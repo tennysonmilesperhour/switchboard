@@ -1,0 +1,331 @@
+'use client';
+
+import { useState, useTransition } from 'react';
+import { useRouter } from 'next/navigation';
+import { Button } from '@/components/ui/Button';
+import { Card, SectionHeader } from '@/components/ui/Card';
+import { Chip } from '@/components/ui/Chip';
+import {
+  acceptMoment,
+  checkIn,
+  closeMoment,
+  expressCuriosity,
+  passMoment,
+} from '@/lib/actions/moments';
+import { formatRelative } from '@/lib/format';
+import { EXPERIENCE_PRESETS } from '@/lib/types';
+
+export interface MyMoment {
+  id: string;
+  place_name: string;
+  experiences: string[];
+  headline: string | null;
+  available_until: string;
+  status: string;
+}
+
+export interface Candidate {
+  id: string;
+  experiences: string[];
+  headline: string | null;
+  stage: 'none' | 'curious' | 'revealed' | 'accepted' | 'passed';
+  intro: { name: string; interests: string[]; headline: string | null } | null;
+}
+
+export function MomentsClient({
+  myMoment,
+  candidates,
+}: {
+  myMoment: MyMoment | null;
+  candidates: Candidate[];
+}) {
+  const [place, setPlace] = useState('');
+  const [experiences, setExperiences] = useState<string[]>([]);
+  const [headline, setHeadline] = useState('');
+  const [hours, setHours] = useState(2);
+  const [error, setError] = useState('');
+  const [pending, startTransition] = useTransition();
+  const router = useRouter();
+
+  function toggleExperience(label: string) {
+    setExperiences((current) =>
+      current.includes(label)
+        ? current.filter((e) => e !== label)
+        : [...current, label],
+    );
+  }
+
+  if (!myMoment) {
+    return (
+      <div className="space-y-6">
+        <p className="text-sm text-ink-soft leading-relaxed -mt-1">
+          Waiting somewhere — an airport, a coffee shop, soccer practice?
+          Check in and Switchboard will quietly look for someone nearby who’d
+          enjoy the same kind of moment. Nobody is revealed unless you’re{' '}
+          <em>both</em> curious.
+        </p>
+
+        <div className="space-y-4">
+          <div className="space-y-1.5">
+            <label htmlFor="place" className="text-sm font-medium">Where are you?</label>
+            <input
+              id="place"
+              value={place}
+              onChange={(e) => setPlace(e.target.value)}
+              placeholder="Denver Airport Gate B27, Café Luna, Miller Park…"
+              className="w-full rounded-card border border-line bg-card px-4 py-3 outline-none focus:border-terracotta"
+            />
+            <p className="text-xs text-ink-faint">
+              People at the same place see the same name — be specific enough to match.
+            </p>
+          </div>
+
+          <div className="space-y-1.5">
+            <p className="text-sm font-medium">What would you enjoy sharing?</p>
+            <div className="flex flex-wrap gap-2">
+              {EXPERIENCE_PRESETS.map((experience) => (
+                <Chip
+                  key={experience.label}
+                  emoji={experience.emoji}
+                  selected={experiences.includes(experience.label)}
+                  onClick={() => toggleExperience(experience.label)}
+                >
+                  {experience.label}
+                </Chip>
+              ))}
+            </div>
+          </div>
+
+          <div className="space-y-1.5">
+            <label htmlFor="headline" className="text-sm font-medium">
+              A line about you <span className="text-ink-faint font-normal">(shown only after mutual curiosity)</span>
+            </label>
+            <input
+              id="headline"
+              value={headline}
+              onChange={(e) => setHeadline(e.target.value)}
+              maxLength={90}
+              placeholder="“My favorite trips begin with unexpected conversations.”"
+              className="w-full rounded-card border border-line bg-card px-4 py-3 text-sm outline-none focus:border-terracotta"
+            />
+          </div>
+
+          <div className="space-y-1.5">
+            <label htmlFor="hours" className="text-sm font-medium">
+              I’m here for about {hours} {hours === 1 ? 'hour' : 'hours'}
+            </label>
+            <input
+              id="hours"
+              type="range"
+              min={1}
+              max={8}
+              value={hours}
+              onChange={(e) => setHours(Number(e.target.value))}
+              className="w-full accent-[oklch(60%_0.128_42)]"
+            />
+          </div>
+
+          {error && <p role="alert" className="text-sm text-rose-deep">{error}</p>}
+          <Button
+            size="lg"
+            className="w-full"
+            disabled={pending}
+            onClick={() =>
+              startTransition(async () => {
+                const result = await checkIn(place, experiences, headline, hours);
+                if (!result.ok) setError(result.error ?? 'Something went wrong');
+                else router.refresh();
+              })
+            }
+          >
+            {pending ? 'Checking in…' : 'Check in ✨'}
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      <Card tone="gold" className="animate-rise">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <p className="text-xs uppercase tracking-wide text-ink-faint font-medium">
+              Checked in
+            </p>
+            <p className="font-display text-xl mt-0.5">📍 {myMoment.place_name}</p>
+            <p className="text-xs text-ink-soft mt-1">
+              {myMoment.experiences.join(' · ')} · ends{' '}
+              {formatRelative(myMoment.available_until)}
+            </p>
+          </div>
+          <button
+            type="button"
+            disabled={pending}
+            onClick={() =>
+              startTransition(async () => {
+                await closeMoment();
+                router.refresh();
+              })
+            }
+            className="text-xs font-medium text-ink-faint hover:text-ink rounded-pill border border-line px-3 py-1.5 bg-card whitespace-nowrap"
+          >
+            Check out
+          </button>
+        </div>
+      </Card>
+
+      <section>
+        <SectionHeader
+          title="Sharing this moment"
+          hint={
+            candidates.length === 0
+              ? 'Serendipity is watching quietly — check back in a bit'
+              : 'Same place, same time, similar interests'
+          }
+        />
+        {candidates.length === 0 ? (
+          <Card tone="cream">
+            <p className="text-sm text-ink-soft leading-relaxed">
+              Nobody else has checked in here yet. That’s the thing about
+              serendipity — it can’t be rushed. You’ll get a gentle nudge if a
+              match appears. ✨
+            </p>
+          </Card>
+        ) : (
+          <div className="space-y-3">
+            {candidates.map((candidate) => (
+              <Card key={candidate.id} lifted className="animate-rise">
+                {candidate.intro ? (
+                  <>
+                    <p className="text-xs uppercase tracking-wide text-terracotta-deep font-medium">
+                      ✨ Mutual curiosity
+                    </p>
+                    <p className="font-display text-xl mt-1">{candidate.intro.name}</p>
+                    {candidate.intro.headline && (
+                      <p className="text-sm text-ink-soft italic mt-1">
+                        “{candidate.intro.headline}”
+                      </p>
+                    )}
+                    <div className="flex flex-wrap gap-1.5 mt-2">
+                      {candidate.intro.interests.map((interest) => (
+                        <span
+                          key={interest}
+                          className="rounded-pill bg-cream px-2.5 py-1 text-xs text-ink-soft"
+                        >
+                          {interest}
+                        </span>
+                      ))}
+                    </div>
+                    {candidate.stage === 'accepted' ? (
+                      <p className="text-sm text-sage-deep mt-3">
+                        You said yes — waiting for them. 🤞
+                      </p>
+                    ) : (
+                      <div className="flex gap-2 mt-3">
+                        <Button
+                          variant="accept"
+                          size="sm"
+                          className="flex-1"
+                          disabled={pending}
+                          onClick={() =>
+                            startTransition(async () => {
+                              const result = await acceptMoment(myMoment.id, candidate.id);
+                              if (result.stage === 'matched' && result.roomId) {
+                                router.push(`/rooms/${result.roomId}`);
+                              } else {
+                                router.refresh();
+                              }
+                            })
+                          }
+                        >
+                          🤝 I’d love to share this moment
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          disabled={pending}
+                          onClick={() =>
+                            startTransition(async () => {
+                              await passMoment(myMoment.id, candidate.id);
+                              router.refresh();
+                            })
+                          }
+                        >
+                          Pass
+                        </Button>
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  <>
+                    <p className="text-sm font-medium">
+                      Someone here is open to:
+                    </p>
+                    <div className="flex flex-wrap gap-1.5 mt-2">
+                      {candidate.experiences.map((experience) => (
+                        <span
+                          key={experience}
+                          className="rounded-pill bg-cream px-2.5 py-1 text-xs text-ink-soft"
+                        >
+                          {experience}
+                        </span>
+                      ))}
+                    </div>
+                    {candidate.headline && (
+                      <p className="text-sm text-ink-soft italic mt-2">
+                        “{candidate.headline}”
+                      </p>
+                    )}
+                    {candidate.stage === 'curious' ? (
+                      <p className="text-xs text-ink-faint mt-3">
+                        You’re curious — they haven’t decided yet. Nothing is
+                        revealed until it’s mutual.
+                      </p>
+                    ) : (
+                      <div className="flex gap-2 mt-3">
+                        <Button
+                          size="sm"
+                          variant="secondary"
+                          className="flex-1"
+                          disabled={pending}
+                          onClick={() =>
+                            startTransition(async () => {
+                              await expressCuriosity(myMoment.id, candidate.id);
+                              router.refresh();
+                            })
+                          }
+                        >
+                          I’d like to learn more
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          disabled={pending}
+                          onClick={() =>
+                            startTransition(async () => {
+                              await passMoment(myMoment.id, candidate.id);
+                              router.refresh();
+                            })
+                          }
+                        >
+                          Not today
+                        </Button>
+                      </div>
+                    )}
+                  </>
+                )}
+              </Card>
+            ))}
+          </div>
+        )}
+      </section>
+
+      <p className="text-xs text-ink-faint leading-relaxed">
+        Three moments of consent: you’re open to the experience → you’d like to
+        learn more → 🤝 you’d love to share it. Identity unfolds gradually, and
+        only ever mutually.
+      </p>
+    </div>
+  );
+}

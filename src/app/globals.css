@@ -1,26 +1,89 @@
 @import "tailwindcss";
 
+@theme {
+  /* ————— Warm editorial calm ————— */
+  --color-paper: oklch(97.6% 0.012 85);
+  --color-cream: oklch(94.8% 0.022 88);
+  --color-card: oklch(99% 0.008 90);
+  --color-ink: oklch(25% 0.022 50);
+  --color-ink-soft: oklch(46% 0.018 55);
+  --color-ink-faint: oklch(62% 0.015 60);
+  --color-line: oklch(89% 0.014 85);
+
+  --color-terracotta: oklch(60% 0.128 42);
+  --color-terracotta-deep: oklch(51% 0.135 40);
+  --color-terracotta-soft: oklch(93% 0.035 45);
+
+  /* sage = availability / acceptance, semantically reserved */
+  --color-sage: oklch(56% 0.09 152);
+  --color-sage-deep: oklch(46% 0.09 152);
+  --color-sage-soft: oklch(93% 0.033 152);
+
+  --color-gold: oklch(76% 0.1 85);
+  --color-gold-soft: oklch(94% 0.045 90);
+
+  --color-rose-soft: oklch(93% 0.03 20);
+  --color-rose-deep: oklch(52% 0.12 25);
+
+  --font-display: var(--font-fraunces), Georgia, serif;
+  --font-sans: var(--font-inter), system-ui, sans-serif;
+
+  --radius-card: 1.25rem;
+  --radius-pill: 999px;
+
+  --shadow-lift: 0 1px 2px oklch(30% 0.02 50 / 0.05), 0 6px 24px oklch(30% 0.02 50 / 0.07);
+  --shadow-float: 0 2px 4px oklch(30% 0.02 50 / 0.07), 0 12px 40px oklch(30% 0.02 50 / 0.12);
+
+  --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --duration-fast: 150ms;
+  --duration-normal: 300ms;
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+html {
+  background: var(--color-paper);
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--color-paper);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  overscroll-behavior-y: none;
+}
+
+/* Display headings carry the brand voice */
+h1, h2, .font-display {
+  font-family: var(--font-display);
+  font-optical-sizing: auto;
+}
+
+::selection {
+  background: var(--color-terracotta-soft);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* Gentle entrance used for match reveals and cascade steps */
+@keyframes rise-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.animate-rise {
+  animation: rise-in var(--duration-normal) var(--ease-out-expo) both;
+}
+
+@keyframes pulse-soft {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.55; }
+}
+.animate-pulse-soft {
+  animation: pulse-soft 2.4s ease-in-out infinite;
 }

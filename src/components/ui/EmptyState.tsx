@@ -1,0 +1,19 @@
+interface EmptyStateProps {
+  emoji: string;
+  title: string;
+  body: string;
+  action?: React.ReactNode;
+}
+
+export function EmptyState({ emoji, title, body, action }: EmptyStateProps) {
+  return (
+    <div className="flex flex-col items-center text-center gap-2 py-12 px-6">
+      <span className="text-4xl" aria-hidden>
+        {emoji}
+      </span>
+      <h3 className="font-display text-lg text-ink">{title}</h3>
+      <p className="text-sm text-ink-faint max-w-xs leading-relaxed">{body}</p>
+      {action ? <div className="mt-3">{action}</div> : null}
+    </div>
+  );
+}
