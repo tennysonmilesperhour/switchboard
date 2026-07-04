@@ -36,6 +36,38 @@ export interface Expense {
   created_at: string;
 }
 
+export type BoardRole = 'member' | 'moderator';
+export type BoardPostKind = 'notice' | 'event';
+
+export interface Board {
+  id: string;
+  slug: string;
+  name: string;
+  description: string | null;
+  created_by: string;
+  created_at: string;
+}
+
+export interface BoardMember {
+  board_id: string;
+  member_id: string;
+  role: BoardRole;
+  joined_at: string;
+}
+
+export interface BoardPost {
+  id: string;
+  board_id: string;
+  author_id: string;
+  kind: BoardPostKind;
+  title: string;
+  body: string | null;
+  location: string | null;
+  cadence: string | null;
+  starts_at: string | null;
+  created_at: string;
+}
+
 export interface Circle {
   id: string;
   owner_id: string;

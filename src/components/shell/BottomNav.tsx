@@ -8,6 +8,7 @@ const TABS = [
   { href: '/plans', label: 'Plans', icon: '✦' },
   { href: '/mutual', label: 'Mutual', icon: '◐' },
   { href: '/rooms', label: 'Rooms', icon: '❋' },
+  { href: '/boards', label: 'Boards', icon: '▦' },
   { href: '/people', label: 'People', icon: '☺' },
 ] as const;
 
@@ -19,7 +20,7 @@ export function BottomNav() {
       aria-label="Main navigation"
       className="fixed bottom-0 inset-x-0 z-40 border-t border-line bg-card/90 backdrop-blur-md pb-[env(safe-area-inset-bottom)]"
     >
-      <div className="mx-auto max-w-lg grid grid-cols-5">
+      <div className="mx-auto max-w-lg grid grid-cols-6">
         {TABS.map((tab) => {
           const active =
             tab.href === '/'
