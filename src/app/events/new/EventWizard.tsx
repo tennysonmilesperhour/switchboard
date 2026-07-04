@@ -79,6 +79,7 @@ export function EventWizard({
 }) {
   const [step, setStep] = useState(0);
   const [submitting, setSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
   // Step 1 - basics
   const [title, setTitle] = useState(initialTitle);
@@ -256,31 +257,42 @@ export function EventWizard({
 
   async function submit() {
     setSubmitting(true);
-    await createEvent({
-      title,
-      description: description.trim() || null,
-      locationName: locationName.trim() || null,
-      locationAddress: null,
-      startsAt,
-      endsAt: null,
-      capacity: capacity ? Number(capacity) : null,
-      inviteMode,
-      openTable,
-      showInviteList,
-      showAccepted,
-      showExpired,
-      enablePoll,
-      pollResolution,
-      voteDeadline: null,
-      ritualId,
-      invitees: invitees.map((invitee) => ({
-        profileId: invitee.profileId,
-        guestName: invitee.profileId ? undefined : invitee.name,
-        guestContact: invitee.guestContact,
-        groupStage: invitee.groupStage,
-        windowMinutes: invitee.windowMinutes,
-      })),
-    });
+    setSubmitError(null);
+    try {
+      await createEvent({
+        title,
+        description: description.trim() || null,
+        locationName: locationName.trim() || null,
+        locationAddress: null,
+        startsAt,
+        endsAt: null,
+        capacity: capacity ? Number(capacity) : null,
+        inviteMode,
+        openTable,
+        showInviteList,
+        showAccepted,
+        showExpired,
+        enablePoll,
+        pollResolution,
+        voteDeadline: null,
+        ritualId,
+        invitees: invitees.map((invitee) => ({
+          profileId: invitee.profileId,
+          guestName: invitee.profileId ? undefined : invitee.name,
+          guestContact: invitee.guestContact,
+          groupStage: invitee.groupStage,
+          windowMinutes: invitee.windowMinutes,
+        })),
+      });
+    } catch {
+      // A successful create redirects via the server action (normal control
+      // flow that doesn't land here); only a real failure does. Reset the
+      // button and tell the host instead of leaving it stuck on "Creating…".
+      setSubmitting(false);
+      setSubmitError(
+        'Something went wrong creating your plan. Please try again.',
+      );
+    }
   }
 
   const stageCount =
@@ -762,6 +774,15 @@ export function EventWizard({
             </Card>
           )}
         </div>
+      )}
+
+      {submitError && (
+        <p
+          role="alert"
+          className="rounded-card bg-rose-soft text-rose-deep text-sm p-3"
+        >
+          {submitError}
+        </p>
       )}
 
       {/* Nav */}

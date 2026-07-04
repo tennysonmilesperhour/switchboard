@@ -23,6 +23,7 @@ export async function completeOnboarding(formData: FormData): Promise<void> {
     .trim()
     .toLowerCase();
   const interests = formData.getAll('interests').map(String).filter(Boolean);
+  const downTo = formData.getAll('down_to').map(String).filter(Boolean);
 
   if (!displayName) redirect('/onboarding?error=name');
   if (!HANDLE_PATTERN.test(handle)) redirect('/onboarding?error=handle');
@@ -33,6 +34,7 @@ export async function completeOnboarding(formData: FormData): Promise<void> {
       display_name: displayName,
       handle,
       interests,
+      down_to: downTo,
       timezone: String(formData.get('timezone') || 'UTC'),
       onboarded: true,
     })
@@ -59,6 +61,24 @@ export async function completeOnboarding(formData: FormData): Promise<void> {
   }
 
   redirect('/');
+}
+
+export async function updateInterests(formData: FormData): Promise<void> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) redirect('/login');
+
+  const interests = formData.getAll('interests').map(String).filter(Boolean);
+  const downTo = formData.getAll('down_to').map(String).filter(Boolean);
+
+  await supabase
+    .from('profiles')
+    .update({ interests, down_to: downTo })
+    .eq('id', user.id);
+
+  revalidatePath('/settings');
 }
 
 export async function updateQuietHours(formData: FormData): Promise<void> {

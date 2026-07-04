@@ -10,6 +10,7 @@ export interface Profile {
   avatar_url: string | null;
   bio: string | null;
   interests: string[];
+  down_to: string[];
   quiet_hours_start: number | null; // hour 0-23, local
   quiet_hours_end: number | null;
   created_at: string;

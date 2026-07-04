@@ -3,13 +3,8 @@
 import { useEffect, useState } from 'react';
 import { completeOnboarding } from '@/lib/actions/profile';
 import { Button } from '@/components/ui/Button';
-import { Chip } from '@/components/ui/Chip';
-
-const INTEREST_OPTIONS = [
-  'Coffee', 'Food', 'Live music', 'Hiking', 'Cycling', 'Games',
-  'Books', 'Movies', 'Art', 'Travel', 'Fitness', 'Cooking',
-  'Photography', 'Gardening', 'Sports', 'Comedy', 'Volunteering', 'Tech',
-];
+import { InterestPicker } from '@/components/profile/InterestPicker';
+import { INTEREST_CATEGORIES, DOWN_TO_GROUP } from '@/lib/interests';
 
 interface OnboardingFormProps {
   initialName: string;
@@ -17,8 +12,11 @@ interface OnboardingFormProps {
 }
 
 export function OnboardingForm({ initialName, initialHandle }: OnboardingFormProps) {
-  const [interests, setInterests] = useState<string[]>([]);
   const [submitting, setSubmitting] = useState(false);
+  // Normalize the handle to lowercase as it's typed so the validated value
+  // matches what the user sees. The `lowercase` CSS class only changes the
+  // display, so without this the browser would reject a value that looks valid.
+  const [handle, setHandle] = useState(initialHandle.toLowerCase());
   // Set after mount to avoid a server/client hydration mismatch.
   const [timezone, setTimezone] = useState('UTC');
   useEffect(() => {
@@ -32,14 +30,6 @@ export function OnboardingForm({ initialName, initialHandle }: OnboardingFormPro
       cancelled = true;
     };
   }, []);
-
-  function toggleInterest(interest: string) {
-    setInterests((current) =>
-      current.includes(interest)
-        ? current.filter((i) => i !== interest)
-        : [...current, interest],
-    );
-  }
 
   return (
     <form
@@ -71,8 +61,10 @@ export function OnboardingForm({ initialName, initialHandle }: OnboardingFormPro
             id="handle"
             name="handle"
             required
-            defaultValue={initialHandle}
+            value={handle}
+            onChange={(e) => setHandle(e.target.value.toLowerCase())}
             pattern="[a-z0-9_]{3,24}"
+            title="Use 3–24 lowercase letters, numbers, or underscores."
             placeholder="alexr"
             className="flex-1 bg-transparent px-1.5 py-3 outline-none lowercase"
           />
@@ -82,24 +74,32 @@ export function OnboardingForm({ initialName, initialHandle }: OnboardingFormPro
         </p>
       </div>
 
-      <fieldset>
-        <legend className="text-sm font-medium text-ink mb-2">
-          What do you enjoy? <span className="text-ink-faint font-normal">(pick a few)</span>
+      <fieldset className="space-y-3">
+        <legend className="text-sm font-medium text-ink mb-1">
+          What do you enjoy?{' '}
+          <span className="text-ink-faint font-normal">(pick as many as you like)</span>
         </legend>
-        <div className="flex flex-wrap gap-2">
-          {INTEREST_OPTIONS.map((interest) => (
-            <Chip
-              key={interest}
-              selected={interests.includes(interest)}
-              onClick={() => toggleInterest(interest)}
-            >
-              {interest}
-            </Chip>
-          ))}
-        </div>
-        {interests.map((interest) => (
-          <input key={interest} type="hidden" name="interests" value={interest} />
-        ))}
+        <p className="text-sm text-ink-soft leading-relaxed">
+          Your interests help Switchboard suggest people and plans you’ll
+          actually enjoy. Browse the categories or search.
+        </p>
+        <InterestPicker name="interests" groups={INTEREST_CATEGORIES} />
+      </fieldset>
+
+      <fieldset className="space-y-3">
+        <legend className="text-sm font-medium text-ink mb-1">
+          What are you usually down to do?{' '}
+          <span className="text-ink-faint font-normal">(optional)</span>
+        </legend>
+        <p className="text-sm text-ink-soft leading-relaxed">
+          These are the plans you’d happily say yes to — friends see them when
+          they’re looking for someone to join.
+        </p>
+        <InterestPicker
+          name="down_to"
+          groups={[DOWN_TO_GROUP]}
+          searchable={false}
+        />
       </fieldset>
 
       <input type="hidden" name="timezone" value={timezone} />

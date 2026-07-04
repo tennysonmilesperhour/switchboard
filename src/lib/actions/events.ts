@@ -111,7 +111,15 @@ export async function createEvent(input: CreateEventInput): Promise<never> {
       phase: 'suggesting',
     });
   } else {
-    await advanceEventCascade(event.id);
+    // Best-effort: the event and invites already exist. If kicking off the
+    // cascade fails (e.g. admin credentials or push aren't configured), the
+    // host must still land on their new event rather than hang — the sweep
+    // will pick the cascade back up. Never let this abort the redirect below.
+    try {
+      await advanceEventCascade(event.id);
+    } catch (cascadeError) {
+      console.error('Failed to start cascade for new event', cascadeError);
+    }
   }
 
   redirect(`/events/${event.id}`);
