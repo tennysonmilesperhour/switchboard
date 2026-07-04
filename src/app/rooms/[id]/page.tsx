@@ -1,7 +1,12 @@
 import { notFound, redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
 import { AppShell } from '@/components/shell/AppShell';
-import { RoomClient, type RoomMessage, type RoomItemRow } from './RoomClient';
+import {
+  RoomClient,
+  type RoomMessage,
+  type RoomItemRow,
+  type ExpenseRow,
+} from './RoomClient';
 
 export default async function RoomPage({
   params,
@@ -22,7 +27,7 @@ export default async function RoomPage({
     .single();
   if (!room) notFound();
 
-  const [{ data: members }, { data: messages }, { data: items }] =
+  const [{ data: members }, { data: messages }, { data: items }, { data: expenses }] =
     await Promise.all([
       supabase
         .from('room_members')
@@ -36,6 +41,11 @@ export default async function RoomPage({
         .limit(200),
       supabase
         .from('room_items')
+        .select('*')
+        .eq('room_id', id)
+        .order('created_at', { ascending: false }),
+      supabase
+        .from('expenses')
         .select('*')
         .eq('room_id', id)
         .order('created_at', { ascending: false }),
@@ -55,6 +65,7 @@ export default async function RoomPage({
         memberNames={memberNames}
         initialMessages={(messages ?? []) as RoomMessage[]}
         items={(items ?? []) as RoomItemRow[]}
+        expenses={(expenses ?? []) as ExpenseRow[]}
       />
     </AppShell>
   );

@@ -81,6 +81,34 @@ export async function updateInterests(formData: FormData): Promise<void> {
   revalidatePath('/settings');
 }
 
+export async function updateSabbatical(formData: FormData): Promise<void> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) redirect('/login');
+
+  const on = formData.get('sabbatical') === 'on';
+  const message = String(formData.get('sabbatical_message') ?? '').trim();
+
+  await supabase
+    .from('profiles')
+    .update({
+      sabbatical: on,
+      sabbatical_message: on ? message || null : null,
+    })
+    .eq('id', user.id);
+
+  // Entering a quiet season pulls down any live availability signal so you
+  // stop appearing on friends' radars right away.
+  if (on) {
+    await supabase.from('availability_signals').delete().eq('user_id', user.id);
+  }
+
+  revalidatePath('/settings');
+  revalidatePath('/');
+}
+
 export async function updateQuietHours(formData: FormData): Promise<void> {
   const supabase = await createClient();
   const {

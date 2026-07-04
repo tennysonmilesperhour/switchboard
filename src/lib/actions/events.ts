@@ -3,8 +3,19 @@
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import { createClient } from '@/lib/supabase/server';
+import { createAdminClient } from '@/lib/supabase/admin';
 import { advanceEventCascade } from '@/lib/server/cascade-runner';
 import type { InviteMode } from '@/lib/types';
+
+/** Primary host or a co-host — the people allowed to manage an event. */
+async function canManageEvent(userId: string, eventId: string): Promise<boolean> {
+  const admin = createAdminClient();
+  const { data } = await admin.rpc('is_event_host', {
+    p_event: eventId,
+    p_user: userId,
+  });
+  return Boolean(data);
+}
 
 export interface WizardInvitee {
   /** Profile id for members; null for guests. */
@@ -127,13 +138,25 @@ export async function createEvent(input: CreateEventInput): Promise<never> {
 
 export async function confirmEvent(eventId: string): Promise<void> {
   const supabase = await createClient();
-  await supabase.from('events').update({ status: 'confirmed' }).eq('id', eventId);
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) redirect('/login');
+  if (!(await canManageEvent(user.id, eventId))) return;
+  const admin = createAdminClient();
+  await admin.from('events').update({ status: 'confirmed' }).eq('id', eventId);
   revalidatePath(`/events/${eventId}`);
 }
 
 export async function cancelEvent(eventId: string): Promise<void> {
   const supabase = await createClient();
-  await supabase.from('events').update({ status: 'cancelled' }).eq('id', eventId);
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) redirect('/login');
+  if (!(await canManageEvent(user.id, eventId))) return;
+  const admin = createAdminClient();
+  await admin.from('events').update({ status: 'cancelled' }).eq('id', eventId);
   revalidatePath(`/events/${eventId}`);
   revalidatePath('/plans');
 }
@@ -141,12 +164,93 @@ export async function cancelEvent(eventId: string): Promise<void> {
 /** Host closes voting and moves an AWI event into the inviting phase. */
 export async function startInviting(eventId: string): Promise<void> {
   const supabase = await createClient();
-  const { error } = await supabase
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) redirect('/login');
+  if (!(await canManageEvent(user.id, eventId))) return;
+  const admin = createAdminClient();
+  const { error } = await admin
     .from('events')
     .update({ status: 'inviting' })
     .eq('id', eventId);
   if (!error) {
     await advanceEventCascade(eventId);
   }
+  revalidatePath(`/events/${eventId}`);
+}
+
+/**
+ * Primary host adds a co-host by handle. Co-hosts share host powers (editing
+ * the plan, approving join requests, confirming/cancelling). Only the primary
+ * host can manage the co-host list — RLS enforces that on event_cohosts.
+ */
+export async function addCoHost(
+  eventId: string,
+  handle: string,
+): Promise<{ ok: boolean; error?: string }> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false, error: 'Not signed in' };
+
+  const cleanHandle = handle.trim().toLowerCase().replace(/^@/, '');
+  if (!cleanHandle) return { ok: false, error: 'Enter a handle.' };
+
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('id')
+    .eq('handle', cleanHandle)
+    .maybeSingle();
+  if (!profile) return { ok: false, error: 'No one with that handle.' };
+  if (profile.id === user.id) {
+    return { ok: false, error: 'You’re already the host.' };
+  }
+
+  const { error } = await supabase.from('event_cohosts').insert({
+    event_id: eventId,
+    cohost_id: profile.id,
+    added_by: user.id,
+  });
+  if (error) {
+    const already = error.code === '23505';
+    return {
+      ok: false,
+      error: already ? 'They’re already a co-host.' : error.message,
+    };
+  }
+
+  // Bring them into the Living Room so they can coordinate. Best-effort:
+  // they may already be a member.
+  const { data: event } = await supabase
+    .from('events')
+    .select('room_id')
+    .eq('id', eventId)
+    .maybeSingle();
+  if (event?.room_id) {
+    await supabase
+      .from('room_members')
+      .insert({ room_id: event.room_id, member_id: profile.id });
+  }
+
+  revalidatePath(`/events/${eventId}`);
+  return { ok: true };
+}
+
+export async function removeCoHost(
+  eventId: string,
+  cohostId: string,
+): Promise<void> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) redirect('/login');
+  await supabase
+    .from('event_cohosts')
+    .delete()
+    .eq('event_id', eventId)
+    .eq('cohost_id', cohostId);
   revalidatePath(`/events/${eventId}`);
 }

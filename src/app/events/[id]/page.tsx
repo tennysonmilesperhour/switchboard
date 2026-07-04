@@ -12,6 +12,7 @@ import { JoinRequests } from '@/components/events/JoinRequests';
 import { RsvpCard } from '@/components/events/RsvpCard';
 import { PollSection, type OptionResult } from '@/components/polls/PollSection';
 import { HostControls } from './HostControls';
+import { CoHostManager } from './CoHostManager';
 import { inviteExpiresAt } from '@/lib/engine/cascade';
 import { formatDateTime } from '@/lib/format';
 import type { Invite, Poll, PollOption, SwitchboardEvent } from '@/lib/types';
@@ -46,12 +47,35 @@ export default async function EventPage({
   const isHost = event.host_id === user.id;
   const admin = createAdminClient();
 
-  // Host: full cascade view. Invitee: their own invite.
+  // Co-hosts share host powers. Read the list with admin — a co-host can't
+  // see the full roster through their own RLS.
+  const { data: cohostRows } = await admin
+    .from('event_cohosts')
+    .select('cohost_id')
+    .eq('event_id', id);
+  const cohostIds = (cohostRows ?? []).map((row) => row.cohost_id as string);
+  const isCoHost = cohostIds.includes(user.id);
+  const canManage = isHost || isCoHost;
+
+  // Names for the primary host's co-host manager.
+  let cohosts: Array<{ id: string; name: string }> = [];
+  if (isHost && cohostIds.length > 0) {
+    const { data } = await admin
+      .from('profiles')
+      .select('id, display_name')
+      .in('id', cohostIds);
+    cohosts = (data ?? []).map((p) => ({
+      id: p.id as string,
+      name: (p.display_name as string) ?? 'Co-host',
+    }));
+  }
+
+  // Host/co-host: full cascade view. Invitee: their own invite.
   let hostInvites: Array<Invite & { invitee_name: string }> = [];
   let myInvite: Invite | null = null;
 
-  if (isHost) {
-    const { data } = await supabase
+  if (canManage) {
+    const { data } = await admin
       .from('invites')
       .select('*, invitee:profiles(display_name)')
       .eq('event_id', id)
@@ -75,7 +99,7 @@ export default async function EventPage({
 
   // Accepted attendees (respects visibility settings; admin read + TS check).
   let attendees: Array<{ id: string; name: string }> = [];
-  if (isHost || event.show_accepted) {
+  if (canManage || event.show_accepted) {
     const { data } = await admin
       .from('invites')
       .select('id, invitee_id, guest_name, invitee:profiles(display_name)')
@@ -131,7 +155,7 @@ export default async function EventPage({
   }
 
   const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? '';
-  const guestLinks = isHost
+  const guestLinks = canManage
     ? hostInvites
         .filter((i) => !i.invitee_id && i.guest_token && i.status === 'sent')
         .map((i) => ({
@@ -269,7 +293,7 @@ export default async function EventPage({
         )}
 
         {/* Open Table join requests */}
-        {isHost && (
+        {canManage && (
           <JoinRequests
             eventId={event.id}
             requests={hostInvites
@@ -283,7 +307,7 @@ export default async function EventPage({
         )}
 
         {/* Host cascade view */}
-        {isHost && hostInvites.length > 0 && event.status !== 'deciding' && (
+        {canManage && hostInvites.length > 0 && event.status !== 'deciding' && (
           <section>
             <SectionHeader
               title="Invitation flow"
@@ -311,7 +335,9 @@ export default async function EventPage({
           </section>
         )}
 
-        {isHost && <HostControls event={event} pollDecided={poll?.phase === 'decided'} />}
+        {canManage && <HostControls event={event} pollDecided={poll?.phase === 'decided'} />}
+
+        {isHost && <CoHostManager eventId={event.id} cohosts={cohosts} />}
       </div>
     </AppShell>
   );

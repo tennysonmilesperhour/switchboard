@@ -17,6 +17,16 @@ export async function proposeIntroduction(
   if (!user) return { ok: false, error: 'Not signed in' };
   if (personA === personB) return { ok: false, error: 'Pick two different friends' };
 
+  // Don't propose anyone who's taking a quiet season.
+  const { data: resting } = await supabase
+    .from('profiles')
+    .select('id')
+    .in('id', [personA, personB])
+    .eq('sabbatical', true);
+  if (resting && resting.length > 0) {
+    return { ok: false, error: 'One of them is on a sabbatical right now.' };
+  }
+
   const { error } = await supabase.from('matchmaker_proposals').insert({
     proposer_id: user.id,
     person_a: personA,

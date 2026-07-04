@@ -11,8 +11,28 @@ export interface Profile {
   bio: string | null;
   interests: string[];
   down_to: string[];
+  sabbatical: boolean;
+  sabbatical_message: string | null;
   quiet_hours_start: number | null; // hour 0-23, local
   quiet_hours_end: number | null;
+  created_at: string;
+}
+
+export interface EventCoHost {
+  event_id: string;
+  cohost_id: string;
+  added_by: string | null;
+  created_at: string;
+}
+
+export interface Expense {
+  id: string;
+  room_id: string;
+  description: string;
+  amount_cents: number;
+  payer_id: string;
+  settle_url: string | null;
+  created_by: string;
   created_at: string;
 }
 
