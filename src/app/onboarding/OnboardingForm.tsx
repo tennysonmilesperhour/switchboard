@@ -19,6 +19,10 @@ interface OnboardingFormProps {
 export function OnboardingForm({ initialName, initialHandle }: OnboardingFormProps) {
   const [interests, setInterests] = useState<string[]>([]);
   const [submitting, setSubmitting] = useState(false);
+  // Normalize the handle to lowercase as it's typed so the validated value
+  // matches what the user sees. The `lowercase` CSS class only changes the
+  // display, so without this the browser would reject a value that looks valid.
+  const [handle, setHandle] = useState(initialHandle.toLowerCase());
   // Set after mount to avoid a server/client hydration mismatch.
   const [timezone, setTimezone] = useState('UTC');
   useEffect(() => {
@@ -71,8 +75,10 @@ export function OnboardingForm({ initialName, initialHandle }: OnboardingFormPro
             id="handle"
             name="handle"
             required
-            defaultValue={initialHandle}
+            value={handle}
+            onChange={(e) => setHandle(e.target.value.toLowerCase())}
             pattern="[a-z0-9_]{3,24}"
+            title="Use 3–24 lowercase letters, numbers, or underscores."
             placeholder="alexr"
             className="flex-1 bg-transparent px-1.5 py-3 outline-none lowercase"
           />
