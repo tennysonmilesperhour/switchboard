@@ -6,7 +6,9 @@ import { Card, SectionHeader } from '@/components/ui/Card';
 import { Avatar } from '@/components/ui/Avatar';
 import { Button } from '@/components/ui/Button';
 import { PushManager } from '@/components/push/PushManager';
-import { signOut, updateQuietHours } from '@/lib/actions/profile';
+import { InterestPicker } from '@/components/profile/InterestPicker';
+import { INTEREST_CATEGORIES, DOWN_TO_GROUP } from '@/lib/interests';
+import { signOut, updateInterests, updateQuietHours } from '@/lib/actions/profile';
 
 export const metadata: Metadata = { title: 'Settings' };
 
@@ -26,9 +28,12 @@ export default async function SettingsPage() {
 
   const { data: profile } = await supabase
     .from('profiles')
-    .select('display_name, handle, interests, quiet_hours_start, quiet_hours_end')
+    .select('display_name, handle, interests, down_to, quiet_hours_start, quiet_hours_end')
     .eq('id', user.id)
     .single();
+
+  const interests: string[] = profile?.interests ?? [];
+  const downTo: string[] = profile?.down_to ?? [];
 
   return (
     <AppShell title="Settings" back="/">
@@ -41,16 +46,54 @@ export default async function SettingsPage() {
               <p className="text-sm text-ink-faint">@{profile?.handle}</p>
             </div>
           </div>
-          {(profile?.interests?.length ?? 0) > 0 && (
+          {(interests.length > 0 || downTo.length > 0) && (
             <div className="flex flex-wrap gap-1.5 mt-3">
-              {profile?.interests.map((interest: string) => (
+              {interests.map((interest) => (
                 <span key={interest} className="rounded-pill bg-cream px-2.5 py-1 text-xs text-ink-soft">
                   {interest}
+                </span>
+              ))}
+              {downTo.map((activity) => (
+                <span key={activity} className="rounded-pill bg-terracotta-soft px-2.5 py-1 text-xs text-terracotta-deep">
+                  {activity}
                 </span>
               ))}
             </div>
           )}
         </Card>
+
+        <section>
+          <SectionHeader
+            title="Interests & activities"
+            hint="Help Switchboard suggest the right people and plans"
+          />
+          <Card>
+            <form action={updateInterests} className="space-y-6">
+              <div className="space-y-3">
+                <p className="text-sm font-medium text-ink">Interests</p>
+                <InterestPicker
+                  name="interests"
+                  groups={INTEREST_CATEGORIES}
+                  initialSelected={interests}
+                />
+              </div>
+              <div className="space-y-3 border-t border-line pt-6">
+                <p className="text-sm font-medium text-ink">
+                  Usually down to…
+                </p>
+                <InterestPicker
+                  name="down_to"
+                  groups={[DOWN_TO_GROUP]}
+                  initialSelected={downTo}
+                  searchable={false}
+                />
+              </div>
+              <Button type="submit" size="sm" variant="secondary">
+                Save
+              </Button>
+            </form>
+          </Card>
+        </section>
 
         <section>
           <SectionHeader
