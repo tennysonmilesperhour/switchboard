@@ -21,7 +21,7 @@ export default async function LoginPage({
       <main className="flex-1 flex flex-col justify-center pb-24">
         <h1 className="font-display text-4xl text-ink">Welcome.</h1>
         <p className="mt-3 text-ink-soft leading-relaxed">
-          Sign in with a magic link — no password to remember.
+          Sign in with a magic link - no password to remember.
         </p>
         {error ? (
           <p role="alert" className="mt-4 rounded-card bg-rose-soft text-rose-deep text-sm p-3">

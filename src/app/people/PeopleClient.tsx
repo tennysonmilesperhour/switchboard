@@ -12,6 +12,9 @@ import {
   sendConnectionRequest,
   toggleCircleMember,
 } from '@/lib/actions/connections';
+import { proposeIntroduction } from '@/lib/actions/matchmaker';
+import { createHousehold, deleteHousehold } from '@/lib/actions/households';
+import { ACTIVITY_PRESETS } from '@/lib/types';
 
 export interface FriendRow {
   connectionId: string;
@@ -35,21 +38,37 @@ export interface CircleRow {
   memberCount: number;
 }
 
+export interface HouseholdRow {
+  id: string;
+  name: string;
+  emoji: string;
+  memberCount: number;
+}
+
 export function PeopleClient({
   friends,
   incoming,
   outgoing,
   circles,
+  households = [],
 }: {
   friends: FriendRow[];
   incoming: RequestRow[];
   outgoing: RequestRow[];
   circles: CircleRow[];
+  households?: HouseholdRow[];
 }) {
   const [handle, setHandle] = useState('');
   const [message, setMessage] = useState<{ tone: 'ok' | 'error'; text: string } | null>(null);
   const [expandedFriend, setExpandedFriend] = useState<string | null>(null);
   const [newCircle, setNewCircle] = useState('');
+  const [matchA, setMatchA] = useState('');
+  const [matchB, setMatchB] = useState('');
+  const [matchActivity, setMatchActivity] = useState('Coffee');
+  const [matchNote, setMatchNote] = useState('');
+  const [matchStatus, setMatchStatus] = useState('');
+  const [householdName, setHouseholdName] = useState('');
+  const [householdMembers, setHouseholdMembers] = useState<string[]>([]);
   const [pending, startTransition] = useTransition();
   const router = useRouter();
 
@@ -258,6 +277,196 @@ export function PeopleClient({
               </li>
             ))}
           </ul>
+        </section>
+      )}
+
+      {/* Households */}
+      {friends.length > 0 && (
+        <section>
+          <SectionHeader
+            title="Households 🏡"
+            hint="Invite a whole family or roommate crew with one tap"
+          />
+          {households.length > 0 && (
+            <div className="space-y-2 mb-3">
+              {households.map((household) => (
+                <div
+                  key={household.id}
+                  className="flex items-center gap-3 rounded-card bg-cream px-3.5 py-3 text-sm"
+                >
+                  <span className="text-lg" aria-hidden>{household.emoji}</span>
+                  <span className="font-medium flex-1">{household.name}</span>
+                  <span className="text-xs text-ink-faint">
+                    {household.memberCount} {household.memberCount === 1 ? 'person' : 'people'}
+                  </span>
+                  <button
+                    type="button"
+                    disabled={pending}
+                    className="text-xs text-ink-faint hover:text-rose-deep"
+                    onClick={() =>
+                      startTransition(async () => {
+                        await deleteHousehold(household.id);
+                        router.refresh();
+                      })
+                    }
+                  >
+                    Remove
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+          <Card>
+            <div className="space-y-2.5">
+              <input
+                value={householdName}
+                onChange={(e) => setHouseholdName(e.target.value)}
+                placeholder="Household name (The Riveras, Lake House Crew…)"
+                aria-label="Household name"
+                className="w-full rounded-card border border-line bg-paper px-3 py-2.5 text-sm outline-none focus:border-terracotta"
+              />
+              <div className="flex flex-wrap gap-2">
+                {friends.map((friend) => {
+                  const selected = householdMembers.includes(friend.id);
+                  return (
+                    <button
+                      key={friend.id}
+                      type="button"
+                      aria-pressed={selected}
+                      onClick={() =>
+                        setHouseholdMembers((current) =>
+                          selected
+                            ? current.filter((id) => id !== friend.id)
+                            : [...current, friend.id],
+                        )
+                      }
+                      className={`rounded-pill border px-3 py-1.5 text-xs font-medium transition-all ${
+                        selected
+                          ? 'bg-ink text-paper border-ink'
+                          : 'bg-paper text-ink-soft border-line hover:border-ink-faint'
+                      }`}
+                    >
+                      {friend.name.split(' ')[0]}
+                    </button>
+                  );
+                })}
+              </div>
+              <Button
+                size="sm"
+                variant="secondary"
+                className="w-full"
+                disabled={pending || !householdName.trim() || householdMembers.length === 0}
+                onClick={() =>
+                  startTransition(async () => {
+                    const result = await createHousehold(householdName, householdMembers);
+                    if (result.ok) {
+                      setHouseholdName('');
+                      setHouseholdMembers([]);
+                    }
+                    router.refresh();
+                  })
+                }
+              >
+                Create household
+              </Button>
+            </div>
+          </Card>
+        </section>
+      )}
+
+      {/* Matchmaker */}
+      {friends.length >= 2 && (
+        <section>
+          <SectionHeader
+            title="Play matchmaker 🤝"
+            hint="Introduce two friends. Revealed only if they both say yes."
+          />
+          <Card>
+            <div className="space-y-2.5">
+              <div className="flex gap-2">
+                <select
+                  value={matchA}
+                  onChange={(e) => setMatchA(e.target.value)}
+                  aria-label="First friend"
+                  className="flex-1 rounded-card border border-line bg-paper px-3 py-2.5 text-sm"
+                >
+                  <option value="">First friend</option>
+                  {friends.map((friend) => (
+                    <option key={friend.id} value={friend.id} disabled={friend.id === matchB}>
+                      {friend.name}
+                    </option>
+                  ))}
+                </select>
+                <select
+                  value={matchB}
+                  onChange={(e) => setMatchB(e.target.value)}
+                  aria-label="Second friend"
+                  className="flex-1 rounded-card border border-line bg-paper px-3 py-2.5 text-sm"
+                >
+                  <option value="">Second friend</option>
+                  {friends.map((friend) => (
+                    <option key={friend.id} value={friend.id} disabled={friend.id === matchA}>
+                      {friend.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <select
+                value={matchActivity}
+                onChange={(e) => setMatchActivity(e.target.value)}
+                aria-label="Suggested activity"
+                className="w-full rounded-card border border-line bg-paper px-3 py-2.5 text-sm"
+              >
+                {ACTIVITY_PRESETS.map((activity) => (
+                  <option key={activity.label} value={activity.label}>
+                    {activity.emoji} {activity.label}
+                  </option>
+                ))}
+              </select>
+              <input
+                value={matchNote}
+                onChange={(e) => setMatchNote(e.target.value)}
+                maxLength={140}
+                placeholder="Why they'd hit it off (they'll both see this)"
+                aria-label="Matchmaker note"
+                className="w-full rounded-card border border-line bg-paper px-3 py-2.5 text-sm outline-none focus:border-terracotta"
+              />
+              {matchStatus && (
+                <p className="text-xs text-sage-deep" role="status">{matchStatus}</p>
+              )}
+              <Button
+                size="sm"
+                variant="secondary"
+                className="w-full"
+                disabled={pending || !matchA || !matchB}
+                onClick={() =>
+                  startTransition(async () => {
+                    const result = await proposeIntroduction(
+                      matchA,
+                      matchB,
+                      matchActivity,
+                      matchNote,
+                    );
+                    if (result.ok) {
+                      setMatchStatus('Introduction sent, quietly. 🤫');
+                      setMatchA('');
+                      setMatchB('');
+                      setMatchNote('');
+                    } else {
+                      setMatchStatus(result.error ?? 'Something went wrong');
+                    }
+                    router.refresh();
+                  })
+                }
+              >
+                Suggest they meet
+              </Button>
+              <p className="text-xs text-ink-faint">
+                Neither friend learns who the other is unless both are curious.
+                A no is invisible to everyone, including you.
+              </p>
+            </div>
+          </Card>
         </section>
       )}
 

@@ -55,7 +55,7 @@ export function GuestRsvpClient({
   if (status === 'waitlisted') {
     return (
       <div className="mt-8 rounded-card bg-gold-soft p-5 animate-rise">
-        <p className="font-medium">The event filled up — you’re on the waitlist</p>
+        <p className="font-medium">The event filled up - you’re on the waitlist</p>
         <p className="text-sm text-ink-soft mt-1">
           If a spot opens, the host will reach out.
         </p>
@@ -67,7 +67,7 @@ export function GuestRsvpClient({
       <div className="mt-8 rounded-card bg-cream p-5">
         <p className="font-medium">This invitation’s window has passed</p>
         <p className="text-sm text-ink-soft mt-1">
-          It quietly moved to the next person — that’s how Switchboard keeps
+          It quietly moved to the next person - that’s how Switchboard keeps
           plans pressure-free.
         </p>
       </div>

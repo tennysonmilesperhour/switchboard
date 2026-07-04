@@ -10,7 +10,7 @@ import type { Suggestion } from '@/lib/ai/discovery';
 
 const BUDGETS = ['Free', '$', '$$', '$$$'];
 const VIBES = ['Relaxed', 'Adventurous', 'Cozy', 'Lively', 'Quiet'];
-const GROUP_SIZES = ['Just us two', 'Small group (3–6)', 'Bigger crew (7+)'];
+const GROUP_SIZES = ['Just us two', 'Small group (3-6)', 'Bigger crew (7+)'];
 
 export function DiscoverClient({ defaultInterests }: { defaultInterests: string[] }) {
   const [location, setLocation] = useState('');
@@ -44,7 +44,7 @@ export function DiscoverClient({ defaultInterests }: { defaultInterests: string[
     <div className="space-y-6">
       <p className="text-sm text-ink-soft leading-relaxed -mt-1">
         Describe the experience you’re hoping for. Switchboard curates a few
-        great fits — not a hundred search results.
+        great fits - not a hundred search results.
       </p>
 
       <div className="space-y-4">

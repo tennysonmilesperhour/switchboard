@@ -14,19 +14,27 @@ export default async function PeoplePage() {
   } = await supabase.auth.getUser();
   if (!user) redirect('/login');
 
-  const [{ data: connections }, { data: circles }, { data: circleMembers }] =
-    await Promise.all([
-      supabase
-        .from('connections')
-        .select(
-          'id, status, requester_id, addressee_id, requester:profiles!connections_requester_id_fkey(id, display_name, handle), addressee:profiles!connections_addressee_id_fkey(id, display_name, handle)',
-        )
-        .or(`requester_id.eq.${user.id},addressee_id.eq.${user.id}`),
-      supabase.from('circles').select('id, name, emoji').eq('owner_id', user.id).order('created_at'),
-      supabase
-        .from('circle_members')
-        .select('circle_id, member_id'),
-    ]);
+  const [
+    { data: connections },
+    { data: circles },
+    { data: circleMembers },
+    { data: householdRows },
+  ] = await Promise.all([
+    supabase
+      .from('connections')
+      .select(
+        'id, status, requester_id, addressee_id, requester:profiles!connections_requester_id_fkey(id, display_name, handle), addressee:profiles!connections_addressee_id_fkey(id, display_name, handle)',
+      )
+      .or(`requester_id.eq.${user.id},addressee_id.eq.${user.id}`),
+    supabase.from('circles').select('id, name, emoji').eq('owner_id', user.id).order('created_at'),
+    supabase
+      .from('circle_members')
+      .select('circle_id, member_id'),
+    supabase
+      .from('households')
+      .select('id, name, emoji, household_members(member_id)')
+      .eq('owner_id', user.id),
+  ]);
 
   const friends: FriendRow[] = [];
   const incoming: RequestRow[] = [];
@@ -64,6 +72,13 @@ export default async function PeoplePage() {
     memberCount: (circleMembers ?? []).filter((cm) => cm.circle_id === circle.id).length,
   }));
 
+  const households = (householdRows ?? []).map((row) => ({
+    id: row.id,
+    name: row.name,
+    emoji: row.emoji,
+    memberCount: (row.household_members ?? []).length,
+  }));
+
   return (
     <AppShell title="People">
       {friends.length === 0 && incoming.length === 0 && outgoing.length === 0 ? (
@@ -78,6 +93,7 @@ export default async function PeoplePage() {
             incoming={incoming}
             outgoing={outgoing}
             circles={circleRows}
+            households={households}
           />
         </div>
       ) : (
@@ -86,6 +102,7 @@ export default async function PeoplePage() {
           incoming={incoming}
           outgoing={outgoing}
           circles={circleRows}
+          households={households}
         />
       )}
     </AppShell>

@@ -24,12 +24,15 @@ export interface CreateEventInput {
   endsAt: string | null;
   capacity: number | null;
   inviteMode: InviteMode;
+  openTable: boolean;
   showInviteList: boolean;
   showAccepted: boolean;
   showExpired: boolean;
   enablePoll: boolean;
   pollResolution: 'host_pick' | 'auto' | 'runoff';
   voteDeadline: string | null;
+  /** Standing ritual this plan fulfills, if any. */
+  ritualId?: string | null;
   /** Already in host-preferred order. */
   invitees: WizardInvitee[];
 }
@@ -69,6 +72,7 @@ export async function createEvent(input: CreateEventInput): Promise<never> {
       ends_at: input.endsAt,
       capacity: input.capacity,
       invite_mode: input.inviteMode,
+      open_table: input.openTable && input.capacity !== null,
       status: input.enablePoll ? 'deciding' : 'inviting',
       show_invite_list: input.showInviteList,
       show_accepted: input.showAccepted,
@@ -91,6 +95,13 @@ export async function createEvent(input: CreateEventInput): Promise<never> {
 
   const { error: inviteError } = await supabase.from('invites').insert(inviteRows);
   if (inviteError) redirect('/events/new?error=save');
+
+  if (input.ritualId) {
+    await supabase
+      .from('rituals')
+      .update({ last_planned_at: new Date().toISOString() })
+      .eq('id', input.ritualId);
+  }
 
   if (input.enablePoll) {
     await supabase.from('polls').insert({

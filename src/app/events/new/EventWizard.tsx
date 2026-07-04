@@ -8,12 +8,21 @@ import { Card } from '@/components/ui/Card';
 import { suggestWindow, WINDOW_CHOICES } from '@/lib/engine/windows';
 import { simulateCascade } from '@/lib/engine/cascade';
 import { createEvent, type CreateEventInput } from '@/lib/actions/events';
+import { DescribePlan } from '@/components/events/DescribePlan';
+import type { PlanDraft } from '@/lib/actions/plan';
 import type { InviteMode } from '@/lib/types';
 
 export interface WizardFriend {
   id: string;
   name: string;
   handle: string;
+}
+
+export interface WizardHousehold {
+  id: string;
+  name: string;
+  emoji: string;
+  memberIds: string[];
 }
 
 interface DraftInvitee {
@@ -43,7 +52,7 @@ const MODE_OPTIONS: Array<{
     mode: 'group',
     emoji: '🌊',
     title: 'In waves',
-    body: 'Invite groups in stages. Later waves only go out if spots remain — events fill naturally without overbooking.',
+    body: 'Invite groups in stages. Later waves only go out if spots remain - events fill naturally without overbooking.',
   },
   {
     mode: 'all_at_once',
@@ -55,18 +64,24 @@ const MODE_OPTIONS: Array<{
 
 export function EventWizard({
   friends,
+  households = [],
   initialTitle = '',
   initialDescription = '',
+  ritualId = null,
+  initialInviteeId = null,
 }: {
   friends: WizardFriend[];
+  households?: WizardHousehold[];
   initialTitle?: string;
   initialDescription?: string;
+  ritualId?: string | null;
+  initialInviteeId?: string | null;
 }) {
   const [step, setStep] = useState(0);
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
 
-  // Step 1 — basics
+  // Step 1 - basics
   const [title, setTitle] = useState(initialTitle);
   const [description, setDescription] = useState(initialDescription);
   const [locationName, setLocationName] = useState('');
@@ -74,21 +89,34 @@ export function EventWizard({
   const [time, setTime] = useState('');
   const [capacity, setCapacity] = useState('');
 
-  // Step 2 — style
+  // Step 2 - style
   const [inviteMode, setInviteMode] = useState<InviteMode>('individual');
   const [enablePoll, setEnablePoll] = useState(false);
   const [pollResolution, setPollResolution] =
     useState<CreateEventInput['pollResolution']>('host_pick');
 
-  // Step 3/4 — people & order
-  const [invitees, setInvitees] = useState<DraftInvitee[]>([]);
+  // Step 3/4 - people & order
+  const [invitees, setInvitees] = useState<DraftInvitee[]>(() => {
+    const preselected = friends.find((f) => f.id === initialInviteeId);
+    if (!preselected) return [];
+    return [
+      {
+        key: preselected.id,
+        profileId: preselected.id,
+        name: preselected.name,
+        groupStage: 0,
+        windowMinutes: 24 * 60,
+      },
+    ];
+  });
   const [guestName, setGuestName] = useState('');
   const [guestContact, setGuestContact] = useState('');
 
-  // Step 5 — visibility
+  // Step 5 - visibility
   const [showInviteList, setShowInviteList] = useState(false);
   const [showAccepted, setShowAccepted] = useState(true);
   const [showExpired, setShowExpired] = useState(false);
+  const [openTable, setOpenTable] = useState(false);
 
   const startsAt = useMemo(() => {
     if (!date) return null;
@@ -114,6 +142,52 @@ export function EventWizard({
           windowMinutes: suggested.windowMinutes,
         },
       ];
+    });
+  }
+
+  function applyDraft(draft: PlanDraft) {
+    setTitle(draft.title);
+    if (draft.date) setDate(draft.date);
+    if (draft.time) setTime(draft.time);
+    if (draft.locationName) setLocationName(draft.locationName);
+    if (draft.capacity) setCapacity(String(draft.capacity));
+    setInviteMode(draft.mode);
+    if (draft.invitees.length > 0) {
+      setInvitees(
+        draft.invitees.map((friend) => ({
+          key: friend.id,
+          profileId: friend.id,
+          name: friend.name,
+          groupStage: 0,
+          windowMinutes: suggested.windowMinutes,
+        })),
+      );
+    }
+  }
+
+  function toggleHousehold(household: WizardHousehold) {
+    setInvitees((current) => {
+      const members = household.memberIds
+        .map((id) => friends.find((f) => f.id === id))
+        .filter((f): f is WizardFriend => Boolean(f));
+      const allIn = members.every((m) =>
+        current.some((i) => i.profileId === m.id),
+      );
+      if (allIn) {
+        return current.filter(
+          (i) => !members.some((m) => m.id === i.profileId),
+        );
+      }
+      const additions = members
+        .filter((m) => !current.some((i) => i.profileId === m.id))
+        .map((m) => ({
+          key: m.id,
+          profileId: m.id,
+          name: m.name,
+          groupStage: 0,
+          windowMinutes: suggested.windowMinutes,
+        }));
+      return [...current, ...additions];
     });
   }
 
@@ -194,12 +268,14 @@ export function EventWizard({
         endsAt: null,
         capacity: capacity ? Number(capacity) : null,
         inviteMode,
+        openTable,
         showInviteList,
         showAccepted,
         showExpired,
         enablePoll,
         pollResolution,
         voteDeadline: null,
+        ritualId,
         invitees: invitees.map((invitee) => ({
           profileId: invitee.profileId,
           guestName: invitee.profileId ? undefined : invitee.name,
@@ -240,11 +316,12 @@ export function EventWizard({
         ))}
       </ol>
       <p className="text-xs font-medium uppercase tracking-wide text-ink-faint">
-        Step {step + 1} of {STEPS.length} — {STEPS[step]}
+        Step {step + 1} of {STEPS.length} - {STEPS[step]}
       </p>
 
       {step === 0 && (
         <div className="space-y-4 animate-rise">
+          <DescribePlan onDraft={applyDraft} />
           <div className="space-y-1.5">
             <label htmlFor="title" className="text-sm font-medium">What’s the plan?</label>
             <input
@@ -344,7 +421,7 @@ export function EventWizard({
                 <span className="font-medium">Let the group decide what to do 🗳️</span>
                 <span className="block text-sm text-ink-soft mt-0.5 leading-relaxed">
                   Attendees suggest ideas and rank them privately. The best fit
-                  wins — no debates, no loudest-voice problem.
+                  wins - no debates, no loudest-voice problem.
                 </span>
               </span>
             </label>
@@ -373,10 +450,37 @@ export function EventWizard({
 
       {step === 2 && (
         <div className="space-y-4 animate-rise">
+          {households.length > 0 && (
+            <div>
+              <p className="text-sm font-medium mb-2">Whole households</p>
+              <div className="flex flex-wrap gap-2">
+                {households.map((household) => {
+                  const members = household.memberIds.filter((id) =>
+                    friends.some((f) => f.id === id),
+                  );
+                  const allIn =
+                    members.length > 0 &&
+                    members.every((id) =>
+                      invitees.some((i) => i.profileId === id),
+                    );
+                  return (
+                    <Chip
+                      key={household.id}
+                      emoji={household.emoji}
+                      selected={allIn}
+                      onClick={() => toggleHousehold(household)}
+                    >
+                      {household.name} ({members.length})
+                    </Chip>
+                  );
+                })}
+              </div>
+            </div>
+          )}
           {friends.length === 0 && (
             <Card tone="cream">
               <p className="text-sm text-ink-soft leading-relaxed">
-                You haven’t connected with anyone yet — you can still invite
+                You haven’t connected with anyone yet - you can still invite
                 people as <strong>guests</strong> below. They’ll get a link, no
                 account needed.
               </p>
@@ -536,7 +640,7 @@ export function EventWizard({
             ))}
           </ol>
           <p className="text-xs text-ink-faint">
-            💡 Suggested window for this event: <strong>{suggested.label}</strong> —
+            💡 Suggested window for this event: <strong>{suggested.label}</strong> -
             based on how soon it starts.
           </p>
         </div>
@@ -581,6 +685,25 @@ export function EventWizard({
               </label>
             </Card>
           ))}
+          {capacity && Number(capacity) > 1 && (
+            <Card tone="gold">
+              <label className="flex items-start gap-3 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={openTable}
+                  onChange={(e) => setOpenTable(e.target.checked)}
+                  className="mt-1 size-4 accent-[oklch(60%_0.128_42)]"
+                />
+                <span>
+                  <span className="font-medium">Open Table 🍽️</span>
+                  <span className="block text-sm text-ink-soft mt-0.5">
+                    If seats stay empty, friends of your attendees can ask to
+                    join. You approve every request.
+                  </span>
+                </span>
+              </label>
+            </Card>
+          )}
           <p className="text-xs text-ink-faint leading-relaxed px-1">
             Defaults are tuned so a one-on-one coffee feels private and a party
             feels social. Invitees never see their position in the cascade.
@@ -635,7 +758,7 @@ export function EventWizard({
                 })}
               </ol>
               <p className="text-xs text-ink-faint mt-2">
-                In reality it usually goes much faster — the moment someone
+                In reality it usually goes much faster - the moment someone
                 accepts, the flow stops.
               </p>
             </div>
@@ -644,7 +767,7 @@ export function EventWizard({
           {enablePoll && (
             <Card tone="gold">
               <p className="text-sm leading-relaxed">
-                🗳️ This plan starts in <strong>deciding mode</strong> — invitees
+                🗳️ This plan starts in <strong>deciding mode</strong> - invitees
                 will suggest and rank ideas first. You’ll send the cascade once
                 the group settles on what to do.
               </p>

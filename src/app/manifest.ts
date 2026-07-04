@@ -5,7 +5,7 @@ export default function manifest(): MetadataRoute.Manifest {
     name: 'Switchboard',
     short_name: 'Switchboard',
     description:
-      'Plans without pressure — cascading invites, anonymous group decisions, and mutual-interest matching.',
+      'Plans without pressure - cascading invites, anonymous group decisions, and mutual-interest matching.',
     start_url: '/',
     display: 'standalone',
     background_color: '#f7f3ea',

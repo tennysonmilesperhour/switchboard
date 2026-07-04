@@ -1,4 +1,4 @@
-/** Formatting helpers — Intl-based, no library dependency. */
+/** Formatting helpers - Intl-based, no library dependency. */
 
 export function formatDateTime(iso: string | null): string {
   if (!iso) return 'Time TBD';

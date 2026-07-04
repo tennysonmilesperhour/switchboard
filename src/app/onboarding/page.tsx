@@ -7,8 +7,8 @@ export const metadata: Metadata = { title: 'Set up your profile' };
 
 const ERROR_MESSAGES: Record<string, string> = {
   name: 'Please tell us your name.',
-  handle: 'Handles are 3–24 characters: lowercase letters, numbers, underscores.',
-  handle_taken: 'That handle is taken — try another.',
+  handle: 'Handles are 3-24 characters: lowercase letters, numbers, underscores.',
+  handle_taken: 'That handle is taken - try another.',
   save: 'Something went wrong saving your profile. Try again.',
 };
 

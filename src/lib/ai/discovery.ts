@@ -13,7 +13,7 @@ export interface DiscoveryInput {
 export interface Suggestion {
   title: string;
   description: string;
-  /** "Why this" — every recommendation explains itself. */
+  /** "Why this" - every recommendation explains itself. */
   why: string;
   category: string;
   estimatedCost: string;
@@ -80,14 +80,14 @@ function fallbackSuggestions(input: DiscoveryInput): Suggestion[] {
     {
       title: 'Farmers market brunch mission',
       description: 'Everyone buys one ingredient or ready-made item; assemble brunch together after.',
-      why: 'Turns errands into an event — spontaneous and cheap.',
+      why: 'Turns errands into an event - spontaneous and cheap.',
       category: 'Food',
       estimatedCost: '$',
     },
   ];
   return pool.slice(0, 4).map((s) => ({
     ...s,
-    why: `${s.why} (Curated pick — connect an Anthropic key for suggestions tailored to ${input.location || 'your area'}.)`,
+    why: `${s.why} (Curated pick - connect an Anthropic key for suggestions tailored to ${input.location || 'your area'}.)`,
   }));
 }
 
@@ -101,10 +101,10 @@ export async function discoverActivities(
       model: MODELS.smart,
       max_tokens: 1500,
       system:
-        'You are Switchboard’s activity curator. Recommend 3–5 specific, ' +
+        'You are Switchboard’s activity curator. Recommend 3-5 specific, ' +
         'realistic activities a small group could actually do. Prefer concrete, ' +
         'locally-plausible ideas over generic ones; never invent specific venue ' +
-        'names or events you cannot verify — describe the kind of place instead ' +
+        'names or events you cannot verify - describe the kind of place instead ' +
         '(e.g. "a brewery with a patio"). Each needs a one-sentence "why" tied ' +
         'to the stated preferences. Match the budget and vibe.',
       tools: [SUGGEST_TOOL],

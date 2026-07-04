@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useTransition } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/Button';
 import { Card, SectionHeader } from '@/components/ui/Card';
@@ -58,11 +59,18 @@ export function MomentsClient({
   if (!myMoment) {
     return (
       <div className="space-y-6">
+        <Link
+          href="/zones"
+          className="block rounded-card border border-dashed border-line bg-cream px-4 py-3 text-sm text-ink-soft hover:border-terracotta hover:text-terracotta-deep transition-colors"
+        >
+          🎪 At a conference, cruise, or festival? Check in through its{' '}
+          <strong>Serendipity Zone</strong> instead.
+        </Link>
         <p className="text-sm text-ink-soft leading-relaxed -mt-1">
-          Waiting somewhere — an airport, a coffee shop, soccer practice?
+          Waiting somewhere - an airport, a coffee shop, soccer practice?
           Check in and Switchboard will quietly look for someone nearby who’d
           enjoy the same kind of moment. Nobody is revealed unless you’re{' '}
-          <em>both</em> curious.
+          <strong>both</strong> curious.
         </p>
 
         <div className="space-y-4">
@@ -76,7 +84,7 @@ export function MomentsClient({
               className="w-full rounded-card border border-line bg-card px-4 py-3 outline-none focus:border-terracotta"
             />
             <p className="text-xs text-ink-faint">
-              People at the same place see the same name — be specific enough to match.
+              People at the same place see the same name - be specific enough to match.
             </p>
           </div>
 
@@ -180,7 +188,7 @@ export function MomentsClient({
           title="Sharing this moment"
           hint={
             candidates.length === 0
-              ? 'Serendipity is watching quietly — check back in a bit'
+              ? 'Serendipity is watching quietly - check back in a bit'
               : 'Same place, same time, similar interests'
           }
         />
@@ -188,7 +196,7 @@ export function MomentsClient({
           <Card tone="cream">
             <p className="text-sm text-ink-soft leading-relaxed">
               Nobody else has checked in here yet. That’s the thing about
-              serendipity — it can’t be rushed. You’ll get a gentle nudge if a
+              serendipity - it can’t be rushed. You’ll get a gentle nudge if a
               match appears. ✨
             </p>
           </Card>
@@ -203,7 +211,7 @@ export function MomentsClient({
                     </p>
                     <p className="font-display text-xl mt-1">{candidate.intro.name}</p>
                     {candidate.intro.headline && (
-                      <p className="text-sm text-ink-soft italic mt-1">
+                      <p className="text-sm text-ink-soft mt-1">
                         “{candidate.intro.headline}”
                       </p>
                     )}
@@ -219,7 +227,7 @@ export function MomentsClient({
                     </div>
                     {candidate.stage === 'accepted' ? (
                       <p className="text-sm text-sage-deep mt-3">
-                        You said yes — waiting for them. 🤞
+                        You said yes - waiting for them. 🤞
                       </p>
                     ) : (
                       <div className="flex gap-2 mt-3">
@@ -273,13 +281,13 @@ export function MomentsClient({
                       ))}
                     </div>
                     {candidate.headline && (
-                      <p className="text-sm text-ink-soft italic mt-2">
+                      <p className="text-sm text-ink-soft mt-2">
                         “{candidate.headline}”
                       </p>
                     )}
                     {candidate.stage === 'curious' ? (
                       <p className="text-xs text-ink-faint mt-3">
-                        You’re curious — they haven’t decided yet. Nothing is
+                        You’re curious - they haven’t decided yet. Nothing is
                         revealed until it’s mutual.
                       </p>
                     ) : (

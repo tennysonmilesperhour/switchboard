@@ -1,4 +1,4 @@
-/* Warm, deterministic initials avatar — no image dependency. */
+/* Warm, deterministic initials avatar - no image dependency. */
 
 const HUES = [25, 45, 85, 150, 200, 260, 320];
 

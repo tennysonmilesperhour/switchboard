@@ -9,6 +9,7 @@ import { Chip } from '@/components/ui/Chip';
 import { Avatar } from '@/components/ui/Avatar';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { downToConnect, withdrawIntent } from '@/lib/actions/mutual';
+import { endRitual, pauseRitual, proposeRitual } from '@/lib/actions/rituals';
 import { formatRelative } from '@/lib/format';
 import { ACTIVITY_PRESETS } from '@/lib/types';
 
@@ -34,17 +35,38 @@ export interface MyMatch {
   createdAt: string;
 }
 
+export interface RitualRow {
+  id: string;
+  activity: string;
+  cadenceDays: number;
+  status: string;
+  isMine: boolean;
+  otherId: string;
+  otherName: string;
+}
+
 export function MutualClient({
   friends,
   intents,
   matches,
+  rituals = [],
+  initialPersonId = null,
 }: {
   friends: MutualFriend[];
   intents: MyIntent[];
   matches: MyMatch[];
+  rituals?: RitualRow[];
+  initialPersonId?: string | null;
 }) {
   const [activities, setActivities] = useState<string[]>([]);
-  const [people, setPeople] = useState<string[]>([]);
+  const [people, setPeople] = useState<string[]>(
+    initialPersonId && friends.some((f) => f.id === initialPersonId)
+      ? [initialPersonId]
+      : [],
+  );
+  const [ritualPartner, setRitualPartner] = useState('');
+  const [ritualActivity, setRitualActivity] = useState('Coffee');
+  const [ritualCadence, setRitualCadence] = useState(21);
   const [justMatched, setJustMatched] = useState(false);
   const [pending, startTransition] = useTransition();
   const router = useRouter();
@@ -74,8 +96,8 @@ export function MutualClient({
   return (
     <div className="space-y-8">
       <p className="text-sm text-ink-soft leading-relaxed -mt-1">
-        Pick an activity and the people you’d enjoy it with. Nothing is sent —
-        if they independently pick you too, you <em>both</em> find out.
+        Pick an activity and the people you’d enjoy it with. Nothing is sent -
+        if they independently pick you too, you <strong>both</strong> find out.
         If not, no one ever knows. 🤫
       </p>
 
@@ -83,7 +105,7 @@ export function MutualClient({
         <Card tone="sage" lifted className="animate-rise">
           <p className="font-display text-xl text-sage-deep">✨ It’s mutual!</p>
           <p className="text-sm text-ink-soft mt-1">
-            You matched — check your matches below and say hi.
+            You matched - check your matches below and say hi.
           </p>
         </Card>
       )}
@@ -141,7 +163,7 @@ export function MutualClient({
           <EmptyState
             emoji="☺"
             title="No connections yet"
-            body="Add friends from the People tab first — Mutual Mode needs someone to be mutual with."
+            body="Add friends from the People tab first - Mutual Mode needs someone to be mutual with."
           />
         ) : (
           <div className="space-y-2">
@@ -182,6 +204,134 @@ export function MutualClient({
       <p className="text-xs text-ink-faint text-center -mt-4">
         Completely private until it’s mutual.
       </p>
+
+      {/* Standing rituals */}
+      <section>
+        <SectionHeader
+          title="Standing rituals 🔁"
+          hint="Regular things with regular people, without the scheduling chore"
+        />
+        {rituals.length > 0 && (
+          <ul className="space-y-2 mb-4">
+            {rituals.map((ritual) => (
+              <li
+                key={ritual.id}
+                className="flex items-center gap-3 rounded-card bg-cream px-3.5 py-2.5"
+              >
+                <span className="text-sm flex-1">
+                  <strong>{ritual.activity}</strong> with{' '}
+                  <strong>{ritual.otherName}</strong>
+                  <span className="text-ink-faint">
+                    {' '}
+                    · every {ritual.cadenceDays} days
+                    {ritual.status === 'proposed'
+                      ? ritual.isMine
+                        ? ' · waiting on them'
+                        : ' · waiting on you (see Home)'
+                      : ritual.status === 'paused'
+                        ? ' · paused'
+                        : ''}
+                  </span>
+                </span>
+                {ritual.status !== 'proposed' && (
+                  <button
+                    type="button"
+                    className="text-xs text-ink-faint hover:text-ink"
+                    disabled={pending}
+                    onClick={() =>
+                      startTransition(async () => {
+                        await pauseRitual(ritual.id, ritual.status === 'active');
+                        router.refresh();
+                      })
+                    }
+                  >
+                    {ritual.status === 'active' ? 'Pause' : 'Resume'}
+                  </button>
+                )}
+                <button
+                  type="button"
+                  className="text-xs text-ink-faint hover:text-rose-deep"
+                  disabled={pending}
+                  onClick={() =>
+                    startTransition(async () => {
+                      await endRitual(ritual.id);
+                      router.refresh();
+                    })
+                  }
+                >
+                  End
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+        {friends.length > 0 && (
+          <Card>
+            <p className="text-sm font-medium mb-2.5">Start one</p>
+            <div className="space-y-2.5">
+              <select
+                value={ritualPartner}
+                onChange={(e) => setRitualPartner(e.target.value)}
+                aria-label="Ritual partner"
+                className="w-full rounded-card border border-line bg-paper px-3 py-2.5 text-sm"
+              >
+                <option value="">With who?</option>
+                {friends.map((friend) => (
+                  <option key={friend.id} value={friend.id}>
+                    {friend.name}
+                  </option>
+                ))}
+              </select>
+              <div className="flex gap-2">
+                <select
+                  value={ritualActivity}
+                  onChange={(e) => setRitualActivity(e.target.value)}
+                  aria-label="Ritual activity"
+                  className="flex-1 rounded-card border border-line bg-paper px-3 py-2.5 text-sm"
+                >
+                  {ACTIVITY_PRESETS.map((activity) => (
+                    <option key={activity.label} value={activity.label}>
+                      {activity.emoji} {activity.label}
+                    </option>
+                  ))}
+                </select>
+                <select
+                  value={ritualCadence}
+                  onChange={(e) => setRitualCadence(Number(e.target.value))}
+                  aria-label="Ritual cadence"
+                  className="rounded-card border border-line bg-paper px-3 py-2.5 text-sm"
+                >
+                  <option value={7}>Weekly</option>
+                  <option value={14}>Every 2 weeks</option>
+                  <option value={21}>Every 3 weeks</option>
+                  <option value={30}>Monthly</option>
+                  <option value={60}>Every 2 months</option>
+                </select>
+              </div>
+              <Button
+                size="sm"
+                variant="secondary"
+                className="w-full"
+                disabled={pending || !ritualPartner}
+                onClick={() =>
+                  startTransition(async () => {
+                    await proposeRitual(ritualPartner, ritualActivity, ritualCadence);
+                    setRitualPartner('');
+                    router.refresh();
+                  })
+                }
+              >
+                Propose the ritual
+              </Button>
+              <p className="text-xs text-ink-faint">
+                They accept once. After that, Switchboard nudges you both when
+                it has been about that long, and either of you can skip
+                guilt-free.
+              </p>
+            </div>
+          </Card>
+        )}
+      </section>
 
       {/* Active intents */}
       {intents.length > 0 && (

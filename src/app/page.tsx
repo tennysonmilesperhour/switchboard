@@ -5,6 +5,14 @@ import { AppShell } from '@/components/shell/AppShell';
 import { Card, SectionHeader } from '@/components/ui/Card';
 import { Avatar } from '@/components/ui/Avatar';
 import { SignalBar } from '@/components/signals/SignalBar';
+import {
+  EnergyPrompt,
+  MatchmakerCard,
+  RitualCard,
+  type ProposalCardData,
+  type RitualCardData,
+} from '@/components/home/HomeCards';
+import { getReconnectionSuggestions } from '@/lib/server/radar';
 import { formatDateTime, formatRelative } from '@/lib/format';
 import type { SwitchboardEvent } from '@/lib/types';
 
@@ -64,6 +72,83 @@ export default async function HomePage() {
       .limit(3),
   ]);
 
+  // Innovations: matchmaker proposals, rituals, radar, energy prompts.
+  const nowMs = new Date(nowIso).getTime();
+  const threeDaysAgo = new Date(nowMs - 3 * 86_400_000).toISOString();
+  const [
+    { data: proposalRows },
+    { data: ritualRows },
+    radar,
+    { data: recentPast },
+    { data: energyLogged },
+  ] = await Promise.all([
+    supabase.rpc('my_matchmaker_proposals'),
+    supabase
+      .from('rituals')
+      .select(
+        'id, activity, cadence_days, status, last_planned_at, creator_id, partner_id, creator:profiles!rituals_creator_id_fkey(display_name), partner:profiles!rituals_partner_id_fkey(display_name)',
+      )
+      .or(`creator_id.eq.${user.id},partner_id.eq.${user.id}`)
+      .in('status', ['proposed', 'active']),
+    getReconnectionSuggestions(user.id),
+    supabase
+      .from('events')
+      .select('id, title, starts_at')
+      .lt('starts_at', nowIso)
+      .gte('starts_at', threeDaysAgo)
+      .neq('status', 'cancelled')
+      .limit(3),
+    supabase.from('energy_logs').select('event_id').eq('user_id', user.id),
+  ]);
+
+  const proposals: ProposalCardData[] = (proposalRows ?? []).map(
+    (row: {
+      id: string;
+      activity: string;
+      note: string | null;
+      proposer_name: string;
+      my_response: string;
+      status: string;
+      room_id: string | null;
+      other_name: string | null;
+    }) => ({
+      id: row.id,
+      activity: row.activity,
+      note: row.note,
+      proposerName: row.proposer_name,
+      myResponse: row.my_response,
+      status: row.status,
+      roomId: row.room_id,
+      otherName: row.other_name,
+    }),
+  );
+
+  const rituals: RitualCardData[] = (ritualRows ?? [])
+    .map((row) => {
+      const isMine = row.creator_id === user.id;
+      const otherRaw = isMine ? row.partner : row.creator;
+      const other = Array.isArray(otherRaw) ? otherRaw[0] : otherRaw;
+      const due =
+        row.status === 'active' &&
+        (!row.last_planned_at ||
+          nowMs - new Date(row.last_planned_at).getTime() >
+            row.cadence_days * 86_400_000);
+      return {
+        id: row.id,
+        activity: row.activity,
+        otherName: other?.display_name ?? 'Friend',
+        otherId: isMine ? row.partner_id : row.creator_id,
+        cadenceDays: row.cadence_days,
+        status: row.status,
+        isMine,
+        due,
+      };
+    })
+    .filter((ritual) => (ritual.status === 'proposed' && !ritual.isMine) || ritual.due);
+
+  const loggedIds = new Set((energyLogged ?? []).map((log) => log.event_id));
+  const energyPrompts = (recentPast ?? []).filter((event) => !loggedIds.has(event.id));
+
   const firstName = profile.display_name.split(' ')[0];
   const hour = new Date().getHours();
   const greeting = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
@@ -86,11 +171,88 @@ export default async function HomePage() {
             {greeting}, {firstName}.
           </h1>
           <p className="text-sm text-ink-faint mt-1">
-            Feeling social? Let people know — quietly.
+            Feeling social? Let people know - quietly.
           </p>
         </div>
 
         <SignalBar active={mySignal ?? null} circles={circles ?? []} />
+
+        {/* Matchmaker introductions */}
+        {proposals.length > 0 && (
+          <section aria-label="Introductions">
+            <div className="space-y-2.5">
+              {proposals.map((proposal) => (
+                <MatchmakerCard key={proposal.id} proposal={proposal} />
+              ))}
+            </div>
+          </section>
+        )}
+
+        {/* Ritual nudges and invitations */}
+        {rituals.length > 0 && (
+          <section aria-label="Rituals">
+            <div className="space-y-2.5">
+              {rituals.map((ritual) => (
+                <RitualCard key={ritual.id} ritual={ritual} />
+              ))}
+            </div>
+          </section>
+        )}
+
+        {/* Reconnection radar (private) */}
+        {radar.length > 0 && (
+          <section>
+            <SectionHeader
+              title="It’s been a while"
+              hint="Only you can see this"
+            />
+            <div className="space-y-2">
+              {radar.map((suggestion) => (
+                <Link
+                  key={suggestion.friendId}
+                  href={`/mutual?person=${suggestion.friendId}`}
+                  className="block group"
+                >
+                  <Card className="group-hover:border-terracotta transition-colors">
+                    <div className="flex items-center gap-3">
+                      <Avatar
+                        name={suggestion.friendName}
+                        seed={suggestion.friendId}
+                        size="sm"
+                      />
+                      <p className="text-sm flex-1">
+                        <strong>{suggestion.friendName}</strong>{' '}
+                        <span className="text-ink-soft">
+                          {suggestion.daysSince
+                            ? `· ${suggestion.daysSince} days since you got together`
+                            : '· you two haven’t gotten together yet'}
+                        </span>
+                      </p>
+                      <span className="text-xs text-terracotta-deep whitespace-nowrap">
+                        Reach out quietly
+                      </span>
+                    </div>
+                  </Card>
+                </Link>
+              ))}
+            </div>
+          </section>
+        )}
+
+        {/* Post-event reflection */}
+        {energyPrompts.length > 0 && (
+          <section aria-label="Reflections">
+            <div className="space-y-2.5">
+              {energyPrompts.map((event) => (
+                <EnergyPrompt
+                  key={event.id}
+                  eventId={event.id}
+                  eventTitle={event.title}
+                />
+              ))}
+            </div>
+          </section>
+        )}
 
         {/* Friends who are around */}
         {(friendSignals?.length ?? 0) > 0 && (
@@ -166,7 +328,7 @@ export default async function HomePage() {
                 >
                   <Card className="group-hover:border-terracotta transition-colors">
                     <p className="text-sm">
-                      <strong>{match.activity}</strong> — it’s mutual!{' '}
+                      <strong>{match.activity}</strong> - it’s mutual!{' '}
                       <span className="text-ink-faint">
                         {formatRelative(match.created_at)}
                       </span>

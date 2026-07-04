@@ -52,7 +52,7 @@ export default async function MomentsPage() {
           const stage = (stageByOther.get(candidate.id) ?? 'none') as Candidate['stage'];
           let intro: Candidate['intro'] = null;
           if (stage === 'revealed' || stage === 'accepted') {
-            // Mutual curiosity confirmed — a gentle introduction is allowed.
+            // Mutual curiosity confirmed - a gentle introduction is allowed.
             const { data: otherMoment } = await admin
               .from('moments')
               .select('user_id, headline, profile:profiles(display_name, interests)')

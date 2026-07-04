@@ -13,7 +13,7 @@ export interface MutualResult {
 }
 
 /**
- * "Down to Connect" — stores private interest. The DB trigger creates a
+ * "Down to Connect" - stores private interest. The DB trigger creates a
  * match if (and only if) the interest is mutual; we then notify BOTH
  * people simultaneously so neither is ever "the one who asked".
  */
@@ -46,7 +46,7 @@ export async function downToConnect(
     .single();
   if (error || !intent) return { ok: false, error: error?.message ?? 'save failed' };
 
-  // The trigger flips both intents to 'matched' when interest is mutual —
+  // The trigger flips both intents to 'matched' when interest is mutual -
   // re-read to observe its result (RETURNING predates the AFTER trigger).
   const { data: after } = await supabase
     .from('mutual_intents')
@@ -60,7 +60,7 @@ export async function downToConnect(
       body:
         kind === 'down_to_connect'
           ? `You both want to ${activity.toLowerCase()}. Say hi!`
-          : 'You’d both rather reschedule — no one has to be the bad guy.',
+          : 'You’d both rather reschedule - no one has to be the bad guy.',
       url: '/mutual',
     });
 

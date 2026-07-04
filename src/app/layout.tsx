@@ -14,7 +14,7 @@ const inter = Inter({
 
 export const metadata: Metadata = {
   title: {
-    default: 'Switchboard — plans without pressure',
+    default: 'Switchboard - plans without pressure',
     template: '%s · Switchboard',
   },
   description:

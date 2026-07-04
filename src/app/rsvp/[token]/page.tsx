@@ -28,7 +28,7 @@ export async function generateMetadata({
   };
 }
 
-/** Public guest RSVP — reached via an unguessable token link, no account needed. */
+/** Public guest RSVP - reached via an unguessable token link, no account needed. */
 export default async function GuestRsvpPage({
   params,
 }: {
@@ -95,7 +95,7 @@ export default async function GuestRsvpPage({
               initialStatus={invite.status}
             />
             <p className="text-xs text-ink-faint mt-10 leading-relaxed">
-              Switchboard makes plans without pressure — invitations flow one
+              Switchboard makes plans without pressure - invitations flow one
               person at a time, so nobody feels like a backup. If you can’t
               make it, the invitation quietly moves along. No hard feelings.
             </p>

@@ -104,12 +104,12 @@ export function PollSection({
           poll.phase === 'decided'
             ? 'The group has decided.'
             : poll.phase === 'runoff'
-              ? 'Final runoff — pick between the finalists.'
+              ? 'Final runoff - pick between the finalists.'
               : 'Rank ideas privately. Nobody sees your individual votes.'
         }
       />
 
-      {/* Consensus meter — aggregate only, never individual votes */}
+      {/* Consensus meter - aggregate only, never individual votes */}
       {votingOpen && results.some((r) => r.voters > 0) && (
         <div className="mb-4">
           <div className="flex justify-between text-xs text-ink-faint mb-1">

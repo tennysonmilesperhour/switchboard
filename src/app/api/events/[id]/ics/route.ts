@@ -16,7 +16,7 @@ export async function GET(
   const { id } = await params;
   const supabase = await createClient();
 
-  // RLS decides visibility — no extra checks needed.
+  // RLS decides visibility - no extra checks needed.
   const { data: event } = await supabase
     .from('events')
     .select('id, title, description, location_name, location_address, starts_at, ends_at')

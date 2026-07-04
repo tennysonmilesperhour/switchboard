@@ -117,7 +117,7 @@ export function SignalBar({ active, circles }: SignalBarProps) {
             ))}
           </div>
           <p className="text-xs text-ink-faint mt-2.5">
-            No broadcast, no notification — friends simply notice when they
+            No broadcast, no notification - friends simply notice when they
             open Switchboard. It turns off by itself in 3 hours.
           </p>
         </Card>

@@ -1,5 +1,5 @@
 /**
- * Anonymous Weighted Input scoring — pure functions.
+ * Anonymous Weighted Input scoring - pure functions.
  *
  * Weights: 2 = "Absolutely love this", 1 = "Sounds good",
  * 0 = neutral/unranked, -1 = "I'd rather not".
@@ -21,7 +21,7 @@ export interface OptionScore {
   loves: number;
   objections: number;
   voters: number;
-  /** 0–100: how satisfied the group would be with this option. */
+  /** 0-100: how satisfied the group would be with this option. */
   consensus: number;
 }
 
@@ -62,7 +62,7 @@ export function scoreOptions(
   );
 }
 
-/** Consensus of the current leader — powers the live consensus meter. */
+/** Consensus of the current leader - powers the live consensus meter. */
 export function groupConsensus(
   optionIds: readonly string[],
   votes: readonly Vote[],

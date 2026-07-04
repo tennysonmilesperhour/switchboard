@@ -17,6 +17,7 @@ export async function checkIn(
   experiences: string[],
   headline: string,
   hoursAvailable: number,
+  zoneId: string | null = null,
 ): Promise<MomentActionResult> {
   const supabase = await createClient();
   const {
@@ -39,6 +40,7 @@ export async function checkIn(
     experiences,
     headline: headline.trim() || null,
     available_until: new Date(Date.now() + hoursAvailable * 3_600_000).toISOString(),
+    zone_id: zoneId,
   });
   if (error) return { ok: false, error: error.message };
   revalidatePath('/moments');
@@ -179,7 +181,7 @@ export async function acceptMoment(
 
   await sendPushToUsers([mine.user_id, other.user_id], {
     title: '✨ You’d both love to share this moment',
-    body: 'A conversation is open — say hi and pick a spot.',
+    body: 'A conversation is open - say hi and pick a spot.',
     url: `/rooms/${room.id}`,
   });
 

@@ -157,7 +157,7 @@ export function RoomClient({
               <EmptyState
                 emoji="👋"
                 title="Say hello"
-                body="Anything useful you share — addresses, links, to-dos — files itself into the tabs above."
+                body="Anything useful you share - addresses, links, to-dos - files itself into the tabs above."
               />
             )}
             {messages.map((message) => {

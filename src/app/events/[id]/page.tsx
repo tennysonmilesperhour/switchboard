@@ -8,6 +8,7 @@ import { Card, SectionHeader } from '@/components/ui/Card';
 import { Avatar } from '@/components/ui/Avatar';
 import { CopyButton } from '@/components/ui/CopyButton';
 import { CascadeProgress } from '@/components/events/CascadeProgress';
+import { JoinRequests } from '@/components/events/JoinRequests';
 import { RsvpCard } from '@/components/events/RsvpCard';
 import { PollSection, type OptionResult } from '@/components/polls/PollSection';
 import { HostControls } from './HostControls';
@@ -28,7 +29,7 @@ export default async function EventPage({
   } = await supabase.auth.getUser();
   if (!user) redirect('/login');
 
-  // Lazy cascade tick — the cron sweep is the backstop, this keeps pages live.
+  // Lazy cascade tick - the cron sweep is the backstop, this keeps pages live.
   try {
     await advanceEventCascade(id);
   } catch {
@@ -117,6 +118,18 @@ export default async function EventPage({
     );
   }
 
+  // Venue perk when the location matches a claimed partner venue.
+  let venuePerk: { name: string; perk: string } | null = null;
+  if (event.location_name) {
+    const { data: venue } = await supabase
+      .from('venues')
+      .select('name, perk')
+      .ilike('name', event.location_name.trim())
+      .limit(1)
+      .maybeSingle();
+    venuePerk = venue ?? null;
+  }
+
   const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? '';
   const guestLinks = isHost
     ? hostInvites
@@ -173,7 +186,21 @@ export default async function EventPage({
                 ❋ Living Room
               </Link>
             )}
+            {event.starts_at && new Date(event.starts_at) < new Date() && (
+              <Link
+                href={`/events/${event.id}/capsule`}
+                className="inline-flex items-center gap-1.5 rounded-pill border border-line bg-card px-3 py-1.5 text-xs font-medium text-ink-soft hover:border-terracotta hover:text-terracotta-deep transition-colors"
+              >
+                📦 Memory Capsule
+              </Link>
+            )}
           </div>
+          {venuePerk && (
+            <p className="mt-3 rounded-card bg-gold-soft px-3.5 py-2.5 text-sm">
+              🏪 <strong>{venuePerk.name}</strong> perk for Switchboard groups:{' '}
+              {venuePerk.perk}
+            </p>
+          )}
         </div>
 
         {/* Invitee RSVP */}
@@ -241,21 +268,38 @@ export default async function EventPage({
           </section>
         )}
 
+        {/* Open Table join requests */}
+        {isHost && (
+          <JoinRequests
+            eventId={event.id}
+            requests={hostInvites
+              .filter((invite) => invite.status === 'requested')
+              .map((invite) => ({
+                inviteId: invite.id,
+                name: invite.invitee_name,
+                userId: invite.invitee_id ?? invite.id,
+              }))}
+          />
+        )}
+
         {/* Host cascade view */}
         {isHost && hostInvites.length > 0 && event.status !== 'deciding' && (
           <section>
             <SectionHeader
               title="Invitation flow"
-              hint="Live view — only you can see this"
+              hint="Live view - only you can see this"
             />
-            <CascadeProgress invites={hostInvites} mode={event.invite_mode} />
+            <CascadeProgress
+              invites={hostInvites.filter((invite) => invite.status !== 'requested')}
+              mode={event.invite_mode}
+            />
           </section>
         )}
 
         {/* Guest links for the host to share */}
         {guestLinks.length > 0 && (
           <section>
-            <SectionHeader title="Guest links" hint="Send these to your guests — no account needed" />
+            <SectionHeader title="Guest links" hint="Send these to your guests - no account needed" />
             <ul className="space-y-2">
               {guestLinks.map((guest) => (
                 <li key={guest.url} className="flex items-center justify-between gap-2 rounded-card bg-cream px-3.5 py-2.5">
