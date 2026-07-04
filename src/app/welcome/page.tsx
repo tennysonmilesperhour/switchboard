@@ -2,7 +2,7 @@ import Link from 'next/link';
 import type { Metadata } from 'next';
 
 export const metadata: Metadata = {
-  title: 'Switchboard — plans without pressure',
+  title: 'Switchboard - plans without pressure',
 };
 
 const FEATURES = [
@@ -14,7 +14,7 @@ const FEATURES = [
   {
     emoji: '🗳️',
     title: 'Anonymous Weighted Input',
-    body: 'Everyone ranks options privately — and says how strongly they feel. The best idea rises without anyone dominating.',
+    body: 'Everyone ranks options privately - and says how strongly they feel. The best idea rises without anyone dominating.',
   },
   {
     emoji: '◐',
@@ -24,7 +24,7 @@ const FEATURES = [
   {
     emoji: '🟢',
     title: 'Availability Signals',
-    body: 'One tap says "I’m around." Friends discover it naturally — no broadcast, no pressure, no explanation needed.',
+    body: 'One tap says "I’m around." Friends discover it naturally - no broadcast, no pressure, no explanation needed.',
   },
   {
     emoji: '❋',
@@ -34,7 +34,7 @@ const FEATURES = [
   {
     emoji: '✨',
     title: 'Shared Moments',
-    body: 'Same airport, same layover, same taste in conversation? Switchboard notices — and only introduces you if you’re both curious.',
+    body: 'Same airport, same layover, same taste in conversation? Switchboard notices - and only introduces you if you’re both curious.',
   },
 ] as const;
 
@@ -61,11 +61,11 @@ export default function WelcomePage() {
         >
           Plans without
           <br />
-          the <em className="text-terracotta not-italic">pressure</em>.
+          the <span className="text-terracotta">pressure</span>.
         </h1>
         <p className="mt-5 text-[17px] leading-relaxed text-ink-soft max-w-sm">
-          Reaching out is hard. Switchboard handles the awkward parts —
-          the asking, the waiting, the deciding — so more of your moments
+          Reaching out is hard. Switchboard handles the awkward parts -
+          the asking, the waiting, the deciding - so more of your moments
           actually happen.
         </p>
         <div className="mt-8 flex items-center gap-4">

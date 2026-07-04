@@ -1,5 +1,5 @@
 /**
- * Cascade state machine — pure, server-authoritative invite advancement.
+ * Cascade state machine - pure, server-authoritative invite advancement.
  *
  * Individual mode: one live invite at a time, by position, until spots fill.
  * Group mode: whole stages go out together; the next stage is sent only when
@@ -13,7 +13,9 @@ export type InviteStatus =
   | 'declined'
   | 'expired'
   | 'cancelled'
-  | 'waitlisted';
+  | 'waitlisted'
+  /** Open-table join request awaiting host approval. */
+  | 'requested';
 
 export interface CascadeInvite {
   id: string;

@@ -69,7 +69,58 @@ export async function respondToInvite(
   return { ok: true, outcome: typeof data === 'string' ? data : undefined };
 }
 
-/** Guest RSVP via token — no account required. */
+/** Open Table: ask to join a friends-of-friends event. */
+export async function requestToJoin(eventId: string): Promise<RespondResult> {
+  const supabase = await createClient();
+  const { error } = await supabase.rpc('request_to_join', { p_event: eventId });
+  if (error) return { ok: false, error: error.message };
+  revalidatePath('/discover');
+  return { ok: true, outcome: 'requested' };
+}
+
+/** Open Table: host approves a join request (capacity-checked in the DB). */
+export async function approveJoinRequest(
+  inviteId: string,
+  eventId: string,
+): Promise<RespondResult> {
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc('approve_join_request', {
+    p_invite: inviteId,
+  });
+  if (error) return { ok: false, error: error.message };
+
+  if (data === 'accepted') {
+    const { data: invite } = await supabase
+      .from('invites')
+      .select('invitee_id, event:events(title)')
+      .eq('id', inviteId)
+      .single();
+    const event = Array.isArray(invite?.event) ? invite?.event[0] : invite?.event;
+    if (invite?.invitee_id) {
+      await sendPushToUsers([invite.invitee_id], {
+        title: 'You are in 🎉',
+        body: `The host welcomed you to ${event?.title ?? 'the event'}.`,
+        url: `/events/${eventId}`,
+      });
+    }
+  }
+  revalidatePath(`/events/${eventId}`);
+  return { ok: true, outcome: typeof data === 'string' ? data : undefined };
+}
+
+export async function declineJoinRequest(
+  inviteId: string,
+  eventId: string,
+): Promise<RespondResult> {
+  const supabase = await createClient();
+  // Host-only via RLS delete policy on invites.
+  const { error } = await supabase.from('invites').delete().eq('id', inviteId);
+  if (error) return { ok: false, error: error.message };
+  revalidatePath(`/events/${eventId}`);
+  return { ok: true };
+}
+
+/** Guest RSVP via token - no account required. */
 export async function respondToGuestInvite(
   token: string,
   accept: boolean,

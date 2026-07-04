@@ -41,7 +41,7 @@ export default async function RoomsPage() {
         <EmptyState
           emoji="❋"
           title="No rooms yet"
-          body="Every plan and match gets a Living Room — a conversation where addresses, tasks, links, and photos quietly organize themselves."
+          body="Every plan and match gets a Living Room - a conversation where addresses, tasks, links, and photos quietly organize themselves."
         />
       ) : (
         <div className="space-y-2.5">

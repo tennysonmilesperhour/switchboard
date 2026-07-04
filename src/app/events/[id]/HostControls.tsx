@@ -44,7 +44,7 @@ export function HostControls({ event, pollDecided }: HostControlsProps) {
           disabled={pending}
           onClick={() => run(() => confirmEvent(event.id))}
         >
-          Lock it in — confirm the plan ✓
+          Lock it in - confirm the plan ✓
         </Button>
       )}
       <Button

@@ -71,7 +71,7 @@ export function extractWithRules(body: string): ExtractedItem[] {
 
 /**
  * Living Room auto-organization. Uses Haiku when available; rules otherwise.
- * The AI should feel like good architecture — "of course it's there".
+ * The AI should feel like good architecture - "of course it's there".
  */
 export async function extractItems(body: string): Promise<ExtractedItem[]> {
   if (!aiEnabled()) return extractWithRules(body);
@@ -85,7 +85,7 @@ export async function extractItems(body: string): Promise<ExtractedItem[]> {
         'reusable information: street addresses (kind=address), concrete tasks ' +
         'someone should do (kind=task), URLs (kind=link), and important notes ' +
         'like door codes or decisions (kind=note). Most messages contain ' +
-        'NOTHING worth filing — return an empty list for chit-chat. Never ' +
+        'NOTHING worth filing - return an empty list for chit-chat. Never ' +
         'invent information.',
       tools: [EXTRACT_TOOL],
       tool_choice: { type: 'tool', name: 'file_items' },

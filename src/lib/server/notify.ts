@@ -48,7 +48,7 @@ export function isQuietTime(
 
 /**
  * Push to a set of users, silently skipping anyone in quiet hours and
- * pruning dead subscriptions. Never throws — notifications are best-effort.
+ * pruning dead subscriptions. Never throws - notifications are best-effort.
  */
 export async function sendPushToUsers(
   userIds: string[],

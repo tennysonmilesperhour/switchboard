@@ -65,7 +65,7 @@ export default async function SettingsPage() {
         <section>
           <SectionHeader
             title="Quiet hours"
-            hint="No pushes during these hours — they simply wait"
+            hint="No pushes during these hours - they simply wait"
           />
           <Card>
             <form action={updateQuietHours} className="flex items-end gap-3">

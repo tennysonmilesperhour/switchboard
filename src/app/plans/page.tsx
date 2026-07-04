@@ -98,7 +98,7 @@ export default async function PlansPage() {
         <EmptyState
           emoji="✦"
           title="Nothing on the calendar"
-          body="Start a plan and let Switchboard handle the asking. One person or twenty — no group-chat chaos."
+          body="Start a plan and let Switchboard handle the asking. One person or twenty - no group-chat chaos."
           action={
             <Link href="/events/new">
               <Button>Make a plan</Button>

@@ -73,7 +73,7 @@ export async function advanceEventCascade(eventId: string): Promise<void> {
   if (notifyUsers.length > 0) {
     await sendPushToUsers(notifyUsers, {
       title: 'You’re invited ✉️',
-      body: `${event.title} — you have a little while to respond.`,
+      body: `${event.title} - you have a little while to respond.`,
       url: `/events/${event.id}`,
     });
   }

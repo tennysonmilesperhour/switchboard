@@ -35,7 +35,7 @@ export function RsvpCard({ inviteId, expiresAtIso }: RsvpCardProps) {
       <p className="font-medium">You’re invited 💌</p>
       {expiresAtIso && (
         <p className="text-sm text-ink-soft mt-0.5">
-          Respond {formatRelative(expiresAtIso)} — after that the invitation
+          Respond {formatRelative(expiresAtIso)} - after that the invitation
           quietly moves on. No hard feelings either way.
         </p>
       )}
@@ -63,14 +63,14 @@ export function RsvpCard({ inviteId, expiresAtIso }: RsvpCardProps) {
         </div>
       ) : (
         <div className="mt-4 space-y-2 animate-rise">
-          <p className="text-sm text-ink-soft">No problem — which is it?</p>
+          <p className="text-sm text-ink-soft">No problem - which is it?</p>
           <Button
             variant="secondary"
             className="w-full"
             disabled={pending}
             onClick={() => respond(false, 'keep_asking')}
           >
-            Can’t this time — keep asking! 💛
+            Can’t this time - keep asking! 💛
           </Button>
           <Button
             variant="ghost"

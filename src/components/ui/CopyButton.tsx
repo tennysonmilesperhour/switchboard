@@ -17,7 +17,7 @@ export function CopyButton({ text, label = 'Copy link', className = '' }: CopyBu
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     } catch {
-      // Clipboard unavailable — show the text so it can be copied manually.
+      // Clipboard unavailable - show the text so it can be copied manually.
       window.prompt('Copy this link:', text);
     }
   }

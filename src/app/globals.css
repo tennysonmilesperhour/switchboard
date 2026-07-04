@@ -1,7 +1,7 @@
 @import "tailwindcss";
 
 @theme {
-  /* ————— Warm editorial calm ————— */
+  /* ----- Warm editorial calm ----- */
   --color-paper: oklch(97.6% 0.012 85);
   --color-cream: oklch(94.8% 0.022 88);
   --color-card: oklch(99% 0.008 90);

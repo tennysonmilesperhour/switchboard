@@ -18,7 +18,7 @@ export function PushManager() {
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      // Yield first — never set state synchronously inside the effect body.
+      // Yield first - never set state synchronously inside the effect body.
       await Promise.resolve();
       if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
         if (!cancelled) setState('unsupported');
@@ -76,7 +76,7 @@ export function PushManager() {
   if (state === 'subscribed') {
     return (
       <p className="text-sm text-sage-deep">
-        ✓ Notifications are on — matches, invitations, and confirmed plans.
+        ✓ Notifications are on - matches, invitations, and confirmed plans.
       </p>
     );
   }

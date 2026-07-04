@@ -105,8 +105,8 @@ export function OnboardingForm({ initialName, initialHandle }: OnboardingFormPro
       <input type="hidden" name="timezone" value={timezone} />
 
       <div className="rounded-card bg-cream p-4 text-sm text-ink-soft leading-relaxed">
-        We’ll also set up three starter circles — <strong>Close Friends</strong>,{' '}
-        <strong>Family</strong>, and <strong>Neighbors</strong> — so you can
+        We’ll also set up three starter circles - <strong>Close Friends</strong>,{' '}
+        <strong>Family</strong>, and <strong>Neighbors</strong> - so you can
         control who sees what. You can edit them anytime.
       </div>
 

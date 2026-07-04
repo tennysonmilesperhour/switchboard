@@ -43,7 +43,7 @@ export async function completeOnboarding(formData: FormData): Promise<void> {
     redirect(`/onboarding?error=${reason}`);
   }
 
-  // Starter circles — reused across signals, visibility, and invite lists.
+  // Starter circles - reused across signals, visibility, and invite lists.
   const { data: existing } = await supabase
     .from('circles')
     .select('id')

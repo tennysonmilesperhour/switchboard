@@ -6,14 +6,19 @@ import { MutualClient, type MutualFriend, type MyIntent, type MyMatch } from './
 
 export const metadata: Metadata = { title: 'Mutual Mode' };
 
-export default async function MutualPage() {
+export default async function MutualPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ person?: string }>;
+}) {
+  const { person } = await searchParams;
   const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) redirect('/login');
 
-  const [{ data: connections }, { data: intents }, { data: matches }] =
+  const [{ data: connections }, { data: intents }, { data: matches }, { data: ritualRows }] =
     await Promise.all([
       supabase
         .from('connections')
@@ -33,6 +38,11 @@ export default async function MutualPage() {
         .select('id, user_a, user_b, activity, kind, room_id, created_at')
         .or(`user_a.eq.${user.id},user_b.eq.${user.id}`)
         .order('created_at', { ascending: false }),
+      supabase
+        .from('rituals')
+        .select('id, activity, cadence_days, status, creator_id, partner_id')
+        .or(`creator_id.eq.${user.id},partner_id.eq.${user.id}`)
+        .in('status', ['proposed', 'active', 'paused']),
     ]);
 
   const friends: MutualFriend[] = (connections ?? []).map((connection) => {
@@ -65,9 +75,29 @@ export default async function MutualPage() {
     };
   });
 
+  const rituals = (ritualRows ?? []).map((row) => {
+    const isMine = row.creator_id === user.id;
+    const otherId = isMine ? row.partner_id : row.creator_id;
+    return {
+      id: row.id,
+      activity: row.activity,
+      cadenceDays: row.cadence_days,
+      status: row.status,
+      isMine,
+      otherId,
+      otherName: friendName(otherId),
+    };
+  });
+
   return (
     <AppShell title="Mutual">
-      <MutualClient friends={friends} intents={myIntents} matches={myMatches} />
+      <MutualClient
+        friends={friends}
+        intents={myIntents}
+        matches={myMatches}
+        rituals={rituals}
+        initialPersonId={person ?? null}
+      />
     </AppShell>
   );
 }
