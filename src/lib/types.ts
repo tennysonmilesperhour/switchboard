@@ -3,12 +3,34 @@
 import type { InviteStatus } from '@/lib/engine/cascade';
 import type { Weight } from '@/lib/engine/scoring';
 
+/** A free-form labelled link on a profile (personal site, portfolio, etc.). */
+export interface ProfileLink {
+  label: string;
+  url: string;
+}
+
+/** A social handle. `platform` keys into SOCIAL_PLATFORMS; `value` is a
+ *  handle or a full URL (normalised to a URL at render time). */
+export interface ProfileSocial {
+  platform: string;
+  value: string;
+}
+
 export interface Profile {
   id: string;
   display_name: string;
   handle: string;
   avatar_url: string | null;
+  cover_url: string | null;
   bio: string | null;
+  tagline: string | null;
+  pronouns: string | null;
+  location: string | null;
+  links: ProfileLink[];
+  socials: ProfileSocial[];
+  contact_email: string | null;
+  contact_phone: string | null;
+  contact_public: boolean;
   interests: string[];
   down_to: string[];
   sabbatical: boolean;
