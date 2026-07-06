@@ -122,6 +122,11 @@ export function EventWizard({
   const [date, setDate] = useState('');
   const [time, setTime] = useState('');
   const [capacity, setCapacity] = useState('');
+  const [coverUrl, setCoverUrl] = useState('');
+  const [wishlistUrl, setWishlistUrl] = useState('');
+  const [questions, setQuestions] = useState<
+    Array<{ prompt: string; required: boolean }>
+  >([]);
 
   // Step 2 - style
   const [inviteMode, setInviteMode] = useState<InviteMode>('individual');
@@ -309,6 +314,11 @@ export function EventWizard({
         enablePoll,
         pollResolution,
         voteDeadline: null,
+        coverUrl: coverUrl.trim() || null,
+        wishlistUrl: wishlistUrl.trim() || null,
+        questions: questions
+          .map((q) => ({ prompt: q.prompt.trim(), required: q.required }))
+          .filter((q) => q.prompt.length > 0),
         ritualId,
         invitees: invitees.map((invitee) => ({
           profileId: invitee.profileId,
@@ -434,6 +444,90 @@ export function EventWizard({
               placeholder="1"
               className={`${FIELD} w-36`}
             />
+          </div>
+          <div className="space-y-1.5">
+            <label htmlFor="cover" className={FIELD_LABEL}>
+              Cover image URL <span className="font-normal text-ink-faint">(optional)</span>
+            </label>
+            <input
+              id="cover" type="url" value={coverUrl}
+              onChange={(e) => setCoverUrl(e.target.value)}
+              placeholder="https://…"
+              className={FIELD}
+            />
+          </div>
+          <div className="space-y-1.5">
+            <label htmlFor="wishlist" className={FIELD_LABEL}>
+              Wishlist or registry link <span className="font-normal text-ink-faint">(optional)</span>
+            </label>
+            <input
+              id="wishlist" type="url" value={wishlistUrl}
+              onChange={(e) => setWishlistUrl(e.target.value)}
+              placeholder="https://…"
+              className={FIELD}
+            />
+          </div>
+          <div className="space-y-2">
+            <p className={FIELD_LABEL}>
+              Questions for guests <span className="font-normal text-ink-faint">(optional)</span>
+            </p>
+            <p className="text-xs text-ink-faint -mt-0.5">
+              Asked when someone accepts. Only you see the answers.
+            </p>
+            {questions.map((question, index) => (
+              <div key={index} className="flex items-center gap-2">
+                <input
+                  value={question.prompt}
+                  onChange={(e) =>
+                    setQuestions((current) =>
+                      current.map((q, i) =>
+                        i === index ? { ...q, prompt: e.target.value } : q,
+                      ),
+                    )
+                  }
+                  placeholder="Dietary needs? What are you bringing?"
+                  aria-label={`Question ${index + 1}`}
+                  className="flex-1 rounded-card border border-line bg-paper px-3.5 py-2.5 text-sm outline-none transition-colors focus:border-terracotta focus:ring-2 focus:ring-terracotta-soft"
+                />
+                <label className="flex items-center gap-1 text-xs font-semibold text-ink-soft whitespace-nowrap">
+                  <input
+                    type="checkbox"
+                    checked={question.required}
+                    onChange={(e) =>
+                      setQuestions((current) =>
+                        current.map((q, i) =>
+                          i === index ? { ...q, required: e.target.checked } : q,
+                        ),
+                      )
+                    }
+                    className="size-3.5 accent-terracotta"
+                  />
+                  Required
+                </label>
+                <button
+                  type="button"
+                  aria-label={`Remove question ${index + 1}`}
+                  onClick={() =>
+                    setQuestions((current) => current.filter((_, i) => i !== index))
+                  }
+                  className="text-ink-faint hover:text-rose-deep px-1"
+                >
+                  ✕
+                </button>
+              </div>
+            ))}
+            {questions.length < 5 && (
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                onClick={() =>
+                  setQuestions((current) => [...current, { prompt: '', required: false }])
+                }
+              >
+                + Add a question
+              </Button>
+            )}
           </div>
         </div>
       )}

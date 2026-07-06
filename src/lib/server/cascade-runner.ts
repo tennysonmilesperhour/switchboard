@@ -5,6 +5,7 @@ import {
   type CascadeInvite,
 } from '@/lib/engine/cascade';
 import { sendPushToUsers } from '@/lib/server/notify';
+import { sendEmails, looksLikeEmail, appUrl } from '@/lib/server/email';
 import type { Invite, SwitchboardEvent } from '@/lib/types';
 
 function toEngineInvite(invite: Invite): CascadeInvite {
@@ -77,6 +78,52 @@ export async function advanceEventCascade(eventId: string): Promise<void> {
       url: `/events/${event.id}`,
     });
   }
+
+  // Newly-sent guests reached by their token link - no account needed. This
+  // is the off-platform delivery Partiful gets from SMS; we do it by email so
+  // a guest never has to hand over a phone number.
+  const guestEmails = invites
+    .filter(
+      (i) =>
+        sentIds.has(i.id) &&
+        !i.invitee_id &&
+        i.guest_token &&
+        looksLikeEmail(i.guest_contact),
+    )
+    .map((i) => ({
+      to: i.guest_contact as string,
+      subject: `You’re invited: ${event.title}`,
+      text: guestInviteText(event, i.guest_name, i.guest_token as string),
+    }));
+  if (guestEmails.length > 0) {
+    await sendEmails(guestEmails);
+  }
+}
+
+function guestInviteText(
+  event: SwitchboardEvent,
+  guestName: string | null,
+  token: string,
+): string {
+  const hello = guestName ? `Hi ${guestName},` : 'Hi there,';
+  const when = event.starts_at
+    ? new Date(event.starts_at).toLocaleString('en-US', {
+        weekday: 'long',
+        month: 'long',
+        day: 'numeric',
+        hour: 'numeric',
+        minute: '2-digit',
+      })
+    : 'Time to be decided';
+  const where = event.location_name ? `\nWhere: ${event.location_name}` : '';
+  return (
+    `${hello}\n\n` +
+    `You’re invited to ${event.title}.\n` +
+    `When: ${when}${where}\n\n` +
+    `RSVP here (no account needed): ${appUrl(`/rsvp/${token}`)}\n\n` +
+    `No pressure either way - if you can’t make it, the invitation quietly ` +
+    `moves along.\n\n— Switchboard`
+  );
 }
 
 /** Sweep every inviting event with an overdue live invite (cron entrypoint). */

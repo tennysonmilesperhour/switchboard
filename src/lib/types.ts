@@ -41,6 +41,7 @@ export interface Connection {
 
 export type EventStatus = 'draft' | 'deciding' | 'inviting' | 'confirmed' | 'cancelled' | 'past';
 export type InviteMode = 'individual' | 'group' | 'all_at_once';
+export type EventTheme = 'default' | 'sunrise' | 'dusk' | 'meadow' | 'ink' | 'blossom';
 
 export interface SwitchboardEvent {
   id: string;
@@ -59,6 +60,39 @@ export interface SwitchboardEvent {
   show_accepted: boolean;
   show_expired: boolean;
   room_id: string | null;
+  /** Presentation */
+  cover_url: string | null;
+  theme: EventTheme;
+  wishlist_url: string | null;
+  /** Reminders */
+  reminders_enabled: boolean;
+  reminded_day_before_at: string | null;
+  reminded_soon_at: string | null;
+  created_at: string;
+}
+
+export interface Announcement {
+  id: string;
+  event_id: string;
+  author_id: string;
+  body: string;
+  created_at: string;
+}
+
+export interface EventQuestion {
+  id: string;
+  event_id: string;
+  prompt: string;
+  required: boolean;
+  position: number;
+  created_at: string;
+}
+
+export interface InviteAnswer {
+  id: string;
+  invite_id: string;
+  question_id: string;
+  answer: string;
   created_at: string;
 }
 

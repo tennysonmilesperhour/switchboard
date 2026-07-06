@@ -17,12 +17,27 @@ export async function respondToInvite(
   inviteId: string,
   accept: boolean,
   note: DeclineNote = null,
+  answers: Record<string, string> = {},
 ): Promise<RespondResult> {
   const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) return { ok: false, error: 'Not signed in' };
+
+  // Save any RSVP question answers first (RLS lets an invitee write their own).
+  const answerRows = Object.entries(answers)
+    .map(([question_id, answer]) => ({
+      invite_id: inviteId,
+      question_id,
+      answer: answer.trim(),
+    }))
+    .filter((row) => row.answer.length > 0);
+  if (accept && answerRows.length > 0) {
+    await supabase
+      .from('invite_answers')
+      .upsert(answerRows, { onConflict: 'invite_id,question_id' });
+  }
 
   // Atomic capacity-checked transition, then a cascade tick.
   const { data, error } = await supabase.rpc('respond_to_invite', {
@@ -124,6 +139,7 @@ export async function declineJoinRequest(
 export async function respondToGuestInvite(
   token: string,
   accept: boolean,
+  answers: Record<string, string> = {},
 ): Promise<RespondResult> {
   const admin = createAdminClient();
 
@@ -135,6 +151,20 @@ export async function respondToGuestInvite(
   if (!invite) return { ok: false, error: 'Invitation not found' };
   if (invite.status !== 'sent') {
     return { ok: false, outcome: invite.status, error: 'This invitation is no longer active' };
+  }
+
+  // Persist RSVP answers (service role - guests have no auth session).
+  const answerRows = Object.entries(answers)
+    .map(([question_id, answer]) => ({
+      invite_id: invite.id,
+      question_id,
+      answer: answer.trim(),
+    }))
+    .filter((row) => row.answer.length > 0);
+  if (accept && answerRows.length > 0) {
+    await admin
+      .from('invite_answers')
+      .upsert(answerRows, { onConflict: 'invite_id,question_id' });
   }
 
   if (!accept) {

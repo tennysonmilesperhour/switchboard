@@ -4,25 +4,38 @@ import { useState, useTransition } from 'react';
 import { Button } from '@/components/ui/Button';
 import { Icon } from '@/components/ui/Icon';
 import { respondToGuestInvite } from '@/lib/actions/invites';
+import {
+  RsvpQuestions,
+  requiredAnswered,
+  type RsvpQuestion,
+} from '@/components/events/RsvpQuestions';
 
 interface GuestRsvpClientProps {
   token: string;
   guestName: string;
   initialStatus: string;
+  questions?: RsvpQuestion[];
 }
 
 export function GuestRsvpClient({
   token,
   guestName,
   initialStatus,
+  questions = [],
 }: GuestRsvpClientProps) {
   const [status, setStatus] = useState(initialStatus);
   const [error, setError] = useState('');
+  const [answers, setAnswers] = useState<Record<string, string>>({});
   const [pending, startTransition] = useTransition();
 
   function respond(accept: boolean) {
+    if (accept && !requiredAnswered(questions, answers)) {
+      setError('Please answer the required questions');
+      return;
+    }
+    setError('');
     startTransition(async () => {
-      const result = await respondToGuestInvite(token, accept);
+      const result = await respondToGuestInvite(token, accept, accept ? answers : {});
       if (!result.ok) {
         setError(result.error ?? 'Something went wrong');
         if (result.outcome) setStatus(result.outcome);
@@ -82,6 +95,18 @@ export function GuestRsvpClient({
 
   return (
     <div className="mt-8">
+      {questions.length > 0 && (
+        <div className="mb-4 rounded-card bg-cream p-4">
+          <RsvpQuestions
+            questions={questions}
+            values={answers}
+            disabled={pending}
+            onChange={(id, value) =>
+              setAnswers((current) => ({ ...current, [id]: value }))
+            }
+          />
+        </div>
+      )}
       {error && (
         <p role="alert" className="text-sm text-rose-deep mb-3">{error}</p>
       )}
