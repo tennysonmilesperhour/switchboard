@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from 'next';
 import { Work_Sans } from 'next/font/google';
 import './globals.css';
+import { VersionWatcher } from '@/components/system/VersionWatcher';
 
 const workSans = Work_Sans({
   subsets: ['latin'],
@@ -36,7 +37,10 @@ export default function RootLayout({
 }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="en" className={`${workSans.variable} antialiased`}>
-      <body className="min-h-dvh">{children}</body>
+      <body className="min-h-dvh">
+        {children}
+        <VersionWatcher />
+      </body>
     </html>
   );
 }

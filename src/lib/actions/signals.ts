@@ -17,6 +17,16 @@ export async function setSignal(
   } = await supabase.auth.getUser();
   if (!user) return { ok: false, error: 'Not signed in' };
 
+  // Signals stay quiet during a sabbatical.
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('sabbatical')
+    .eq('id', user.id)
+    .single();
+  if (profile?.sabbatical) {
+    return { ok: false, error: 'Signals are paused while you’re on sabbatical.' };
+  }
+
   // One live signal at a time keeps the surface calm.
   await supabase.from('availability_signals').delete().eq('user_id', user.id);
 

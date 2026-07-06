@@ -37,6 +37,14 @@ interface DraftInvitee {
 
 const STEPS = ['Basics', 'Style', 'People', 'Order', 'Visibility', 'Review'] as const;
 
+// Words that suggest a plan happens outdoors, used only to nudge the host to
+// glance at the forecast.
+const OUTDOOR_HINTS = [
+  'hike', 'hiking', 'walk', 'park', 'picnic', 'beach', 'trail', 'camp',
+  'bike', 'cycling', 'garden', 'outdoor', 'outside', 'bbq', 'barbecue',
+  'kayak', 'climb', 'ski', 'lake', 'river', 'patio', 'rooftop', 'festival',
+];
+
 const MODE_OPTIONS: Array<{
   mode: InviteMode;
   title: string;
@@ -161,6 +169,13 @@ export function EventWizard({
     () => suggestWindow(startsAt ? new Date(startsAt) : new Date(), new Date()),
     [startsAt],
   );
+
+  // Gentle nudge to check the forecast when the plan reads as outdoors. Purely
+  // a heuristic on what the host typed — no forecast API involved.
+  const looksOutdoor = useMemo(() => {
+    const haystack = `${title} ${locationName} ${description}`.toLowerCase();
+    return OUTDOOR_HINTS.some((word) => haystack.includes(word));
+  }, [title, locationName, description]);
 
   function toggleFriend(friend: WizardFriend) {
     setInvitees((current) => {
@@ -813,6 +828,16 @@ export function EventWizard({
               {enablePoll ? ' · group decides activity' : ''}
             </p>
           </Card>
+
+          {looksOutdoor && (
+            <Card tone="gold">
+              <p className="text-sm leading-relaxed">
+                🌤️ This looks like an outdoor plan — worth a quick peek at the
+                forecast before you send it, so you have a plan B if the weather
+                turns.
+              </p>
+            </Card>
+          )}
 
           {!enablePoll && preview.length > 0 && (
             <div>

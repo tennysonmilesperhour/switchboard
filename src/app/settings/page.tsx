@@ -8,7 +8,12 @@ import { Button } from '@/components/ui/Button';
 import { PushManager } from '@/components/push/PushManager';
 import { InterestPicker } from '@/components/profile/InterestPicker';
 import { INTEREST_CATEGORIES, DOWN_TO_GROUP } from '@/lib/interests';
-import { signOut, updateInterests, updateQuietHours } from '@/lib/actions/profile';
+import {
+  signOut,
+  updateInterests,
+  updateQuietHours,
+  updateSabbatical,
+} from '@/lib/actions/profile';
 
 export const metadata: Metadata = { title: 'Settings' };
 
@@ -28,12 +33,16 @@ export default async function SettingsPage() {
 
   const { data: profile } = await supabase
     .from('profiles')
-    .select('display_name, handle, interests, down_to, quiet_hours_start, quiet_hours_end')
+    .select(
+      'display_name, handle, interests, down_to, sabbatical, sabbatical_message, quiet_hours_start, quiet_hours_end',
+    )
     .eq('id', user.id)
     .single();
 
   const interests: string[] = profile?.interests ?? [];
   const downTo: string[] = profile?.down_to ?? [];
+  const sabbatical: boolean = profile?.sabbatical ?? false;
+  const sabbaticalMessage: string = profile?.sabbatical_message ?? '';
 
   return (
     <AppShell title="Settings" back="/profile">
@@ -141,6 +150,44 @@ export default async function SettingsPage() {
                 </select>
               </div>
               <Button type="submit" size="sm" variant="secondary">Save</Button>
+            </form>
+          </Card>
+        </section>
+
+        <section>
+          <SectionHeader
+            title="Sabbatical"
+            hint="Pause signals, radar, and matchmaking for a while"
+          />
+          <Card>
+            <form action={updateSabbatical} className="space-y-3">
+              <label className="flex items-start gap-3 cursor-pointer">
+                <input
+                  type="checkbox"
+                  name="sabbatical"
+                  defaultChecked={sabbatical}
+                  className="mt-1 size-4 accent-[oklch(60%_0.128_42)]"
+                />
+                <span>
+                  <span className="font-medium">Take a quiet season</span>
+                  <span className="block text-sm text-ink-soft mt-0.5 leading-relaxed">
+                    You’ll stop appearing on friends’ radars, in matchmaking, and
+                    your live signal is cleared. Friends who reach out see your
+                    note instead of silence.
+                  </span>
+                </span>
+              </label>
+              <input
+                name="sabbatical_message"
+                defaultValue={sabbaticalMessage}
+                maxLength={140}
+                placeholder="Taking a quiet season 🍃"
+                aria-label="Sabbatical note"
+                className="w-full rounded-card border border-line bg-paper px-3.5 py-2.5 text-sm outline-none focus:border-terracotta"
+              />
+              <Button type="submit" size="sm" variant="secondary">
+                Save
+              </Button>
             </form>
           </Card>
         </section>
