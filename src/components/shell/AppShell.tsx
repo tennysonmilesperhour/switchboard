@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { BottomNav } from './BottomNav';
+import { Icon } from '@/components/ui/Icon';
 
 interface AppShellProps {
   title?: string;
@@ -12,24 +13,37 @@ interface AppShellProps {
 export function AppShell({ title, back, action, children }: AppShellProps) {
   return (
     <div className="mx-auto max-w-lg min-h-dvh flex flex-col">
-      <header className="sticky top-0 z-30 flex items-center gap-3 px-4 py-3 bg-paper/90 backdrop-blur-md">
+      <header className="sticky top-0 z-30 flex items-center gap-2 px-4 py-3 bg-paper/85 backdrop-blur-xl">
         {back ? (
           <Link
             href={back}
             aria-label="Back"
-            className="size-9 -ml-1 inline-flex items-center justify-center rounded-full text-ink-soft hover:bg-cream"
+            className="size-9 -ml-1.5 inline-flex items-center justify-center rounded-full text-ink hover:bg-cream"
           >
-            ←
+            <Icon name="back" size={22} />
           </Link>
         ) : null}
         {title ? (
-          <h1 className="font-display text-2xl text-ink flex-1 truncate">{title}</h1>
+          <h1 className="text-2xl font-extrabold tracking-tight text-ink flex-1 truncate">
+            {title}
+          </h1>
         ) : (
-          <Link href="/" className="font-display text-2xl text-ink flex-1">
-            Switchboard
+          <Link
+            href="/"
+            className="flex-1 text-2xl font-extrabold lowercase tracking-tight text-terracotta"
+          >
+            switchboard
           </Link>
         )}
-        {action}
+        {action ?? (
+          <Link
+            href="/profile"
+            aria-label="Notifications"
+            className="size-9 inline-flex items-center justify-center rounded-full text-terracotta-deep hover:bg-cream"
+          >
+            <Icon name="bell" size={22} />
+          </Link>
+        )}
       </header>
       <main className="flex-1 px-4 pb-28 pt-1">{children}</main>
       <BottomNav />

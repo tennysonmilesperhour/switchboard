@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { Icon } from '@/components/ui/Icon';
 
 interface CopyButtonProps {
   text: string;
@@ -26,9 +27,18 @@ export function CopyButton({ text, label = 'Copy link', className = '' }: CopyBu
     <button
       type="button"
       onClick={copy}
-      className={`inline-flex items-center gap-1.5 rounded-pill border border-line bg-card px-3 py-1.5 text-xs font-medium text-ink-soft hover:border-terracotta hover:text-terracotta-deep transition-colors ${className}`}
+      className={`inline-flex items-center gap-1.5 rounded-pill border border-line bg-card px-3 py-1.5 text-xs font-bold text-ink-soft hover:border-terracotta hover:text-terracotta-deep transition-colors ${
+        copied ? 'border-sage text-sage-deep' : ''
+      } ${className}`}
     >
-      {copied ? '✓ Copied' : label}
+      {copied ? (
+        <>
+          <Icon name="check" size={14} />
+          Copied
+        </>
+      ) : (
+        label
+      )}
     </button>
   );
 }

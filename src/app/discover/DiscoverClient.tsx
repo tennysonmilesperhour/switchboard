@@ -82,7 +82,7 @@ export function DiscoverClient({ defaultInterests }: { defaultInterests: string[
             max={50}
             value={distance}
             onChange={(e) => setDistance(Number(e.target.value))}
-            className="w-full accent-[oklch(60%_0.128_42)]"
+            className="range-pink"
           />
         </div>
 

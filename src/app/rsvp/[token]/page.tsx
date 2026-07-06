@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { formatDateTime } from '@/lib/format';
+import { Icon } from '@/components/ui/Icon';
 import { GuestRsvpClient } from './GuestRsvpClient';
 
 export async function generateMetadata({
@@ -63,26 +64,33 @@ export default async function GuestRsvpPage({
   return (
     <div className="mx-auto max-w-lg min-h-dvh flex flex-col px-6">
       <header className="py-6">
-        <span className="font-display text-xl">Switchboard</span>
+        <span className="font-extrabold tracking-tight text-xl">
+          Switch<span className="text-terracotta">board</span>
+        </span>
       </header>
       <main className="flex-1 flex flex-col justify-center pb-24">
         {!invite || !event ? (
           <div className="text-center">
             <p className="text-4xl mb-3" aria-hidden>🍂</p>
-            <h1 className="font-display text-2xl">This invitation isn’t here anymore</h1>
+            <h1 className="font-extrabold tracking-tight text-2xl">This invitation isn’t here anymore</h1>
             <p className="text-ink-soft text-sm mt-2">
               It may have expired or been withdrawn.
             </p>
           </div>
         ) : (
           <>
-            <p className="text-sm font-medium tracking-wide uppercase text-terracotta-deep">
+            <p className="text-sm font-bold tracking-wide uppercase text-terracotta-deep">
               {host?.display_name ?? 'A friend'} invited you
             </p>
-            <h1 className="font-display text-4xl text-ink mt-2">{event.title}</h1>
-            <p className="mt-3 text-ink font-medium">{formatDateTime(event.starts_at)}</p>
+            <h1 className="font-extrabold tracking-tight text-4xl text-ink mt-2 text-balance">
+              {event.title}
+            </h1>
+            <p className="mt-3 text-ink font-bold">{formatDateTime(event.starts_at)}</p>
             {event.location_name && (
-              <p className="text-ink-soft text-sm mt-0.5">📍 {event.location_name}</p>
+              <p className="text-ink-soft text-sm mt-1 inline-flex items-center gap-1.5">
+                <Icon name="mapPin" size={15} className="text-terracotta" />
+                {event.location_name}
+              </p>
             )}
             {event.description && (
               <p className="text-ink-soft text-sm mt-3 leading-relaxed">

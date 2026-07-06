@@ -4,6 +4,7 @@ import { createClient } from '@/lib/supabase/server';
 import { AppShell } from '@/components/shell/AppShell';
 import { Card, SectionHeader } from '@/components/ui/Card';
 import { Avatar } from '@/components/ui/Avatar';
+import { PlanCard, planColor } from '@/components/ui/PlanCard';
 import { SignalBar } from '@/components/signals/SignalBar';
 import {
   EnergyPrompt,
@@ -154,20 +155,10 @@ export default async function HomePage() {
   const greeting = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
 
   return (
-    <AppShell
-      action={
-        <Link
-          href="/settings"
-          aria-label="Settings"
-          className="size-9 inline-flex items-center justify-center rounded-full text-ink-soft hover:bg-cream"
-        >
-          ⚙
-        </Link>
-      }
-    >
+    <AppShell>
       <div className="space-y-8">
         <div>
-          <h1 className="font-display text-3xl text-ink">
+          <h1 className="text-3xl font-extrabold tracking-tight text-ink">
             {greeting}, {firstName}.
           </h1>
           <p className="text-sm text-ink-faint mt-1">
@@ -176,6 +167,37 @@ export default async function HomePage() {
         </div>
 
         <SignalBar active={mySignal ?? null} circles={circles ?? []} />
+
+        {/* Plan feed - the heart of Home */}
+        {(upcoming?.length ?? 0) > 0 ? (
+          <section aria-label="Your plans" className="space-y-4">
+            {(upcoming as SwitchboardEvent[]).map((event, i) => (
+              <PlanCard
+                key={event.id}
+                href={`/events/${event.id}`}
+                title={event.title}
+                color={planColor(i)}
+                when={formatDateTime(event.starts_at)}
+                where={event.location_name ?? undefined}
+                status={event.status === 'confirmed' ? 'Confirmed' : undefined}
+                className="animate-card-in"
+              />
+            ))}
+          </section>
+        ) : (
+          <Link href="/events/new" className="block">
+            <PlanCard
+              title="Start something"
+              color="pink"
+              attendeesLabel="Make a plan and Switchboard sorts out the details"
+              actions={
+                <span className="rounded-btn bg-white/25 px-5 py-2.5 text-sm font-bold backdrop-blur-sm">
+                  Create a plan
+                </span>
+              }
+            />
+          </Link>
+        )}
 
         {/* Matchmaker introductions */}
         {proposals.length > 0 && (
@@ -332,26 +354,6 @@ export default async function HomePage() {
                       <span className="text-ink-faint">
                         {formatRelative(match.created_at)}
                       </span>
-                    </p>
-                  </Card>
-                </Link>
-              ))}
-            </div>
-          </section>
-        )}
-
-        {/* Upcoming */}
-        {(upcoming?.length ?? 0) > 0 && (
-          <section>
-            <SectionHeader title="Coming up" />
-            <div className="space-y-2">
-              {(upcoming as SwitchboardEvent[]).map((event) => (
-                <Link key={event.id} href={`/events/${event.id}`} className="block group">
-                  <Card className="group-hover:border-terracotta transition-colors">
-                    <p className="font-medium">{event.title}</p>
-                    <p className="text-xs text-ink-soft mt-0.5">
-                      {formatDateTime(event.starts_at)}
-                      {event.location_name ? ` · ${event.location_name}` : ''}
                     </p>
                   </Card>
                 </Link>

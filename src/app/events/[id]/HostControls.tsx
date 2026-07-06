@@ -25,9 +25,10 @@ export function HostControls({ event, pollDecided }: HostControlsProps) {
   if (event.status === 'cancelled' || event.status === 'past') return null;
 
   return (
-    <section className="border-t border-line pt-5 space-y-2.5">
+    <section className="border-t border-line pt-6 space-y-2.5">
       {event.status === 'deciding' && (
         <Button
+          size="lg"
           className="w-full"
           disabled={pending || !pollDecided}
           onClick={() => run(() => startInviting(event.id))}
@@ -40,6 +41,7 @@ export function HostControls({ event, pollDecided }: HostControlsProps) {
       {event.status === 'inviting' && (
         <Button
           variant="accept"
+          size="lg"
           className="w-full"
           disabled={pending}
           onClick={() => run(() => confirmEvent(event.id))}

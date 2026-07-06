@@ -49,7 +49,7 @@ export function VenuePerks({ venues }: { venues: VenueRow[] }) {
         <div className="space-y-2">
           {venues.map((venue) => (
             <Card key={venue.id}>
-              <p className="font-medium">
+              <p className="font-bold">
                 {venue.name}
                 {venue.area && (
                   <span className="text-xs text-ink-faint font-normal"> · {venue.area}</span>

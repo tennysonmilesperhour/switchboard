@@ -33,10 +33,12 @@ export default async function ZonePage({
     <AppShell title={zone.name} back="/zones">
       <div className="space-y-6">
         <div className="rounded-card bg-ink text-paper p-6">
-          <p className="text-xs uppercase tracking-widest text-gold">
+          <p className="text-xs font-bold uppercase tracking-widest text-gold">
             Serendipity Zone
           </p>
-          <h2 className="font-display text-3xl mt-1.5">✨ {zone.name}</h2>
+          <h2 className="font-extrabold tracking-tight text-3xl mt-1.5 text-balance">
+            ✨ {zone.name}
+          </h2>
           {zone.description && (
             <p className="text-sm opacity-70 mt-2 leading-relaxed">{zone.description}</p>
           )}

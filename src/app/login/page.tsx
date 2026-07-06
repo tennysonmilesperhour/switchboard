@@ -14,12 +14,15 @@ export default async function LoginPage({
   return (
     <div className="mx-auto max-w-lg min-h-dvh flex flex-col px-6">
       <header className="py-6">
-        <Link href="/welcome" className="font-display text-xl">
-          Switchboard
+        <Link
+          href="/welcome"
+          className="text-xl font-extrabold lowercase tracking-tight text-terracotta"
+        >
+          switchboard
         </Link>
       </header>
       <main className="flex-1 flex flex-col justify-center pb-24">
-        <h1 className="font-display text-4xl text-ink">Welcome.</h1>
+        <h1 className="text-5xl font-black tracking-tight text-ink">Welcome.</h1>
         <p className="mt-3 text-ink-soft leading-relaxed">
           Sign in with a magic link - no password to remember.
         </p>

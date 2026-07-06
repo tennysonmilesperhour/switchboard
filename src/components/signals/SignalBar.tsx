@@ -48,7 +48,7 @@ export function SignalBar({ active, circles }: SignalBarProps) {
         <div className="flex items-center gap-3">
           <span className="text-2xl" aria-hidden>{active.emoji}</span>
           <div className="flex-1">
-            <p className="font-medium text-sage-deep">{active.label}</p>
+            <p className="font-bold text-sage-deep">{active.label}</p>
             <p className="text-xs text-ink-soft">
               Visible to{' '}
               {active.circle_id

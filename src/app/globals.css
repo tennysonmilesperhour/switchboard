@@ -1,38 +1,53 @@
 @import "tailwindcss";
 
 @theme {
-  /* ----- Warm editorial calm ----- */
-  --color-paper: oklch(97.6% 0.012 85);
-  --color-cream: oklch(94.8% 0.022 88);
-  --color-card: oklch(99% 0.008 90);
-  --color-ink: oklch(25% 0.022 50);
-  --color-ink-soft: oklch(46% 0.018 55);
-  --color-ink-faint: oklch(62% 0.015 60);
-  --color-line: oklch(89% 0.014 85);
+  /* ----- Switchboard: bold, bright, social ----- */
+  /* Neutrals */
+  --color-paper: #f9fbfd;
+  --color-cream: #f5f5f6;
+  --color-card: #ffffff;
+  --color-ink: #191d22;
+  --color-ink-soft: #565a60;
+  --color-ink-faint: #8d8f93;
+  --color-line: #ebebeb;
 
-  --color-terracotta: oklch(60% 0.128 42);
-  --color-terracotta-deep: oklch(51% 0.135 40);
-  --color-terracotta-soft: oklch(93% 0.035 45);
+  /* Brand accent (pink) - kept under the `terracotta` token name so the
+     existing utility classes across the app restyle automatically. */
+  --color-terracotta: #f82a63;
+  --color-terracotta-deep: #d1318a;
+  --color-terracotta-soft: #ffe3ec;
 
-  /* sage = availability / acceptance, semantically reserved */
-  --color-sage: oklch(56% 0.09 152);
-  --color-sage-deep: oklch(46% 0.09 152);
-  --color-sage-soft: oklch(93% 0.033 152);
+  /* sage = availability / acceptance, semantically reserved (now jade) */
+  --color-sage: #21af96;
+  --color-sage-deep: #178a76;
+  --color-sage-soft: #dff5f0;
 
-  --color-gold: oklch(76% 0.1 85);
-  --color-gold-soft: oklch(94% 0.045 90);
+  /* gold = highlight / rewards */
+  --color-gold: #eeae36;
+  --color-gold-soft: #fbefd3;
 
-  --color-rose-soft: oklch(93% 0.03 20);
-  --color-rose-deep: oklch(52% 0.12 25);
+  /* rose = error / decline */
+  --color-rose-soft: #ffe1e6;
+  --color-rose-deep: #e5405e;
 
-  --font-display: var(--font-fraunces), Georgia, serif;
-  --font-sans: var(--font-inter), system-ui, sans-serif;
+  /* Plan palette - one accent per plan card */
+  --color-plan-pink: #f82a63;
+  --color-plan-purple: #8a38f5;
+  --color-plan-blue: #5392ff;
+  --color-plan-jade: #21af96;
+  --color-plan-orange: #eeae36;
+  --color-plan-magenta: #d1318a;
 
-  --radius-card: 1.25rem;
+  --font-display: var(--font-work), system-ui, sans-serif;
+  --font-sans: var(--font-work), system-ui, sans-serif;
+
+  --radius-card: 1.3125rem; /* 21px */
+  --radius-btn: 1.1875rem; /* 19px */
   --radius-pill: 999px;
 
-  --shadow-lift: 0 1px 2px oklch(30% 0.02 50 / 0.05), 0 6px 24px oklch(30% 0.02 50 / 0.07);
-  --shadow-float: 0 2px 4px oklch(30% 0.02 50 / 0.07), 0 12px 40px oklch(30% 0.02 50 / 0.12);
+  --shadow-lift: 0 2px 5px rgb(0 0 0 / 0.12), 0 1px 2px rgb(0 0 0 / 0.06);
+  --shadow-float: 0 8px 28px rgb(0 0 0 / 0.16), 0 2px 6px rgb(0 0 0 / 0.08);
+  --shadow-card: 0 2px 5px rgb(0 0 0 / 0.15), inset 0 -10px 14px rgb(0 0 0 / 0.05);
 
   --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
 }
@@ -40,6 +55,9 @@
 :root {
   --duration-fast: 150ms;
   --duration-normal: 300ms;
+
+  /* Signature CTA gradient (pink -> violet) */
+  --brand-gradient: linear-gradient(96deg, #f82a63 0%, #d1318a 55%, #8a38f5 120%);
 }
 
 html {
@@ -54,14 +72,76 @@ body {
   overscroll-behavior-y: none;
 }
 
-/* Display headings carry the brand voice */
-h1, h2, .font-display {
+/* Display headings carry the brand voice: heavy, tight, confident. */
+h1, h2, h3, .font-display {
   font-family: var(--font-display);
-  font-optical-sizing: auto;
+  letter-spacing: -0.02em;
+}
+h1, h2 {
+  font-weight: 800;
 }
 
 ::selection {
   background: var(--color-terracotta-soft);
+  color: var(--color-terracotta-deep);
+}
+
+/* ----- Signature surfaces ----- */
+
+/* Pink -> violet CTA gradient (buttons, progress, sliders) */
+.bg-brand-gradient {
+  background-image: var(--brand-gradient);
+}
+
+/* Per-color plan-card gradients: vivid, top-lit, slightly deepening. */
+.plan-pink {
+  background-image: linear-gradient(155deg, #ff4d7e 0%, #f82a63 48%, #d81c72 100%);
+}
+.plan-purple {
+  background-image: linear-gradient(155deg, #a95cff 0%, #8a38f5 52%, #6d28d9 100%);
+}
+.plan-blue {
+  background-image: linear-gradient(155deg, #6fa5ff 0%, #5392ff 50%, #3478f6 100%);
+}
+.plan-jade {
+  background-image: linear-gradient(155deg, #35c9ad 0%, #21af96 52%, #178a76 100%);
+}
+.plan-orange {
+  background-image: linear-gradient(155deg, #f6c15c 0%, #eeae36 50%, #e0872b 100%);
+}
+.plan-magenta {
+  background-image: linear-gradient(155deg, #ec5aa8 0%, #d1318a 52%, #a21c6b 100%);
+}
+
+/* Pink range slider used in onboarding / settings. */
+input[type="range"].range-pink {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--color-line);
+  outline: none;
+}
+input[type="range"].range-pink::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 26px;
+  height: 26px;
+  border-radius: 999px;
+  background: #ffffff;
+  border: 2px solid var(--color-line);
+  box-shadow: var(--shadow-lift);
+  cursor: pointer;
+}
+input[type="range"].range-pink::-moz-range-thumb {
+  width: 26px;
+  height: 26px;
+  border-radius: 999px;
+  background: #ffffff;
+  border: 2px solid var(--color-line);
+  box-shadow: var(--shadow-lift);
+  cursor: pointer;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -78,6 +158,15 @@ h1, h2, .font-display {
 }
 .animate-rise {
   animation: rise-in var(--duration-normal) var(--ease-out-expo) both;
+}
+
+/* Card stack entrance for the home plan feed */
+@keyframes card-in {
+  from { opacity: 0; transform: translateY(16px) scale(0.98); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+.animate-card-in {
+  animation: card-in 0.4s var(--ease-out-expo) both;
 }
 
 @keyframes pulse-soft {

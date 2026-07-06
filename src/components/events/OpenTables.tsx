@@ -30,10 +30,10 @@ export function OpenTables({ tables }: { tables: OpenTableRow[] }) {
       />
       <div className="space-y-2.5">
         {tables.map((table) => (
-          <Card key={table.event_id} tone="gold">
+          <Card key={table.event_id} tone="gold" lifted>
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
-                <p className="font-medium truncate">{table.title}</p>
+                <p className="font-bold truncate">{table.title}</p>
                 <p className="text-xs text-ink-soft mt-0.5">
                   {formatDateTime(table.starts_at)}
                   {table.location_name ? ` · ${table.location_name}` : ''}
@@ -44,11 +44,11 @@ export function OpenTables({ tables }: { tables: OpenTableRow[] }) {
                 </p>
               </div>
               <div className="text-right shrink-0">
-                <p className="text-xs text-ink-faint mb-1.5">
+                <p className="text-xs font-bold text-terracotta-deep mb-1.5">
                   {table.spots_left} {table.spots_left === 1 ? 'seat' : 'seats'}
                 </p>
                 {requested.has(table.event_id) ? (
-                  <span className="text-xs text-sage-deep font-medium">
+                  <span className="text-xs text-sage-deep font-bold">
                     Asked ✓
                   </span>
                 ) : (

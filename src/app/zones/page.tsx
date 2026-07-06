@@ -50,7 +50,7 @@ export default async function ZonesPage({
               {zones?.map((zone) => (
                 <Link key={zone.id} href={`/zones/${zone.slug}`} className="block group">
                   <Card className="group-hover:border-terracotta transition-colors">
-                    <p className="font-medium">✨ {zone.name}</p>
+                    <p className="font-bold">✨ {zone.name}</p>
                     {zone.description && (
                       <p className="text-sm text-ink-soft mt-0.5">{zone.description}</p>
                     )}
@@ -108,7 +108,7 @@ export default async function ZonesPage({
                     ))}
                   </div>
                 </fieldset>
-                <Button type="submit" size="sm" variant="secondary" className="w-full">
+                <Button type="submit" size="sm" className="w-full">
                   Create zone
                 </Button>
               </div>

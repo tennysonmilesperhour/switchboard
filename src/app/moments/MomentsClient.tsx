@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/Button';
 import { Card, SectionHeader } from '@/components/ui/Card';
 import { Chip } from '@/components/ui/Chip';
+import { Icon } from '@/components/ui/Icon';
 import {
   acceptMoment,
   checkIn,
@@ -75,7 +76,7 @@ export function MomentsClient({
 
         <div className="space-y-4">
           <div className="space-y-1.5">
-            <label htmlFor="place" className="text-sm font-medium">Where are you?</label>
+            <label htmlFor="place" className="text-sm font-bold">Where are you?</label>
             <input
               id="place"
               value={place}
@@ -89,7 +90,7 @@ export function MomentsClient({
           </div>
 
           <div className="space-y-1.5">
-            <p className="text-sm font-medium">What would you enjoy sharing?</p>
+            <p className="text-sm font-bold">What would you enjoy sharing?</p>
             <div className="flex flex-wrap gap-2">
               {EXPERIENCE_PRESETS.map((experience) => (
                 <Chip
@@ -105,7 +106,7 @@ export function MomentsClient({
           </div>
 
           <div className="space-y-1.5">
-            <label htmlFor="headline" className="text-sm font-medium">
+            <label htmlFor="headline" className="text-sm font-bold">
               A line about you <span className="text-ink-faint font-normal">(shown only after mutual curiosity)</span>
             </label>
             <input
@@ -119,7 +120,7 @@ export function MomentsClient({
           </div>
 
           <div className="space-y-1.5">
-            <label htmlFor="hours" className="text-sm font-medium">
+            <label htmlFor="hours" className="text-sm font-bold">
               I’m here for about {hours} {hours === 1 ? 'hour' : 'hours'}
             </label>
             <input
@@ -158,17 +159,22 @@ export function MomentsClient({
       <Card tone="gold" className="animate-rise">
         <div className="flex items-start justify-between gap-3">
           <div>
-            <p className="text-xs uppercase tracking-wide text-ink-faint font-medium">
+            <p className="text-xs uppercase tracking-wide text-ink-faint font-bold">
               Checked in
             </p>
-            <p className="font-display text-xl mt-0.5">📍 {myMoment.place_name}</p>
+            <p className="font-display text-xl mt-0.5 flex items-center gap-1.5">
+              <Icon name="mapPin" size={20} className="text-terracotta" />
+              {myMoment.place_name}
+            </p>
             <p className="text-xs text-ink-soft mt-1">
               {myMoment.experiences.join(' · ')} · ends{' '}
               {formatRelative(myMoment.available_until)}
             </p>
           </div>
-          <button
-            type="button"
+          <Button
+            variant="secondary"
+            size="sm"
+            className="whitespace-nowrap"
             disabled={pending}
             onClick={() =>
               startTransition(async () => {
@@ -176,10 +182,9 @@ export function MomentsClient({
                 router.refresh();
               })
             }
-            className="text-xs font-medium text-ink-faint hover:text-ink rounded-pill border border-line px-3 py-1.5 bg-card whitespace-nowrap"
           >
             Check out
-          </button>
+          </Button>
         </div>
       </Card>
 
@@ -206,7 +211,7 @@ export function MomentsClient({
               <Card key={candidate.id} lifted className="animate-rise">
                 {candidate.intro ? (
                   <>
-                    <p className="text-xs uppercase tracking-wide text-terracotta-deep font-medium">
+                    <p className="text-xs uppercase tracking-wide text-terracotta-deep font-bold">
                       ✨ Mutual curiosity
                     </p>
                     <p className="font-display text-xl mt-1">{candidate.intro.name}</p>
@@ -219,7 +224,7 @@ export function MomentsClient({
                       {candidate.intro.interests.map((interest) => (
                         <span
                           key={interest}
-                          className="rounded-pill bg-cream px-2.5 py-1 text-xs text-ink-soft"
+                          className="rounded-pill bg-terracotta-soft px-2.5 py-1 text-xs font-semibold text-terracotta-deep"
                         >
                           {interest}
                         </span>
@@ -267,7 +272,7 @@ export function MomentsClient({
                   </>
                 ) : (
                   <>
-                    <p className="text-sm font-medium">
+                    <p className="text-sm font-bold">
                       Someone here is open to:
                     </p>
                     <div className="flex flex-wrap gap-1.5 mt-2">

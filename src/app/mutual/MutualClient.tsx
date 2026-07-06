@@ -8,6 +8,7 @@ import { Card, SectionHeader } from '@/components/ui/Card';
 import { Chip } from '@/components/ui/Chip';
 import { Avatar } from '@/components/ui/Avatar';
 import { EmptyState } from '@/components/ui/EmptyState';
+import { Icon } from '@/components/ui/Icon';
 import { downToConnect, withdrawIntent } from '@/lib/actions/mutual';
 import { endRitual, pauseRitual, proposeRitual } from '@/lib/actions/rituals';
 import { formatRelative } from '@/lib/format';
@@ -182,10 +183,12 @@ export function MutualClient({
                   }`}
                 >
                   <Avatar name={friend.name} seed={friend.id} size="sm" />
-                  <span className="flex-1 text-left font-medium">{friend.name}</span>
-                  <span aria-hidden className={selected ? 'text-terracotta-deep' : 'text-line'}>
-                    {selected ? '✓' : '+'}
-                  </span>
+                  <span className="flex-1 text-left font-bold">{friend.name}</span>
+                  <Icon
+                    name={selected ? 'check' : 'add'}
+                    size={20}
+                    className={selected ? 'text-terracotta-deep' : 'text-ink-faint'}
+                  />
                 </button>
               );
             })}
@@ -267,13 +270,13 @@ export function MutualClient({
         )}
         {friends.length > 0 && (
           <Card>
-            <p className="text-sm font-medium mb-2.5">Start one</p>
+            <p className="text-sm font-bold mb-2.5">Start one</p>
             <div className="space-y-2.5">
               <select
                 value={ritualPartner}
                 onChange={(e) => setRitualPartner(e.target.value)}
                 aria-label="Ritual partner"
-                className="w-full rounded-card border border-line bg-paper px-3 py-2.5 text-sm"
+                className="w-full rounded-card border border-line bg-paper px-3 py-2.5 text-sm outline-none focus:border-terracotta"
               >
                 <option value="">With who?</option>
                 {friends.map((friend) => (
@@ -287,7 +290,7 @@ export function MutualClient({
                   value={ritualActivity}
                   onChange={(e) => setRitualActivity(e.target.value)}
                   aria-label="Ritual activity"
-                  className="flex-1 rounded-card border border-line bg-paper px-3 py-2.5 text-sm"
+                  className="flex-1 rounded-card border border-line bg-paper px-3 py-2.5 text-sm outline-none focus:border-terracotta"
                 >
                   {ACTIVITY_PRESETS.map((activity) => (
                     <option key={activity.label} value={activity.label}>
@@ -299,7 +302,7 @@ export function MutualClient({
                   value={ritualCadence}
                   onChange={(e) => setRitualCadence(Number(e.target.value))}
                   aria-label="Ritual cadence"
-                  className="rounded-card border border-line bg-paper px-3 py-2.5 text-sm"
+                  className="rounded-card border border-line bg-paper px-3 py-2.5 text-sm outline-none focus:border-terracotta"
                 >
                   <option value={7}>Weekly</option>
                   <option value={14}>Every 2 weeks</option>

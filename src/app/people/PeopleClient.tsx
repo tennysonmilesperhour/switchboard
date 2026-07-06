@@ -5,6 +5,9 @@ import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/Button';
 import { Card, SectionHeader } from '@/components/ui/Card';
 import { Avatar } from '@/components/ui/Avatar';
+import { Chip } from '@/components/ui/Chip';
+import { Icon } from '@/components/ui/Icon';
+import { EmptyState } from '@/components/ui/EmptyState';
 import {
   acceptConnection,
   createCircle,
@@ -127,7 +130,7 @@ export function PeopleClient({
                 <div className="flex items-center gap-3">
                   <Avatar name={request.name} seed={request.id} size="sm" />
                   <span className="flex-1">
-                    <span className="font-medium block">{request.name}</span>
+                    <span className="font-bold block">{request.name}</span>
                     <span className="text-xs text-ink-faint">@{request.handle}</span>
                   </span>
                   <Button
@@ -183,7 +186,7 @@ export function PeopleClient({
                   >
                     <Avatar name={friend.name} seed={friend.id} size="sm" />
                     <span className="flex-1">
-                      <span className="font-medium block">{friend.name}</span>
+                      <span className="font-bold block">{friend.name}</span>
                       <span className="text-xs text-ink-faint">
                         @{friend.handle}
                         {friend.circleIds.length > 0 &&
@@ -192,21 +195,26 @@ export function PeopleClient({
                             .join(' ')}`}
                       </span>
                     </span>
-                    <span className="text-ink-faint" aria-hidden>
-                      {expanded ? '▴' : '▾'}
-                    </span>
+                    <Icon
+                      name="back"
+                      size={18}
+                      className={`text-ink-faint transition-transform ${expanded ? 'rotate-90' : '-rotate-90'}`}
+                    />
+
                   </button>
                   {expanded && (
                     <div className="mt-3 pt-3 border-t border-line animate-rise">
-                      <p className="text-xs text-ink-faint mb-2">Circles</p>
+                      <p className="text-xs font-bold uppercase tracking-wide text-ink-faint mb-2.5">
+                        Circles
+                      </p>
                       <div className="flex flex-wrap gap-2">
                         {circles.map((circle) => {
                           const inCircle = friend.circleIds.includes(circle.id);
                           return (
-                            <button
+                            <Chip
                               key={circle.id}
-                              type="button"
-                              aria-pressed={inCircle}
+                              emoji={circle.emoji}
+                              selected={inCircle}
                               disabled={pending}
                               onClick={() =>
                                 startTransition(async () => {
@@ -214,14 +222,9 @@ export function PeopleClient({
                                   router.refresh();
                                 })
                               }
-                              className={`rounded-pill border px-3 py-1.5 text-xs font-medium transition-all ${
-                                inCircle
-                                  ? 'bg-ink text-paper border-ink'
-                                  : 'bg-paper text-ink-soft border-line hover:border-ink-faint'
-                              }`}
                             >
-                              {circle.emoji} {circle.name}
-                            </button>
+                              {circle.name}
+                            </Chip>
                           );
                         })}
                       </div>
@@ -234,8 +237,9 @@ export function PeopleClient({
                             router.refresh();
                           })
                         }
-                        className="text-xs text-ink-faint hover:text-rose-deep mt-3"
+                        className="inline-flex items-center gap-1 text-xs font-semibold text-ink-faint hover:text-rose-deep mt-3.5"
                       >
+                        <Icon name="close" size={14} />
                         Remove connection
                       </button>
                     </div>
@@ -280,6 +284,15 @@ export function PeopleClient({
         </section>
       )}
 
+      {/* Friendly empty state */}
+      {friends.length === 0 && incoming.length === 0 && outgoing.length === 0 && (
+        <EmptyState
+          emoji="👋"
+          title="Your people live here"
+          body="Add a friend by their handle above. Once you're connected you can sort them into circles and quietly play matchmaker."
+        />
+      )}
+
       {/* Households */}
       {friends.length > 0 && (
         <section>
@@ -295,7 +308,7 @@ export function PeopleClient({
                   className="flex items-center gap-3 rounded-card bg-cream px-3.5 py-3 text-sm"
                 >
                   <span className="text-lg" aria-hidden>{household.emoji}</span>
-                  <span className="font-medium flex-1">{household.name}</span>
+                  <span className="font-bold flex-1">{household.name}</span>
                   <span className="text-xs text-ink-faint">
                     {household.memberCount} {household.memberCount === 1 ? 'person' : 'people'}
                   </span>
@@ -329,10 +342,9 @@ export function PeopleClient({
                 {friends.map((friend) => {
                   const selected = householdMembers.includes(friend.id);
                   return (
-                    <button
+                    <Chip
                       key={friend.id}
-                      type="button"
-                      aria-pressed={selected}
+                      selected={selected}
                       onClick={() =>
                         setHouseholdMembers((current) =>
                           selected
@@ -340,14 +352,9 @@ export function PeopleClient({
                             : [...current, friend.id],
                         )
                       }
-                      className={`rounded-pill border px-3 py-1.5 text-xs font-medium transition-all ${
-                        selected
-                          ? 'bg-ink text-paper border-ink'
-                          : 'bg-paper text-ink-soft border-line hover:border-ink-faint'
-                      }`}
                     >
                       {friend.name.split(' ')[0]}
-                    </button>
+                    </Chip>
                   );
                 })}
               </div>
@@ -388,7 +395,7 @@ export function PeopleClient({
                   value={matchA}
                   onChange={(e) => setMatchA(e.target.value)}
                   aria-label="First friend"
-                  className="flex-1 rounded-card border border-line bg-paper px-3 py-2.5 text-sm"
+                  className="flex-1 rounded-card border border-line bg-paper px-3 py-2.5 text-sm outline-none focus:border-terracotta"
                 >
                   <option value="">First friend</option>
                   {friends.map((friend) => (
@@ -401,7 +408,7 @@ export function PeopleClient({
                   value={matchB}
                   onChange={(e) => setMatchB(e.target.value)}
                   aria-label="Second friend"
-                  className="flex-1 rounded-card border border-line bg-paper px-3 py-2.5 text-sm"
+                  className="flex-1 rounded-card border border-line bg-paper px-3 py-2.5 text-sm outline-none focus:border-terracotta"
                 >
                   <option value="">Second friend</option>
                   {friends.map((friend) => (
@@ -415,7 +422,7 @@ export function PeopleClient({
                 value={matchActivity}
                 onChange={(e) => setMatchActivity(e.target.value)}
                 aria-label="Suggested activity"
-                className="w-full rounded-card border border-line bg-paper px-3 py-2.5 text-sm"
+                className="w-full rounded-card border border-line bg-paper px-3 py-2.5 text-sm outline-none focus:border-terracotta"
               >
                 {ACTIVITY_PRESETS.map((activity) => (
                   <option key={activity.label} value={activity.label}>
@@ -480,7 +487,7 @@ export function PeopleClient({
               className="flex items-center gap-3 rounded-card bg-cream px-3.5 py-3 text-sm"
             >
               <span className="text-lg" aria-hidden>{circle.emoji}</span>
-              <span className="font-medium flex-1">{circle.name}</span>
+              <span className="font-bold flex-1">{circle.name}</span>
               <span className="text-xs text-ink-faint">
                 {circle.memberCount} {circle.memberCount === 1 ? 'person' : 'people'}
               </span>
