@@ -33,10 +33,10 @@ export function JoinRequests({
       />
       <div className="space-y-2">
         {requests.map((request) => (
-          <Card key={request.inviteId} tone="gold">
+          <Card key={request.inviteId} tone="gold" lifted>
             <div className="flex items-center gap-3">
-              <Avatar name={request.name} seed={request.userId} size="sm" />
-              <span className="font-medium flex-1">{request.name}</span>
+              <Avatar name={request.name} seed={request.userId} size="sm" ring />
+              <span className="font-bold flex-1">{request.name}</span>
               <Button
                 size="sm"
                 variant="accept"

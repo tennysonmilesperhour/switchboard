@@ -34,10 +34,10 @@ export default async function OnboardingPage({
 
   return (
     <div className="mx-auto max-w-lg min-h-dvh px-6 py-8">
-      <p className="text-sm font-medium tracking-wide uppercase text-terracotta-deep">
+      <p className="text-sm font-bold tracking-wide uppercase text-terracotta">
         Welcome to Switchboard
       </p>
-      <h1 className="font-display text-3xl text-ink mt-2">
+      <h1 className="text-4xl font-black tracking-tight text-ink mt-2">
         First, a little about you.
       </h1>
       <p className="mt-2 text-ink-soft text-sm leading-relaxed">

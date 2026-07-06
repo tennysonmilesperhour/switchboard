@@ -45,7 +45,7 @@ export default async function SettingsPage() {
   const sabbaticalMessage: string = profile?.sabbatical_message ?? '';
 
   return (
-    <AppShell title="Settings" back="/">
+    <AppShell title="Settings" back="/profile">
       <div className="space-y-7">
         <Card>
           <div className="flex items-center gap-4">

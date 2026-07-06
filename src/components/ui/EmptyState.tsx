@@ -11,7 +11,7 @@ export function EmptyState({ emoji, title, body, action }: EmptyStateProps) {
       <span className="text-4xl" aria-hidden>
         {emoji}
       </span>
-      <h3 className="font-display text-lg text-ink">{title}</h3>
+      <h3 className="font-extrabold tracking-tight text-lg text-ink">{title}</h3>
       <p className="text-sm text-ink-faint max-w-xs leading-relaxed">{body}</p>
       {action ? <div className="mt-3">{action}</div> : null}
     </div>

@@ -6,7 +6,7 @@ import { DiscoverClient } from './DiscoverClient';
 import { OpenTables, type OpenTableRow } from '@/components/events/OpenTables';
 import { VenuePerks, type VenueRow } from '@/components/venues/VenuePerks';
 
-export const metadata: Metadata = { title: 'Discover' };
+export const metadata: Metadata = { title: 'Explore' };
 
 export default async function DiscoverPage() {
   const supabase = await createClient();
@@ -27,7 +27,7 @@ export default async function DiscoverPage() {
     ]);
 
   return (
-    <AppShell title="Discover">
+    <AppShell title="Explore">
       <div className="space-y-8">
         <OpenTables tables={(openTables ?? []) as OpenTableRow[]} />
         <DiscoverClient defaultInterests={profile?.interests ?? []} />

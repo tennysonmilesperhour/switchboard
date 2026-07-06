@@ -112,11 +112,11 @@ export function PollSection({
       {/* Consensus meter - aggregate only, never individual votes */}
       {votingOpen && results.some((r) => r.voters > 0) && (
         <div className="mb-4">
-          <div className="flex justify-between text-xs text-ink-faint mb-1">
-            <span>Group consensus</span>
-            <span>{groupConsensus}%</span>
+          <div className="flex justify-between text-xs mb-1.5">
+            <span className="font-bold text-ink-soft uppercase tracking-wide">Group consensus</span>
+            <span className="font-extrabold text-sage-deep">{groupConsensus}%</span>
           </div>
-          <div className="h-2 rounded-pill bg-cream overflow-hidden">
+          <div className="h-2.5 rounded-pill bg-cream overflow-hidden">
             <div
               className="h-full rounded-pill bg-sage transition-all duration-500"
               style={{ width: `${groupConsensus}%` }}
@@ -127,10 +127,10 @@ export function PollSection({
 
       {winner && (
         <Card tone="sage" lifted className="mb-4 animate-rise">
-          <p className="text-xs uppercase tracking-wide text-sage-deep font-medium">
+          <p className="text-xs uppercase tracking-wide text-sage-deep font-extrabold">
             The plan
           </p>
-          <p className="font-display text-2xl mt-1">{winner.label}</p>
+          <p className="font-extrabold text-3xl tracking-tight mt-1">{winner.label}</p>
           {winner.detail && (
             <p className="text-sm text-ink-soft mt-1">{winner.detail}</p>
           )}
@@ -149,10 +149,10 @@ export function PollSection({
           const isWinner = poll.winning_option_id === option.id;
           return (
             <li key={option.id}>
-              <Card className={isWinner ? 'border-sage' : ''}>
+              <Card className={isWinner ? 'border-sage border-2' : ''}>
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
-                    <p className="font-medium truncate">{option.label}</p>
+                    <p className="font-bold truncate">{option.label}</p>
                     {option.detail && (
                       <p className="text-xs text-ink-faint mt-0.5">{option.detail}</p>
                     )}

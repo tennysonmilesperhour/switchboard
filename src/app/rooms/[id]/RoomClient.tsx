@@ -405,7 +405,7 @@ export function RoomClient({
         <div className="flex-1 overflow-y-auto py-3 space-y-2">
           {visibleItems.length === 0 ? (
             <EmptyState
-              emoji={TABS.find((t) => t.key === tab)?.emoji ?? '❋'}
+              emoji={TABS.find((t) => t.key === tab)?.emoji ?? '📋'}
               title="Nothing filed yet"
               body="When someone shares something useful in chat, it lands here automatically."
             />

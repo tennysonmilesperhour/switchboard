@@ -3,46 +3,41 @@ import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
 import { AppShell } from '@/components/shell/AppShell';
-import { Card, SectionHeader } from '@/components/ui/Card';
+import { SectionHeader } from '@/components/ui/Card';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { Button } from '@/components/ui/Button';
+import { PlanCard, planColor } from '@/components/ui/PlanCard';
 import { formatDateTime } from '@/lib/format';
 import type { SwitchboardEvent } from '@/lib/types';
 
-export const metadata: Metadata = { title: 'Plans' };
+export const metadata: Metadata = { title: 'Calendar' };
 
-const STATUS_BADGES: Record<string, string> = {
-  deciding: '🗳️ deciding',
-  inviting: '🪜 inviting',
-  confirmed: '✓ confirmed',
-  cancelled: 'cancelled',
+const STATUS_LABELS: Record<string, string> = {
+  deciding: 'Deciding',
+  inviting: 'Inviting',
+  confirmed: 'Confirmed',
+  cancelled: 'Cancelled',
 };
 
 function EventCard({
   event,
+  index,
   note,
 }: {
   event: SwitchboardEvent;
+  index: number;
   note?: string;
 }) {
   return (
-    <Link href={`/events/${event.id}`} className="block group">
-      <Card className="group-hover:border-terracotta transition-colors">
-        <div className="flex items-start justify-between gap-3">
-          <div className="min-w-0">
-            <p className="font-display text-lg truncate">{event.title}</p>
-            <p className="text-sm text-ink-soft mt-0.5">
-              {formatDateTime(event.starts_at)}
-              {event.location_name ? ` · ${event.location_name}` : ''}
-            </p>
-            {note && <p className="text-xs text-terracotta-deep mt-1">{note}</p>}
-          </div>
-          <span className="text-xs text-ink-faint whitespace-nowrap rounded-pill bg-cream px-2.5 py-1">
-            {STATUS_BADGES[event.status] ?? event.status}
-          </span>
-        </div>
-      </Card>
-    </Link>
+    <PlanCard
+      variant="compact"
+      href={`/events/${event.id}`}
+      title={event.title}
+      color={planColor(index)}
+      when={formatDateTime(event.starts_at)}
+      where={event.location_name ?? undefined}
+      dateLabel={note ?? STATUS_LABELS[event.status] ?? event.status}
+    />
   );
 }
 
@@ -86,14 +81,7 @@ export default async function PlansPage() {
     (hosting?.length ?? 0) === 0 && invited.length === 0;
 
   return (
-    <AppShell
-      title="Plans"
-      action={
-        <Link href="/events/new">
-          <Button size="sm">+ New plan</Button>
-        </Link>
-      }
-    >
+    <AppShell title="Coming up">
       {isEmpty ? (
         <EmptyState
           emoji="✦"
@@ -110,9 +98,9 @@ export default async function PlansPage() {
           {needsResponse.length > 0 && (
             <section>
               <SectionHeader title="Waiting on you" hint="These invitations have a timer" />
-              <div className="space-y-2.5">
-                {needsResponse.map(({ event }) => (
-                  <EventCard key={event.id} event={event} note="Respond soon 💌" />
+              <div className="space-y-3">
+                {needsResponse.map(({ event }, i) => (
+                  <EventCard key={event.id} event={event} index={i} note="Respond soon" />
                 ))}
               </div>
             </section>
@@ -120,9 +108,9 @@ export default async function PlansPage() {
           {(hosting?.length ?? 0) > 0 && (
             <section>
               <SectionHeader title="Hosting" />
-              <div className="space-y-2.5">
-                {(hosting as SwitchboardEvent[]).map((event) => (
-                  <EventCard key={event.id} event={event} />
+              <div className="space-y-3">
+                {(hosting as SwitchboardEvent[]).map((event, i) => (
+                  <EventCard key={event.id} event={event} index={i} />
                 ))}
               </div>
             </section>
@@ -130,9 +118,9 @@ export default async function PlansPage() {
           {going.length > 0 && (
             <section>
               <SectionHeader title="Going" />
-              <div className="space-y-2.5">
-                {going.map(({ event }) => (
-                  <EventCard key={event.id} event={event} />
+              <div className="space-y-3">
+                {going.map(({ event }, i) => (
+                  <EventCard key={event.id} event={event} index={i} />
                 ))}
               </div>
             </section>

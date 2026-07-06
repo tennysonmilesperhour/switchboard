@@ -29,7 +29,7 @@ export function ZoneCheckIn({
   return (
     <div className="space-y-4">
       <div className="space-y-1.5">
-        <p className="text-sm font-medium">What would you enjoy sharing here?</p>
+        <p className="text-sm font-bold">What would you enjoy sharing here?</p>
         <div className="flex flex-wrap gap-2">
           {experiences.map((experience) => (
             <Chip
@@ -58,7 +58,7 @@ export function ZoneCheckIn({
         className="w-full rounded-card border border-line bg-card px-4 py-3 text-sm outline-none focus:border-terracotta"
       />
       <div className="space-y-1.5">
-        <label htmlFor="zone-hours" className="text-sm font-medium">
+        <label htmlFor="zone-hours" className="text-sm font-bold">
           Here for about {hours} {hours === 1 ? 'hour' : 'hours'}
         </label>
         <input

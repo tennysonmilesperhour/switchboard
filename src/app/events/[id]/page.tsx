@@ -6,6 +6,7 @@ import { advanceEventCascade } from '@/lib/server/cascade-runner';
 import { AppShell } from '@/components/shell/AppShell';
 import { Card, SectionHeader } from '@/components/ui/Card';
 import { Avatar } from '@/components/ui/Avatar';
+import { PlanCard, planColor } from '@/components/ui/PlanCard';
 import { CopyButton } from '@/components/ui/CopyButton';
 import { CascadeProgress } from '@/components/events/CascadeProgress';
 import { JoinRequests } from '@/components/events/JoinRequests';
@@ -173,39 +174,44 @@ export default async function EventPage({
     past: 'Past',
   };
 
+  // Stable hero color derived from the event id.
+  const heroIndex = Array.from(event.id).reduce(
+    (sum, ch) => sum + ch.charCodeAt(0),
+    0,
+  );
+
   return (
     <AppShell title={event.title} back="/plans">
       <div className="space-y-6">
-        <div>
-          <span
-            className={`inline-block rounded-pill px-3 py-1 text-xs font-medium ${
-              event.status === 'confirmed'
-                ? 'bg-sage-soft text-sage-deep'
-                : event.status === 'cancelled'
-                  ? 'bg-rose-soft text-rose-deep'
-                  : 'bg-gold-soft text-ink-soft'
-            }`}
-          >
-            {statusLabel[event.status]}
-          </span>
-          <p className="mt-3 text-ink font-medium">{formatDateTime(event.starts_at)}</p>
-          {event.location_name && (
-            <p className="text-ink-soft text-sm mt-0.5">📍 {event.location_name}</p>
-          )}
+        <div className="space-y-4">
+          <PlanCard
+            variant="full"
+            title={event.title}
+            color={planColor(heroIndex)}
+            status={statusLabel[event.status]}
+            when={formatDateTime(event.starts_at)}
+            where={event.location_name ?? undefined}
+            attendees={attendees.map((attendee) => ({ name: attendee.name }))}
+            attendeesLabel={
+              attendees.length > 0
+                ? `${attendees.length}${event.capacity ? ` of ${event.capacity}` : ''} going`
+                : undefined
+            }
+          />
           {event.description && (
-            <p className="text-ink-soft text-sm mt-2 leading-relaxed">{event.description}</p>
+            <p className="text-ink-soft text-[15px] leading-relaxed">{event.description}</p>
           )}
-          <div className="flex gap-2 mt-3 flex-wrap">
+          <div className="flex gap-2 flex-wrap">
             <a
               href={`/api/events/${event.id}/ics`}
-              className="inline-flex items-center gap-1.5 rounded-pill border border-line bg-card px-3 py-1.5 text-xs font-medium text-ink-soft hover:border-terracotta hover:text-terracotta-deep transition-colors"
+              className="inline-flex items-center gap-1.5 rounded-pill border border-line bg-card px-3.5 py-2 text-xs font-bold text-ink-soft shadow-lift hover:border-terracotta hover:text-terracotta-deep active:scale-[0.98] transition-all"
             >
               📅 Add to calendar
             </a>
             {event.room_id && (
               <Link
                 href={`/rooms/${event.room_id}`}
-                className="inline-flex items-center gap-1.5 rounded-pill border border-line bg-card px-3 py-1.5 text-xs font-medium text-ink-soft hover:border-terracotta hover:text-terracotta-deep transition-colors"
+                className="inline-flex items-center gap-1.5 rounded-pill border border-line bg-card px-3.5 py-2 text-xs font-bold text-ink-soft shadow-lift hover:border-terracotta hover:text-terracotta-deep active:scale-[0.98] transition-all"
               >
                 ❋ Living Room
               </Link>
@@ -213,15 +219,15 @@ export default async function EventPage({
             {event.starts_at && new Date(event.starts_at) < new Date() && (
               <Link
                 href={`/events/${event.id}/capsule`}
-                className="inline-flex items-center gap-1.5 rounded-pill border border-line bg-card px-3 py-1.5 text-xs font-medium text-ink-soft hover:border-terracotta hover:text-terracotta-deep transition-colors"
+                className="inline-flex items-center gap-1.5 rounded-pill border border-line bg-card px-3.5 py-2 text-xs font-bold text-ink-soft shadow-lift hover:border-terracotta hover:text-terracotta-deep active:scale-[0.98] transition-all"
               >
                 📦 Memory Capsule
               </Link>
             )}
           </div>
           {venuePerk && (
-            <p className="mt-3 rounded-card bg-gold-soft px-3.5 py-2.5 text-sm">
-              🏪 <strong>{venuePerk.name}</strong> perk for Switchboard groups:{' '}
+            <p className="rounded-card bg-gold-soft px-3.5 py-3 text-sm">
+              🏪 <strong className="font-bold">{venuePerk.name}</strong> perk for Switchboard groups:{' '}
               {venuePerk.perk}
             </p>
           )}
@@ -244,16 +250,16 @@ export default async function EventPage({
           />
         )}
         {myInvite?.status === 'accepted' && (
-          <Card tone="sage">
-            <p className="font-medium text-sage-deep">You’re in ✓</p>
+          <Card tone="sage" lifted>
+            <p className="font-extrabold text-lg text-sage-deep">You’re in ✓</p>
             <p className="text-sm text-ink-soft mt-0.5">
               See you there. The Living Room has the details.
             </p>
           </Card>
         )}
         {myInvite?.status === 'waitlisted' && (
-          <Card tone="gold">
-            <p className="font-medium">You’re on the waitlist</p>
+          <Card tone="gold" lifted>
+            <p className="font-extrabold text-lg">You’re on the waitlist</p>
             <p className="text-sm text-ink-soft mt-0.5">
               If a spot opens up, you’ll be the first to know.
             </p>
@@ -282,8 +288,8 @@ export default async function EventPage({
             <div className="flex flex-wrap gap-3">
               {attendees.map((attendee) => (
                 <div key={attendee.id} className="flex flex-col items-center gap-1 w-16">
-                  <Avatar name={attendee.name} seed={attendee.id} size="md" />
-                  <span className="text-xs text-ink-soft truncate w-full text-center">
+                  <Avatar name={attendee.name} seed={attendee.id} size="md" ring />
+                  <span className="text-xs font-semibold text-ink-soft truncate w-full text-center">
                     {attendee.name.split(' ')[0]}
                   </span>
                 </div>
@@ -326,8 +332,8 @@ export default async function EventPage({
             <SectionHeader title="Guest links" hint="Send these to your guests - no account needed" />
             <ul className="space-y-2">
               {guestLinks.map((guest) => (
-                <li key={guest.url} className="flex items-center justify-between gap-2 rounded-card bg-cream px-3.5 py-2.5">
-                  <span className="text-sm font-medium">{guest.name}</span>
+                <li key={guest.url} className="flex items-center justify-between gap-2 rounded-card bg-cream px-3.5 py-3">
+                  <span className="text-sm font-bold">{guest.name}</span>
                   <CopyButton text={guest.url} />
                 </li>
               ))}

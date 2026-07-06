@@ -79,17 +79,17 @@ export function DescribePlan({ onDraft }: { onDraft: (draft: PlanDraft) => void 
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="w-full rounded-card border border-dashed border-line bg-cream px-4 py-3 text-sm text-ink-soft hover:border-terracotta hover:text-terracotta-deep transition-colors text-left"
+        className="w-full rounded-card border border-dashed border-line bg-cream px-4 py-3.5 text-sm text-ink-soft hover:border-terracotta hover:text-terracotta-deep hover:bg-terracotta-soft active:scale-[0.99] transition-all text-left"
       >
-        ✨ Or just describe it: “Coffee tomorrow morning, try Alex first, then
-        Jordan, 20-minute windows”
+        <span className="font-bold text-terracotta-deep">✨ Or just describe it:</span>{' '}
+        “Coffee tomorrow morning, try Alex first, then Jordan, 20-minute windows”
       </button>
     );
   }
 
   return (
     <Card tone="cream" className="animate-rise">
-      <label htmlFor="describe" className="text-sm font-medium">
+      <label htmlFor="describe" className="text-base font-extrabold tracking-tight">
         Describe your plan
       </label>
       <textarea

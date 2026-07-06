@@ -37,7 +37,7 @@ export function CascadeProgress({ invites, mode }: CascadeProgressProps) {
         return (
           <div key={stage ?? 'all'}>
             {stage !== null && stages.length > 1 && (
-              <p className="text-xs font-medium uppercase tracking-wide text-ink-faint mb-2">
+              <p className="text-xs font-extrabold uppercase tracking-wide text-terracotta-deep mb-2">
                 Wave {stage + 1}
               </p>
             )}
@@ -58,18 +58,18 @@ export function CascadeProgress({ invites, mode }: CascadeProgressProps) {
                 return (
                   <li
                     key={invite.id}
-                    className={`flex items-center gap-3 rounded-card px-3.5 py-2.5 ${
+                    className={`flex items-center gap-3 rounded-card px-3.5 py-3 ${
                       invite.status === 'sent'
-                        ? 'bg-gold-soft'
+                        ? 'bg-gold-soft shadow-lift'
                         : invite.status === 'accepted'
                           ? 'bg-sage-soft'
                           : 'bg-cream'
                     }`}
                   >
-                    <span className={`size-2 rounded-full shrink-0 ${meta.dot}`} aria-hidden />
+                    <span className={`size-2.5 rounded-full shrink-0 ${meta.dot}`} aria-hidden />
                     <Avatar name={invite.invitee_name} seed={invite.invitee_id ?? invite.id} size="sm" />
                     <span className="flex-1 min-w-0">
-                      <span className="text-sm font-medium block truncate">
+                      <span className="text-sm font-bold block truncate">
                         {invite.invitee_name}
                         {!invite.invitee_id && (
                           <span className="ml-1.5 text-[10px] uppercase tracking-wide text-ink-faint">guest</span>

@@ -23,7 +23,7 @@ export function CapsuleForm({
 
   return (
     <Card>
-      <p className="text-sm font-medium">
+      <p className="text-sm font-bold">
         {initialLine ? 'Your line (you can update it)' : 'Add your line'}
       </p>
       <div className="space-y-2.5 mt-2.5">

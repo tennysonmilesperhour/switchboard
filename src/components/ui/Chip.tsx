@@ -19,10 +19,10 @@ export function Chip({
     <button
       type="button"
       aria-pressed={selected}
-      className={`inline-flex items-center gap-1.5 rounded-pill border px-3.5 py-2 text-sm font-medium transition-all duration-150 active:scale-[0.97] outline-none focus-visible:ring-2 focus-visible:ring-terracotta ${
+      className={`inline-flex items-center gap-1.5 rounded-pill border px-4 py-2 text-sm font-semibold transition-all duration-150 active:scale-[0.97] outline-none focus-visible:ring-2 focus-visible:ring-terracotta ${
         selected
-          ? 'bg-ink text-paper border-ink shadow-lift'
-          : 'bg-card text-ink-soft border-line hover:border-ink-faint'
+          ? 'bg-terracotta text-white border-terracotta shadow-lift'
+          : 'bg-card text-ink-soft border-line hover:border-terracotta hover:text-terracotta'
       } ${className}`}
       {...props}
     >

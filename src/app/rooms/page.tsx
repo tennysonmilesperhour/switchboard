@@ -5,15 +5,16 @@ import { createClient } from '@/lib/supabase/server';
 import { AppShell } from '@/components/shell/AppShell';
 import { Card } from '@/components/ui/Card';
 import { EmptyState } from '@/components/ui/EmptyState';
+import { Icon, type IconName } from '@/components/ui/Icon';
 import { formatRelative } from '@/lib/format';
 
 export const metadata: Metadata = { title: 'Rooms' };
 
-const KIND_EMOJI: Record<string, string> = {
-  event: '✦',
-  match: '◐',
-  group: '❋',
-  moment: '✨',
+const KIND_ICON: Record<string, IconName> = {
+  event: 'calendar',
+  match: 'sparkle',
+  group: 'users',
+  moment: 'sparkle',
 };
 
 export default async function RoomsPage() {
@@ -39,7 +40,7 @@ export default async function RoomsPage() {
     <AppShell title="Rooms">
       {rooms.length === 0 ? (
         <EmptyState
-          emoji="❋"
+          emoji="💬"
           title="No rooms yet"
           body="Every plan and match gets a Living Room - a conversation where addresses, tasks, links, and photos quietly organize themselves."
         />
@@ -50,19 +51,23 @@ export default async function RoomsPage() {
               <Card className="group-hover:border-terracotta transition-colors">
                 <div className="flex items-center gap-3">
                   <span
-                    className="size-11 rounded-full bg-cream inline-flex items-center justify-center text-lg"
+                    className="size-11 rounded-full bg-terracotta-soft text-terracotta-deep inline-flex items-center justify-center"
                     aria-hidden
                   >
-                    {KIND_EMOJI[room.kind] ?? '❋'}
+                    <Icon name={KIND_ICON[room.kind] ?? 'chat'} size={20} />
                   </span>
                   <div className="flex-1 min-w-0">
-                    <p className="font-medium truncate">{room.title}</p>
+                    <p className="font-bold truncate">{room.title}</p>
                     <p className="text-xs text-ink-faint">
                       {room.kind === 'match' ? 'Mutual match' : room.kind === 'event' ? 'Plan' : 'Group'} ·
                       started {formatRelative(room.created_at)}
                     </p>
                   </div>
-                  <span className="text-ink-faint" aria-hidden>→</span>
+                  <Icon
+                    name="back"
+                    size={18}
+                    className="text-ink-faint rotate-180 group-hover:text-terracotta transition-colors"
+                  />
                 </div>
               </Card>
             </Link>

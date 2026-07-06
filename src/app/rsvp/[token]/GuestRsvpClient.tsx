@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from 'react';
 import { Button } from '@/components/ui/Button';
+import { Icon } from '@/components/ui/Icon';
 import { respondToGuestInvite } from '@/lib/actions/invites';
 
 interface GuestRsvpClientProps {
@@ -34,7 +35,12 @@ export function GuestRsvpClient({
   if (status === 'accepted') {
     return (
       <div className="mt-8 rounded-card bg-sage-soft p-5 animate-rise">
-        <p className="font-medium text-sage-deep">You’re in, {guestName}! ✓</p>
+        <p className="font-bold text-sage-deep inline-flex items-center gap-1.5">
+          <span className="inline-flex items-center justify-center size-5 rounded-full bg-sage text-white">
+            <Icon name="check" size={13} />
+          </span>
+          You’re in, {guestName}!
+        </p>
         <p className="text-sm text-ink-soft mt-1">
           The host has been told. See you there.
         </p>
@@ -44,7 +50,7 @@ export function GuestRsvpClient({
   if (status === 'declined') {
     return (
       <div className="mt-8 rounded-card bg-cream p-5 animate-rise">
-        <p className="font-medium">No worries 💛</p>
+        <p className="font-bold">No worries 💛</p>
         <p className="text-sm text-ink-soft mt-1">
           The invitation will quietly move along. Nobody’s feelings were harmed
           in the making of this RSVP.
@@ -55,7 +61,7 @@ export function GuestRsvpClient({
   if (status === 'waitlisted') {
     return (
       <div className="mt-8 rounded-card bg-gold-soft p-5 animate-rise">
-        <p className="font-medium">The event filled up - you’re on the waitlist</p>
+        <p className="font-bold">The event filled up, you’re on the waitlist</p>
         <p className="text-sm text-ink-soft mt-1">
           If a spot opens, the host will reach out.
         </p>
@@ -65,7 +71,7 @@ export function GuestRsvpClient({
   if (status !== 'sent') {
     return (
       <div className="mt-8 rounded-card bg-cream p-5">
-        <p className="font-medium">This invitation’s window has passed</p>
+        <p className="font-bold">This invitation’s window has passed</p>
         <p className="text-sm text-ink-soft mt-1">
           It quietly moved to the next person - that’s how Switchboard keeps
           plans pressure-free.
@@ -87,7 +93,8 @@ export function GuestRsvpClient({
           disabled={pending}
           onClick={() => respond(true)}
         >
-          I’m in ✓
+          <Icon name="check" size={18} />
+          I’m in
         </Button>
         <Button
           variant="secondary"

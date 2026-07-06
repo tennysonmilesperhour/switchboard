@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/Button';
 import { Chip } from '@/components/ui/Chip';
 import { Avatar } from '@/components/ui/Avatar';
 import { Card } from '@/components/ui/Card';
+import { Icon } from '@/components/ui/Icon';
 import { suggestWindow, WINDOW_CHOICES } from '@/lib/engine/windows';
 import { simulateCascade } from '@/lib/engine/cascade';
 import { createEvent, type CreateEventInput } from '@/lib/actions/events';
@@ -69,6 +70,39 @@ const MODE_OPTIONS: Array<{
     body: 'A classic invitation to your whole list, with a response window.',
   },
 ];
+
+// Bold, confident heading per step. Visual copy only, not tied to logic.
+const STEP_META: Array<{ heading: string; sub: string }> = [
+  {
+    heading: 'I want to...',
+    sub: 'Name the plan. A few words is plenty, add the rest below.',
+  },
+  {
+    heading: 'How should invites go out?',
+    sub: 'Pick the rhythm that fits this plan.',
+  },
+  {
+    heading: 'Who is coming?',
+    sub: 'Tap to add people, or invite a guest by link.',
+  },
+  {
+    heading: 'Set the order',
+    sub: 'Decide who hears about it first.',
+  },
+  {
+    heading: 'Who sees what',
+    sub: 'Tune the privacy for this plan.',
+  },
+  {
+    heading: 'Ready to send',
+    sub: 'Give it one last look before it goes out.',
+  },
+];
+
+// Shared field styling for the new bold, roomy input language.
+const FIELD =
+  'w-full rounded-card border border-line bg-card px-4 py-3 text-[15px] text-ink outline-none transition-colors focus:border-terracotta focus:ring-2 focus:ring-terracotta-soft';
+const FIELD_LABEL = 'text-sm font-semibold text-ink';
 
 export function EventWizard({
   friends,
@@ -316,85 +350,104 @@ export function EventWizard({
       : 1;
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-6">
       {/* Progress */}
       <ol aria-label="Steps" className="flex items-center gap-1.5">
         {STEPS.map((label, i) => (
           <li key={label} className="flex-1">
             <div
-              className={`h-1.5 rounded-pill transition-colors ${
-                i <= step ? 'bg-terracotta' : 'bg-line'
+              className={`h-2 rounded-pill transition-all duration-300 ${
+                i < step
+                  ? 'bg-terracotta'
+                  : i === step
+                    ? 'bg-brand-gradient'
+                    : 'bg-line'
               }`}
               title={label}
             />
           </li>
         ))}
       </ol>
-      <p className="text-xs font-medium uppercase tracking-wide text-ink-faint">
-        Step {step + 1} of {STEPS.length} - {STEPS[step]}
-      </p>
+
+      <header key={step} className="animate-rise">
+        <p className="text-xs font-bold uppercase tracking-[0.16em] text-terracotta">
+          Step {step + 1} of {STEPS.length}
+        </p>
+        <h2
+          className={`mt-2 tracking-tight text-ink ${
+            step === 0
+              ? 'text-[2.5rem] leading-[1.05] font-black'
+              : 'text-[1.75rem] leading-tight font-extrabold'
+          }`}
+        >
+          {STEP_META[step].heading}
+        </h2>
+        <p className="mt-1.5 text-sm leading-relaxed text-ink-soft">
+          {STEP_META[step].sub}
+        </p>
+      </header>
 
       {step === 0 && (
         <div className="space-y-4 animate-rise">
           <DescribePlan onDraft={applyDraft} />
           <div className="space-y-1.5">
-            <label htmlFor="title" className="text-sm font-medium">What’s the plan?</label>
+            <label htmlFor="title" className="sr-only">What is the plan?</label>
             <input
               id="title"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
               placeholder="Coffee downtown, Game night, Saturday hike…"
-              className="w-full rounded-card border border-line bg-card px-4 py-3 outline-none focus:border-terracotta"
+              className="w-full rounded-card border-2 border-line bg-card px-5 py-4 text-xl font-semibold text-ink outline-none transition-colors placeholder:font-normal placeholder:text-ink-faint focus:border-terracotta focus:ring-4 focus:ring-terracotta-soft"
             />
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
-              <label htmlFor="date" className="text-sm font-medium">Date</label>
+              <label htmlFor="date" className={FIELD_LABEL}>Date</label>
               <input
                 id="date" type="date" value={date}
                 onChange={(e) => setDate(e.target.value)}
-                className="w-full rounded-card border border-line bg-card px-4 py-3 outline-none focus:border-terracotta"
+                className={FIELD}
               />
             </div>
             <div className="space-y-1.5">
-              <label htmlFor="time" className="text-sm font-medium">Time</label>
+              <label htmlFor="time" className={FIELD_LABEL}>Time</label>
               <input
                 id="time" type="time" value={time}
                 onChange={(e) => setTime(e.target.value)}
-                className="w-full rounded-card border border-line bg-card px-4 py-3 outline-none focus:border-terracotta"
+                className={FIELD}
               />
             </div>
           </div>
           <div className="space-y-1.5">
-            <label htmlFor="location" className="text-sm font-medium">
-              Where? <span className="text-ink-faint font-normal">(optional)</span>
+            <label htmlFor="location" className={FIELD_LABEL}>
+              Where? <span className="font-normal text-ink-faint">(optional)</span>
             </label>
             <input
               id="location" value={locationName}
               onChange={(e) => setLocationName(e.target.value)}
               placeholder="Café Luna, my place, Miller Park…"
-              className="w-full rounded-card border border-line bg-card px-4 py-3 outline-none focus:border-terracotta"
+              className={FIELD}
             />
           </div>
           <div className="space-y-1.5">
-            <label htmlFor="description" className="text-sm font-medium">
-              Details <span className="text-ink-faint font-normal">(optional)</span>
+            <label htmlFor="description" className={FIELD_LABEL}>
+              Details <span className="font-normal text-ink-faint">(optional)</span>
             </label>
             <textarea
               id="description" value={description} rows={3}
               onChange={(e) => setDescription(e.target.value)}
-              className="w-full rounded-card border border-line bg-card px-4 py-3 outline-none focus:border-terracotta resize-none"
+              className={`${FIELD} resize-none`}
             />
           </div>
           <div className="space-y-1.5">
-            <label htmlFor="capacity" className="text-sm font-medium">
-              How many spots? <span className="text-ink-faint font-normal">(leave blank for one-on-one)</span>
+            <label htmlFor="capacity" className={FIELD_LABEL}>
+              How many spots? <span className="font-normal text-ink-faint">(leave blank for one-on-one)</span>
             </label>
             <input
               id="capacity" type="number" min={1} value={capacity}
               onChange={(e) => setCapacity(e.target.value)}
               placeholder="1"
-              className="w-32 rounded-card border border-line bg-card px-4 py-3 outline-none focus:border-terracotta"
+              className={`${FIELD} w-36`}
             />
           </div>
         </div>
@@ -402,27 +455,49 @@ export function EventWizard({
 
       {step === 1 && (
         <div className="space-y-3 animate-rise">
-          {MODE_OPTIONS.map((option) => (
-            <button
-              key={option.mode}
-              type="button"
-              onClick={() => setInviteMode(option.mode)}
-              aria-pressed={inviteMode === option.mode}
-              className={`w-full text-left rounded-card border p-4 transition-all ${
-                inviteMode === option.mode
-                  ? 'border-terracotta bg-terracotta-soft shadow-lift'
-                  : 'border-line bg-card hover:border-ink-faint'
-              }`}
-            >
-              <div className="flex items-center gap-3">
-                <span className="text-2xl" aria-hidden>{option.emoji}</span>
-                <div>
-                  <p className="font-medium">{option.title}</p>
-                  <p className="text-sm text-ink-soft mt-0.5 leading-relaxed">{option.body}</p>
+          {MODE_OPTIONS.map((option) => {
+            const active = inviteMode === option.mode;
+            return (
+              <button
+                key={option.mode}
+                type="button"
+                onClick={() => setInviteMode(option.mode)}
+                aria-pressed={active}
+                className={`w-full text-left rounded-card border-2 p-4 transition-all active:scale-[0.99] ${
+                  active
+                    ? 'border-terracotta bg-terracotta-soft shadow-lift'
+                    : 'border-line bg-card hover:border-terracotta/50'
+                }`}
+              >
+                <div className="flex items-center gap-3.5">
+                  <span
+                    className={`grid size-12 shrink-0 place-items-center rounded-2xl text-2xl transition-colors ${
+                      active ? 'bg-card shadow-lift' : 'bg-cream'
+                    }`}
+                    aria-hidden
+                  >
+                    {option.emoji}
+                  </span>
+                  <div className="flex-1">
+                    <p className={`font-extrabold ${active ? 'text-terracotta-deep' : 'text-ink'}`}>
+                      {option.title}
+                    </p>
+                    <p className="text-sm text-ink-soft mt-0.5 leading-relaxed">{option.body}</p>
+                  </div>
+                  <span
+                    aria-hidden
+                    className={`grid size-6 shrink-0 place-items-center rounded-pill border-2 transition-colors ${
+                      active
+                        ? 'border-terracotta bg-terracotta text-white'
+                        : 'border-line text-transparent'
+                    }`}
+                  >
+                    <Icon name="check" size={14} />
+                  </span>
                 </div>
-              </div>
-            </button>
-          ))}
+              </button>
+            );
+          })}
 
           <Card tone="cream" className="mt-2">
             <label className="flex items-start gap-3 cursor-pointer">
@@ -430,10 +505,10 @@ export function EventWizard({
                 type="checkbox"
                 checked={enablePoll}
                 onChange={(e) => setEnablePoll(e.target.checked)}
-                className="mt-1 size-4 accent-[oklch(60%_0.128_42)]"
+                className="mt-1 size-4 accent-terracotta"
               />
               <span>
-                <span className="font-medium">Let the group decide what to do 🗳️</span>
+                <span className="font-bold">Let the group decide what to do 🗳️</span>
                 <span className="block text-sm text-ink-soft mt-0.5 leading-relaxed">
                   Attendees suggest ideas and rank them privately. The best fit
                   wins - no debates, no loudest-voice problem.
@@ -467,7 +542,7 @@ export function EventWizard({
         <div className="space-y-4 animate-rise">
           {households.length > 0 && (
             <div>
-              <p className="text-sm font-medium mb-2">Whole households</p>
+              <p className="text-sm font-bold text-ink mb-2">Whole households</p>
               <div className="flex flex-wrap gap-2">
                 {households.map((household) => {
                   const members = household.memberIds.filter((id) =>
@@ -510,19 +585,26 @@ export function EventWizard({
                     type="button"
                     onClick={() => toggleFriend(friend)}
                     aria-pressed={selected}
-                    className={`w-full flex items-center gap-3 rounded-card border p-3 transition-all ${
+                    className={`w-full flex items-center gap-3 rounded-card border-2 p-3 transition-all active:scale-[0.99] ${
                       selected
                         ? 'border-terracotta bg-terracotta-soft'
-                        : 'border-line bg-card hover:border-ink-faint'
+                        : 'border-line bg-card hover:border-terracotta/50'
                     }`}
                   >
                     <Avatar name={friend.name} seed={friend.id} size="sm" />
                     <span className="flex-1 text-left">
-                      <span className="font-medium block">{friend.name}</span>
+                      <span className="font-bold block">{friend.name}</span>
                       <span className="text-xs text-ink-faint">@{friend.handle}</span>
                     </span>
-                    <span aria-hidden className={selected ? 'text-terracotta-deep' : 'text-line'}>
-                      {selected ? '✓' : '+'}
+                    <span
+                      aria-hidden
+                      className={`grid size-6 shrink-0 place-items-center rounded-pill border-2 transition-colors ${
+                        selected
+                          ? 'border-terracotta bg-terracotta text-white'
+                          : 'border-line text-ink-faint'
+                      }`}
+                    >
+                      <Icon name={selected ? 'check' : 'add'} size={14} />
                     </span>
                   </button>
                 </li>
@@ -531,20 +613,20 @@ export function EventWizard({
           </ul>
 
           <Card>
-            <p className="text-sm font-medium mb-2">Invite a guest by link</p>
+            <p className="text-sm font-bold text-ink mb-2">Invite a guest by link</p>
             <div className="space-y-2">
               <input
                 value={guestName}
                 onChange={(e) => setGuestName(e.target.value)}
                 placeholder="Guest name"
-                className="w-full rounded-card border border-line bg-paper px-3.5 py-2.5 text-sm outline-none focus:border-terracotta"
+                className="w-full rounded-card border border-line bg-paper px-3.5 py-2.5 text-sm outline-none transition-colors focus:border-terracotta focus:ring-2 focus:ring-terracotta-soft"
               />
               <div className="flex gap-2">
                 <input
                   value={guestContact}
                   onChange={(e) => setGuestContact(e.target.value)}
                   placeholder="Email or phone (optional)"
-                  className="flex-1 rounded-card border border-line bg-paper px-3.5 py-2.5 text-sm outline-none focus:border-terracotta"
+                  className="flex-1 rounded-card border border-line bg-paper px-3.5 py-2.5 text-sm outline-none transition-colors focus:border-terracotta focus:ring-2 focus:ring-terracotta-soft"
                 />
                 <Button type="button" variant="secondary" size="sm" onClick={addGuest}>
                   Add
@@ -554,7 +636,7 @@ export function EventWizard({
           </Card>
 
           {invitees.length > 0 && (
-            <p className="text-sm text-ink-soft">
+            <p className="inline-flex items-center gap-1.5 rounded-pill bg-terracotta-soft px-3.5 py-1.5 text-sm font-bold text-terracotta-deep">
               {invitees.length} {invitees.length === 1 ? 'person' : 'people'} selected
             </p>
           )}
@@ -581,20 +663,20 @@ export function EventWizard({
             {invitees.map((invitee, index) => (
               <li
                 key={invitee.key}
-                className="rounded-card border border-line bg-card p-3"
+                className="rounded-card border-2 border-line bg-card p-3"
               >
                 <div className="flex items-center gap-3">
                   {inviteMode === 'individual' && (
-                    <span className="font-display text-lg text-terracotta-deep w-6 text-center">
+                    <span className="grid size-7 shrink-0 place-items-center rounded-pill bg-terracotta text-sm font-extrabold text-white">
                       {index + 1}
                     </span>
                   )}
                   <Avatar name={invitee.name} seed={invitee.key} size="sm" />
                   <span className="flex-1 min-w-0">
-                    <span className="font-medium block truncate">
+                    <span className="font-bold block truncate">
                       {invitee.name}
                       {!invitee.profileId && (
-                        <span className="ml-1.5 text-xs text-gold rounded-pill bg-gold-soft px-1.5 py-0.5">guest</span>
+                        <span className="ml-1.5 text-xs font-semibold text-gold rounded-pill bg-gold-soft px-1.5 py-0.5">guest</span>
                       )}
                     </span>
                   </span>
@@ -629,7 +711,7 @@ export function EventWizard({
                         updateInvitee(index, { groupStage: Number(e.target.value) })
                       }
                       aria-label={`Wave for ${invitee.name}`}
-                      className="rounded-pill border border-line bg-paper px-3 py-1.5 text-sm"
+                      className="rounded-pill border border-line bg-paper px-3 py-1.5 text-sm font-medium text-ink outline-none transition-colors focus:border-terracotta"
                     >
                       {Array.from({ length: Math.min(stageCount + 1, 5) }, (_, s) => (
                         <option key={s} value={s}>Wave {s + 1}</option>
@@ -642,7 +724,7 @@ export function EventWizard({
                       updateInvitee(index, { windowMinutes: Number(e.target.value) })
                     }
                     aria-label={`Response window for ${invitee.name}`}
-                    className="rounded-pill border border-line bg-paper px-3 py-1.5 text-sm"
+                    className="rounded-pill border border-line bg-paper px-3 py-1.5 text-sm font-medium text-ink outline-none transition-colors focus:border-terracotta"
                   >
                     {WINDOW_CHOICES.map((choice) => (
                       <option key={choice.windowMinutes} value={choice.windowMinutes}>
@@ -691,10 +773,10 @@ export function EventWizard({
                   type="checkbox"
                   checked={option.value}
                   onChange={(e) => option.set(e.target.checked)}
-                  className="mt-1 size-4 accent-[oklch(60%_0.128_42)]"
+                  className="mt-1 size-4 accent-terracotta"
                 />
                 <span>
-                  <span className="font-medium">{option.label}</span>
+                  <span className="font-bold">{option.label}</span>
                   <span className="block text-sm text-ink-soft mt-0.5">{option.hint}</span>
                 </span>
               </label>
@@ -707,10 +789,10 @@ export function EventWizard({
                   type="checkbox"
                   checked={openTable}
                   onChange={(e) => setOpenTable(e.target.checked)}
-                  className="mt-1 size-4 accent-[oklch(60%_0.128_42)]"
+                  className="mt-1 size-4 accent-terracotta"
                 />
                 <span>
-                  <span className="font-medium">Open Table 🍽️</span>
+                  <span className="font-bold">Open Table 🍽️</span>
                   <span className="block text-sm text-ink-soft mt-0.5">
                     If seats stay empty, friends of your attendees can ask to
                     join. You approve every request.
@@ -729,7 +811,7 @@ export function EventWizard({
       {step === 5 && (
         <div className="space-y-4 animate-rise">
           <Card lifted>
-            <h3 className="font-display text-xl">{title || 'Untitled plan'}</h3>
+            <h3 className="text-2xl font-black tracking-tight text-ink">{title || 'Untitled plan'}</h3>
             <p className="text-sm text-ink-soft mt-1">
               {startsAt
                 ? new Intl.DateTimeFormat('en-US', {
@@ -759,7 +841,7 @@ export function EventWizard({
 
           {!enablePoll && preview.length > 0 && (
             <div>
-              <h4 className="text-sm font-medium mb-2">
+              <h4 className="text-sm font-bold text-ink mb-2">
                 If nobody responds, here’s how invitations will flow:
               </h4>
               <ol className="space-y-1.5">
@@ -770,8 +852,8 @@ export function EventWizard({
                       key={entry.id}
                       className="flex items-center gap-3 text-sm rounded-card bg-cream px-3.5 py-2.5"
                     >
-                      <span className="text-ink-faint" aria-hidden>→</span>
-                      <span className="font-medium flex-1">{invitee?.name}</span>
+                      <span className="text-terracotta" aria-hidden>→</span>
+                      <span className="font-bold flex-1">{invitee?.name}</span>
                       <span className="text-ink-faint text-xs">
                         {new Intl.DateTimeFormat('en-US', {
                           month: 'short', day: 'numeric',
@@ -804,7 +886,7 @@ export function EventWizard({
       {submitError && (
         <p
           role="alert"
-          className="rounded-card bg-rose-soft text-rose-deep text-sm p-3"
+          className="rounded-card bg-rose-soft text-rose-deep text-sm font-semibold p-3.5"
         >
           {submitError}
         </p>
@@ -813,22 +895,24 @@ export function EventWizard({
       {/* Nav */}
       <div className="flex gap-3 pt-2">
         {step > 0 && (
-          <Button type="button" variant="secondary" onClick={() => setStep(step - 1)}>
+          <Button type="button" variant="secondary" size="lg" onClick={() => setStep(step - 1)}>
             Back
           </Button>
         )}
         {step < STEPS.length - 1 ? (
           <Button
             type="button"
+            size="lg"
             className="flex-1"
             disabled={!canNext}
             onClick={() => setStep(step + 1)}
           >
-            Continue
+            Next
           </Button>
         ) : (
           <Button
             type="button"
+            size="lg"
             className="flex-1"
             disabled={submitting}
             onClick={submit}

@@ -32,7 +32,7 @@ export function RsvpCard({ inviteId, expiresAtIso }: RsvpCardProps) {
 
   return (
     <Card tone="gold" lifted className="animate-rise">
-      <p className="font-medium">You’re invited 💌</p>
+      <p className="font-extrabold text-xl tracking-tight">You’re invited 💌</p>
       {expiresAtIso && (
         <p className="text-sm text-ink-soft mt-0.5">
           Respond {formatRelative(expiresAtIso)} - after that the invitation

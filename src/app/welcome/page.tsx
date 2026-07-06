@@ -42,40 +42,46 @@ export default function WelcomePage() {
   return (
     <div className="mx-auto max-w-lg min-h-dvh flex flex-col px-6">
       <header className="flex items-center justify-between py-6">
-        <span className="font-display text-xl">Switchboard</span>
+        <span className="text-xl font-extrabold lowercase tracking-tight text-terracotta">
+          switchboard
+        </span>
         <Link
           href="/login"
-          className="text-sm font-medium text-terracotta-deep hover:underline underline-offset-4"
+          className="text-sm font-bold text-ink hover:text-terracotta"
         >
           Sign in
         </Link>
       </header>
 
-      <section aria-labelledby="hero-heading" className="pt-10 pb-14">
-        <p className="text-sm font-medium tracking-wide uppercase text-terracotta-deep mb-4">
-          Connect without pressure
-        </p>
+      <section aria-labelledby="hero-heading" className="pt-12 pb-14">
         <h1
           id="hero-heading"
-          className="font-display text-[2.9rem] leading-[1.04] text-ink"
+          className="text-6xl font-black leading-[0.95] tracking-tight text-ink"
         >
-          Plans without
+          Make plans.
           <br />
-          the <span className="text-terracotta">pressure</span>.
+          <span className="bg-brand-gradient bg-clip-text text-transparent">
+            Like magic.
+          </span>
         </h1>
-        <p className="mt-5 text-[17px] leading-relaxed text-ink-soft max-w-sm">
-          Reaching out is hard. Switchboard handles the awkward parts -
-          the asking, the waiting, the deciding - so more of your moments
-          actually happen.
+        <p className="mt-6 text-[17px] leading-relaxed text-ink-soft max-w-sm">
+          Reaching out is hard. Switchboard handles the awkward parts, the
+          asking, the waiting, the deciding, so more of your moments actually
+          happen.
         </p>
-        <div className="mt-8 flex items-center gap-4">
+        <div className="mt-8 flex flex-col gap-3">
           <Link
             href="/login"
-            className="inline-flex items-center rounded-pill bg-terracotta px-7 py-3.5 text-white font-medium shadow-lift hover:bg-terracotta-deep transition-colors"
+            className="inline-flex items-center justify-center rounded-btn bg-brand-gradient px-7 py-4 text-white font-bold shadow-lift hover:brightness-105 transition"
           >
-            Get started
+            Create account
           </Link>
-          <span className="text-sm text-ink-faint">Free while in beta</span>
+          <Link
+            href="/login"
+            className="inline-flex items-center justify-center rounded-btn border border-line bg-card px-7 py-4 font-bold text-ink hover:border-terracotta hover:text-terracotta transition"
+          >
+            Sign in
+          </Link>
         </div>
       </section>
 
@@ -92,7 +98,9 @@ export default function WelcomePage() {
                 {feature.emoji}
               </span>
               <div>
-                <h2 className="font-display text-lg text-ink">{feature.title}</h2>
+                <h2 className="text-lg font-extrabold tracking-tight text-ink">
+                  {feature.title}
+                </h2>
                 <p className="mt-1 text-sm leading-relaxed text-ink-soft">
                   {feature.body}
                 </p>
@@ -103,13 +111,13 @@ export default function WelcomePage() {
       </section>
 
       <section className="pb-20 text-center">
-        <p className="font-display text-2xl leading-snug text-ink max-w-xs mx-auto">
+        <p className="text-2xl font-extrabold leading-snug tracking-tight text-ink max-w-xs mx-auto">
           Connection still belongs to people. Switchboard just makes it easier
           to find one another.
         </p>
         <Link
           href="/login"
-          className="mt-8 inline-flex items-center rounded-pill bg-ink px-7 py-3.5 text-paper font-medium hover:opacity-90 transition-opacity"
+          className="mt-8 inline-flex items-center rounded-btn bg-ink px-7 py-4 text-paper font-bold hover:opacity-90 transition-opacity"
         >
           Join Switchboard
         </Link>

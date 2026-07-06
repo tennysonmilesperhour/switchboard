@@ -7,6 +7,7 @@ const PUBLIC_PREFIXES = [
   '/login',
   '/auth',
   '/rsvp', // guest RSVP links
+  '/design', // design direction previews
   '/api/cron',
   '/api/og',
 ];

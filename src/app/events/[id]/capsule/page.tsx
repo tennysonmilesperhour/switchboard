@@ -2,6 +2,7 @@ import { notFound, redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
 import { AppShell } from '@/components/shell/AppShell';
 import { Avatar } from '@/components/ui/Avatar';
+import { Icon } from '@/components/ui/Icon';
 import { formatDate } from '@/lib/format';
 import { CapsuleForm } from './CapsuleForm';
 
@@ -41,12 +42,17 @@ export default async function CapsulePage({
     <AppShell title="Memory Capsule" back={`/events/${id}`}>
       <div className="space-y-6">
         <div className="rounded-card bg-ink text-paper p-6">
-          <p className="text-xs uppercase tracking-widest text-gold">
+          <p className="text-xs font-bold uppercase tracking-widest text-gold">
             {formatDate(event.starts_at)}
           </p>
-          <h2 className="font-display text-3xl mt-1.5">{event.title}</h2>
+          <h2 className="font-extrabold tracking-tight text-3xl mt-1.5 text-balance">
+            {event.title}
+          </h2>
           {event.location_name && (
-            <p className="text-sm opacity-70 mt-1">📍 {event.location_name}</p>
+            <p className="text-sm opacity-70 mt-1 inline-flex items-center gap-1.5">
+              <Icon name="mapPin" size={14} />
+              {event.location_name}
+            </p>
           )}
           <p className="text-sm opacity-70 mt-3">
             One line and one photo from everyone who was there. It lives here
@@ -74,7 +80,7 @@ export default async function CapsulePage({
                   />
                 )}
                 <blockquote className="rounded-card bg-cream px-4 py-3">
-                  <p className="font-display text-lg leading-snug">{row.line}</p>
+                  <p className="font-bold text-lg leading-snug tracking-tight">{row.line}</p>
                   <figcaption className="flex items-center gap-2 mt-2 text-xs text-ink-faint">
                     <Avatar name={row.name} seed={row.user_id} size="sm" />
                     {row.name}

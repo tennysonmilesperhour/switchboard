@@ -1,16 +1,12 @@
 import type { Metadata, Viewport } from 'next';
-import { Fraunces, Inter } from 'next/font/google';
+import { Work_Sans } from 'next/font/google';
 import './globals.css';
 import { VersionWatcher } from '@/components/system/VersionWatcher';
 
-const fraunces = Fraunces({
+const workSans = Work_Sans({
   subsets: ['latin'],
-  variable: '--font-fraunces',
-});
-
-const inter = Inter({
-  subsets: ['latin'],
-  variable: '--font-inter',
+  display: 'swap',
+  variable: '--font-work',
 });
 
 export const metadata: Metadata = {
@@ -30,7 +26,7 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: '#f7f3ea',
+  themeColor: '#f9fbfd',
   width: 'device-width',
   initialScale: 1,
   viewportFit: 'cover',
@@ -40,7 +36,7 @@ export default function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="en" className={`${fraunces.variable} ${inter.variable}`}>
+    <html lang="en" className={`${workSans.variable} antialiased`}>
       <body className="min-h-dvh">
         {children}
         <VersionWatcher />
