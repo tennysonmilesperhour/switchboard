@@ -6,8 +6,11 @@ import { AppShell } from '@/components/shell/AppShell';
 import { Avatar } from '@/components/ui/Avatar';
 import { Icon, type IconName } from '@/components/ui/Icon';
 import { signOut } from '@/lib/actions/profile';
-import type { SwitchboardEvent } from '@/lib/types';
+import { SOCIAL_BY_ID, hrefFor, displayHandle } from '@/lib/socials';
+import { buildVCard, qrSvg } from '@/lib/vcard';
+import type { SwitchboardEvent, ProfileLink, ProfileSocial } from '@/lib/types';
 import { ProfileTabs, type ProfileEvent } from './ProfileTabs';
+import { ProfileShare } from './ProfileShare';
 
 export const metadata: Metadata = { title: 'Profile' };
 
@@ -29,6 +32,14 @@ function toProfileEvent(event: SwitchboardEvent): ProfileEvent {
   };
 }
 
+function hostFromUrl(url: string): string {
+  try {
+    return new URL(url).hostname.replace(/^www\./, '');
+  } catch {
+    return url;
+  }
+}
+
 export default async function ProfilePage() {
   const supabase = await createClient();
   const {
@@ -38,7 +49,9 @@ export default async function ProfilePage() {
 
   const { data: profile } = await supabase
     .from('profiles')
-    .select('display_name, handle, avatar_url, bio, interests, down_to')
+    .select(
+      'display_name, handle, avatar_url, cover_url, bio, tagline, pronouns, location, links, socials, contact_email, contact_phone, contact_public, interests, down_to',
+    )
     .eq('id', user.id)
     .single();
 
@@ -62,51 +75,251 @@ export default async function ProfilePage() {
 
   const interests: string[] = profile?.interests ?? [];
   const downTo: string[] = profile?.down_to ?? [];
-  const tags = [...downTo, ...interests].slice(0, 6);
+  const tags = [...downTo, ...interests].slice(0, 8);
+
+  const displayName = profile?.display_name || 'You';
+  const handle = profile?.handle ?? '';
+  const links: ProfileLink[] = Array.isArray(profile?.links) ? profile!.links : [];
+  const socials: ProfileSocial[] = (Array.isArray(profile?.socials) ? profile!.socials : []).filter(
+    (s) => SOCIAL_BY_ID[s.platform],
+  );
+  const contactPublic = Boolean(profile?.contact_public);
+  const email = profile?.contact_email ?? null;
+  const phone = profile?.contact_phone ?? null;
+  const hasContact = Boolean(email || phone);
+
+  // vCard embeds contact details only when the user opted them into sharing.
+  const vcard = buildVCard({
+    displayName,
+    handle,
+    tagline: profile?.tagline,
+    bio: profile?.bio,
+    location: profile?.location,
+    email: contactPublic ? email : null,
+    phone: contactPublic ? phone : null,
+    links,
+    socials,
+  });
+  const qrMarkup = await qrSvg(vcard);
 
   return (
     <AppShell
       title="Profile"
       action={
         <Link
-          href="/settings"
-          aria-label="Edit profile and settings"
+          href="/profile/edit"
+          aria-label="Edit profile"
           className="size-9 inline-flex items-center justify-center rounded-full text-terracotta-deep hover:bg-cream"
         >
           <Icon name="edit" size={20} />
         </Link>
       }
     >
-      <div className="space-y-8">
-        {/* Identity */}
-        <div className="flex flex-col items-center text-center">
-          <Avatar
-            name={profile?.display_name ?? 'You'}
-            seed={user.id}
-            src={profile?.avatar_url}
-            size="xl"
-            className="shadow-lift"
-          />
-          <h2 className="mt-4 text-2xl font-extrabold tracking-tight text-ink">
-            {profile?.display_name}
-          </h2>
-          <p className="text-sm text-ink-faint">@{profile?.handle}</p>
-          {profile?.bio ? (
-            <p className="mt-2 max-w-xs text-sm text-ink-soft">{profile.bio}</p>
-          ) : null}
-          {tags.length > 0 ? (
-            <div className="mt-3 flex flex-wrap justify-center gap-1.5">
-              {tags.map((tag) => (
-                <span
-                  key={tag}
-                  className="rounded-pill bg-terracotta-soft px-3 py-1 text-xs font-semibold text-terracotta-deep"
-                >
-                  {tag}
+      <div className="space-y-7">
+        {/* Cover + identity */}
+        <div>
+          <div className="-mx-4 h-40 overflow-hidden bg-cream sm:rounded-card sm:mx-0">
+            {profile?.cover_url ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={profile.cover_url}
+                alt=""
+                className="h-full w-full object-cover"
+              />
+            ) : (
+              <div className="h-full w-full bg-brand-gradient opacity-90" />
+            )}
+          </div>
+
+          <div className="-mt-12 flex flex-col items-center px-2 text-center">
+            <Avatar
+              name={displayName}
+              seed={user.id}
+              src={profile?.avatar_url}
+              size="xl"
+              ring
+              className="shadow-lift ring-4"
+            />
+            <div className="mt-3 flex items-center gap-2">
+              <h2 className="text-2xl font-extrabold tracking-tight text-ink">
+                {displayName}
+              </h2>
+              {profile?.pronouns ? (
+                <span className="rounded-pill bg-cream px-2 py-0.5 text-xs font-semibold text-ink-faint">
+                  {profile.pronouns}
                 </span>
+              ) : null}
+            </div>
+            <p className="text-sm text-ink-faint">@{handle}</p>
+
+            {profile?.tagline ? (
+              <p className="mt-2 text-sm font-semibold text-terracotta-deep">
+                {profile.tagline}
+              </p>
+            ) : null}
+            {profile?.location ? (
+              <p className="mt-1 flex items-center gap-1 text-sm text-ink-soft">
+                <Icon name="mapPin" size={14} className="text-ink-faint" />
+                {profile.location}
+              </p>
+            ) : null}
+            {profile?.bio ? (
+              <p className="mt-3 max-w-sm text-sm leading-relaxed text-ink-soft">
+                {profile.bio}
+              </p>
+            ) : null}
+
+            {/* Social icons */}
+            {socials.length > 0 ? (
+              <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
+                {socials.map((social, i) => {
+                  const platform = SOCIAL_BY_ID[social.platform];
+                  const href = hrefFor(social.platform, social.value);
+                  const inner = (
+                    <span style={{ color: platform.color }}>
+                      <Icon name={platform.icon} size={20} />
+                    </span>
+                  );
+                  const cls =
+                    'inline-flex size-10 items-center justify-center rounded-full border border-line bg-card shadow-sm transition-transform hover:-translate-y-0.5';
+                  return href ? (
+                    <a
+                      key={`${social.platform}-${i}`}
+                      href={href}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      aria-label={`${platform.label}: ${displayHandle(social.platform, social.value)}`}
+                      className={cls}
+                    >
+                      {inner}
+                    </a>
+                  ) : (
+                    <span
+                      key={`${social.platform}-${i}`}
+                      aria-label={`${platform.label}: ${social.value}`}
+                      title={social.value}
+                      className={cls}
+                    >
+                      {inner}
+                    </span>
+                  );
+                })}
+              </div>
+            ) : null}
+
+            {tags.length > 0 ? (
+              <div className="mt-4 flex flex-wrap justify-center gap-1.5">
+                {tags.map((tag) => (
+                  <span
+                    key={tag}
+                    className="rounded-pill bg-terracotta-soft px-3 py-1 text-xs font-semibold text-terracotta-deep"
+                  >
+                    {tag}
+                  </span>
+                ))}
+              </div>
+            ) : null}
+          </div>
+        </div>
+
+        {/* Links */}
+        {links.length > 0 ? (
+          <section>
+            <h3 className="mb-2 text-xs font-bold uppercase tracking-wide text-ink-faint">
+              Links
+            </h3>
+            <div className="overflow-hidden rounded-card border border-line bg-card">
+              {links.map((link, i) => (
+                <a
+                  key={`${link.url}-${i}`}
+                  href={link.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className={`flex items-center gap-3 px-4 py-3.5 hover:bg-cream ${
+                    i > 0 ? 'border-t border-line' : ''
+                  }`}
+                >
+                  <span className="text-terracotta">
+                    <Icon name="globe" size={20} />
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate font-semibold text-ink">
+                      {link.label}
+                    </span>
+                    <span className="block truncate text-xs text-ink-faint">
+                      {hostFromUrl(link.url)}
+                    </span>
+                  </span>
+                  <span className="text-ink-faint">
+                    <Icon name="external" size={16} />
+                  </span>
+                </a>
               ))}
             </div>
-          ) : null}
-        </div>
+          </section>
+        ) : null}
+
+        {/* Contact */}
+        {hasContact ? (
+          <section>
+            <h3 className="mb-2 flex items-center gap-2 text-xs font-bold uppercase tracking-wide text-ink-faint">
+              Contact
+              <span
+                className={`rounded-pill px-1.5 py-0.5 text-[10px] font-bold normal-case ${
+                  contactPublic
+                    ? 'bg-sage-soft text-sage-deep'
+                    : 'bg-cream text-ink-faint'
+                }`}
+              >
+                {contactPublic ? 'Shared' : 'Only you'}
+              </span>
+            </h3>
+            <div className="overflow-hidden rounded-card border border-line bg-card">
+              {email ? (
+                <a
+                  href={`mailto:${email}`}
+                  className="flex items-center gap-3 px-4 py-3.5 hover:bg-cream"
+                >
+                  <span className="text-terracotta">
+                    <Icon name="mail" size={20} />
+                  </span>
+                  <span className="min-w-0 flex-1 truncate font-semibold text-ink">
+                    {email}
+                  </span>
+                </a>
+              ) : null}
+              {phone ? (
+                <a
+                  href={`tel:${phone}`}
+                  className={`flex items-center gap-3 px-4 py-3.5 hover:bg-cream ${
+                    email ? 'border-t border-line' : ''
+                  }`}
+                >
+                  <span className="text-terracotta">
+                    <Icon name="phone" size={20} />
+                  </span>
+                  <span className="min-w-0 flex-1 truncate font-semibold text-ink">
+                    {phone}
+                  </span>
+                </a>
+              ) : null}
+            </div>
+          </section>
+        ) : null}
+
+        {/* Shareable QR / contact card */}
+        <section>
+          <h3 className="mb-2 text-xs font-bold uppercase tracking-wide text-ink-faint">
+            Share
+          </h3>
+          <ProfileShare
+            qrMarkup={qrMarkup}
+            vcard={vcard}
+            displayName={displayName}
+            handle={handle}
+            contactIncluded={contactPublic && hasContact}
+          />
+        </section>
 
         {/* Created / Attended / Activity */}
         <ProfileTabs
@@ -137,6 +350,18 @@ export default async function ProfilePage() {
                 </span>
               </Link>
             ))}
+            <Link
+              href="/settings"
+              className="flex items-center gap-3 border-t border-line px-4 py-3.5 hover:bg-cream"
+            >
+              <span className="text-terracotta">
+                <Icon name="edit" size={22} />
+              </span>
+              <span className="flex-1 font-semibold text-ink">Settings</span>
+              <span className="text-ink-faint">
+                <Icon name="back" size={18} className="rotate-180" />
+              </span>
+            </Link>
           </div>
         </section>
 
