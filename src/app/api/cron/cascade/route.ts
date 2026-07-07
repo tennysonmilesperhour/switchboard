@@ -9,11 +9,16 @@ import { sweepReminders } from '@/lib/server/reminders';
  * on page load is the low-latency path; this is the guarantee.
  */
 export async function GET(request: Request) {
+  // Fail closed: an unset secret must never leave the sweeps publicly invokable.
+  const secret = process.env.CRON_SECRET;
+  if (!secret) {
+    return NextResponse.json(
+      { error: 'CRON_SECRET not configured' },
+      { status: 500 },
+    );
+  }
   const authHeader = request.headers.get('authorization');
-  if (
-    process.env.CRON_SECRET &&
-    authHeader !== `Bearer ${process.env.CRON_SECRET}`
-  ) {
+  if (authHeader !== `Bearer ${secret}`) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 

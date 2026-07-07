@@ -2,7 +2,6 @@
 
 import { revalidatePath } from 'next/cache';
 import { createClient } from '@/lib/supabase/server';
-import { createAdminClient } from '@/lib/supabase/admin';
 import { sendPushToUsers } from '@/lib/server/notify';
 import type { IntentKind } from '@/lib/types';
 
@@ -65,11 +64,10 @@ export async function downToConnect(
     });
 
     if (kind === 'open_to_reschedule' && eventId) {
-      const admin = createAdminClient();
-      await admin
-        .from('events')
-        .update({ status: 'cancelled' })
-        .eq('id', eventId);
+      // Authorization is enforced inside the security-definer function: the
+      // caller must participate in the event and hold a matched reschedule
+      // intent for it. Never cancel with the admin client from here.
+      await supabase.rpc('reschedule_cancel_event', { p_event: eventId });
     }
   }
 
