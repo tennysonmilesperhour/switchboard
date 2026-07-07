@@ -1,4 +1,5 @@
 import type { NextConfig } from 'next';
+import { resolveBuildId } from './src/lib/build-id';
 
 const securityHeaders = [
   {
@@ -31,13 +32,11 @@ const securityHeaders = [
 
 const nextConfig: NextConfig = {
   // Stamp each build with an identifier so the client can tell when a newer
-  // production build has shipped. On Vercel this is the commit SHA; locally
-  // it falls back to 'dev' (the version watcher stays quiet for 'dev').
+  // production build has shipped. On Vercel this is the commit SHA (or a
+  // unique per-build fallback); locally it is 'dev' and the watcher stays
+  // quiet. See src/lib/build-id.ts for the precedence.
   env: {
-    NEXT_PUBLIC_BUILD_ID:
-      process.env.VERCEL_GIT_COMMIT_SHA ??
-      process.env.VERCEL_DEPLOYMENT_ID ??
-      'dev',
+    NEXT_PUBLIC_BUILD_ID: resolveBuildId(),
   },
   async headers() {
     return [{ source: '/(.*)', headers: securityHeaders }];
