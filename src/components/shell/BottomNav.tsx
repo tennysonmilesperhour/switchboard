@@ -13,6 +13,7 @@ const LEFT: Tab[] = [
 
 const RIGHT: Tab[] = [
   { href: '/plans', label: 'Calendar', icon: 'calendar' },
+  { href: '/boards', label: 'Boards', icon: 'users' },
   { href: '/profile', label: 'Profile', icon: 'account' },
 ];
 
@@ -28,7 +29,7 @@ export function BottomNav() {
       aria-label="Main navigation"
       className="fixed bottom-0 inset-x-0 z-40 border-t border-line/70 bg-card/80 backdrop-blur-xl pb-[env(safe-area-inset-bottom)]"
     >
-      <div className="mx-auto max-w-lg grid grid-cols-5 items-center px-2">
+      <div className="mx-auto max-w-lg grid grid-cols-6 items-center px-2">
         {LEFT.map((tab) => (
           <TabLink key={tab.href} tab={tab} active={isActive(pathname, tab.href)} />
         ))}

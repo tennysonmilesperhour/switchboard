@@ -24,22 +24,26 @@ export async function getReconnectionSuggestions(
   const { data: connections } = await admin
     .from('connections')
     .select(
-      'created_at, requester_id, addressee_id, requester:profiles!connections_requester_id_fkey(id, display_name), addressee:profiles!connections_addressee_id_fkey(id, display_name)',
+      'created_at, requester_id, addressee_id, requester:profiles!connections_requester_id_fkey(id, display_name, sabbatical), addressee:profiles!connections_addressee_id_fkey(id, display_name, sabbatical)',
     )
     .eq('status', 'accepted')
     .or(`requester_id.eq.${userId},addressee_id.eq.${userId}`);
   if (!connections || connections.length === 0) return [];
 
-  const friends = connections.map((connection) => {
-    const otherRaw =
-      connection.requester_id === userId ? connection.addressee : connection.requester;
-    const other = Array.isArray(otherRaw) ? otherRaw[0] : otherRaw;
-    return {
-      id: other.id as string,
-      name: other.display_name as string,
-      connectedAt: connection.created_at as string,
-    };
-  });
+  const friends = connections
+    .map((connection) => {
+      const otherRaw =
+        connection.requester_id === userId ? connection.addressee : connection.requester;
+      const other = Array.isArray(otherRaw) ? otherRaw[0] : otherRaw;
+      return {
+        id: other.id as string,
+        name: other.display_name as string,
+        connectedAt: connection.created_at as string,
+        // Don't nudge someone who's asked for a quiet season.
+        sabbatical: Boolean(other.sabbatical),
+      };
+    })
+    .filter((friend) => !friend.sabbatical);
   const friendIds = friends.map((f) => f.id);
 
   // My events (hosted or accepted).

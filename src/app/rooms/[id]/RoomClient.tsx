@@ -7,6 +7,7 @@ import { Avatar } from '@/components/ui/Avatar';
 import { Button } from '@/components/ui/Button';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { sendMessage, toggleTask } from '@/lib/actions/rooms';
+import { addExpense, deleteExpense } from '@/lib/actions/expenses';
 import { formatRelative } from '@/lib/format';
 import type { RoomItemKind } from '@/lib/types';
 
@@ -27,12 +28,25 @@ export interface RoomItemRow {
   created_at: string;
 }
 
-const TABS: Array<{ key: 'chat' | RoomItemKind; label: string; emoji: string }> = [
+export interface ExpenseRow {
+  id: string;
+  description: string;
+  amount_cents: number;
+  payer_id: string;
+  settle_url: string | null;
+  created_by: string;
+  created_at: string;
+}
+
+type TabKey = 'chat' | 'split' | RoomItemKind;
+
+const TABS: Array<{ key: TabKey; label: string; emoji: string }> = [
   { key: 'chat', label: 'Chat', emoji: '💬' },
   { key: 'address', label: 'Places', emoji: '📍' },
   { key: 'task', label: 'Tasks', emoji: '✓' },
   { key: 'link', label: 'Links', emoji: '🔗' },
   { key: 'note', label: 'Notes', emoji: '📝' },
+  { key: 'split', label: 'Split', emoji: '💸' },
 ];
 
 interface RoomClientProps {
@@ -41,6 +55,14 @@ interface RoomClientProps {
   memberNames: Record<string, string>;
   initialMessages: RoomMessage[];
   items: RoomItemRow[];
+  expenses: ExpenseRow[];
+}
+
+function formatMoney(cents: number): string {
+  return (cents / 100).toLocaleString('en-US', {
+    style: 'currency',
+    currency: 'USD',
+  });
 }
 
 export function RoomClient({
@@ -49,11 +71,17 @@ export function RoomClient({
   memberNames,
   initialMessages,
   items,
+  expenses,
 }: RoomClientProps) {
   const [messages, setMessages] = useState<RoomMessage[]>(initialMessages);
-  const [tab, setTab] = useState<'chat' | RoomItemKind>('chat');
+  const [tab, setTab] = useState<TabKey>('chat');
   const [draft, setDraft] = useState('');
   const [pending, startTransition] = useTransition();
+  // Split the Bill form state.
+  const [expenseDesc, setExpenseDesc] = useState('');
+  const [expenseAmount, setExpenseAmount] = useState('');
+  const [expenseUrl, setExpenseUrl] = useState('');
+  const [expenseError, setExpenseError] = useState<string | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const router = useRouter();
 
@@ -119,8 +147,41 @@ export function RoomClient({
   }, {});
 
   const visibleItems = items.filter((item) =>
-    tab === 'chat' ? false : item.kind === tab || (tab === 'note' && item.kind === 'event'),
+    tab === 'chat' || tab === 'split'
+      ? false
+      : item.kind === tab || (tab === 'note' && item.kind === 'event'),
   );
+
+  // Split the Bill: equal shares across everyone in the room.
+  const memberIds = Object.keys(memberNames);
+  const memberCount = Math.max(memberIds.length, 1);
+  const totalCents = expenses.reduce((sum, e) => sum + e.amount_cents, 0);
+  const shareCents = Math.round(totalCents / memberCount);
+  const paidByMember = expenses.reduce<Record<string, number>>((acc, e) => {
+    acc[e.payer_id] = (acc[e.payer_id] ?? 0) + e.amount_cents;
+    return acc;
+  }, {});
+  const myPaid = paidByMember[currentUserId] ?? 0;
+  const myNet = myPaid - shareCents; // positive: you're owed; negative: you owe
+
+  function submitExpense(e: React.FormEvent) {
+    e.preventDefault();
+    const description = expenseDesc.trim();
+    const amount = expenseAmount.trim();
+    if (!description || !amount) return;
+    setExpenseError(null);
+    startTransition(async () => {
+      const result = await addExpense(roomId, description, amount, expenseUrl.trim());
+      if (result.ok) {
+        setExpenseDesc('');
+        setExpenseAmount('');
+        setExpenseUrl('');
+        router.refresh();
+      } else {
+        setExpenseError(result.error ?? 'Could not add that.');
+      }
+    });
+  }
 
   return (
     <div className="flex flex-col h-[calc(100dvh-180px)]">
@@ -131,7 +192,12 @@ export function RoomClient({
         className="flex gap-1.5 overflow-x-auto pb-2 -mx-4 px-4 [scrollbar-width:none]"
       >
         {TABS.map((tabDef) => {
-          const count = tabDef.key === 'chat' ? 0 : (itemCounts[tabDef.key] ?? 0);
+          const count =
+            tabDef.key === 'chat'
+              ? 0
+              : tabDef.key === 'split'
+                ? expenses.length
+                : (itemCounts[tabDef.key] ?? 0);
           const active = tab === tabDef.key;
           return (
             <button
@@ -209,6 +275,132 @@ export function RoomClient({
             </Button>
           </form>
         </>
+      ) : tab === 'split' ? (
+        <div className="flex-1 overflow-y-auto py-3 space-y-3">
+          {expenses.length > 0 && (
+            <div className="rounded-card bg-cream px-3.5 py-3">
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-ink-soft">Total spent</span>
+                <span className="font-medium">{formatMoney(totalCents)}</span>
+              </div>
+              <div className="flex items-center justify-between text-sm mt-1">
+                <span className="text-ink-soft">Even split ({memberCount})</span>
+                <span className="font-medium">{formatMoney(shareCents)} each</span>
+              </div>
+              <p className="text-sm mt-2 pt-2 border-t border-line">
+                {myNet > 0 ? (
+                  <>You’re owed <strong>{formatMoney(myNet)}</strong>.</>
+                ) : myNet < 0 ? (
+                  <>You owe <strong>{formatMoney(-myNet)}</strong>.</>
+                ) : (
+                  <>You’re all square.</>
+                )}
+              </p>
+            </div>
+          )}
+
+          {expenses.length === 0 ? (
+            <EmptyState
+              emoji="💸"
+              title="No expenses yet"
+              body="Log what people paid — Switchboard tallies who owes what. Settling up happens with your own Venmo or PayPal link."
+            />
+          ) : (
+            <ul className="space-y-2">
+              {expenses.map((expense) => {
+                const canRemove =
+                  expense.created_by === currentUserId ||
+                  expense.payer_id === currentUserId;
+                return (
+                  <li
+                    key={expense.id}
+                    className="flex items-start gap-3 rounded-card bg-card border border-line px-3.5 py-3"
+                  >
+                    <div className="flex-1 min-w-0">
+                      <p className="font-medium break-words">{expense.description}</p>
+                      <p className="text-xs text-ink-faint mt-0.5">
+                        {memberNames[expense.payer_id] ?? 'Someone'} paid ·{' '}
+                        {formatRelative(expense.created_at)}
+                      </p>
+                      {expense.settle_url && (
+                        <a
+                          href={expense.settle_url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-xs font-medium text-terracotta-deep underline underline-offset-2 mt-1 inline-block"
+                        >
+                          Settle up →
+                        </a>
+                      )}
+                    </div>
+                    <div className="flex flex-col items-end gap-1">
+                      <span className="font-medium">{formatMoney(expense.amount_cents)}</span>
+                      {canRemove && (
+                        <button
+                          type="button"
+                          onClick={() =>
+                            startTransition(async () => {
+                              await deleteExpense(expense.id, roomId);
+                              router.refresh();
+                            })
+                          }
+                          disabled={pending}
+                          className="text-[11px] text-ink-faint hover:text-rose-deep"
+                        >
+                          remove
+                        </button>
+                      )}
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+
+          <form
+            onSubmit={submitExpense}
+            className="space-y-2 pt-2 border-t border-line"
+          >
+            <input
+              value={expenseDesc}
+              onChange={(e) => setExpenseDesc(e.target.value)}
+              placeholder="What was it for?"
+              aria-label="Expense description"
+              maxLength={120}
+              className="w-full rounded-card border border-line bg-card px-3.5 py-2.5 text-sm outline-none focus:border-terracotta"
+            />
+            <div className="flex gap-2">
+              <input
+                value={expenseAmount}
+                onChange={(e) => setExpenseAmount(e.target.value)}
+                type="number"
+                min="0"
+                step="0.01"
+                inputMode="decimal"
+                placeholder="Amount"
+                aria-label="Amount"
+                className="w-28 rounded-card border border-line bg-card px-3.5 py-2.5 text-sm outline-none focus:border-terracotta"
+              />
+              <input
+                value={expenseUrl}
+                onChange={(e) => setExpenseUrl(e.target.value)}
+                placeholder="Venmo/PayPal link (optional)"
+                aria-label="Settle-up link"
+                className="flex-1 rounded-card border border-line bg-card px-3.5 py-2.5 text-sm outline-none focus:border-terracotta"
+              />
+            </div>
+            {expenseError && (
+              <p className="text-xs text-rose-deep">{expenseError}</p>
+            )}
+            <Button
+              type="submit"
+              size="sm"
+              disabled={pending || !expenseDesc.trim() || !expenseAmount.trim()}
+            >
+              Add expense
+            </Button>
+          </form>
+        </div>
       ) : (
         <div className="flex-1 overflow-y-auto py-3 space-y-2">
           {visibleItems.length === 0 ? (

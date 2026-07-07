@@ -3,16 +3,90 @@
 import type { InviteStatus } from '@/lib/engine/cascade';
 import type { Weight } from '@/lib/engine/scoring';
 
+/** A free-form labelled link on a profile (personal site, portfolio, etc.). */
+export interface ProfileLink {
+  label: string;
+  url: string;
+}
+
+/** A social handle. `platform` keys into SOCIAL_PLATFORMS; `value` is a
+ *  handle or a full URL (normalised to a URL at render time). */
+export interface ProfileSocial {
+  platform: string;
+  value: string;
+}
+
 export interface Profile {
   id: string;
   display_name: string;
   handle: string;
   avatar_url: string | null;
+  cover_url: string | null;
   bio: string | null;
+  tagline: string | null;
+  pronouns: string | null;
+  location: string | null;
+  links: ProfileLink[];
+  socials: ProfileSocial[];
+  contact_email: string | null;
+  contact_phone: string | null;
+  contact_public: boolean;
   interests: string[];
   down_to: string[];
+  sabbatical: boolean;
+  sabbatical_message: string | null;
   quiet_hours_start: number | null; // hour 0-23, local
   quiet_hours_end: number | null;
+  created_at: string;
+}
+
+export interface EventCoHost {
+  event_id: string;
+  cohost_id: string;
+  added_by: string | null;
+  created_at: string;
+}
+
+export interface Expense {
+  id: string;
+  room_id: string;
+  description: string;
+  amount_cents: number;
+  payer_id: string;
+  settle_url: string | null;
+  created_by: string;
+  created_at: string;
+}
+
+export type BoardRole = 'member' | 'moderator';
+export type BoardPostKind = 'notice' | 'event';
+
+export interface Board {
+  id: string;
+  slug: string;
+  name: string;
+  description: string | null;
+  created_by: string;
+  created_at: string;
+}
+
+export interface BoardMember {
+  board_id: string;
+  member_id: string;
+  role: BoardRole;
+  joined_at: string;
+}
+
+export interface BoardPost {
+  id: string;
+  board_id: string;
+  author_id: string;
+  kind: BoardPostKind;
+  title: string;
+  body: string | null;
+  location: string | null;
+  cadence: string | null;
+  starts_at: string | null;
   created_at: string;
 }
 

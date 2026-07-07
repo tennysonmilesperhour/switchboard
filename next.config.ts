@@ -30,6 +30,15 @@ const securityHeaders = [
 ];
 
 const nextConfig: NextConfig = {
+  // Stamp each build with an identifier so the client can tell when a newer
+  // production build has shipped. On Vercel this is the commit SHA; locally
+  // it falls back to 'dev' (the version watcher stays quiet for 'dev').
+  env: {
+    NEXT_PUBLIC_BUILD_ID:
+      process.env.VERCEL_GIT_COMMIT_SHA ??
+      process.env.VERCEL_DEPLOYMENT_ID ??
+      'dev',
+  },
   async headers() {
     return [{ source: '/(.*)', headers: securityHeaders }];
   },
