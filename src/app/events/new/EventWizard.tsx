@@ -6,6 +6,7 @@ import { Chip } from '@/components/ui/Chip';
 import { Avatar } from '@/components/ui/Avatar';
 import { Card } from '@/components/ui/Card';
 import { Icon } from '@/components/ui/Icon';
+import { ImageInput } from '@/components/ui/ImageInput';
 import { suggestWindow, WINDOW_CHOICES } from '@/lib/engine/windows';
 import { simulateCascade } from '@/lib/engine/cascade';
 import { createEvent, type CreateEventInput } from '@/lib/actions/events';
@@ -105,6 +106,7 @@ const FIELD =
 const FIELD_LABEL = 'text-sm font-semibold text-ink';
 
 export function EventWizard({
+  userId,
   friends,
   households = [],
   initialTitle = '',
@@ -112,6 +114,7 @@ export function EventWizard({
   ritualId = null,
   initialInviteeId = null,
 }: {
+  userId: string;
   friends: WizardFriend[];
   households?: WizardHousehold[];
   initialTitle?: string;
@@ -461,14 +464,16 @@ export function EventWizard({
             />
           </div>
           <div className="space-y-1.5">
-            <label htmlFor="cover" className={FIELD_LABEL}>
-              Cover image URL <span className="font-normal text-ink-faint">(optional)</span>
-            </label>
-            <input
-              id="cover" type="url" value={coverUrl}
-              onChange={(e) => setCoverUrl(e.target.value)}
-              placeholder="https://…"
-              className={FIELD}
+            <p className={FIELD_LABEL}>
+              Cover image <span className="font-normal text-ink-faint">(optional)</span>
+            </p>
+            <ImageInput
+              userId={userId}
+              value={coverUrl}
+              onChange={setCoverUrl}
+              pathPrefix="event-cover"
+              label="cover image"
+              aspect="video"
             />
           </div>
           <div className="space-y-1.5">

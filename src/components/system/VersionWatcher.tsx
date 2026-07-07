@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { Icon } from '@/components/ui/Icon';
 
 // Baked into the client bundle at build time (see next.config.ts).
 const CURRENT_BUILD = process.env.NEXT_PUBLIC_BUILD_ID ?? 'dev';
@@ -39,17 +40,31 @@ export function VersionWatcher() {
     const onVisible = () => {
       if (document.visibilityState === 'visible') check();
     };
+    // A tab restored from the back/forward cache may be running stale code;
+    // re-check on restore so the toast can surface right away.
+    const onPageShow = (e: PageTransitionEvent) => {
+      if (e.persisted) check();
+    };
     document.addEventListener('visibilitychange', onVisible);
+    window.addEventListener('pageshow', onPageShow);
     check();
 
     return () => {
       cancelled = true;
       clearInterval(interval);
       document.removeEventListener('visibilitychange', onVisible);
+      window.removeEventListener('pageshow', onPageShow);
     };
   }, []);
 
   if (!stale) return null;
+
+  // Reload the current URL from the network so the newest deployment's HTML +
+  // bundle replace this stale tab. bfcache can hand back the old page on a plain
+  // reload, so restores re-check and reload again if still stale.
+  function goToLatest() {
+    window.location.reload();
+  }
 
   return (
     <div
@@ -57,16 +72,19 @@ export function VersionWatcher() {
       aria-live="polite"
       className="fixed inset-x-0 bottom-24 z-50 flex justify-center px-4 pointer-events-none"
     >
-      <div className="pointer-events-auto flex items-center gap-3 rounded-pill bg-ink text-paper px-4 py-2.5 shadow-lift animate-rise">
-        <span className="text-sm font-medium">A new version is available</span>
-        <button
-          type="button"
-          onClick={() => window.location.reload()}
-          className="rounded-pill bg-paper text-ink text-xs font-semibold px-3 py-1.5 hover:opacity-90 active:scale-[0.97] transition"
-        >
-          Refresh
-        </button>
-      </div>
+      <button
+        type="button"
+        onClick={goToLatest}
+        className="pointer-events-auto flex items-center gap-3 rounded-pill bg-ink text-paper px-4 py-2.5 shadow-lift animate-rise active:scale-[0.98] transition"
+      >
+        <span className="flex items-center gap-2 text-sm font-medium">
+          <Icon name="sparkle" size={16} className="text-terracotta" />
+          A new version is available
+        </span>
+        <span className="rounded-pill bg-paper text-ink text-xs font-semibold px-3 py-1.5">
+          Update
+        </span>
+      </button>
     </div>
   );
 }

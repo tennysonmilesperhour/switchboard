@@ -4,14 +4,17 @@ import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
+import { ImageInput } from '@/components/ui/ImageInput';
 import { addCapsuleEntry } from '@/lib/actions/capsules';
 
 export function CapsuleForm({
   eventId,
+  userId,
   initialLine,
   initialPhotoUrl,
 }: {
   eventId: string;
+  userId: string;
   initialLine: string;
   initialPhotoUrl: string;
 }) {
@@ -36,12 +39,13 @@ export function CapsuleForm({
           aria-label="Your capsule line"
           className="w-full rounded-card border border-line bg-paper px-3.5 py-2.5 text-sm outline-none focus:border-terracotta resize-none"
         />
-        <input
+        <ImageInput
+          userId={userId}
           value={photoUrl}
-          onChange={(e) => setPhotoUrl(e.target.value)}
-          placeholder="Photo link (optional)"
-          aria-label="Photo link"
-          className="w-full rounded-card border border-line bg-paper px-3.5 py-2.5 text-sm outline-none focus:border-terracotta"
+          onChange={setPhotoUrl}
+          pathPrefix="capsule"
+          label="photo"
+          aspect="video"
         />
         {error && <p role="alert" className="text-xs text-rose-deep">{error}</p>}
         <Button
