@@ -111,6 +111,7 @@ export function EventWizard({
   initialDescription = '',
   ritualId = null,
   initialInviteeId = null,
+  initialError = null,
 }: {
   friends: WizardFriend[];
   households?: WizardHousehold[];
@@ -118,10 +119,11 @@ export function EventWizard({
   initialDescription?: string;
   ritualId?: string | null;
   initialInviteeId?: string | null;
+  initialError?: string | null;
 }) {
   const [step, setStep] = useState(0);
   const [submitting, setSubmitting] = useState(false);
-  const [submitError, setSubmitError] = useState<string | null>(null);
+  const [submitError, setSubmitError] = useState<string | null>(initialError);
 
   // Step 1 - basics
   const [title, setTitle] = useState(initialTitle);

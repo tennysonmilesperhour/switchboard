@@ -31,7 +31,10 @@ export async function createBoard(formData: FormData): Promise<void> {
     p_description: description,
   });
   if (error) {
-    redirect(`/boards?error=${error.code === '23505' ? 'taken' : 'save'}`);
+    if (error.code === '23505') redirect('/boards?error=taken');
+    // Surface the real reason for anything unexpected instead of a blank
+    // "try again", so the host (and we) can see what actually failed.
+    redirect(`/boards?error=save&reason=${encodeURIComponent(error.message)}`);
   }
   redirect(`/boards/${data ?? slug}`);
 }

@@ -131,7 +131,10 @@ export default async function ProfilePage() {
             )}
           </div>
 
-          <div className="-mt-12 flex flex-col items-center px-2 text-center">
+          {/* relative + z-10 keeps the avatar above the cover: an empty cover
+              renders a gradient with opacity < 1, which forms its own stacking
+              context and would otherwise paint over the overlapping avatar. */}
+          <div className="relative z-10 -mt-12 flex flex-col items-center px-2 text-center">
             <Avatar
               name={displayName}
               seed={user.id}

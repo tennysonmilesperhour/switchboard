@@ -19,9 +19,9 @@ const ERRORS: Record<string, string> = {
 export default async function BoardsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ error?: string }>;
+  searchParams: Promise<{ error?: string; reason?: string }>;
 }) {
-  const { error } = await searchParams;
+  const { error, reason } = await searchParams;
   const supabase = await createClient();
   const {
     data: { user },
@@ -75,6 +75,7 @@ export default async function BoardsPage({
           {error && (
             <p role="alert" className="mb-3 rounded-card bg-rose-soft text-rose-deep text-sm p-3">
               {ERRORS[error] ?? 'Something went wrong.'}
+              {error === 'save' && reason ? ` (${reason})` : ''}
             </p>
           )}
           <form action={createBoard}>
