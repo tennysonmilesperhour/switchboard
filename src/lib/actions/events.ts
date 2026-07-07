@@ -65,19 +65,28 @@ export async function createEvent(input: CreateEventInput): Promise<never> {
   if (!title) redirect('/events/new?error=title');
   if (input.invitees.length === 0) redirect('/events/new?error=invitees');
 
+  // Creation writes run through the service-role client. The host isn't a
+  // member of the new Living Room until the row below exists, so an
+  // RLS-scoped insert that also reads the row back (`.select()` →
+  // INSERT ... RETURNING) is denied by `rooms_select` and the whole plan
+  // fails to save. The moment-matching flow creates its room the same way.
+  // Ownership is pinned to the authenticated user on every row, so bypassing
+  // RLS here grants no extra reach.
+  const admin = createAdminClient();
+
   // Every event gets a Living Room.
-  const { data: room, error: roomError } = await supabase
+  const { data: room, error: roomError } = await admin
     .from('rooms')
     .insert({ kind: 'event', title, created_by: user.id })
     .select('id')
     .single();
   if (roomError || !room) redirect('/events/new?error=save');
 
-  await supabase
+  await admin
     .from('room_members')
     .insert({ room_id: room.id, member_id: user.id });
 
-  const { data: event, error: eventError } = await supabase
+  const { data: event, error: eventError } = await admin
     .from('events')
     .insert({
       host_id: user.id,
@@ -107,7 +116,7 @@ export async function createEvent(input: CreateEventInput): Promise<never> {
     .map((q) => ({ prompt: q.prompt.trim(), required: q.required }))
     .filter((q) => q.prompt.length > 0);
   if (questions.length > 0) {
-    await supabase.from('event_questions').insert(
+    await admin.from('event_questions').insert(
       questions.map((q, index) => ({
         event_id: event.id,
         prompt: q.prompt,
@@ -127,18 +136,18 @@ export async function createEvent(input: CreateEventInput): Promise<never> {
     window_minutes: invitee.windowMinutes,
   }));
 
-  const { error: inviteError } = await supabase.from('invites').insert(inviteRows);
+  const { error: inviteError } = await admin.from('invites').insert(inviteRows);
   if (inviteError) redirect('/events/new?error=save');
 
   if (input.ritualId) {
-    await supabase
+    await admin
       .from('rituals')
       .update({ last_planned_at: new Date().toISOString() })
       .eq('id', input.ritualId);
   }
 
   if (input.enablePoll) {
-    await supabase.from('polls').insert({
+    await admin.from('polls').insert({
       event_id: event.id,
       resolution: input.pollResolution,
       vote_deadline: input.voteDeadline,
@@ -203,16 +212,21 @@ export async function runItBack(eventId: string): Promise<never> {
     .single();
   if (!source || source.host_id !== user.id) redirect('/plans');
 
-  const { data: room } = await supabase
+  // Writes go through the service-role client for the same reason as
+  // createEvent: the host can't read back a room they don't yet belong to
+  // under RLS. Ownership is pinned to the authenticated user on every row.
+  const admin = createAdminClient();
+
+  const { data: room } = await admin
     .from('rooms')
     .insert({ kind: 'event', title: source.title, created_by: user.id })
     .select('id')
     .single();
   if (room) {
-    await supabase.from('room_members').insert({ room_id: room.id, member_id: user.id });
+    await admin.from('room_members').insert({ room_id: room.id, member_id: user.id });
   }
 
-  const { data: clone } = await supabase
+  const { data: clone } = await admin
     .from('events')
     .insert({
       host_id: user.id,
@@ -247,7 +261,7 @@ export async function runItBack(eventId: string): Promise<never> {
     (i) => i.decline_note !== 'not_my_thing',
   );
   if (carryOver.length > 0) {
-    await supabase.from('invites').insert(
+    await admin.from('invites').insert(
       carryOver.map((i, index) => ({
         event_id: clone.id,
         invitee_id: i.invitee_id,
@@ -265,7 +279,7 @@ export async function runItBack(eventId: string): Promise<never> {
     .select('prompt, required, position')
     .eq('event_id', eventId);
   if (questions && questions.length > 0) {
-    await supabase.from('event_questions').insert(
+    await admin.from('event_questions').insert(
       questions.map((q) => ({ ...q, event_id: clone.id })),
     );
   }

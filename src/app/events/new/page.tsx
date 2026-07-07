@@ -14,9 +14,19 @@ export default async function NewEventPage({
     description?: string;
     ritual?: string;
     invite?: string;
+    error?: string;
   }>;
 }) {
-  const { title, description, ritual, invite } = await searchParams;
+  const { title, description, ritual, invite, error } = await searchParams;
+
+  const errorMessage =
+    error === 'title'
+      ? 'Please give your plan a name before sending it.'
+      : error === 'invitees'
+        ? 'Add at least one person to invite before sending.'
+        : error === 'save'
+          ? 'Something went wrong saving your plan. Please try again.'
+          : null;
   const supabase = await createClient();
   const {
     data: { user },
@@ -69,6 +79,7 @@ export default async function NewEventPage({
         initialDescription={description ?? ''}
         ritualId={ritual ?? null}
         initialInviteeId={invite ?? null}
+        initialError={errorMessage}
       />
     </AppShell>
   );
