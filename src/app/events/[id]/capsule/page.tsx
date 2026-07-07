@@ -93,6 +93,7 @@ export default async function CapsulePage({
 
         <CapsuleForm
           eventId={id}
+          userId={user.id}
           initialLine={mine?.line ?? ''}
           initialPhotoUrl={mine?.photo_url ?? ''}
         />

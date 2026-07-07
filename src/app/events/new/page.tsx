@@ -62,6 +62,7 @@ export default async function NewEventPage({
   return (
     <AppShell title="New plan" back="/plans">
       <EventWizard
+        userId={user.id}
         friends={friends}
         households={households}
         initialTitle={title ?? ''}
