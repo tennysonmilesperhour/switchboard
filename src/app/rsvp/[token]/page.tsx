@@ -41,10 +41,24 @@ export default async function GuestRsvpPage({
   const { data: invite } = await admin
     .from('invites')
     .select(
-      'id, status, guest_name, event:events(title, description, location_name, starts_at, host:profiles(display_name))',
+      'id, event_id, status, guest_name, event:events(title, description, location_name, starts_at, host:profiles(display_name))',
     )
     .eq('guest_token', token)
     .maybeSingle();
+
+  // Host-defined RSVP questions, if any.
+  const { data: questionRows } = invite
+    ? await admin
+        .from('event_questions')
+        .select('id, prompt, required')
+        .eq('event_id', invite.event_id)
+        .order('position')
+    : { data: null };
+  const questions = (questionRows ?? []).map((q) => ({
+    id: q.id as string,
+    prompt: q.prompt as string,
+    required: q.required as boolean,
+  }));
 
   const event = invite
     ? ((Array.isArray(invite.event) ? invite.event[0] : invite.event) as {
@@ -101,6 +115,7 @@ export default async function GuestRsvpPage({
               token={token}
               guestName={invite.guest_name ?? 'there'}
               initialStatus={invite.status}
+              questions={questions}
             />
             <p className="text-xs text-ink-faint mt-10 leading-relaxed">
               Switchboard makes plans without pressure - invitations flow one

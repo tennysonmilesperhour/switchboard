@@ -11,12 +11,21 @@ import { CopyButton } from '@/components/ui/CopyButton';
 import { CascadeProgress } from '@/components/events/CascadeProgress';
 import { JoinRequests } from '@/components/events/JoinRequests';
 import { RsvpCard } from '@/components/events/RsvpCard';
+import { Announcements, type AnnouncementView } from '@/components/events/Announcements';
+import { RunItBackButton } from '@/components/events/RunItBackButton';
 import { PollSection, type OptionResult } from '@/components/polls/PollSection';
 import { HostControls } from './HostControls';
 import { CoHostManager } from './CoHostManager';
 import { inviteExpiresAt } from '@/lib/engine/cascade';
 import { formatDateTime } from '@/lib/format';
-import type { Invite, Poll, PollOption, SwitchboardEvent } from '@/lib/types';
+import { googleCalendarUrl } from '@/lib/calendar-links';
+import type {
+  EventQuestion,
+  Invite,
+  Poll,
+  PollOption,
+  SwitchboardEvent,
+} from '@/lib/types';
 import type { Weight } from '@/lib/engine/scoring';
 
 export default async function EventPage({
@@ -155,7 +164,78 @@ export default async function EventPage({
     venuePerk = venue ?? null;
   }
 
+  // RSVP questions (host-defined intake).
+  const { data: questionRows } = await supabase
+    .from('event_questions')
+    .select('*')
+    .eq('event_id', id)
+    .order('position')
+    .returns<EventQuestion[]>();
+  const questions = questionRows ?? [];
+
+  // Announcements (host broadcasts) with author names.
+  const { data: announcementRows } = await supabase
+    .from('announcements')
+    .select('id, body, created_at, author:profiles(display_name)')
+    .eq('event_id', id)
+    .order('created_at', { ascending: false });
+  const announcements: AnnouncementView[] = (announcementRows ?? []).map((row) => {
+    const author = Array.isArray(row.author) ? row.author[0] : row.author;
+    return {
+      id: row.id as string,
+      body: row.body as string,
+      created_at: row.created_at as string,
+      author_name: author?.display_name ?? 'Host',
+    };
+  });
+
+  // True accepted count (independent of visibility) so the host knows the reach.
+  const { count: acceptedCount } = await admin
+    .from('invites')
+    .select('id', { count: 'exact', head: true })
+    .eq('event_id', id)
+    .eq('status', 'accepted');
+
+  // Host-only: answers to RSVP questions, grouped by attendee.
+  let answersByGuest: Array<{ name: string; answers: Array<{ prompt: string; answer: string }> }> = [];
+  if (isHost && questions.length > 0) {
+    const promptById = new Map(questions.map((q) => [q.id, q.prompt]));
+    const { data: answerRows } = await admin
+      .from('invite_answers')
+      .select('question_id, answer, invite:invites(guest_name, invitee:profiles(display_name))')
+      .in('question_id', Array.from(promptById.keys()));
+    const grouped = new Map<string, Array<{ prompt: string; answer: string }>>();
+    for (const row of answerRows ?? []) {
+      const invite = Array.isArray(row.invite) ? row.invite[0] : row.invite;
+      const profile = invite
+        ? Array.isArray(invite.invitee)
+          ? invite.invitee[0]
+          : invite.invitee
+        : null;
+      const name = profile?.display_name ?? invite?.guest_name ?? 'Guest';
+      const list = grouped.get(name) ?? [];
+      list.push({
+        prompt: promptById.get(row.question_id as string) ?? '',
+        answer: row.answer as string,
+      });
+      grouped.set(name, list);
+    }
+    answersByGuest = Array.from(grouped.entries()).map(([name, answers]) => ({
+      name,
+      answers,
+    }));
+  }
+
   const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? '';
+  const calendarEvent = event.starts_at
+    ? {
+        title: event.title,
+        description: event.description,
+        location: event.location_name,
+        startsAt: event.starts_at,
+        endsAt: event.ends_at,
+      }
+    : null;
   const guestLinks = canManage
     ? hostInvites
         .filter((i) => !i.invitee_id && i.guest_token && i.status === 'sent')
@@ -184,6 +264,14 @@ export default async function EventPage({
     <AppShell title={event.title} back="/plans">
       <div className="space-y-6">
         <div className="space-y-4">
+          {event.cover_url && (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={event.cover_url}
+              alt=""
+              className="w-full max-h-64 rounded-card object-cover shadow-lift"
+            />
+          )}
           <PlanCard
             variant="full"
             title={event.title}
@@ -206,8 +294,28 @@ export default async function EventPage({
               href={`/api/events/${event.id}/ics`}
               className="inline-flex items-center gap-1.5 rounded-pill border border-line bg-card px-3.5 py-2 text-xs font-bold text-ink-soft shadow-lift hover:border-terracotta hover:text-terracotta-deep active:scale-[0.98] transition-all"
             >
-              📅 Add to calendar
+              📅 Apple / Outlook
             </a>
+            {calendarEvent && (
+              <a
+                href={googleCalendarUrl(calendarEvent)}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1.5 rounded-pill border border-line bg-card px-3.5 py-2 text-xs font-bold text-ink-soft shadow-lift hover:border-terracotta hover:text-terracotta-deep active:scale-[0.98] transition-all"
+              >
+                📅 Google Calendar
+              </a>
+            )}
+            {event.wishlist_url && (
+              <a
+                href={event.wishlist_url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1.5 rounded-pill border border-line bg-card px-3.5 py-2 text-xs font-bold text-ink-soft shadow-lift hover:border-terracotta hover:text-terracotta-deep active:scale-[0.98] transition-all"
+              >
+                🎁 Wishlist
+              </a>
+            )}
             {event.room_id && (
               <Link
                 href={`/rooms/${event.room_id}`}
@@ -237,6 +345,11 @@ export default async function EventPage({
         {myInvite?.status === 'sent' && (
           <RsvpCard
             inviteId={myInvite.id}
+            questions={questions.map((q) => ({
+              id: q.id,
+              prompt: q.prompt,
+              required: q.required,
+            }))}
             expiresAtIso={
               inviteExpiresAt({
                 id: myInvite.id,
@@ -276,6 +389,36 @@ export default async function EventPage({
             isHost={isHost}
             eventId={event.id}
           />
+        )}
+
+        {/* Host broadcasts */}
+        <Announcements
+          eventId={event.id}
+          isHost={isHost}
+          canReach={acceptedCount ?? 0}
+          announcements={announcements}
+        />
+
+        {/* Host-only: RSVP question answers */}
+        {isHost && answersByGuest.length > 0 && (
+          <section>
+            <SectionHeader title="RSVP answers" hint="Only you can see these" />
+            <ul className="space-y-2">
+              {answersByGuest.map((guest) => (
+                <li key={guest.name} className="rounded-card bg-cream px-3.5 py-3">
+                  <p className="text-sm font-bold text-ink">{guest.name}</p>
+                  <dl className="mt-1.5 space-y-1">
+                    {guest.answers.map((qa, i) => (
+                      <div key={i} className="text-sm">
+                        <dt className="text-ink-faint">{qa.prompt}</dt>
+                        <dd className="text-ink font-medium">{qa.answer}</dd>
+                      </div>
+                    ))}
+                  </dl>
+                </li>
+              ))}
+            </ul>
+          </section>
         )}
 
         {/* Attendees */}
@@ -344,6 +487,19 @@ export default async function EventPage({
         {canManage && <HostControls event={event} pollDecided={poll?.phase === 'decided'} />}
 
         {isHost && <CoHostManager eventId={event.id} cohosts={cohosts} />}
+
+        {/* Run it back: available to the host once the plan is behind them. */}
+        {isHost &&
+          (event.status === 'past' ||
+            event.status === 'cancelled' ||
+            (event.starts_at && new Date(event.starts_at) < new Date())) && (
+            <section className="border-t border-line pt-6">
+              <p className="text-sm text-ink-soft mb-2.5">
+                Loved it? Gather the same crew for a fresh plan.
+              </p>
+              <RunItBackButton eventId={event.id} />
+            </section>
+          )}
       </div>
     </AppShell>
   );
