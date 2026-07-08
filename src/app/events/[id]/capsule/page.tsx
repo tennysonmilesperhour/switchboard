@@ -42,7 +42,7 @@ export default async function CapsulePage({
     <AppShell title="Memory Capsule" back={`/events/${id}`}>
       <div className="space-y-6">
         <div className="rounded-card bg-ink text-paper p-6">
-          <p className="text-xs font-bold uppercase tracking-widest text-gold">
+          <p className="text-xs font-bold uppercase tracking-widest text-gold-deep">
             {formatDate(event.starts_at)}
           </p>
           <h2 className="font-extrabold tracking-tight text-3xl mt-1.5 text-balance">

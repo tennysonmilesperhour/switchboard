@@ -13,12 +13,12 @@ const STATUS_META: Record<
   { label: string; className: string; dot: string }
 > = {
   queued: { label: 'Waiting in line', className: 'text-ink-faint', dot: 'bg-line' },
-  sent: { label: 'Invited - waiting', className: 'text-gold', dot: 'bg-gold animate-pulse-soft' },
+  sent: { label: 'Invited - waiting', className: 'text-gold-deep', dot: 'bg-gold animate-pulse-soft' },
   accepted: { label: 'Accepted', className: 'text-sage-deep', dot: 'bg-sage' },
   declined: { label: 'Declined', className: 'text-ink-faint', dot: 'bg-rose-deep/50' },
   expired: { label: 'No response', className: 'text-ink-faint', dot: 'bg-line' },
   cancelled: { label: 'Not needed', className: 'text-ink-faint', dot: 'bg-line' },
-  waitlisted: { label: 'Waitlisted', className: 'text-gold', dot: 'bg-gold-soft' },
+  waitlisted: { label: 'Waitlisted', className: 'text-gold-deep', dot: 'bg-gold' },
   requested: { label: 'Asked to join', className: 'text-terracotta-deep', dot: 'bg-terracotta' },
 };
 

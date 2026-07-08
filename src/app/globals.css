@@ -25,6 +25,8 @@
   /* gold = highlight / rewards */
   --color-gold: #eeae36;
   --color-gold-soft: #fbefd3;
+  /* Accessible dark amber for text on light/gold-soft surfaces (WCAG AA). */
+  --color-gold-deep: #8a5300;
 
   /* rose = error / decline */
   --color-rose-soft: #ffe1e6;

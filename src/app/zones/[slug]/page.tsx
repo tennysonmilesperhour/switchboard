@@ -33,7 +33,7 @@ export default async function ZonePage({
     <AppShell title={zone.name} back="/zones">
       <div className="space-y-6">
         <div className="rounded-card bg-ink text-paper p-6">
-          <p className="text-xs font-bold uppercase tracking-widest text-gold">
+          <p className="text-xs font-bold uppercase tracking-widest text-gold-deep">
             Serendipity Zone
           </p>
           <h2 className="font-extrabold tracking-tight text-3xl mt-1.5 text-balance">

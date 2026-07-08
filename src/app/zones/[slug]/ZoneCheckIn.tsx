@@ -68,7 +68,7 @@ export function ZoneCheckIn({
           max={12}
           value={hours}
           onChange={(e) => setHours(Number(e.target.value))}
-          className="w-full accent-[oklch(60%_0.128_42)]"
+          className="w-full accent-terracotta"
         />
       </div>
       {error && <p role="alert" className="text-sm text-rose-deep">{error}</p>}

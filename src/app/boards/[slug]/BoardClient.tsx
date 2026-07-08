@@ -166,7 +166,7 @@ export function BoardClient({
                   type="button"
                   onClick={() => setKind(value)}
                   aria-pressed={kind === value}
-                  className={`rounded-pill px-3 py-1.5 text-xs font-medium transition-colors ${
+                  className={`rounded-pill px-3 py-1.5 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-terracotta ${
                     kind === value
                       ? 'bg-ink text-paper'
                       : 'bg-cream text-ink-soft hover:bg-line'
@@ -311,7 +311,7 @@ export function BoardClient({
               <span className="flex-1 font-medium">
                 {member.name}
                 {member.role === 'moderator' && (
-                  <span className="ml-1.5 text-xs text-gold rounded-pill bg-gold-soft px-1.5 py-0.5">
+                  <span className="ml-1.5 text-xs text-gold-deep rounded-pill bg-gold-soft px-1.5 py-0.5">
                     moderator
                   </span>
                 )}

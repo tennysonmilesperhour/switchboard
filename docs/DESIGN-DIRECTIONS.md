@@ -1,3 +1,9 @@
+> **Historical.** These five directions were exploration; none was adopted. The
+> app ships the "bold, bright, social" pink + Work Sans system documented in
+> [`DESIGN-SYSTEM.md`](./DESIGN-SYSTEM.md), which is the true source of truth for
+> how the app looks today. Keep this file as a menu of alternate directions to
+> pull from if the brand is ever re-themed.
+
 # Switchboard: Five Design Directions
 
 Ground rules that apply to every option below:

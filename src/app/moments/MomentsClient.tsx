@@ -132,7 +132,7 @@ export function MomentsClient({
               max={8}
               value={hours}
               onChange={(e) => setHours(Number(e.target.value))}
-              className="w-full accent-[oklch(60%_0.128_42)]"
+              className="w-full accent-terracotta"
             />
           </div>
 
