@@ -318,7 +318,7 @@ export function EventWizard({
     setSubmitting(true);
     setSubmitError(null);
     try {
-      await createEvent({
+      const result = await createEvent({
         title,
         description: description.trim() || null,
         locationName: locationName.trim() || null,
@@ -348,10 +348,15 @@ export function EventWizard({
           windowMinutes: invitee.windowMinutes,
         })),
       });
+      if (result.ok && result.eventId) {
+        window.location.assign(`/events/${result.eventId}`);
+        return;
+      }
+      setSubmitting(false);
+      setSubmitError(
+        result.error ?? 'Something went wrong creating your plan. Please try again.',
+      );
     } catch {
-      // A successful create redirects via the server action (normal control
-      // flow that doesn't land here); only a real failure does. Reset the
-      // button and tell the host instead of leaving it stuck on "Creating…".
       setSubmitting(false);
       setSubmitError(
         'Something went wrong creating your plan. Please try again.',
