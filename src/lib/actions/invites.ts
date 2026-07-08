@@ -167,47 +167,30 @@ export async function respondToGuestInvite(
       .upsert(answerRows, { onConflict: 'invite_id,question_id' });
   }
 
-  if (!accept) {
-    await admin
-      .from('invites')
-      .update({ status: 'declined', responded_at: new Date().toISOString() })
-      .eq('id', invite.id);
-    await advanceEventCascade(invite.event_id);
-    return { ok: true, outcome: 'declined' };
-  }
+  // Atomic capacity-checked accept/decline under a row lock, keyed by the guest
+  // token. Shares the event-row lock with respond_to_invite, so registered and
+  // guest accepts serialize and capacity can never be exceeded.
+  const { data: outcome, error } = await admin.rpc('respond_to_guest_invite', {
+    p_token: token,
+    p_accept: accept,
+  });
+  if (error) return { ok: false, error: error.message };
 
-  // Capacity check mirrors respond_to_invite, executed with a fresh read.
-  const { data: event } = await admin
-    .from('events')
-    .select('id, title, host_id, capacity, invite_mode')
-    .eq('id', invite.event_id)
-    .single();
-  if (!event) return { ok: false, error: 'Event not found' };
+  await advanceEventCascade(invite.event_id);
 
-  const { count: accepted } = await admin
-    .from('invites')
-    .select('id', { count: 'exact', head: true })
-    .eq('event_id', event.id)
-    .eq('status', 'accepted');
-
-  const cap =
-    event.capacity ?? (event.invite_mode === 'individual' ? 1 : null);
-  const outcome =
-    cap !== null && (accepted ?? 0) >= cap ? 'waitlisted' : 'accepted';
-
-  await admin
-    .from('invites')
-    .update({ status: outcome, responded_at: new Date().toISOString() })
-    .eq('id', invite.id)
-    .eq('status', 'sent');
-
-  await advanceEventCascade(event.id);
   if (outcome === 'accepted') {
-    await sendPushToUsers([event.host_id], {
-      title: 'Someone’s in 🎉',
-      body: `${invite.guest_name ?? 'A guest'} accepted your invitation to ${event.title}.`,
-      url: `/events/${event.id}`,
-    });
+    const { data: event } = await admin
+      .from('events')
+      .select('id, title, host_id')
+      .eq('id', invite.event_id)
+      .single();
+    if (event) {
+      await sendPushToUsers([event.host_id], {
+        title: 'Someone’s in 🎉',
+        body: `${invite.guest_name ?? 'A guest'} accepted your invitation to ${event.title}.`,
+        url: `/events/${event.id}`,
+      });
+    }
   }
-  return { ok: true, outcome };
+  return { ok: true, outcome: typeof outcome === 'string' ? outcome : undefined };
 }
