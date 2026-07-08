@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/Button';
 import { Card, SectionHeader } from '@/components/ui/Card';
 import { Chip } from '@/components/ui/Chip';
 import { Icon } from '@/components/ui/Icon';
+import { useToast } from '@/components/ui/Toast';
 import {
   acceptMoment,
   checkIn,
@@ -48,6 +49,7 @@ export function MomentsClient({
   const [error, setError] = useState('');
   const [pending, startTransition] = useTransition();
   const router = useRouter();
+  const toast = useToast();
 
   function toggleExperience(label: string) {
     setExperiences((current) =>
@@ -178,8 +180,12 @@ export function MomentsClient({
             disabled={pending}
             onClick={() =>
               startTransition(async () => {
-                await closeMoment();
-                router.refresh();
+                try {
+                  await closeMoment();
+                  router.refresh();
+                } catch {
+                  toast.error('Could not check out. Try again.');
+                }
               })
             }
           >
@@ -244,6 +250,10 @@ export function MomentsClient({
                           onClick={() =>
                             startTransition(async () => {
                               const result = await acceptMoment(myMoment.id, candidate.id);
+                              if (!result.ok) {
+                                toast.error(result.error ?? 'Could not respond. Try again.');
+                                return;
+                              }
                               if (result.stage === 'matched' && result.roomId) {
                                 router.push(`/rooms/${result.roomId}`);
                               } else {
@@ -260,8 +270,12 @@ export function MomentsClient({
                           disabled={pending}
                           onClick={() =>
                             startTransition(async () => {
-                              await passMoment(myMoment.id, candidate.id);
-                              router.refresh();
+                              try {
+                                await passMoment(myMoment.id, candidate.id);
+                                router.refresh();
+                              } catch {
+                                toast.error('Could not pass. Try again.');
+                              }
                             })
                           }
                         >
@@ -304,7 +318,11 @@ export function MomentsClient({
                           disabled={pending}
                           onClick={() =>
                             startTransition(async () => {
-                              await expressCuriosity(myMoment.id, candidate.id);
+                              const result = await expressCuriosity(myMoment.id, candidate.id);
+                              if (!result.ok) {
+                                toast.error(result.error ?? 'Could not respond. Try again.');
+                                return;
+                              }
                               router.refresh();
                             })
                           }
@@ -317,8 +335,12 @@ export function MomentsClient({
                           disabled={pending}
                           onClick={() =>
                             startTransition(async () => {
-                              await passMoment(myMoment.id, candidate.id);
-                              router.refresh();
+                              try {
+                                await passMoment(myMoment.id, candidate.id);
+                                router.refresh();
+                              } catch {
+                                toast.error('Could not pass. Try again.');
+                              }
                             })
                           }
                         >

@@ -6,6 +6,8 @@ import { Button } from '@/components/ui/Button';
 import { Avatar } from '@/components/ui/Avatar';
 import { Card, SectionHeader } from '@/components/ui/Card';
 import { EmptyState } from '@/components/ui/EmptyState';
+import { useToast } from '@/components/ui/Toast';
+import { useConfirm } from '@/components/ui/ConfirmDialog';
 import { formatRelative } from '@/lib/format';
 import {
   addBoardPost,
@@ -51,6 +53,44 @@ export function BoardClient({
 }: BoardClientProps) {
   const [pending, startTransition] = useTransition();
   const router = useRouter();
+  const toast = useToast();
+  const confirm = useConfirm();
+
+  async function removePost(postId: string) {
+    const ok = await confirm({
+      title: 'Remove this post?',
+      body: 'It’ll disappear from the board for everyone.',
+      confirmLabel: 'Remove',
+      danger: true,
+    });
+    if (!ok) return;
+    startTransition(async () => {
+      try {
+        await deleteBoardPost(postId, slug);
+        router.refresh();
+      } catch {
+        toast.error('Could not remove the post. Try again.');
+      }
+    });
+  }
+
+  async function removeNeighbor(member: BoardMemberRow) {
+    const ok = await confirm({
+      title: `Remove ${member.name} from the board?`,
+      body: 'They’ll lose access to this neighborhood board.',
+      confirmLabel: 'Remove',
+      danger: true,
+    });
+    if (!ok) return;
+    startTransition(async () => {
+      try {
+        await removeFromBoard(boardId, member.id);
+        router.refresh();
+      } catch {
+        toast.error('Could not remove that neighbor. Try again.');
+      }
+    });
+  }
 
   // Composer state.
   const [kind, setKind] = useState<'notice' | 'event'>('notice');
@@ -239,14 +279,9 @@ export function BoardClient({
                       {canRemove && (
                         <button
                           type="button"
-                          onClick={() =>
-                            startTransition(async () => {
-                              await deleteBoardPost(post.id, slug);
-                              router.refresh();
-                            })
-                          }
+                          onClick={() => removePost(post.id)}
                           disabled={pending}
-                          className="text-[11px] text-ink-faint hover:text-rose-deep shrink-0"
+                          className="rounded-pill px-2 py-1 text-[11px] text-ink-faint hover:text-rose-deep shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-terracotta"
                         >
                           remove
                         </button>
@@ -284,14 +319,9 @@ export function BoardClient({
               {isModerator && member.id !== currentUserId && (
                 <button
                   type="button"
-                  onClick={() =>
-                    startTransition(async () => {
-                      await removeFromBoard(boardId, member.id);
-                      router.refresh();
-                    })
-                  }
+                  onClick={() => removeNeighbor(member)}
                   disabled={pending}
-                  className="text-xs text-ink-faint hover:text-rose-deep"
+                  className="rounded-pill px-2 py-1 text-xs text-ink-faint hover:text-rose-deep focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-terracotta"
                 >
                   remove
                 </button>

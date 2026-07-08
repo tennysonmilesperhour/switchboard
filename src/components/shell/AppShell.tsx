@@ -37,7 +37,7 @@ export function AppShell({ title, back, action, children }: AppShellProps) {
         )}
         {action ?? (
           <Link
-            href="/profile"
+            href="/notifications"
             aria-label="Notifications"
             className="size-9 inline-flex items-center justify-center rounded-full text-terracotta-deep hover:bg-cream"
           >
