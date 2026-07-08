@@ -1,5 +1,11 @@
 import { createClient as createSupabaseClient } from '@supabase/supabase-js';
 
+export function hasAdminCredentials() {
+  return Boolean(
+    process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY,
+  );
+}
+
 /**
  * Service-role client - bypasses RLS. Server-only: import exclusively from
  * route handlers, server actions, or cron jobs. Never expose to the client.

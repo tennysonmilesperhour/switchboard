@@ -4,9 +4,10 @@ import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import { createClient } from '@/lib/supabase/server';
 import { SOCIAL_BY_ID } from '@/lib/socials';
+import { USERNAME_PATTERN } from '@/lib/auth-identity';
 import type { ProfileLink, ProfileSocial } from '@/lib/types';
 
-const HANDLE_PATTERN = /^[a-z0-9_]{3,24}$/;
+const HANDLE_PATTERN = USERNAME_PATTERN;
 const MAX_LINKS = 15;
 const MAX_SOCIALS = 15;
 

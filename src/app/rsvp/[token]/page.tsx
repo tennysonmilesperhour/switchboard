@@ -1,5 +1,5 @@
 import type { Metadata } from 'next';
-import { createAdminClient } from '@/lib/supabase/admin';
+import { createAdminClient, hasAdminCredentials } from '@/lib/supabase/admin';
 import { formatDateTime } from '@/lib/format';
 import { Icon } from '@/components/ui/Icon';
 import { GuestRsvpClient } from './GuestRsvpClient';
@@ -9,6 +9,8 @@ export async function generateMetadata({
 }: {
   params: Promise<{ token: string }>;
 }): Promise<Metadata> {
+  if (!hasAdminCredentials()) return { title: 'You’re invited' };
+
   const { token } = await params;
   const admin = createAdminClient();
   const { data: invite } = await admin
@@ -36,18 +38,20 @@ export default async function GuestRsvpPage({
   params: Promise<{ token: string }>;
 }) {
   const { token } = await params;
-  const admin = createAdminClient();
+  const admin = hasAdminCredentials() ? createAdminClient() : null;
 
-  const { data: invite } = await admin
-    .from('invites')
-    .select(
-      'id, event_id, status, guest_name, event:events(title, description, location_name, starts_at, host:profiles(display_name))',
-    )
-    .eq('guest_token', token)
-    .maybeSingle();
+  const { data: invite } = admin
+    ? await admin
+        .from('invites')
+        .select(
+          'id, event_id, status, guest_name, event:events(title, description, location_name, starts_at, host:profiles(display_name))',
+        )
+        .eq('guest_token', token)
+        .maybeSingle()
+    : { data: null };
 
   // Host-defined RSVP questions, if any.
-  const { data: questionRows } = invite
+  const { data: questionRows } = invite && admin
     ? await admin
         .from('event_questions')
         .select('id, prompt, required')

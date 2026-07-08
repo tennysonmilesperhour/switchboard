@@ -4,14 +4,14 @@ test.describe('public surface', () => {
   test('landing hero loads', async ({ page }) => {
     await page.goto('/welcome');
     await expect(page.locator('h1')).toBeVisible();
-    await expect(page.locator('h1')).toContainText('pressure');
+    await expect(page.locator('h1')).toContainText('Make plans.');
   });
 
   test('landing links to sign in', async ({ page }) => {
     await page.goto('/welcome');
-    await page.getByRole('link', { name: 'Get started' }).click();
+    await page.getByRole('link', { name: 'Create account' }).click();
     await expect(page).toHaveURL(/\/login/);
-    await expect(page.getByLabel('Email address')).toBeVisible();
+    await expect(page.getByLabel('Username')).toBeVisible();
   });
 
   test('unauthenticated app routes redirect to welcome', async ({ page }) => {

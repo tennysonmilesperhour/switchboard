@@ -24,11 +24,11 @@ export default async function LoginPage({
       <main className="flex-1 flex flex-col justify-center pb-24">
         <h1 className="text-5xl font-black tracking-tight text-ink">Welcome.</h1>
         <p className="mt-3 text-ink-soft leading-relaxed">
-          Sign in with a magic link - no password to remember.
+          Sign in with your Switchboard username and password.
         </p>
         {error ? (
           <p role="alert" className="mt-4 rounded-card bg-rose-soft text-rose-deep text-sm p-3">
-            That sign-in link didn’t work. Try again.
+            That sign-in attempt didn’t work. Try again.
           </p>
         ) : null}
         <LoginForm />

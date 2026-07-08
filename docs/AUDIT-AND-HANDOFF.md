@@ -1001,7 +1001,7 @@ liability into Switchboard's biggest trust differentiator.
 >    exactly what we can and cannot see ("we never read what you're busy with").
 >    Make it fully optional; the manual date poll stays the default.
 > 3. Sign in with Apple/Google + passkeys (WebAuthn) as calm, optional auth
->    methods alongside the existing magic link.
+>    methods alongside the username/password flow.
 > Document the OAuth scopes and the privacy posture in docs/interop.md. Finish
 > build/lint/test green with a summary. Defer PSI contact matching, CalDAV two-way
 > sync, and the Discord bot to a later wave (note them as TODO in docs/interop.md).

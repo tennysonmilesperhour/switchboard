@@ -6,7 +6,7 @@ Switchboard sells **permission** - every screen reduces the social risk of reach
 
 ## Decisions
 - **Platform:** Mobile-first PWA (Next.js App Router, TypeScript), installable, web push
-- **Backend:** Supabase - Postgres + Auth (magic link + Google) + RLS + Realtime
+- **Backend:** Supabase - Postgres + Auth (username/password + Google) + RLS + Realtime
 - **AI:** Claude API - Haiku (Living Room extraction, serendipity scoring), Sonnet (Discovery curation). Behind `AI_ENABLED` flag until `ANTHROPIC_API_KEY` present
 - **Deploy:** GitHub + Vercel preview
 - **Styling:** Tailwind v4, tokens as CSS custom properties
@@ -45,7 +45,7 @@ Cream/paper surfaces, deep ink text, terracotta accent, sage green reserved sema
 7. **Shared Moments** - check-in + experiences + comfort zone → three-consent (open → learn more → mutual reveal) → chat
 
 ## 10 safe-bet innovations (in v1 scope)
-1. Guest RSVP magic links (no-account accept/decline)
+1. Guest RSVP token links (no-account accept/decline)
 2. Cascade preview simulator
 3. Graceful declines that teach ("Can't this time - keep asking!" vs "Not my thing")
 4. Smart response-window suggestions from event lead time

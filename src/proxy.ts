@@ -20,10 +20,20 @@ function isPublicPath(pathname: string): boolean {
 
 export async function proxy(request: NextRequest) {
   let response = NextResponse.next({ request });
+  const { pathname } = request.nextUrl;
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+  if (!supabaseUrl || !supabaseAnonKey) {
+    if (isPublicPath(pathname)) return response;
+    const url = request.nextUrl.clone();
+    url.pathname = '/welcome';
+    return NextResponse.redirect(url);
+  }
 
   const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    supabaseUrl,
+    supabaseAnonKey,
     {
       cookies: {
         getAll() {
@@ -46,8 +56,6 @@ export async function proxy(request: NextRequest) {
   const {
     data: { user },
   } = await supabase.auth.getUser();
-
-  const { pathname } = request.nextUrl;
 
   if (!user && !isPublicPath(pathname)) {
     const url = request.nextUrl.clone();
