@@ -33,7 +33,7 @@ export default async function HomePage() {
 
   const nowIso = new Date().toISOString();
   const [
-    { data: mySignal },
+    { data: mySignals },
     { data: circles },
     { data: friendSignals },
     { data: pendingInvites },
@@ -45,7 +45,7 @@ export default async function HomePage() {
       .select('emoji, label, expires_at, circle_id')
       .eq('user_id', user.id)
       .gt('expires_at', nowIso)
-      .maybeSingle(),
+      .order('created_at'),
     supabase.from('circles').select('id, name, emoji').eq('owner_id', user.id),
     supabase
       .from('availability_signals')
@@ -166,7 +166,7 @@ export default async function HomePage() {
           </p>
         </div>
 
-        <SignalBar active={mySignal ?? null} circles={circles ?? []} />
+        <SignalBar active={mySignals ?? []} circles={circles ?? []} />
 
         {/* Plan feed - the heart of Home */}
         {(upcoming?.length ?? 0) > 0 ? (
