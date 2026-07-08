@@ -228,7 +228,7 @@ export function PeopleClient({
                 <Card key={friend.id}>
                   <button
                     type="button"
-                    className="w-full flex items-center gap-3 text-left"
+                    className="w-full flex items-center gap-3 text-left rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-terracotta"
                     aria-expanded={expanded}
                     onClick={() => setExpandedFriend(expanded ? null : friend.id)}
                   >

@@ -564,7 +564,7 @@ export function EventWizard({
                 type="button"
                 onClick={() => setInviteMode(option.mode)}
                 aria-pressed={active}
-                className={`w-full text-left rounded-card border-2 p-4 transition-all active:scale-[0.99] ${
+                className={`w-full text-left rounded-card border-2 p-4 transition-all active:scale-[0.99] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-terracotta ${
                   active
                     ? 'border-terracotta bg-terracotta-soft shadow-lift'
                     : 'border-line bg-card hover:border-terracotta/50'
@@ -686,7 +686,7 @@ export function EventWizard({
                     type="button"
                     onClick={() => toggleFriend(friend)}
                     aria-pressed={selected}
-                    className={`w-full flex items-center gap-3 rounded-card border-2 p-3 transition-all active:scale-[0.99] ${
+                    className={`w-full flex items-center gap-3 rounded-card border-2 p-3 transition-all active:scale-[0.99] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-terracotta ${
                       selected
                         ? 'border-terracotta bg-terracotta-soft'
                         : 'border-line bg-card hover:border-terracotta/50'
@@ -777,7 +777,7 @@ export function EventWizard({
                     <span className="font-bold block truncate">
                       {invitee.name}
                       {!invitee.profileId && (
-                        <span className="ml-1.5 text-xs font-semibold text-gold rounded-pill bg-gold-soft px-1.5 py-0.5">guest</span>
+                        <span className="ml-1.5 text-xs font-semibold text-gold-deep rounded-pill bg-gold-soft px-1.5 py-0.5">guest</span>
                       )}
                     </span>
                   </span>

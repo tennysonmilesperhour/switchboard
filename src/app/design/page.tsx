@@ -51,7 +51,7 @@ export default function DesignSystemPage() {
             ['Ink', 'bg-ink', 'text-white'],
             ['Paper', 'bg-paper border border-line', 'text-ink'],
             ['Jade', 'bg-sage', 'text-white'],
-            ['Gold', 'bg-gold', 'text-white'],
+            ['Gold', 'bg-gold', 'text-ink'],
             ['Gradient', 'bg-brand-gradient', 'text-white'],
           ].map(([label, bg, fg]) => (
             <div

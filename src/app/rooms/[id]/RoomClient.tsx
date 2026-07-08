@@ -227,7 +227,7 @@ export function RoomClient({
               role="tab"
               aria-selected={active}
               onClick={() => setTab(tabDef.key)}
-              className={`shrink-0 rounded-pill px-3.5 py-1.5 text-xs font-medium transition-colors ${
+              className={`shrink-0 rounded-pill px-3.5 py-1.5 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-terracotta ${
                 active ? 'bg-ink text-paper' : 'bg-cream text-ink-soft hover:bg-line'
               }`}
             >
@@ -448,7 +448,7 @@ export function RoomClient({
                       })
                     }
                     disabled={pending}
-                    className="mt-1 size-4 accent-[oklch(56%_0.09_152)]"
+                    className="mt-1 size-4 accent-terracotta"
                   />
                 )}
                 <div className="flex-1 min-w-0">

@@ -165,7 +165,7 @@ export default async function SettingsPage() {
                   type="checkbox"
                   name="sabbatical"
                   defaultChecked={sabbatical}
-                  className="mt-1 size-4 accent-[oklch(60%_0.128_42)]"
+                  className="mt-1 size-4 accent-terracotta"
                 />
                 <span>
                   <span className="font-medium">Take a quiet season</span>

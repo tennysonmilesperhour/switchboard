@@ -202,7 +202,7 @@ export function MutualClient({
                   type="button"
                   aria-pressed={selected}
                   onClick={() => setPeople((p) => toggle(p, friend.id))}
-                  className={`w-full flex items-center gap-3 rounded-card border p-3 transition-all ${
+                  className={`w-full flex items-center gap-3 rounded-card border p-3 transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-terracotta ${
                     selected
                       ? 'border-terracotta bg-terracotta-soft'
                       : 'border-line bg-card hover:border-ink-faint'

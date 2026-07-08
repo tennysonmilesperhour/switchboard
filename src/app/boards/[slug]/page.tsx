@@ -51,7 +51,7 @@ export default async function BoardPage({
     <AppShell title={board.name} back="/boards">
       <div className="space-y-6">
         <div className="rounded-card bg-ink text-paper p-6">
-          <p className="text-xs uppercase tracking-widest text-gold">
+          <p className="text-xs uppercase tracking-widest text-gold-deep">
             Neighborhood Board
           </p>
           <h2 className="font-display text-3xl mt-1.5">🏘️ {board.name}</h2>
