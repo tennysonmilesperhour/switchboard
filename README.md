@@ -27,10 +27,16 @@ cp .env.example .env.local   # fill in Supabase keys (see below)
 npm run dev
 ```
 
-1. Create a Supabase project and run `supabase/migrations/0001_init.sql`.
+1. Create a Supabase project and run the SQL files in `supabase/migrations/` in timestamp order.
 2. Put the project URL + anon key + service-role key in `.env.local`.
 3. Optional: `ANTHROPIC_API_KEY` for real AI features (graceful fallback without).
 4. Optional: `npx web-push generate-vapid-keys` → enables push notifications.
+
+To seed interactive local test profiles after Supabase is configured:
+
+```bash
+npm run seed:test-profiles
+```
 
 ## Architecture notes
 

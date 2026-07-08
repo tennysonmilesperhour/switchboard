@@ -1,4 +1,5 @@
 import type { NextConfig } from 'next';
+import path from 'node:path';
 import { resolveBuildId } from './src/lib/build-id';
 
 const securityHeaders = [
@@ -31,6 +32,9 @@ const securityHeaders = [
 ];
 
 const nextConfig: NextConfig = {
+  turbopack: {
+    root: path.resolve(__dirname),
+  },
   // Stamp each build with an identifier so the client can tell when a newer
   // production build has shipped. On Vercel this is the commit SHA (or a
   // unique per-build fallback); locally it is 'dev' and the watcher stays
