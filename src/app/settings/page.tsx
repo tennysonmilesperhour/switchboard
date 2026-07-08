@@ -7,6 +7,7 @@ import { Avatar } from '@/components/ui/Avatar';
 import { Button } from '@/components/ui/Button';
 import { PushManager } from '@/components/push/PushManager';
 import { InterestPicker } from '@/components/profile/InterestPicker';
+import { SaveButton } from './SaveButton';
 import { INTEREST_CATEGORIES, DOWN_TO_GROUP } from '@/lib/interests';
 import {
   signOut,
@@ -97,9 +98,7 @@ export default async function SettingsPage() {
                   searchable={false}
                 />
               </div>
-              <Button type="submit" size="sm" variant="secondary">
-                Save
-              </Button>
+              <SaveButton />
             </form>
           </Card>
         </section>
@@ -149,7 +148,7 @@ export default async function SettingsPage() {
                   ))}
                 </select>
               </div>
-              <Button type="submit" size="sm" variant="secondary">Save</Button>
+              <SaveButton />
             </form>
           </Card>
         </section>
@@ -185,9 +184,7 @@ export default async function SettingsPage() {
                 aria-label="Sabbatical note"
                 className="w-full rounded-card border border-line bg-paper px-3.5 py-2.5 text-sm outline-none focus:border-terracotta"
               />
-              <Button type="submit" size="sm" variant="secondary">
-                Save
-              </Button>
+              <SaveButton />
             </form>
           </Card>
         </section>

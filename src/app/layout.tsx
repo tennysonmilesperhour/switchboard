@@ -2,6 +2,8 @@ import type { Metadata, Viewport } from 'next';
 import { Work_Sans } from 'next/font/google';
 import './globals.css';
 import { VersionWatcher } from '@/components/system/VersionWatcher';
+import { ToastProvider } from '@/components/ui/Toast';
+import { ConfirmProvider } from '@/components/ui/ConfirmDialog';
 
 const workSans = Work_Sans({
   subsets: ['latin'],
@@ -38,8 +40,12 @@ export default function RootLayout({
   return (
     <html lang="en" className={`${workSans.variable} antialiased`}>
       <body className="min-h-dvh">
-        {children}
-        <VersionWatcher />
+        <ToastProvider>
+          <ConfirmProvider>
+            {children}
+            <VersionWatcher />
+          </ConfirmProvider>
+        </ToastProvider>
       </body>
     </html>
   );

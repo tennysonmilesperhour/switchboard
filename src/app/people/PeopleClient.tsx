@@ -8,6 +8,8 @@ import { Avatar } from '@/components/ui/Avatar';
 import { Chip } from '@/components/ui/Chip';
 import { Icon } from '@/components/ui/Icon';
 import { EmptyState } from '@/components/ui/EmptyState';
+import { useToast } from '@/components/ui/Toast';
+import { useConfirm } from '@/components/ui/ConfirmDialog';
 import {
   acceptConnection,
   createCircle,
@@ -74,6 +76,44 @@ export function PeopleClient({
   const [householdMembers, setHouseholdMembers] = useState<string[]>([]);
   const [pending, startTransition] = useTransition();
   const router = useRouter();
+  const toast = useToast();
+  const confirm = useConfirm();
+
+  async function removeFriend(friend: FriendRow) {
+    const ok = await confirm({
+      title: `Remove ${friend.name}?`,
+      body: 'You’ll disconnect from each other. You can always reconnect later by handle.',
+      confirmLabel: 'Remove',
+      danger: true,
+    });
+    if (!ok) return;
+    startTransition(async () => {
+      const result = await removeConnection(friend.connectionId);
+      if (!result.ok) {
+        toast.error(result.error ?? 'Could not remove that connection.');
+        return;
+      }
+      router.refresh();
+    });
+  }
+
+  async function removeHousehold(household: HouseholdRow) {
+    const ok = await confirm({
+      title: `Delete ${household.name}?`,
+      body: 'This removes the household group. The people in it stay your friends.',
+      confirmLabel: 'Delete',
+      danger: true,
+    });
+    if (!ok) return;
+    startTransition(async () => {
+      try {
+        await deleteHousehold(household.id);
+        router.refresh();
+      } catch {
+        toast.error('Could not delete the household. Try again.');
+      }
+    });
+  }
 
   function submitRequest(e: React.FormEvent) {
     e.preventDefault();
@@ -139,7 +179,11 @@ export function PeopleClient({
                     disabled={pending}
                     onClick={() =>
                       startTransition(async () => {
-                        await acceptConnection(request.connectionId);
+                        const result = await acceptConnection(request.connectionId);
+                        if (!result.ok) {
+                          toast.error(result.error ?? 'Could not accept. Try again.');
+                          return;
+                        }
                         router.refresh();
                       })
                     }
@@ -152,7 +196,11 @@ export function PeopleClient({
                     disabled={pending}
                     onClick={() =>
                       startTransition(async () => {
-                        await removeConnection(request.connectionId);
+                        const result = await removeConnection(request.connectionId);
+                        if (!result.ok) {
+                          toast.error(result.error ?? 'Could not update. Try again.');
+                          return;
+                        }
                         router.refresh();
                       })
                     }
@@ -218,7 +266,15 @@ export function PeopleClient({
                               disabled={pending}
                               onClick={() =>
                                 startTransition(async () => {
-                                  await toggleCircleMember(circle.id, friend.id, !inCircle);
+                                  const result = await toggleCircleMember(
+                                    circle.id,
+                                    friend.id,
+                                    !inCircle,
+                                  );
+                                  if (!result.ok) {
+                                    toast.error(result.error ?? 'Could not update circle.');
+                                    return;
+                                  }
                                   router.refresh();
                                 })
                               }
@@ -231,13 +287,8 @@ export function PeopleClient({
                       <button
                         type="button"
                         disabled={pending}
-                        onClick={() =>
-                          startTransition(async () => {
-                            await removeConnection(friend.connectionId);
-                            router.refresh();
-                          })
-                        }
-                        className="inline-flex items-center gap-1 text-xs font-semibold text-ink-faint hover:text-rose-deep mt-3.5"
+                        onClick={() => removeFriend(friend)}
+                        className="inline-flex items-center gap-1 rounded-pill px-1 py-1 text-xs font-semibold text-ink-faint hover:text-rose-deep mt-3.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-terracotta"
                       >
                         <Icon name="close" size={14} />
                         Remove connection
@@ -268,10 +319,14 @@ export function PeopleClient({
                 <button
                   type="button"
                   disabled={pending}
-                  className="text-xs text-ink-faint hover:text-ink"
+                  className="rounded-pill px-2 py-1 text-xs text-ink-faint hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-terracotta"
                   onClick={() =>
                     startTransition(async () => {
-                      await removeConnection(request.connectionId);
+                      const result = await removeConnection(request.connectionId);
+                      if (!result.ok) {
+                        toast.error(result.error ?? 'Could not cancel. Try again.');
+                        return;
+                      }
                       router.refresh();
                     })
                   }
@@ -315,13 +370,8 @@ export function PeopleClient({
                   <button
                     type="button"
                     disabled={pending}
-                    className="text-xs text-ink-faint hover:text-rose-deep"
-                    onClick={() =>
-                      startTransition(async () => {
-                        await deleteHousehold(household.id);
-                        router.refresh();
-                      })
-                    }
+                    className="rounded-pill px-2 py-1 text-xs text-ink-faint hover:text-rose-deep focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-terracotta"
+                    onClick={() => removeHousehold(household)}
                   >
                     Remove
                   </button>
@@ -366,11 +416,14 @@ export function PeopleClient({
                 onClick={() =>
                   startTransition(async () => {
                     const result = await createHousehold(householdName, householdMembers);
-                    if (result.ok) {
-                      setHouseholdName('');
-                      setHouseholdMembers([]);
+                    if (!result.ok) {
+                      toast.error(result.error ?? 'Could not create the household.');
+                      return;
                     }
+                    setHouseholdName('');
+                    setHouseholdMembers([]);
                     router.refresh();
+                    toast.success('Household created.');
                   })
                 }
               >
@@ -501,7 +554,11 @@ export function PeopleClient({
             const name = newCircle;
             startTransition(async () => {
               const result = await createCircle(name, '✨');
-              if (result.ok) setNewCircle('');
+              if (!result.ok) {
+                toast.error(result.error ?? 'Could not create the circle.');
+                return;
+              }
+              setNewCircle('');
               router.refresh();
             });
           }}

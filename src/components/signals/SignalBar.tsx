@@ -4,6 +4,7 @@ import { useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { Chip } from '@/components/ui/Chip';
 import { Card } from '@/components/ui/Card';
+import { useToast } from '@/components/ui/Toast';
 import { addSignal, clearSignal, removeSignal, setSignalsAudience } from '@/lib/actions/signals';
 import { formatRelative } from '@/lib/format';
 import { SIGNAL_PRESETS } from '@/lib/types';
@@ -30,6 +31,7 @@ interface SignalBarProps {
 export function SignalBar({ active, circles }: SignalBarProps) {
   const [pending, startTransition] = useTransition();
   const router = useRouter();
+  const toast = useToast();
 
   const activeByLabel = new Map(active.map((s) => [s.label, s]));
   const anyActive = active.length > 0;
@@ -44,10 +46,12 @@ export function SignalBar({ active, circles }: SignalBarProps) {
 
   function toggle(preset: { emoji: string; label: string }) {
     startTransition(async () => {
-      if (activeByLabel.has(preset.label)) {
-        await removeSignal(preset.label);
-      } else {
-        await addSignal(preset.emoji, preset.label, audience);
+      const result = activeByLabel.has(preset.label)
+        ? await removeSignal(preset.label)
+        : await addSignal(preset.emoji, preset.label, audience);
+      if (!result.ok) {
+        toast.error(result.error ?? 'Could not update your signal.');
+        return;
       }
       router.refresh();
     });
@@ -55,7 +59,11 @@ export function SignalBar({ active, circles }: SignalBarProps) {
 
   function chooseAudience(circleId: string | null) {
     startTransition(async () => {
-      await setSignalsAudience(circleId);
+      const result = await setSignalsAudience(circleId);
+      if (!result.ok) {
+        toast.error(result.error ?? 'Could not change who can see this.');
+        return;
+      }
       router.refresh();
     });
   }
@@ -116,6 +124,7 @@ export function SignalBar({ active, circles }: SignalBarProps) {
                 startTransition(async () => {
                   await clearSignal();
                   router.refresh();
+                  toast.success('Signals turned off.');
                 })
               }
               className="shrink-0 rounded-pill border border-line bg-card px-3 py-1.5 text-xs font-medium text-ink-faint hover:text-ink"

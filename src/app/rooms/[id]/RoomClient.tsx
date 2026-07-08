@@ -6,6 +6,8 @@ import { createClient } from '@/lib/supabase/client';
 import { Avatar } from '@/components/ui/Avatar';
 import { Button } from '@/components/ui/Button';
 import { EmptyState } from '@/components/ui/EmptyState';
+import { useToast } from '@/components/ui/Toast';
+import { useConfirm } from '@/components/ui/ConfirmDialog';
 import { sendMessage, toggleTask } from '@/lib/actions/rooms';
 import { addExpense, deleteExpense } from '@/lib/actions/expenses';
 import { formatRelative } from '@/lib/format';
@@ -84,6 +86,26 @@ export function RoomClient({
   const [expenseError, setExpenseError] = useState<string | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const router = useRouter();
+  const toast = useToast();
+  const confirm = useConfirm();
+
+  async function removeExpense(expenseId: string) {
+    const ok = await confirm({
+      title: 'Delete this expense?',
+      body: 'It’ll be removed from the ledger for everyone in this room.',
+      confirmLabel: 'Delete',
+      danger: true,
+    });
+    if (!ok) return;
+    startTransition(async () => {
+      try {
+        await deleteExpense(expenseId, roomId);
+        router.refresh();
+      } catch {
+        toast.error('Could not delete the expense. Try again.');
+      }
+    });
+  }
 
   // Live messages via Supabase Realtime.
   useEffect(() => {
@@ -338,14 +360,9 @@ export function RoomClient({
                       {canRemove && (
                         <button
                           type="button"
-                          onClick={() =>
-                            startTransition(async () => {
-                              await deleteExpense(expense.id, roomId);
-                              router.refresh();
-                            })
-                          }
+                          onClick={() => removeExpense(expense.id)}
                           disabled={pending}
-                          className="text-[11px] text-ink-faint hover:text-rose-deep"
+                          className="rounded-pill px-2 py-1 text-[11px] text-ink-faint hover:text-rose-deep focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-terracotta"
                         >
                           remove
                         </button>
@@ -422,8 +439,12 @@ export function RoomClient({
                     aria-label={`Mark "${item.title}" ${item.done ? 'not done' : 'done'}`}
                     onChange={() =>
                       startTransition(async () => {
-                        await toggleTask(item.id, roomId, !item.done);
-                        router.refresh();
+                        try {
+                          await toggleTask(item.id, roomId, !item.done);
+                          router.refresh();
+                        } catch {
+                          toast.error('Could not update the task. Try again.');
+                        }
                       })
                     }
                     disabled={pending}

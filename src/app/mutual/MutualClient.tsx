@@ -9,6 +9,8 @@ import { Chip } from '@/components/ui/Chip';
 import { Avatar } from '@/components/ui/Avatar';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { Icon } from '@/components/ui/Icon';
+import { useToast } from '@/components/ui/Toast';
+import { useConfirm } from '@/components/ui/ConfirmDialog';
 import { downToConnect, withdrawIntent } from '@/lib/actions/mutual';
 import { endRitual, pauseRitual, proposeRitual } from '@/lib/actions/rituals';
 import { formatRelative } from '@/lib/format';
@@ -71,6 +73,8 @@ export function MutualClient({
   const [justMatched, setJustMatched] = useState(false);
   const [pending, startTransition] = useTransition();
   const router = useRouter();
+  const toast = useToast();
+  const confirm = useConfirm();
 
   function toggle(list: string[], value: string): string[] {
     return list.includes(value)
@@ -84,6 +88,10 @@ export function MutualClient({
       for (const personId of people) {
         for (const activity of activities) {
           const result = await downToConnect(personId, activity);
+          if (!result.ok) {
+            toast.error(result.error ?? 'Could not save that quietly. Try again.');
+            return;
+          }
           if (result.matched) anyMatch = true;
         }
       }
@@ -91,6 +99,24 @@ export function MutualClient({
       setPeople([]);
       setJustMatched(anyMatch);
       router.refresh();
+    });
+  }
+
+  async function end(ritual: RitualRow) {
+    const ok = await confirm({
+      title: `End your ${ritual.activity} ritual?`,
+      body: `This stops the nudges between you and ${ritual.otherName}. You can always start a new one.`,
+      confirmLabel: 'End ritual',
+      danger: true,
+    });
+    if (!ok) return;
+    startTransition(async () => {
+      try {
+        await endRitual(ritual.id);
+        router.refresh();
+      } catch {
+        toast.error('Could not end the ritual. Try again.');
+      }
     });
   }
 
@@ -239,12 +265,16 @@ export function MutualClient({
                 {ritual.status !== 'proposed' && (
                   <button
                     type="button"
-                    className="text-xs text-ink-faint hover:text-ink"
+                    className="rounded-pill px-2 py-1 text-xs text-ink-faint hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-terracotta"
                     disabled={pending}
                     onClick={() =>
                       startTransition(async () => {
-                        await pauseRitual(ritual.id, ritual.status === 'active');
-                        router.refresh();
+                        try {
+                          await pauseRitual(ritual.id, ritual.status === 'active');
+                          router.refresh();
+                        } catch {
+                          toast.error('Could not update the ritual. Try again.');
+                        }
                       })
                     }
                   >
@@ -253,14 +283,9 @@ export function MutualClient({
                 )}
                 <button
                   type="button"
-                  className="text-xs text-ink-faint hover:text-rose-deep"
+                  className="rounded-pill px-2 py-1 text-xs text-ink-faint hover:text-rose-deep focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-terracotta"
                   disabled={pending}
-                  onClick={() =>
-                    startTransition(async () => {
-                      await endRitual(ritual.id);
-                      router.refresh();
-                    })
-                  }
+                  onClick={() => end(ritual)}
                 >
                   End
                 </button>
@@ -318,9 +343,18 @@ export function MutualClient({
                 disabled={pending || !ritualPartner}
                 onClick={() =>
                   startTransition(async () => {
-                    await proposeRitual(ritualPartner, ritualActivity, ritualCadence);
+                    const result = await proposeRitual(
+                      ritualPartner,
+                      ritualActivity,
+                      ritualCadence,
+                    );
+                    if (!result.ok) {
+                      toast.error(result.error ?? 'Could not propose the ritual.');
+                      return;
+                    }
                     setRitualPartner('');
                     router.refresh();
+                    toast.success('Ritual proposed.');
                   })
                 }
               >
@@ -355,10 +389,15 @@ export function MutualClient({
                 </span>
                 <button
                   type="button"
-                  className="text-xs text-ink-faint hover:text-rose-deep"
+                  className="rounded-pill px-2 py-1 text-xs text-ink-faint hover:text-rose-deep focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-terracotta"
+                  disabled={pending}
                   onClick={() =>
                     startTransition(async () => {
-                      await withdrawIntent(intent.id);
+                      const result = await withdrawIntent(intent.id);
+                      if (!result.ok) {
+                        toast.error(result.error ?? 'Could not withdraw. Try again.');
+                        return;
+                      }
                       router.refresh();
                     })
                   }

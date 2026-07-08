@@ -3,6 +3,7 @@
 import { useState, useTransition } from 'react';
 import { Button } from '@/components/ui/Button';
 import { Card, SectionHeader } from '@/components/ui/Card';
+import { useToast } from '@/components/ui/Toast';
 import { requestToJoin } from '@/lib/actions/invites';
 import { formatDateTime } from '@/lib/format';
 
@@ -19,6 +20,7 @@ export interface OpenTableRow {
 export function OpenTables({ tables }: { tables: OpenTableRow[] }) {
   const [requested, setRequested] = useState<Set<string>>(new Set());
   const [pending, startTransition] = useTransition();
+  const toast = useToast();
 
   if (tables.length === 0) return null;
 
@@ -63,6 +65,9 @@ export function OpenTables({ tables }: { tables: OpenTableRow[] }) {
                           setRequested((current) =>
                             new Set(current).add(table.event_id),
                           );
+                          toast.success('Asked to join. The host will get back to you.');
+                        } else {
+                          toast.error(result.error ?? 'Could not send your request.');
                         }
                       })
                     }

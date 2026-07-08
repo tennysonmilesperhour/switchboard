@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { Avatar } from '@/components/ui/Avatar';
+import { useToast } from '@/components/ui/Toast';
 import { logEnergy, type Feeling } from '@/lib/actions/energy';
 import { respondToIntroduction } from '@/lib/actions/matchmaker';
 import { respondToRitual } from '@/lib/actions/rituals';
@@ -20,10 +21,15 @@ export function EnergyPrompt({
 }) {
   const [done, setDone] = useState(false);
   const [pending, startTransition] = useTransition();
+  const toast = useToast();
 
   function log(feeling: Feeling) {
     startTransition(async () => {
-      await logEnergy(eventId, feeling);
+      const result = await logEnergy(eventId, feeling);
+      if (!result.ok) {
+        toast.error('Could not save that. Try again.');
+        return;
+      }
       setDone(true);
     });
   }
@@ -80,6 +86,7 @@ export interface ProposalCardData {
 export function MatchmakerCard({ proposal }: { proposal: ProposalCardData }) {
   const [pending, startTransition] = useTransition();
   const router = useRouter();
+  const toast = useToast();
 
   if (proposal.status === 'matched') {
     return (
@@ -133,7 +140,11 @@ export function MatchmakerCard({ proposal }: { proposal: ProposalCardData }) {
           disabled={pending}
           onClick={() =>
             startTransition(async () => {
-              await respondToIntroduction(proposal.id, true);
+              const result = await respondToIntroduction(proposal.id, true);
+              if (!result.ok) {
+                toast.error(result.error ?? 'Could not respond. Try again.');
+                return;
+              }
               router.refresh();
             })
           }
@@ -146,7 +157,11 @@ export function MatchmakerCard({ proposal }: { proposal: ProposalCardData }) {
           disabled={pending}
           onClick={() =>
             startTransition(async () => {
-              await respondToIntroduction(proposal.id, false);
+              const result = await respondToIntroduction(proposal.id, false);
+              if (!result.ok) {
+                toast.error(result.error ?? 'Could not respond. Try again.');
+                return;
+              }
               router.refresh();
             })
           }
@@ -173,6 +188,7 @@ export interface RitualCardData {
 export function RitualCard({ ritual }: { ritual: RitualCardData }) {
   const [pending, startTransition] = useTransition();
   const router = useRouter();
+  const toast = useToast();
 
   if (ritual.status === 'proposed' && !ritual.isMine) {
     return (
@@ -190,8 +206,12 @@ export function RitualCard({ ritual }: { ritual: RitualCardData }) {
             disabled={pending}
             onClick={() =>
               startTransition(async () => {
-                await respondToRitual(ritual.id, true);
-                router.refresh();
+                try {
+                  await respondToRitual(ritual.id, true);
+                  router.refresh();
+                } catch {
+                  toast.error('Could not respond. Try again.');
+                }
               })
             }
           >
@@ -203,8 +223,12 @@ export function RitualCard({ ritual }: { ritual: RitualCardData }) {
             disabled={pending}
             onClick={() =>
               startTransition(async () => {
-                await respondToRitual(ritual.id, false);
-                router.refresh();
+                try {
+                  await respondToRitual(ritual.id, false);
+                  router.refresh();
+                } catch {
+                  toast.error('Could not respond. Try again.');
+                }
               })
             }
           >

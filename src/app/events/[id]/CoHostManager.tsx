@@ -4,6 +4,8 @@ import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/Button';
 import { Avatar } from '@/components/ui/Avatar';
+import { useToast } from '@/components/ui/Toast';
+import { useConfirm } from '@/components/ui/ConfirmDialog';
 import { addCoHost, removeCoHost } from '@/lib/actions/events';
 
 interface CoHostManagerProps {
@@ -17,6 +19,26 @@ export function CoHostManager({ eventId, cohosts }: CoHostManagerProps) {
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
   const router = useRouter();
+  const toast = useToast();
+  const confirm = useConfirm();
+
+  async function remove(cohost: { id: string; name: string }) {
+    const ok = await confirm({
+      title: `Remove ${cohost.name} as co-host?`,
+      body: 'They’ll lose host powers on this plan. You can add them again later.',
+      confirmLabel: 'Remove',
+      danger: true,
+    });
+    if (!ok) return;
+    startTransition(async () => {
+      try {
+        await removeCoHost(eventId, cohost.id);
+        router.refresh();
+      } catch {
+        toast.error('Could not remove that co-host. Try again.');
+      }
+    });
+  }
 
   function add(e: React.FormEvent) {
     e.preventDefault();
@@ -53,14 +75,9 @@ export function CoHostManager({ eventId, cohosts }: CoHostManagerProps) {
               <span className="flex-1 font-medium">{cohost.name}</span>
               <button
                 type="button"
-                onClick={() =>
-                  startTransition(async () => {
-                    await removeCoHost(eventId, cohost.id);
-                    router.refresh();
-                  })
-                }
+                onClick={() => remove(cohost)}
                 disabled={pending}
-                className="text-xs text-ink-faint hover:text-rose-deep"
+                className="rounded-pill px-2 py-1 text-xs text-ink-faint hover:text-rose-deep focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-terracotta"
               >
                 remove
               </button>
