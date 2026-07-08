@@ -52,6 +52,20 @@ async function remindOneEvent(
   event: SwitchboardEvent,
   kind: ReminderKind,
 ): Promise<void> {
+  // Claim this reminder window atomically FIRST. Two overlapping cron runs can
+  // both see a null marker; the conditional `is null` update lets exactly one
+  // win, and the loser affects no rows and bails, so a reminder never fires
+  // twice.
+  const column =
+    kind === 'soon' ? 'reminded_soon_at' : 'reminded_day_before_at';
+  const { data: claimed } = await admin
+    .from('events')
+    .update({ [column]: new Date().toISOString() })
+    .eq('id', event.id)
+    .is(column, null)
+    .select('id');
+  if (!claimed || claimed.length === 0) return;
+
   const { data: invites } = await admin
     .from('invites')
     .select('invitee_id, guest_name, guest_contact, guest_token, status')
@@ -122,14 +136,7 @@ async function remindOneEvent(
   if (attendeeEmails.length + nudgeEmails.length > 0) {
     await sendEmails([...attendeeEmails, ...nudgeEmails]);
   }
-
-  // Mark the window so this reminder never fires twice.
-  const column =
-    kind === 'soon' ? 'reminded_soon_at' : 'reminded_day_before_at';
-  await admin
-    .from('events')
-    .update({ [column]: new Date().toISOString() })
-    .eq('id', event.id);
+  // The window was already marked (claimed) at the top of this function.
 }
 
 /** Sweep every upcoming event and fire any reminders that are due. */

@@ -37,11 +37,18 @@ export async function respondToRitual(
   accept: boolean,
 ): Promise<void> {
   const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return;
+  // Only the invited partner may accept/decline - the proposer cannot
+  // self-accept their own proposal.
   await supabase
     .from('rituals')
     .update({ status: accept ? 'active' : 'ended' })
     .eq('id', ritualId)
-    .eq('status', 'proposed');
+    .eq('status', 'proposed')
+    .eq('partner_id', user.id);
   revalidatePath('/mutual');
   revalidatePath('/');
 }

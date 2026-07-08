@@ -13,6 +13,45 @@ export interface RespondResult {
   error?: string;
 }
 
+type AnswerClient = ReturnType<typeof createAdminClient>;
+
+/**
+ * Persist RSVP answers for an accepted invite, keeping only answers whose
+ * question actually belongs to this event (M1: don't trust client-supplied
+ * question_ids). Called only once an invite is confirmed accepted (M2: never
+ * store answers for a declined or waitlisted RSVP).
+ */
+async function saveInviteAnswers(
+  client: AnswerClient,
+  inviteId: string,
+  eventId: string,
+  answers: Record<string, string>,
+): Promise<void> {
+  const trimmed = Object.entries(answers)
+    .map(([question_id, answer]) => ({ question_id, answer: answer.trim() }))
+    .filter((row) => row.answer.length > 0);
+  if (trimmed.length === 0) return;
+
+  const { data: questions } = await client
+    .from('event_questions')
+    .select('id')
+    .eq('event_id', eventId);
+  const valid = new Set((questions ?? []).map((q) => q.id));
+
+  const rows = trimmed
+    .filter((row) => valid.has(row.question_id))
+    .map((row) => ({
+      invite_id: inviteId,
+      question_id: row.question_id,
+      answer: row.answer,
+    }));
+  if (rows.length === 0) return;
+
+  await client
+    .from('invite_answers')
+    .upsert(rows, { onConflict: 'invite_id,question_id' });
+}
+
 export async function respondToInvite(
   inviteId: string,
   accept: boolean,
@@ -24,20 +63,6 @@ export async function respondToInvite(
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) return { ok: false, error: 'Not signed in' };
-
-  // Save any RSVP question answers first (RLS lets an invitee write their own).
-  const answerRows = Object.entries(answers)
-    .map(([question_id, answer]) => ({
-      invite_id: inviteId,
-      question_id,
-      answer: answer.trim(),
-    }))
-    .filter((row) => row.answer.length > 0);
-  if (accept && answerRows.length > 0) {
-    await supabase
-      .from('invite_answers')
-      .upsert(answerRows, { onConflict: 'invite_id,question_id' });
-  }
 
   // Atomic capacity-checked transition, then a cascade tick.
   const { data, error } = await supabase.rpc('respond_to_invite', {
@@ -54,6 +79,10 @@ export async function respondToInvite(
     .single();
 
   if (invite) {
+    if (data === 'accepted') {
+      // Only persist answers once accepted, and only for this event's questions.
+      await saveInviteAnswers(supabase, inviteId, invite.event_id, answers);
+    }
     await advanceEventCascade(invite.event_id);
 
     if (data === 'accepted') {
@@ -153,20 +182,6 @@ export async function respondToGuestInvite(
     return { ok: false, outcome: invite.status, error: 'This invitation is no longer active' };
   }
 
-  // Persist RSVP answers (service role - guests have no auth session).
-  const answerRows = Object.entries(answers)
-    .map(([question_id, answer]) => ({
-      invite_id: invite.id,
-      question_id,
-      answer: answer.trim(),
-    }))
-    .filter((row) => row.answer.length > 0);
-  if (accept && answerRows.length > 0) {
-    await admin
-      .from('invite_answers')
-      .upsert(answerRows, { onConflict: 'invite_id,question_id' });
-  }
-
   // Atomic capacity-checked accept/decline under a row lock, keyed by the guest
   // token. Shares the event-row lock with respond_to_invite, so registered and
   // guest accepts serialize and capacity can never be exceeded.
@@ -175,6 +190,11 @@ export async function respondToGuestInvite(
     p_accept: accept,
   });
   if (error) return { ok: false, error: error.message };
+
+  if (outcome === 'accepted') {
+    // Only persist answers once accepted, and only for this event's questions.
+    await saveInviteAnswers(admin, invite.id, invite.event_id, answers);
+  }
 
   await advanceEventCascade(invite.event_id);
 
