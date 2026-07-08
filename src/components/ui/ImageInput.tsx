@@ -1,21 +1,19 @@
 'use client';
 
 import { useRef, useState } from 'react';
-import { createClient } from '@/lib/supabase/client';
 import { Icon } from '@/components/ui/Icon';
-
-const MAX_UPLOAD_BYTES = 5 * 1024 * 1024; // 5MB
+import { MAX_UPLOAD_BYTES, uploadImage } from '@/lib/client/upload-image';
 
 export interface ImageInputProps {
   /** Current image URL (uploaded public URL or a pasted link), or '' for none. */
   value: string;
   onChange: (url: string) => void;
-  /** Owner uid — uploads land under `<userId>/…` to satisfy storage RLS. */
+  /** Owner uid. Kept for call-site clarity; the upload route verifies the session. */
   userId: string;
   /** Filename prefix inside the bucket, e.g. `event-cover` or `capsule`. */
   pathPrefix: string;
   /** Storage bucket. Defaults to the shared `media` bucket. */
-  bucket?: string;
+  bucket?: 'media' | 'avatars' | 'covers';
   /** Preview aspect ratio. */
   aspect?: 'video' | 'square';
   /** Accessible label for the picker (e.g. "cover image"). */
@@ -34,14 +32,12 @@ export interface ImageInputProps {
 export function ImageInput({
   value,
   onChange,
-  userId,
   pathPrefix,
   bucket = 'media',
   aspect = 'video',
   label = 'image',
   className,
 }: ImageInputProps) {
-  const supabase = useRef(createClient()).current;
   const uploadInput = useRef<HTMLInputElement>(null);
   const cameraInput = useRef<HTMLInputElement>(null);
 
@@ -62,18 +58,13 @@ export function ImageInput({
     }
     setUploading(true);
     try {
-      const ext = (file.name.split('.').pop() || 'jpg')
-        .toLowerCase()
-        .replace(/[^a-z0-9]/g, '');
-      const path = `${userId}/${pathPrefix}-${Date.now()}.${ext || 'jpg'}`;
-      const { error: uploadError } = await supabase.storage
-        .from(bucket)
-        .upload(path, file, { upsert: true, cacheControl: '3600' });
-      if (uploadError) throw uploadError;
-      const { data } = supabase.storage.from(bucket).getPublicUrl(path);
-      onChange(`${data.publicUrl}?v=${Date.now()}`);
-    } catch {
-      setError('Upload failed. Check your connection and try again.');
+      onChange(await uploadImage({ file, bucket, pathPrefix }));
+    } catch (uploadError) {
+      setError(
+        uploadError instanceof Error
+          ? uploadError.message
+          : 'Upload failed. Check your connection and try again.',
+      );
     } finally {
       setUploading(false);
     }

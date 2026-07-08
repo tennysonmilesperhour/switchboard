@@ -2,16 +2,15 @@
 
 import { useActionState, useRef, useState } from 'react';
 import Link from 'next/link';
-import { createClient } from '@/lib/supabase/client';
 import { Avatar } from '@/components/ui/Avatar';
 import { Button } from '@/components/ui/Button';
 import { Icon } from '@/components/ui/Icon';
 import { SectionHeader } from '@/components/ui/Card';
 import { SOCIAL_PLATFORMS, SOCIAL_BY_ID } from '@/lib/socials';
 import { updateProfileDetails, type ActionResult } from '@/lib/actions/profile';
+import { MAX_UPLOAD_BYTES, uploadImage } from '@/lib/client/upload-image';
 import type { ProfileLink, ProfileSocial } from '@/lib/types';
 
-const MAX_UPLOAD_BYTES = 5 * 1024 * 1024; // 5MB
 const BIO_MAX = 600;
 
 export interface ProfileEditInitial {
@@ -36,8 +35,6 @@ const inputCls =
 const labelCls = 'text-sm font-medium text-ink';
 
 export function ProfileEditForm(props: ProfileEditInitial) {
-  const supabase = useRef(createClient()).current;
-
   const [avatarUrl, setAvatarUrl] = useState(props.avatarUrl);
   const [coverUrl, setCoverUrl] = useState(props.coverUrl);
   const [handle, setHandle] = useState(props.handle);
@@ -71,18 +68,15 @@ export function ProfileEditForm(props: ProfileEditInitial) {
     setUploading(kind);
     try {
       const bucket = kind === 'avatar' ? 'avatars' : 'covers';
-      const ext = (file.name.split('.').pop() || 'jpg').toLowerCase().replace(/[^a-z0-9]/g, '');
-      const path = `${props.userId}/${kind}-${Date.now()}.${ext || 'jpg'}`;
-      const { error } = await supabase.storage
-        .from(bucket)
-        .upload(path, file, { upsert: true, cacheControl: '3600' });
-      if (error) throw error;
-      const { data } = supabase.storage.from(bucket).getPublicUrl(path);
-      const url = `${data.publicUrl}?v=${Date.now()}`;
+      const url = await uploadImage({ file, bucket, pathPrefix: kind });
       if (kind === 'avatar') setAvatarUrl(url);
       else setCoverUrl(url);
-    } catch {
-      setUploadError('Upload failed. Check your connection and try again.');
+    } catch (uploadError) {
+      setUploadError(
+        uploadError instanceof Error
+          ? uploadError.message
+          : 'Upload failed. Check your connection and try again.',
+      );
     } finally {
       setUploading(null);
     }
