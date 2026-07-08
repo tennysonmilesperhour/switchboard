@@ -53,20 +53,20 @@ export async function advanceEventCascade(eventId: string): Promise<void> {
     toEngineConfig(event),
     new Date(),
   );
+  if (updates.length === 0) return;
 
-  for (const update of updates) {
-    await admin
-      .from('invites')
-      .update({
-        status: update.status,
-        ...(update.sentAt ? { sent_at: update.sentAt } : {}),
-      })
-      .eq('id', update.id);
-  }
+  // Apply every transition atomically under the event-row lock, guarded by each
+  // invite's expected predecessor status and a capacity re-check. Returns the
+  // invites actually sent, so we notify exactly those (a 'sent' is skipped if
+  // the event filled between our snapshot read and the locked apply).
+  const { data: sentRows } = await admin.rpc('apply_cascade_updates', {
+    p_event: eventId,
+    p_updates: updates,
+  });
 
   // Notify newly-sent invitees (registered users only; guests get links).
   const sentIds = new Set(
-    updates.filter((u) => u.status === 'sent').map((u) => u.id),
+    ((sentRows as { sent_id: string }[] | null) ?? []).map((row) => row.sent_id),
   );
   const notifyUsers = invites
     .filter((i) => sentIds.has(i.id) && i.invitee_id)
