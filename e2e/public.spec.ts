@@ -11,7 +11,7 @@ test.describe('public surface', () => {
     await page.goto('/welcome');
     await page.getByRole('link', { name: 'Create account' }).click();
     await expect(page).toHaveURL(/\/login/);
-    await expect(page.getByLabel('Username')).toBeVisible();
+    await expect(page.getByLabel('Email or username')).toBeVisible();
   });
 
   test('unauthenticated app routes redirect to welcome', async ({ page }) => {

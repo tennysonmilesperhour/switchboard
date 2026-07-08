@@ -1,9 +1,13 @@
 'use server';
 
 import { createAdminClient, hasAdminCredentials } from '@/lib/supabase/admin';
+import { createClient } from '@/lib/supabase/server';
 import {
   PASSWORD_MIN_LENGTH,
+  emailToHandleCandidate,
+  isEmailIdentifier,
   isValidUsername,
+  normalizeIdentifier,
   normalizeUsername,
   usernameToAuthEmail,
 } from '@/lib/auth-identity';
@@ -12,10 +16,101 @@ export interface AuthActionResult {
   ok: boolean;
   error?: string;
   username?: string;
+  identifier?: string;
 }
 
 function authError(message: string): AuthActionResult {
   return { ok: false, error: message };
+}
+
+async function uniqueHandle(baseHandle: string): Promise<string | null> {
+  const admin = createAdminClient();
+  const base = normalizeUsername(baseHandle).slice(0, 24);
+  for (let attempt = 0; attempt < 50; attempt += 1) {
+    const suffix = attempt === 0 ? '' : String(attempt + 1);
+    const candidate = `${base.slice(0, 24 - suffix.length)}${suffix}`;
+    if (!isValidUsername(candidate)) continue;
+
+    const { data } = await admin
+      .from('profiles')
+      .select('id')
+      .eq('handle', candidate)
+      .maybeSingle();
+    if (!data) return candidate;
+  }
+  return null;
+}
+
+async function resolveIdentifierEmails(identifier: string): Promise<string[]> {
+  const normalized = normalizeIdentifier(identifier);
+  if (isEmailIdentifier(normalized)) {
+    const emails = [normalized];
+    if (hasAdminCredentials()) {
+      const admin = createAdminClient();
+      const { data: profile } = await admin
+        .from('profiles')
+        .select('id')
+        .ilike('contact_email', normalized)
+        .limit(1)
+        .maybeSingle();
+
+      if (profile?.id) {
+        const { data } = await admin.auth.admin.getUserById(profile.id);
+        if (data.user?.email && !emails.includes(data.user.email)) {
+          emails.push(data.user.email);
+        }
+      }
+    }
+    return emails;
+  }
+  if (!isValidUsername(normalized)) throw new Error('invalid_identifier');
+
+  if (hasAdminCredentials()) {
+    const admin = createAdminClient();
+    const { data: profile } = await admin
+      .from('profiles')
+      .select('id')
+      .eq('handle', normalized)
+      .maybeSingle();
+
+    if (profile?.id) {
+      const { data } = await admin.auth.admin.getUserById(profile.id);
+      if (data.user?.email) return [data.user.email];
+    }
+  }
+
+  return [usernameToAuthEmail(normalized)];
+}
+
+export async function signInWithPasswordIdentifier({
+  identifier,
+  password,
+}: {
+  identifier: string;
+  password: string;
+}): Promise<AuthActionResult> {
+  const normalized = normalizeIdentifier(identifier);
+  if (!normalized || password.length === 0) {
+    return authError('Enter your email or username and password.');
+  }
+
+  let emails: string[];
+  try {
+    emails = await resolveIdentifierEmails(normalized);
+  } catch {
+    return authError('That email, username, or password did not work.');
+  }
+
+  const supabase = await createClient();
+  for (const email of emails) {
+    const { error } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+    });
+    if (!error) return { ok: true };
+  }
+
+  return authError('That email, username, or password did not work.');
 }
 
 export async function createPasswordAccount(
@@ -23,12 +118,12 @@ export async function createPasswordAccount(
   formData: FormData,
 ): Promise<AuthActionResult> {
   const displayName = String(formData.get('display_name') ?? '').trim();
-  const username = normalizeUsername(String(formData.get('username') ?? ''));
+  const identifier = normalizeIdentifier(String(formData.get('identifier') ?? ''));
   const password = String(formData.get('password') ?? '');
 
   if (!displayName) return authError('Add your name.');
-  if (!isValidUsername(username)) {
-    return authError('Username: 3-24 lowercase letters, numbers, or underscores.');
+  if (!isEmailIdentifier(identifier) && !isValidUsername(identifier)) {
+    return authError('Use a valid email or a username with 3-24 letters, numbers, or underscores.');
   }
   if (password.length < PASSWORD_MIN_LENGTH) {
     return authError(`Password must be at least ${PASSWORD_MIN_LENGTH} characters.`);
@@ -39,7 +134,14 @@ export async function createPasswordAccount(
   }
 
   const admin = createAdminClient();
-  const email = usernameToAuthEmail(username);
+  const email = isEmailIdentifier(identifier)
+    ? identifier
+    : usernameToAuthEmail(identifier);
+  const username = isEmailIdentifier(identifier)
+    ? await uniqueHandle(emailToHandleCandidate(identifier))
+    : normalizeUsername(identifier);
+
+  if (!username) return authError('Could not create a unique username for that email.');
 
   const { data: existingProfile } = await admin
     .from('profiles')
@@ -61,7 +163,7 @@ export async function createPasswordAccount(
 
   if (createError) {
     if (/already|registered|exists/i.test(createError.message)) {
-      return authError('That username is already taken.');
+      return authError('That email or username is already taken.');
     }
     return authError(createError.message);
   }
@@ -74,6 +176,7 @@ export async function createPasswordAccount(
     .update({
       display_name: displayName.slice(0, 80),
       handle: username,
+      contact_email: isEmailIdentifier(identifier) ? email : null,
     })
     .eq('id', userId);
 
@@ -85,5 +188,5 @@ export async function createPasswordAccount(
     return authError('Could not finish creating your profile.');
   }
 
-  return { ok: true, username };
+  return { ok: true, username, identifier: isEmailIdentifier(identifier) ? email : username };
 }

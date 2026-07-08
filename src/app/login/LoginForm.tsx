@@ -2,11 +2,14 @@
 
 import { useActionState, useState } from 'react';
 import { Button } from '@/components/ui/Button';
-import { createPasswordAccount, type AuthActionResult } from '@/lib/actions/auth';
+import {
+  createPasswordAccount,
+  signInWithPasswordIdentifier,
+  type AuthActionResult,
+} from '@/lib/actions/auth';
 import {
   PASSWORD_MIN_LENGTH,
-  normalizeUsername,
-  usernameToAuthEmail,
+  normalizeIdentifier,
 } from '@/lib/auth-identity';
 import { createClient } from '@/lib/supabase/client';
 
@@ -17,7 +20,7 @@ const initialCreateState: AuthActionResult = { ok: false };
 
 export function LoginForm() {
   const [mode, setMode] = useState<Mode>('signin');
-  const [username, setUsername] = useState('');
+  const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
   const [status, setStatus] = useState<Status>('idle');
   const [message, setMessage] = useState('');
@@ -31,23 +34,13 @@ export function LoginForm() {
     setStatus('submitting');
     setMessage('');
 
-    let email: string;
-    try {
-      email = usernameToAuthEmail(username);
-    } catch {
-      setMessage('Enter a valid username.');
-      setStatus('error');
-      return;
-    }
-
-    const supabase = createClient();
-    const { error } = await supabase.auth.signInWithPassword({
-      email,
+    const result = await signInWithPasswordIdentifier({
+      identifier,
       password,
     });
 
-    if (error) {
-      setMessage('That username or password did not work.');
+    if (!result.ok) {
+      setMessage(result.error ?? 'That email, username, or password did not work.');
       setStatus('error');
       return;
     }
@@ -95,24 +88,19 @@ export function LoginForm() {
       {mode === 'signin' ? (
         <form onSubmit={signIn} className="space-y-3">
           <label htmlFor="username" className="sr-only">
-            Username
+            Email or username
           </label>
-          <div className="flex items-center rounded-card border border-line bg-card focus-within:border-terracotta transition-colors">
-            <span className="pl-4 text-ink-faint">@</span>
-            <input
-              id="username"
-              name="username"
-              type="text"
-              required
-              autoComplete="username"
-              pattern="[a-z0-9_]{3,24}"
-              title="Use 3-24 lowercase letters, numbers, or underscores."
-              placeholder="username"
-              value={username}
-              onChange={(e) => setUsername(normalizeUsername(e.target.value))}
-              className="min-w-0 flex-1 bg-transparent px-1.5 py-3.5 text-ink placeholder:text-ink-faint outline-none"
-            />
-          </div>
+          <input
+            id="username"
+            name="identifier"
+            type="text"
+            required
+            autoComplete="username"
+            placeholder="email or username"
+            value={identifier}
+            onChange={(e) => setIdentifier(normalizeIdentifier(e.target.value))}
+            className="w-full rounded-card border border-line bg-card px-4 py-3.5 text-ink placeholder:text-ink-faint outline-none focus:border-terracotta transition-colors"
+          />
 
           <label htmlFor="password" className="sr-only">
             Password
@@ -152,7 +140,7 @@ export function LoginForm() {
         <div className="rounded-card bg-sage-soft p-5 animate-rise">
           <p className="font-medium text-sage-deep">Account created.</p>
           <p className="mt-1 text-sm text-ink-soft">
-            Sign in as <strong>@{createState.username}</strong> with the password
+            Sign in as <strong>{createState.identifier ?? `@${createState.username}`}</strong> with the password
             you just chose.
           </p>
           <Button
@@ -160,7 +148,7 @@ export function LoginForm() {
             size="lg"
             className="mt-4 w-full"
             onClick={() => {
-              setUsername(createState.username ?? '');
+              setIdentifier(createState.identifier ?? createState.username ?? '');
               setPassword('');
               setMessage('');
               setStatus('idle');
@@ -185,26 +173,22 @@ export function LoginForm() {
             className="w-full rounded-card border border-line bg-card px-4 py-3.5 text-ink placeholder:text-ink-faint outline-none focus:border-terracotta transition-colors"
           />
 
-          <label htmlFor="create_username" className="sr-only">
-            Username
+          <label htmlFor="create_identifier" className="sr-only">
+            Email or username
           </label>
-          <div className="flex items-center rounded-card border border-line bg-card focus-within:border-terracotta transition-colors">
-            <span className="pl-4 text-ink-faint">@</span>
-            <input
-              id="create_username"
-              name="username"
-              type="text"
-              required
-              autoComplete="username"
-              pattern="[a-z0-9_]{3,24}"
-              title="Use 3-24 lowercase letters, numbers, or underscores."
-              placeholder="username"
-              onChange={(e) => {
-                e.currentTarget.value = normalizeUsername(e.currentTarget.value);
-              }}
-              className="min-w-0 flex-1 bg-transparent px-1.5 py-3.5 text-ink placeholder:text-ink-faint outline-none"
-            />
-          </div>
+          <input
+            id="create_identifier"
+            name="identifier"
+            type="text"
+            required
+            autoComplete="username"
+            title="Use an email address or a username with 3-24 lowercase letters, numbers, or underscores."
+            placeholder="email or username"
+            onChange={(e) => {
+              e.currentTarget.value = normalizeIdentifier(e.currentTarget.value);
+            }}
+            className="w-full rounded-card border border-line bg-card px-4 py-3.5 text-ink placeholder:text-ink-faint outline-none focus:border-terracotta transition-colors"
+          />
 
           <label htmlFor="create_password" className="sr-only">
             Password
