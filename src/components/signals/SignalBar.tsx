@@ -1,10 +1,10 @@
 'use client';
 
-import { useState, useTransition } from 'react';
+import { useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { Chip } from '@/components/ui/Chip';
 import { Card } from '@/components/ui/Card';
-import { clearSignal, setSignal } from '@/lib/actions/signals';
+import { addSignal, clearSignal, removeSignal, setSignalsAudience } from '@/lib/actions/signals';
 import { formatRelative } from '@/lib/format';
 import { SIGNAL_PRESETS } from '@/lib/types';
 
@@ -22,105 +22,113 @@ interface ActiveSignal {
 }
 
 interface SignalBarProps {
-  active: ActiveSignal | null;
+  active: ActiveSignal[];
   circles: CircleOption[];
 }
 
-/** One-tap availability from the home screen. */
+/** One-tap availability from the home screen. Toggle as many signals on as you like. */
 export function SignalBar({ active, circles }: SignalBarProps) {
-  const [choosing, setChoosing] = useState<{ emoji: string; label: string } | null>(null);
   const [pending, startTransition] = useTransition();
   const router = useRouter();
 
-  function activate(circleId: string | null) {
-    const chosen = choosing;
-    if (!chosen) return;
-    setChoosing(null);
+  const activeByLabel = new Map(active.map((s) => [s.label, s]));
+  const anyActive = active.length > 0;
+
+  // Every live signal shares one audience; fall back to "everyone" when nothing is on.
+  const audience = anyActive ? active[0].circle_id : null;
+
+  // Soonest expiry drives the shared "ends" hint.
+  const nextExpiry = anyActive
+    ? active.reduce((soonest, s) => (s.expires_at < soonest ? s.expires_at : soonest), active[0].expires_at)
+    : null;
+
+  function toggle(preset: { emoji: string; label: string }) {
     startTransition(async () => {
-      await setSignal(chosen.emoji, chosen.label, circleId);
+      if (activeByLabel.has(preset.label)) {
+        await removeSignal(preset.label);
+      } else {
+        await addSignal(preset.emoji, preset.label, audience);
+      }
       router.refresh();
     });
   }
 
-  if (active) {
-    return (
-      <Card tone="sage" className="animate-rise">
-        <div className="flex items-center gap-3">
-          <span className="text-2xl" aria-hidden>{active.emoji}</span>
-          <div className="flex-1">
-            <p className="font-bold text-sage-deep">{active.label}</p>
-            <p className="text-xs text-ink-soft">
-              Visible to{' '}
-              {active.circle_id
-                ? circles.find((c) => c.id === active.circle_id)?.name ?? 'a circle'
-                : 'all your connections'}{' '}
-              · ends {formatRelative(active.expires_at)}
-            </p>
-          </div>
-          <button
-            type="button"
-            disabled={pending}
-            onClick={() =>
-              startTransition(async () => {
-                await clearSignal();
-                router.refresh();
-              })
-            }
-            className="text-xs font-medium text-ink-faint hover:text-ink rounded-pill border border-line px-3 py-1.5 bg-card"
-          >
-            Turn off
-          </button>
-        </div>
-      </Card>
-    );
+  function chooseAudience(circleId: string | null) {
+    startTransition(async () => {
+      await setSignalsAudience(circleId);
+      router.refresh();
+    });
   }
 
   return (
-    <div>
-      <div className="flex gap-2 overflow-x-auto pb-1 -mx-4 px-4 [scrollbar-width:none]">
+    <div className="space-y-3">
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
         {SIGNAL_PRESETS.map((signal) => (
           <Chip
             key={signal.label}
             emoji={signal.emoji}
-            selected={choosing?.label === signal.label}
-            onClick={() =>
-              setChoosing(
-                choosing?.label === signal.label
-                  ? null
-                  : { emoji: signal.emoji, label: signal.label },
-              )
-            }
-            className="whitespace-nowrap shrink-0"
+            selected={activeByLabel.has(signal.label)}
+            disabled={pending}
+            onClick={() => toggle(signal)}
+            className="w-full justify-center whitespace-nowrap"
           >
             {signal.label}
           </Chip>
         ))}
       </div>
-      {choosing && (
-        <Card className="mt-2 animate-rise">
-          <p className="text-sm font-medium mb-2">
-            Who can see “{choosing.emoji} {choosing.label}”?
-          </p>
-          <div className="flex flex-wrap gap-2">
-            <Chip onClick={() => activate(null)} disabled={pending}>
-              Everyone I know
-            </Chip>
-            {circles.map((circle) => (
+
+      {anyActive ? (
+        <Card tone="sage" className="animate-rise">
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+            <p className="text-sm font-medium text-sage-deep">Who can see these?</p>
+            <div className="flex flex-wrap gap-1.5">
               <Chip
-                key={circle.id}
-                emoji={circle.emoji}
-                onClick={() => activate(circle.id)}
+                selected={audience === null}
                 disabled={pending}
+                onClick={() => chooseAudience(null)}
+                className="!px-3 !py-1 text-xs"
               >
-                {circle.name}
+                Everyone I know
               </Chip>
-            ))}
+              {circles.map((circle) => (
+                <Chip
+                  key={circle.id}
+                  emoji={circle.emoji}
+                  selected={audience === circle.id}
+                  disabled={pending}
+                  onClick={() => chooseAudience(circle.id)}
+                  className="!px-3 !py-1 text-xs"
+                >
+                  {circle.name}
+                </Chip>
+              ))}
+            </div>
           </div>
-          <p className="text-xs text-ink-faint mt-2.5">
-            No broadcast, no notification - friends simply notice when they
-            open Switchboard. It turns off by itself in 3 hours.
-          </p>
+          <div className="mt-2.5 flex items-center justify-between gap-3">
+            <p className="text-xs text-ink-faint">
+              No broadcast, no notification - friends simply notice when they open
+              Switchboard.{nextExpiry ? ` Turns off ${formatRelative(nextExpiry)}.` : ''}
+            </p>
+            <button
+              type="button"
+              disabled={pending}
+              onClick={() =>
+                startTransition(async () => {
+                  await clearSignal();
+                  router.refresh();
+                })
+              }
+              className="shrink-0 rounded-pill border border-line bg-card px-3 py-1.5 text-xs font-medium text-ink-faint hover:text-ink"
+            >
+              Turn all off
+            </button>
+          </div>
         </Card>
+      ) : (
+        <p className="text-xs text-ink-faint">
+          Tap any that fit - friends quietly notice when they open Switchboard. Each
+          turns off by itself in 3 hours.
+        </p>
       )}
     </div>
   );
