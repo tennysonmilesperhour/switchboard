@@ -140,6 +140,36 @@ export default async function EventPage({
     myInvite = data;
   }
 
+  // Host's own connections, for one-tap adding to the flow (only needed while
+  // the Add-people panel is shown). Anyone already on the invite list is
+  // filtered out so the picker only offers new people.
+  const addableConnections: Array<{ id: string; name: string; handle: string }> = [];
+  if (canManage && event.status === 'inviting') {
+    const invitedIds = new Set(
+      hostInvites
+        .map((invite) => invite.invitee_id)
+        .filter((invId): invId is string => Boolean(invId)),
+    );
+    const { data: connectionRows } = await supabase
+      .from('connections')
+      .select(
+        'requester_id, addressee_id, requester:profiles!connections_requester_id_fkey(id, display_name, handle), addressee:profiles!connections_addressee_id_fkey(id, display_name, handle)',
+      )
+      .eq('status', 'accepted')
+      .or(`requester_id.eq.${user.id},addressee_id.eq.${user.id}`);
+    for (const row of connectionRows ?? []) {
+      const isRequester = row.requester_id === user.id;
+      const otherRaw = isRequester ? row.addressee : row.requester;
+      const other = Array.isArray(otherRaw) ? otherRaw[0] : otherRaw;
+      if (!other || invitedIds.has(other.id)) continue;
+      addableConnections.push({
+        id: other.id,
+        name: other.display_name ?? 'Friend',
+        handle: other.handle ?? '',
+      });
+    }
+  }
+
   // Accepted attendees (respects visibility settings; admin read + TS check).
   let attendees: Array<{ id: string; name: string }> = [];
   if (canManage || event.show_accepted) {
@@ -546,6 +576,8 @@ export default async function EventPage({
             <CascadeProgress
               invites={hostInvites.filter((invite) => invite.status !== 'requested')}
               mode={event.invite_mode}
+              eventId={event.id}
+              editable={canManage && event.status === 'inviting'}
             />
           </section>
         )}
@@ -566,7 +598,7 @@ export default async function EventPage({
         )}
 
         {canManage && event.status === 'inviting' && (
-          <AddInvitees eventId={event.id} />
+          <AddInvitees eventId={event.id} connections={addableConnections} />
         )}
 
         {canManage && <HostControls event={event} pollDecided={poll?.phase === 'decided'} />}

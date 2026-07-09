@@ -1,4 +1,11 @@
+'use client';
+
+import { useTransition } from 'react';
+import { useRouter } from 'next/navigation';
 import { Avatar } from '@/components/ui/Avatar';
+import { useToast } from '@/components/ui/Toast';
+import { useConfirm } from '@/components/ui/ConfirmDialog';
+import { removeInvite, resendInvite } from '@/lib/actions/events';
 import { formatRelative, formatWindow } from '@/lib/format';
 import { inviteExpiresAt } from '@/lib/engine/cascade';
 import type { Invite } from '@/lib/types';
@@ -6,6 +13,9 @@ import type { Invite } from '@/lib/types';
 interface CascadeProgressProps {
   invites: Array<Invite & { invitee_name: string }>;
   mode: 'individual' | 'group' | 'all_at_once';
+  /** Host/co-host view: show per-invite manage controls. */
+  eventId?: string;
+  editable?: boolean;
 }
 
 const STATUS_META: Record<
@@ -22,8 +32,54 @@ const STATUS_META: Record<
   requested: { label: 'Asked to join', className: 'text-terracotta-deep', dot: 'bg-terracotta' },
 };
 
-/** Host-only live view of how the cascade is flowing. */
-export function CascadeProgress({ invites, mode }: CascadeProgressProps) {
+const REOPENABLE: ReadonlySet<Invite['status']> = new Set([
+  'expired',
+  'declined',
+  'cancelled',
+]);
+
+/** Host-only live view of how the cascade is flowing, with manage controls. */
+export function CascadeProgress({ invites, mode, eventId, editable }: CascadeProgressProps) {
+  const [pending, startTransition] = useTransition();
+  const router = useRouter();
+  const toast = useToast();
+  const confirm = useConfirm();
+
+  function doRemove(invite: Invite & { invitee_name: string }) {
+    if (!eventId) return;
+    startTransition(async () => {
+      const live = invite.status === 'sent' || invite.status === 'queued';
+      const ok = await confirm({
+        title: `Remove ${invite.invitee_name}?`,
+        body: live
+          ? 'They’ll be taken out of the invitation flow.'
+          : 'This clears them from the flow. You can always add them again.',
+        confirmLabel: 'Remove',
+        danger: true,
+      });
+      if (!ok) return;
+      const result = await removeInvite(eventId, invite.id);
+      if (!result.ok) {
+        toast.error(result.error ?? 'Could not remove that invite.');
+        return;
+      }
+      router.refresh();
+    });
+  }
+
+  function doResend(invite: Invite & { invitee_name: string }) {
+    if (!eventId) return;
+    startTransition(async () => {
+      const result = await resendInvite(eventId, invite.id);
+      if (!result.ok) {
+        toast.error(result.error ?? 'Could not resend that invite.');
+        return;
+      }
+      toast.success(`${invite.invitee_name} is back in the flow.`);
+      router.refresh();
+    });
+  }
+
   const ordered = [...invites].sort((a, b) => a.position - b.position);
   const stages = mode === 'group'
     ? [...new Set(ordered.map((i) => i.group_stage))].sort((a, b) => a - b)
@@ -55,6 +111,8 @@ export function CascadeProgress({ invites, mode }: CascadeProgressProps) {
                         sentAt: invite.sent_at,
                       })
                     : null;
+                const canResend = editable && REOPENABLE.has(invite.status);
+                const canRemove = editable && invite.status !== 'accepted';
                 return (
                   <li
                     key={invite.id}
@@ -88,6 +146,27 @@ export function CascadeProgress({ invites, mode }: CascadeProgressProps) {
                           : ''}
                       </span>
                     </span>
+                    {canResend && (
+                      <button
+                        type="button"
+                        disabled={pending}
+                        onClick={() => doResend(invite)}
+                        className="rounded-pill px-2 py-1 text-xs font-semibold text-terracotta-deep hover:bg-terracotta-soft focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-terracotta"
+                      >
+                        Resend
+                      </button>
+                    )}
+                    {canRemove && (
+                      <button
+                        type="button"
+                        disabled={pending}
+                        onClick={() => doRemove(invite)}
+                        aria-label={`Remove ${invite.invitee_name}`}
+                        className="rounded-pill px-2 py-1 text-xs font-semibold text-ink-faint hover:text-rose-deep focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-terracotta"
+                      >
+                        Remove
+                      </button>
+                    )}
                   </li>
                 );
               })}

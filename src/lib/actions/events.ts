@@ -13,6 +13,7 @@ import type { EventTheme, InviteMode } from '@/lib/types';
 import { reportOperationalError } from '@/lib/server/observability';
 import { looksLikeEmail } from '@/lib/server/email';
 import { normalizePhoneNumber } from '@/lib/phone';
+import { parseInviteEntries, type ParsedInviteEntry } from '@/lib/invite-entry';
 
 /** Primary host or a co-host — the people allowed to manage an event. */
 async function canManageEvent(userId: string, eventId: string): Promise<boolean> {
@@ -166,25 +167,74 @@ export async function createEvent(input: CreateEventInput): Promise<CreateEventR
   return { ok: true, eventId };
 }
 
-export interface AddInviteesResult {
+export interface AddPeopleResult {
   ok: boolean;
   error?: string;
   /** How many new invitees were appended to the cascade. */
   added?: number;
-  /** Handles that couldn't be added, each with a short reason. */
-  skipped?: Array<{ handle: string; reason: string }>;
+  /** Entries that couldn't be added, each with a short reason. */
+  skipped?: Array<{ entry: string; reason: string }>;
+}
+
+/** One resolved thing to insert: either a member (profileId) or a guest. */
+type ResolvedAddition =
+  | { kind: 'member'; profileId: string; label: string }
+  | { kind: 'guest'; name: string; contact: string | null; label: string };
+
+/**
+ * Resolve one parsed entry against real profiles. A handle / email / phone that
+ * matches a profile becomes a member invite; anything else becomes a guest
+ * invite (with a shareable link, and an email if we have one).
+ */
+async function resolveAddition(
+  admin: ReturnType<typeof createAdminClient>,
+  parsed: ParsedInviteEntry,
+): Promise<ResolvedAddition | null> {
+  if (parsed.kind === 'handle') {
+    const { data } = await admin
+      .from('profiles')
+      .select('id')
+      .eq('handle', parsed.value)
+      .maybeSingle();
+    if (!data) return null; // unknown handle — reported as skipped
+    return { kind: 'member', profileId: data.id as string, label: parsed.display };
+  }
+  if (parsed.kind === 'email') {
+    const { data } = await admin
+      .from('profiles')
+      .select('id')
+      .ilike('contact_email', parsed.value)
+      .limit(1)
+      .maybeSingle();
+    if (data) return { kind: 'member', profileId: data.id as string, label: parsed.display };
+    return { kind: 'guest', name: parsed.value, contact: parsed.value, label: parsed.display };
+  }
+  if (parsed.kind === 'phone') {
+    const { data } = await admin
+      .from('profiles')
+      .select('id')
+      .eq('contact_phone_normalized', parsed.value)
+      .limit(1)
+      .maybeSingle();
+    if (data) return { kind: 'member', profileId: data.id as string, label: parsed.display };
+    return { kind: 'guest', name: parsed.display, contact: parsed.value, label: parsed.display };
+  }
+  // Plain name — an off-platform guest reachable via their guest link.
+  return { kind: 'guest', name: parsed.value, contact: null, label: parsed.display };
 }
 
 /**
- * Append people to an already-live cascade by handle. New invitees join the
- * back of the line as `queued` and go out when it's their turn (individual
- * mode) or as a fresh trailing wave (group / all-at-once). Host/co-host only,
- * and only while invitations are in motion.
+ * Append people to an already-live cascade. Accepts free-typed entries
+ * (handle / email / phone / name) and explicitly-picked connection ids. New
+ * invitees join the back of the line as `queued` and go out when it's their
+ * turn (individual mode) or as a fresh trailing wave (group / all-at-once).
+ * Host/co-host only, while invitations are in motion. Best-effort delivery
+ * (push to members, email to guests) runs on the cascade tick.
  */
-export async function addInviteesByHandle(
+export async function addPeopleToEvent(
   eventId: string,
-  handles: string[],
-): Promise<AddInviteesResult> {
+  input: { entries?: string[]; profileIds?: string[] } = {},
+): Promise<AddPeopleResult> {
   const supabase = await createClient();
   const {
     data: { user },
@@ -194,29 +244,10 @@ export async function addInviteesByHandle(
     return { ok: false, error: 'Only the host can add people.' };
   }
 
-  // Normalize + de-duplicate the requested handles, keeping only well-formed ones.
-  const cleaned: string[] = [];
-  const seen = new Set<string>();
-  const skipped: Array<{ handle: string; reason: string }> = [];
-  for (const raw of handles) {
-    const handle = maybeHandle(raw);
-    if (!handle) {
-      const shown = String(raw ?? '').trim();
-      if (shown) skipped.push({ handle: shown, reason: 'not a valid handle' });
-      continue;
-    }
-    if (seen.has(handle)) continue;
-    seen.add(handle);
-    cleaned.push(handle);
-  }
-  if (cleaned.length === 0) {
-    return { ok: false, error: 'Add at least one handle.', skipped };
-  }
-
   const admin = createAdminClient();
   const { data: event } = await admin
     .from('events')
-    .select('id, status, invite_mode, capacity')
+    .select('id, status, invite_mode')
     .eq('id', eventId)
     .maybeSingle();
   if (!event) return { ok: false, error: 'Plan not found.' };
@@ -227,57 +258,102 @@ export async function addInviteesByHandle(
     };
   }
 
-  // Resolve handles to real profiles.
-  const { data: profiles } = await admin
-    .from('profiles')
-    .select('id, handle')
-    .in('handle', cleaned);
-  const idByHandle = new Map(
-    (profiles ?? []).map((p) => [p.handle as string, p.id as string]),
+  const skipped: Array<{ entry: string; reason: string }> = [];
+
+  // Resolve free-typed entries into members/guests.
+  const parsedEntries = parseInviteEntries(input.entries ?? []);
+  const resolutions = await Promise.all(
+    parsedEntries.map(async (parsed) => ({
+      parsed,
+      resolved: await resolveAddition(admin, parsed),
+    })),
   );
+  const additions: ResolvedAddition[] = [];
+  for (const { parsed, resolved } of resolutions) {
+    if (!resolved) {
+      skipped.push({ entry: parsed.display, reason: 'no one with that handle' });
+      continue;
+    }
+    additions.push(resolved);
+  }
+
+  // Explicitly-picked connections (by profile id) — validate they exist.
+  const pickedIds = Array.from(new Set(input.profileIds ?? [])).filter(Boolean);
+  if (pickedIds.length > 0) {
+    const { data: picked } = await admin
+      .from('profiles')
+      .select('id, display_name')
+      .in('id', pickedIds);
+    for (const profile of picked ?? []) {
+      additions.push({
+        kind: 'member',
+        profileId: profile.id as string,
+        label: (profile.display_name as string) ?? 'Friend',
+      });
+    }
+  }
+
+  if (additions.length === 0) {
+    return { ok: false, error: 'Add at least one person.', skipped };
+  }
 
   // Existing invites: compute append positions/stage and skip anyone already on.
   const { data: existing } = await admin
     .from('invites')
-    .select('invitee_id, position, group_stage')
+    .select('invitee_id, guest_contact, position, group_stage')
     .eq('event_id', eventId);
   const rows = existing ?? [];
-  const already = new Set(
+  const alreadyMembers = new Set(
     rows.map((r) => r.invitee_id).filter((id): id is string => Boolean(id)),
+  );
+  const alreadyContacts = new Set(
+    rows
+      .map((r) => r.guest_contact)
+      .filter((c): c is string => Boolean(c))
+      .map((c) => c.toLowerCase()),
   );
   let nextPosition = rows.reduce((max, r) => Math.max(max, r.position), -1) + 1;
   const nextStage = rows.reduce((max, r) => Math.max(max, r.group_stage), -1) + 1;
+  // Grouped modes send the additions as one fresh trailing wave; individual
+  // mode ignores stage and orders purely by position.
+  const groupStage = event.invite_mode === 'individual' ? 0 : nextStage;
 
-  const toInsert: Array<{
-    event_id: string;
-    invitee_id: string;
-    position: number;
-    group_stage: number;
-    status: 'queued';
-  }> = [];
-  for (const handle of cleaned) {
-    const profileId = idByHandle.get(handle);
-    if (!profileId) {
-      skipped.push({ handle, reason: 'no one with that handle' });
-      continue;
+  const toInsert: Array<Record<string, unknown>> = [];
+  for (const addition of additions) {
+    if (addition.kind === 'member') {
+      if (addition.profileId === user.id) {
+        skipped.push({ entry: addition.label, reason: 'that’s you' });
+        continue;
+      }
+      if (alreadyMembers.has(addition.profileId)) {
+        skipped.push({ entry: addition.label, reason: 'already invited' });
+        continue;
+      }
+      alreadyMembers.add(addition.profileId);
+      toInsert.push({
+        event_id: eventId,
+        invitee_id: addition.profileId,
+        position: nextPosition++,
+        group_stage: groupStage,
+        status: 'queued',
+      });
+    } else {
+      const contactKey = addition.contact?.toLowerCase() ?? null;
+      if (contactKey && alreadyContacts.has(contactKey)) {
+        skipped.push({ entry: addition.label, reason: 'already invited' });
+        continue;
+      }
+      if (contactKey) alreadyContacts.add(contactKey);
+      toInsert.push({
+        event_id: eventId,
+        invitee_id: null,
+        guest_name: addition.name,
+        guest_contact: addition.contact,
+        position: nextPosition++,
+        group_stage: groupStage,
+        status: 'queued',
+      });
     }
-    if (profileId === user.id) {
-      skipped.push({ handle, reason: 'that’s you' });
-      continue;
-    }
-    if (already.has(profileId)) {
-      skipped.push({ handle, reason: 'already invited' });
-      continue;
-    }
-    already.add(profileId);
-    toInsert.push({
-      event_id: eventId,
-      invitee_id: profileId,
-      position: nextPosition++,
-      // Individual mode ignores stage; grouped modes get one new trailing wave.
-      group_stage: event.invite_mode === 'individual' ? 0 : nextStage,
-      status: 'queued',
-    });
   }
 
   if (toInsert.length === 0) {
@@ -286,7 +362,7 @@ export async function addInviteesByHandle(
 
   const { error } = await admin.from('invites').insert(toInsert);
   if (error) {
-    await reportOperationalError('add-invitees', error, { eventId });
+    await reportOperationalError('add-people', error, { eventId });
     return { ok: false, error: 'Could not add people. Try again.', skipped };
   }
 
@@ -295,11 +371,105 @@ export async function addInviteesByHandle(
   try {
     await advanceEventCascade(eventId);
   } catch (cascadeError) {
-    await reportOperationalError('add-invitees-cascade', cascadeError, { eventId });
+    await reportOperationalError('add-people-cascade', cascadeError, { eventId });
   }
 
   revalidatePath(`/events/${eventId}`);
   return { ok: true, added: toInsert.length, skipped };
+}
+
+/**
+ * Withdraw a not-yet-accepted invite (queued, live, expired, declined, …).
+ * Accepted attendees can't be silently dropped this way. Advances the cascade
+ * so the next person goes out if a live slot just opened. Host/co-host only.
+ */
+export async function removeInvite(
+  eventId: string,
+  inviteId: string,
+): Promise<{ ok: boolean; error?: string }> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false, error: 'Not signed in' };
+  if (!(await canManageEvent(user.id, eventId))) {
+    return { ok: false, error: 'Only the host can manage invites.' };
+  }
+
+  const admin = createAdminClient();
+  const { data: invite } = await admin
+    .from('invites')
+    .select('id, status, event_id')
+    .eq('id', inviteId)
+    .maybeSingle();
+  if (!invite || invite.event_id !== eventId) {
+    return { ok: false, error: 'Invite not found.' };
+  }
+  if (invite.status === 'accepted') {
+    return { ok: false, error: 'They already accepted — cancel the plan or lower capacity instead.' };
+  }
+
+  const { error } = await admin.from('invites').delete().eq('id', inviteId);
+  if (error) return { ok: false, error: 'Could not remove that invite. Try again.' };
+
+  try {
+    await advanceEventCascade(eventId);
+  } catch (cascadeError) {
+    await reportOperationalError('remove-invite-cascade', cascadeError, { eventId });
+  }
+  revalidatePath(`/events/${eventId}`);
+  return { ok: true };
+}
+
+/**
+ * Give a lapsed invite another chance: re-queue someone who expired, declined,
+ * or was cancelled so the cascade can send to them again. Host/co-host only.
+ */
+export async function resendInvite(
+  eventId: string,
+  inviteId: string,
+): Promise<{ ok: boolean; error?: string }> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false, error: 'Not signed in' };
+  if (!(await canManageEvent(user.id, eventId))) {
+    return { ok: false, error: 'Only the host can manage invites.' };
+  }
+
+  const admin = createAdminClient();
+  const { data: invite } = await admin
+    .from('invites')
+    .select('id, status, event_id')
+    .eq('id', inviteId)
+    .maybeSingle();
+  if (!invite || invite.event_id !== eventId) {
+    return { ok: false, error: 'Invite not found.' };
+  }
+  const reopenable = ['expired', 'declined', 'cancelled'];
+  if (!reopenable.includes(invite.status as string)) {
+    return { ok: false, error: 'That invite is still active.' };
+  }
+
+  const { error } = await admin
+    .from('invites')
+    .update({
+      status: 'queued',
+      sent_at: null,
+      responded_at: null,
+      decline_note: null,
+    })
+    .eq('id', inviteId);
+  if (error) return { ok: false, error: 'Could not resend that invite. Try again.' };
+
+  try {
+    await advanceEventCascade(eventId);
+  } catch (cascadeError) {
+    await reportOperationalError('resend-invite-cascade', cascadeError, { eventId });
+  }
+  revalidatePath(`/events/${eventId}`);
+  return { ok: true };
 }
 
 export interface UpdateEventInput {
