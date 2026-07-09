@@ -10,6 +10,8 @@ import {
 } from '@/lib/server/cascade-runner';
 import type { EventTheme, InviteMode } from '@/lib/types';
 import { reportOperationalError } from '@/lib/server/observability';
+import { looksLikeEmail } from '@/lib/server/email';
+import { normalizePhoneNumber } from '@/lib/phone';
 
 /** Primary host or a co-host — the people allowed to manage an event. */
 async function canManageEvent(userId: string, eventId: string): Promise<boolean> {
@@ -68,6 +70,65 @@ function createEventError(error: string): CreateEventResult {
   return { ok: false, error };
 }
 
+const HANDLE_PATTERN = /^@?[a-z0-9_]{3,24}$/;
+
+function maybeHandle(
+  value: string | null | undefined,
+  options: { requireAt?: boolean } = {},
+): string | null {
+  if (options.requireAt && !String(value ?? '').trim().startsWith('@')) return null;
+  const normalized = String(value ?? '').trim().toLowerCase().replace(/^@/, '');
+  return HANDLE_PATTERN.test(normalized) ? normalized : null;
+}
+
+async function resolveInvitees(
+  invitees: WizardInvitee[],
+): Promise<WizardInvitee[]> {
+  const admin = createAdminClient();
+  return Promise.all(
+    invitees.map(async (invitee) => {
+      if (invitee.profileId) return invitee;
+      const contact = invitee.guestContact?.trim() || null;
+      const handle =
+        maybeHandle(contact) ?? maybeHandle(invitee.guestName, { requireAt: true });
+      const phone = normalizePhoneNumber(contact);
+
+      let profileId: string | null = null;
+      if (handle) {
+        const { data } = await admin
+          .from('profiles')
+          .select('id')
+          .eq('handle', handle)
+          .maybeSingle();
+        profileId = data?.id ?? null;
+      } else if (phone) {
+        const { data } = await admin
+          .from('profiles')
+          .select('id')
+          .eq('contact_phone_normalized', phone)
+          .limit(1)
+          .maybeSingle();
+        profileId = data?.id ?? null;
+      } else if (contact && looksLikeEmail(contact)) {
+        const { data } = await admin
+          .from('profiles')
+          .select('id')
+          .ilike('contact_email', contact)
+          .limit(1)
+          .maybeSingle();
+        profileId = data?.id ?? null;
+      }
+
+      if (!profileId) return invitee;
+      return {
+        ...invitee,
+        profileId,
+        guestContact: phone ?? contact ?? undefined,
+      };
+    }),
+  );
+}
+
 export async function createEvent(input: CreateEventInput): Promise<CreateEventResult> {
   const supabase = await createClient();
   const {
@@ -81,8 +142,10 @@ export async function createEvent(input: CreateEventInput): Promise<CreateEventR
     return createEventError('Add at least one person to invite before sending.');
   }
 
+  const invitees = await resolveInvitees(input.invitees);
+
   const { data: eventId, error } = await supabase.rpc('create_event_atomic', {
-    p_input: { ...input, title },
+    p_input: { ...input, title, invitees },
   });
   if (error || typeof eventId !== 'string') {
     await reportOperationalError('event-create', error ?? 'Missing event id', {

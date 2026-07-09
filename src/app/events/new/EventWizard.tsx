@@ -86,7 +86,7 @@ const STEP_META: Array<{ heading: string; sub: string }> = [
   },
   {
     heading: 'Who is coming?',
-    sub: 'Tap to add people, or invite a guest by link.',
+    sub: 'Tap friends, or invite by username, email, or phone.',
   },
   {
     heading: 'Set the order',
@@ -262,14 +262,16 @@ export function EventWizard({
 
   function addGuest() {
     const name = guestName.trim();
-    if (!name) return;
+    const contact = guestContact.trim();
+    if (!name && !contact) return;
+    const label = name || contact.replace(/^@/, '');
     setInvitees((current) => [
       ...current,
       {
-        key: `guest-${name}-${current.length}`,
+        key: `guest-${label}-${current.length}`,
         profileId: null,
-        name,
-        guestContact: guestContact.trim() || undefined,
+        name: label,
+        guestContact: contact || undefined,
         groupStage: 0,
         windowMinutes: suggested.windowMinutes,
       },
@@ -730,19 +732,19 @@ export function EventWizard({
           </ul>
 
           <Card>
-            <p className="text-sm font-bold text-ink mb-2">Invite a guest by link</p>
+            <p className="text-sm font-bold text-ink mb-2">Invite by username, email, or phone</p>
             <div className="space-y-2">
               <input
                 value={guestName}
                 onChange={(e) => setGuestName(e.target.value)}
-                placeholder="Guest name"
+                placeholder="Name (optional)"
                 className="w-full rounded-card border border-line bg-paper px-3.5 py-2.5 text-sm outline-none transition-colors focus:border-terracotta focus:ring-2 focus:ring-terracotta-soft"
               />
               <div className="flex gap-2">
                 <input
                   value={guestContact}
                   onChange={(e) => setGuestContact(e.target.value)}
-                  placeholder="Email or phone (optional)"
+                  placeholder="@username, email, or phone"
                   className="flex-1 rounded-card border border-line bg-paper px-3.5 py-2.5 text-sm outline-none transition-colors focus:border-terracotta focus:ring-2 focus:ring-terracotta-soft"
                 />
                 <Button type="button" variant="secondary" size="sm" onClick={addGuest}>

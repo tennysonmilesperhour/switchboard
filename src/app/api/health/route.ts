@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createAdminClient, hasAdminCredentials } from '@/lib/supabase/admin';
+import { smsEnabled } from '@/lib/server/sms';
 
 export async function GET() {
   const checks = {
@@ -11,6 +12,7 @@ export async function GET() {
     appUrl: Boolean(process.env.NEXT_PUBLIC_APP_URL),
     cron: Boolean(process.env.CRON_SECRET),
     email: Boolean(process.env.RESEND_API_KEY && process.env.EMAIL_FROM),
+    sms: smsEnabled(),
     push: Boolean(
       process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY &&
       process.env.VAPID_PRIVATE_KEY,

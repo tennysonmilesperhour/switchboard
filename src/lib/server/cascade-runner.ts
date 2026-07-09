@@ -6,6 +6,11 @@ import {
 } from '@/lib/engine/cascade';
 import { sendPushToUsers } from '@/lib/server/notify';
 import { sendEmails, looksLikeEmail, appUrl } from '@/lib/server/email';
+import {
+  guestInviteSmsText,
+  looksLikePhoneNumber,
+  sendSmsMessages,
+} from '@/lib/server/sms';
 import type { Invite, SwitchboardEvent } from '@/lib/types';
 
 function toEngineInvite(invite: Invite): CascadeInvite {
@@ -57,6 +62,21 @@ async function deliverInvitations(
       text: guestInviteText(event, invite.guest_name, invite.guest_token as string),
     }));
   if (guestEmails.length > 0) await sendEmails(guestEmails);
+
+  const smsInvites = invites
+    .filter(
+      (invite) =>
+        sentIds.has(invite.id) &&
+        invite.guest_token &&
+        looksLikePhoneNumber(invite.guest_contact),
+    )
+    .map((invite) => ({
+      to: invite.guest_contact as string,
+      body: invite.invitee_id
+        ? `You are invited to ${event.title} on Switchboard: ${appUrl(`/events/${event.id}`)}`
+        : guestInviteSmsText(event.title, invite.guest_token as string),
+    }));
+  if (smsInvites.length > 0) await sendSmsMessages(smsInvites);
 }
 
 /** Deliver the already-live first wave created by the atomic publish RPC. */
