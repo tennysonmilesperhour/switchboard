@@ -187,14 +187,20 @@ export async function createPasswordAccount(
     const userId = data.user?.id;
     if (!userId) return authError('Could not create that account.');
 
+    // Essential profile fields. Upsert (not update) so signup still succeeds
+    // when the `handle_new_user` trigger has not been applied to the project
+    // and no row was auto-created — otherwise the update would silently affect
+    // zero rows and leave a handle-less account behind.
     const { error: profileError } = await admin
       .from('profiles')
-      .update({
-        display_name: displayName.slice(0, 80),
-        handle: username,
-        contact_email: isEmailIdentifier(identifier) ? email : null,
-      })
-      .eq('id', userId);
+      .upsert(
+        {
+          id: userId,
+          display_name: displayName.slice(0, 80),
+          handle: username,
+        },
+        { onConflict: 'id' },
+      );
 
     if (profileError) {
       await admin.auth.admin.deleteUser(userId);
@@ -202,6 +208,20 @@ export async function createPasswordAccount(
         return authError('That username is already taken.');
       }
       return authError('Could not finish creating your profile.');
+    }
+
+    // contact_email is optional (added by the profile_rich migration) and only
+    // powers reset-by-email lookup. Never let its absence — e.g. an incompletely
+    // migrated project — block account creation; capture it when the column
+    // exists and move on otherwise.
+    if (isEmailIdentifier(identifier)) {
+      const { error: contactError } = await admin
+        .from('profiles')
+        .update({ contact_email: email })
+        .eq('id', userId);
+      if (contactError) {
+        console.warn('[auth:signup:contact_email]', contactError.message);
+      }
     }
 
     return { ok: true, username, identifier: isEmailIdentifier(identifier) ? email : username };
