@@ -8,10 +8,12 @@ import {
   advanceEventCascade,
   notifyCurrentInviteWave,
 } from '@/lib/server/cascade-runner';
+import { sendPushToUsers } from '@/lib/server/notify';
 import type { EventTheme, InviteMode } from '@/lib/types';
 import { reportOperationalError } from '@/lib/server/observability';
 import { looksLikeEmail } from '@/lib/server/email';
 import { normalizePhoneNumber } from '@/lib/phone';
+import { parseInviteEntries, type ParsedInviteEntry } from '@/lib/invite-entry';
 
 /** Primary host or a co-host — the people allowed to manage an event. */
 async function canManageEvent(userId: string, eventId: string): Promise<boolean> {
@@ -163,6 +165,414 @@ export async function createEvent(input: CreateEventInput): Promise<CreateEventR
   }
 
   return { ok: true, eventId };
+}
+
+export interface AddPeopleResult {
+  ok: boolean;
+  error?: string;
+  /** How many new invitees were appended to the cascade. */
+  added?: number;
+  /** Entries that couldn't be added, each with a short reason. */
+  skipped?: Array<{ entry: string; reason: string }>;
+}
+
+/** One resolved thing to insert: either a member (profileId) or a guest. */
+type ResolvedAddition =
+  | { kind: 'member'; profileId: string; label: string }
+  | { kind: 'guest'; name: string; contact: string | null; label: string };
+
+/**
+ * Resolve one parsed entry against real profiles. A handle / email / phone that
+ * matches a profile becomes a member invite; anything else becomes a guest
+ * invite (with a shareable link, and an email if we have one).
+ */
+async function resolveAddition(
+  admin: ReturnType<typeof createAdminClient>,
+  parsed: ParsedInviteEntry,
+): Promise<ResolvedAddition | null> {
+  if (parsed.kind === 'handle') {
+    const { data } = await admin
+      .from('profiles')
+      .select('id')
+      .eq('handle', parsed.value)
+      .maybeSingle();
+    if (!data) return null; // unknown handle — reported as skipped
+    return { kind: 'member', profileId: data.id as string, label: parsed.display };
+  }
+  if (parsed.kind === 'email') {
+    const { data } = await admin
+      .from('profiles')
+      .select('id')
+      .ilike('contact_email', parsed.value)
+      .limit(1)
+      .maybeSingle();
+    if (data) return { kind: 'member', profileId: data.id as string, label: parsed.display };
+    return { kind: 'guest', name: parsed.value, contact: parsed.value, label: parsed.display };
+  }
+  if (parsed.kind === 'phone') {
+    const { data } = await admin
+      .from('profiles')
+      .select('id')
+      .eq('contact_phone_normalized', parsed.value)
+      .limit(1)
+      .maybeSingle();
+    if (data) return { kind: 'member', profileId: data.id as string, label: parsed.display };
+    return { kind: 'guest', name: parsed.display, contact: parsed.value, label: parsed.display };
+  }
+  // Plain name — an off-platform guest reachable via their guest link.
+  return { kind: 'guest', name: parsed.value, contact: null, label: parsed.display };
+}
+
+/**
+ * Append people to an already-live cascade. Accepts free-typed entries
+ * (handle / email / phone / name) and explicitly-picked connection ids. New
+ * invitees join the back of the line as `queued` and go out when it's their
+ * turn (individual mode) or as a fresh trailing wave (group / all-at-once).
+ * Host/co-host only, while invitations are in motion. Best-effort delivery
+ * (push to members, email to guests) runs on the cascade tick.
+ */
+export async function addPeopleToEvent(
+  eventId: string,
+  input: { entries?: string[]; profileIds?: string[] } = {},
+): Promise<AddPeopleResult> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false, error: 'Not signed in' };
+  if (!(await canManageEvent(user.id, eventId))) {
+    return { ok: false, error: 'Only the host can add people.' };
+  }
+
+  const admin = createAdminClient();
+  const { data: event } = await admin
+    .from('events')
+    .select('id, status, invite_mode')
+    .eq('id', eventId)
+    .maybeSingle();
+  if (!event) return { ok: false, error: 'Plan not found.' };
+  if (event.status !== 'inviting') {
+    return {
+      ok: false,
+      error: 'You can only add people while invitations are in motion.',
+    };
+  }
+
+  const skipped: Array<{ entry: string; reason: string }> = [];
+
+  // Resolve free-typed entries into members/guests.
+  const parsedEntries = parseInviteEntries(input.entries ?? []);
+  const resolutions = await Promise.all(
+    parsedEntries.map(async (parsed) => ({
+      parsed,
+      resolved: await resolveAddition(admin, parsed),
+    })),
+  );
+  const additions: ResolvedAddition[] = [];
+  for (const { parsed, resolved } of resolutions) {
+    if (!resolved) {
+      skipped.push({ entry: parsed.display, reason: 'no one with that handle' });
+      continue;
+    }
+    additions.push(resolved);
+  }
+
+  // Explicitly-picked connections (by profile id) — validate they exist.
+  const pickedIds = Array.from(new Set(input.profileIds ?? [])).filter(Boolean);
+  if (pickedIds.length > 0) {
+    const { data: picked } = await admin
+      .from('profiles')
+      .select('id, display_name')
+      .in('id', pickedIds);
+    for (const profile of picked ?? []) {
+      additions.push({
+        kind: 'member',
+        profileId: profile.id as string,
+        label: (profile.display_name as string) ?? 'Friend',
+      });
+    }
+  }
+
+  if (additions.length === 0) {
+    return { ok: false, error: 'Add at least one person.', skipped };
+  }
+
+  // Existing invites: compute append positions/stage and skip anyone already on.
+  const { data: existing } = await admin
+    .from('invites')
+    .select('invitee_id, guest_contact, position, group_stage')
+    .eq('event_id', eventId);
+  const rows = existing ?? [];
+  const alreadyMembers = new Set(
+    rows.map((r) => r.invitee_id).filter((id): id is string => Boolean(id)),
+  );
+  const alreadyContacts = new Set(
+    rows
+      .map((r) => r.guest_contact)
+      .filter((c): c is string => Boolean(c))
+      .map((c) => c.toLowerCase()),
+  );
+  let nextPosition = rows.reduce((max, r) => Math.max(max, r.position), -1) + 1;
+  const nextStage = rows.reduce((max, r) => Math.max(max, r.group_stage), -1) + 1;
+  // Grouped modes send the additions as one fresh trailing wave; individual
+  // mode ignores stage and orders purely by position.
+  const groupStage = event.invite_mode === 'individual' ? 0 : nextStage;
+
+  const toInsert: Array<Record<string, unknown>> = [];
+  for (const addition of additions) {
+    if (addition.kind === 'member') {
+      if (addition.profileId === user.id) {
+        skipped.push({ entry: addition.label, reason: 'that’s you' });
+        continue;
+      }
+      if (alreadyMembers.has(addition.profileId)) {
+        skipped.push({ entry: addition.label, reason: 'already invited' });
+        continue;
+      }
+      alreadyMembers.add(addition.profileId);
+      toInsert.push({
+        event_id: eventId,
+        invitee_id: addition.profileId,
+        position: nextPosition++,
+        group_stage: groupStage,
+        status: 'queued',
+      });
+    } else {
+      const contactKey = addition.contact?.toLowerCase() ?? null;
+      if (contactKey && alreadyContacts.has(contactKey)) {
+        skipped.push({ entry: addition.label, reason: 'already invited' });
+        continue;
+      }
+      if (contactKey) alreadyContacts.add(contactKey);
+      toInsert.push({
+        event_id: eventId,
+        invitee_id: null,
+        guest_name: addition.name,
+        guest_contact: addition.contact,
+        position: nextPosition++,
+        group_stage: groupStage,
+        status: 'queued',
+      });
+    }
+  }
+
+  if (toInsert.length === 0) {
+    return { ok: false, error: 'No new people to add.', skipped };
+  }
+
+  const { error } = await admin.from('invites').insert(toInsert);
+  if (error) {
+    await reportOperationalError('add-people', error, { eventId });
+    return { ok: false, error: 'Could not add people. Try again.', skipped };
+  }
+
+  // Send immediately if the cascade is ready for them (e.g. individual mode
+  // with no live invite, or a resolved prior wave). The cron sweep is the backstop.
+  try {
+    await advanceEventCascade(eventId);
+  } catch (cascadeError) {
+    await reportOperationalError('add-people-cascade', cascadeError, { eventId });
+  }
+
+  revalidatePath(`/events/${eventId}`);
+  return { ok: true, added: toInsert.length, skipped };
+}
+
+/**
+ * Withdraw a not-yet-accepted invite (queued, live, expired, declined, …).
+ * Accepted attendees can't be silently dropped this way. Advances the cascade
+ * so the next person goes out if a live slot just opened. Host/co-host only.
+ */
+export async function removeInvite(
+  eventId: string,
+  inviteId: string,
+): Promise<{ ok: boolean; error?: string }> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false, error: 'Not signed in' };
+  if (!(await canManageEvent(user.id, eventId))) {
+    return { ok: false, error: 'Only the host can manage invites.' };
+  }
+
+  const admin = createAdminClient();
+  const { data: invite } = await admin
+    .from('invites')
+    .select('id, status, event_id')
+    .eq('id', inviteId)
+    .maybeSingle();
+  if (!invite || invite.event_id !== eventId) {
+    return { ok: false, error: 'Invite not found.' };
+  }
+  if (invite.status === 'accepted') {
+    return { ok: false, error: 'They already accepted — cancel the plan or lower capacity instead.' };
+  }
+
+  const { error } = await admin.from('invites').delete().eq('id', inviteId);
+  if (error) return { ok: false, error: 'Could not remove that invite. Try again.' };
+
+  try {
+    await advanceEventCascade(eventId);
+  } catch (cascadeError) {
+    await reportOperationalError('remove-invite-cascade', cascadeError, { eventId });
+  }
+  revalidatePath(`/events/${eventId}`);
+  return { ok: true };
+}
+
+/**
+ * Give a lapsed invite another chance: re-queue someone who expired, declined,
+ * or was cancelled so the cascade can send to them again. Host/co-host only.
+ */
+export async function resendInvite(
+  eventId: string,
+  inviteId: string,
+): Promise<{ ok: boolean; error?: string }> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false, error: 'Not signed in' };
+  if (!(await canManageEvent(user.id, eventId))) {
+    return { ok: false, error: 'Only the host can manage invites.' };
+  }
+
+  const admin = createAdminClient();
+  const { data: invite } = await admin
+    .from('invites')
+    .select('id, status, event_id')
+    .eq('id', inviteId)
+    .maybeSingle();
+  if (!invite || invite.event_id !== eventId) {
+    return { ok: false, error: 'Invite not found.' };
+  }
+  const reopenable = ['expired', 'declined', 'cancelled'];
+  if (!reopenable.includes(invite.status as string)) {
+    return { ok: false, error: 'That invite is still active.' };
+  }
+
+  const { error } = await admin
+    .from('invites')
+    .update({
+      status: 'queued',
+      sent_at: null,
+      responded_at: null,
+      decline_note: null,
+    })
+    .eq('id', inviteId);
+  if (error) return { ok: false, error: 'Could not resend that invite. Try again.' };
+
+  try {
+    await advanceEventCascade(eventId);
+  } catch (cascadeError) {
+    await reportOperationalError('resend-invite-cascade', cascadeError, { eventId });
+  }
+  revalidatePath(`/events/${eventId}`);
+  return { ok: true };
+}
+
+export interface UpdateEventInput {
+  title: string;
+  description: string | null;
+  locationName: string | null;
+  locationAddress: string | null;
+  startsAt: string | null;
+  endsAt: string | null;
+  capacity: number | null;
+  wishlistUrl: string | null;
+}
+
+/**
+ * Host/co-host edit of an already-published plan. Changing the time or place
+ * quietly pings everyone who has already accepted so nobody shows up to the
+ * old details.
+ */
+export async function updateEventDetails(
+  eventId: string,
+  input: UpdateEventInput,
+): Promise<{ ok: boolean; error?: string }> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false, error: 'Not signed in' };
+  if (!(await canManageEvent(user.id, eventId))) {
+    return { ok: false, error: 'Only the host can edit this plan.' };
+  }
+
+  const title = input.title.trim();
+  if (!title) return { ok: false, error: 'Give your plan a name.' };
+  if (input.capacity !== null && (!Number.isInteger(input.capacity) || input.capacity < 1)) {
+    return { ok: false, error: 'Capacity must be a whole number of at least 1.' };
+  }
+
+  let wishlistUrl: string | null = null;
+  if (input.wishlistUrl?.trim()) {
+    const value = input.wishlistUrl.trim();
+    const candidate = /^https?:\/\//i.test(value) ? value : `https://${value}`;
+    try {
+      const url = new URL(candidate);
+      if ((url.protocol === 'http:' || url.protocol === 'https:') && url.hostname.includes('.')) {
+        wishlistUrl = url.toString();
+      }
+    } catch {
+      wishlistUrl = null;
+    }
+  }
+
+  const admin = createAdminClient();
+  const { data: before } = await admin
+    .from('events')
+    .select('starts_at, location_name, title')
+    .eq('id', eventId)
+    .maybeSingle();
+  if (!before) return { ok: false, error: 'Plan not found.' };
+
+  const { error } = await admin
+    .from('events')
+    .update({
+      title,
+      description: input.description?.trim() || null,
+      location_name: input.locationName?.trim() || null,
+      location_address: input.locationAddress?.trim() || null,
+      starts_at: input.startsAt || null,
+      ends_at: input.endsAt || null,
+      capacity: input.capacity,
+      wishlist_url: wishlistUrl,
+    })
+    .eq('id', eventId);
+  if (error) {
+    await reportOperationalError('event-update', error, { eventId });
+    return { ok: false, error: 'Could not save your changes. Try again.' };
+  }
+
+  // Notify accepted guests only when the logistics they'd act on actually change.
+  const whenChanged = (before.starts_at ?? null) !== (input.startsAt || null);
+  const whereChanged = (before.location_name ?? null) !== (input.locationName?.trim() || null);
+  if (whenChanged || whereChanged) {
+    const { data: accepted } = await admin
+      .from('invites')
+      .select('invitee_id')
+      .eq('event_id', eventId)
+      .eq('status', 'accepted')
+      .not('invitee_id', 'is', null);
+    const recipients = (accepted ?? [])
+      .map((row) => row.invitee_id as string | null)
+      .filter((id): id is string => Boolean(id) && id !== user.id);
+    if (recipients.length > 0) {
+      const changed = whenChanged && whereChanged ? 'time and place' : whenChanged ? 'time' : 'place';
+      await sendPushToUsers(recipients, {
+        title: 'Plan updated ✏️',
+        body: `The ${changed} for ${title} changed. Tap for the latest.`,
+        url: `/events/${eventId}`,
+      });
+    }
+  }
+
+  revalidatePath(`/events/${eventId}`);
+  revalidatePath('/plans');
+  return { ok: true };
 }
 
 export async function confirmEvent(eventId: string): Promise<void> {
