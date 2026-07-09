@@ -1,0 +1,77 @@
+'use client';
+
+import { useState, useTransition } from 'react';
+import { Button } from '@/components/ui/Button';
+import { importEventFromLink, type ImportResult } from '@/lib/actions/import';
+
+/**
+ * Paste a Partiful / Luma / Facebook / Apple-Invites / Eventbrite link and pull
+ * the plan into Switchboard. On success, hands the parsed fields to the wizard.
+ */
+export function ImportFromLink({
+  onImport,
+}: {
+  onImport: (result: ImportResult) => void;
+}) {
+  const [url, setUrl] = useState('');
+  const [open, setOpen] = useState(false);
+  const [error, setError] = useState('');
+  const [pending, startTransition] = useTransition();
+
+  function run() {
+    const value = url.trim();
+    if (!value) return;
+    setError('');
+    startTransition(async () => {
+      const result = await importEventFromLink(value);
+      if (!result.ok) {
+        setError(result.error ?? 'We couldn’t import that link.');
+        return;
+      }
+      onImport(result);
+      setUrl('');
+      setOpen(false);
+    });
+  }
+
+  if (!open) {
+    return (
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className="w-full rounded-card border border-dashed border-line bg-cream px-4 py-3 text-sm text-ink-soft hover:border-terracotta hover:text-terracotta-deep transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-terracotta"
+      >
+        🔗 Already have a plan elsewhere? Bring it in from a link.
+      </button>
+    );
+  }
+
+  return (
+    <div className="rounded-card border border-line bg-card p-3 space-y-2">
+      <p className="text-sm font-bold">Import from a link</p>
+      <p className="text-xs text-ink-faint">
+        Paste a Partiful, Luma, Facebook, Apple Invites, or Eventbrite link.
+      </p>
+      <div className="flex gap-2">
+        <input
+          value={url}
+          onChange={(e) => setUrl(e.target.value)}
+          onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), run())}
+          inputMode="url"
+          placeholder="https://partiful.com/e/…"
+          aria-label="Event link to import"
+          className="flex-1 rounded-card border border-line bg-paper px-3 py-2.5 text-sm outline-none focus:border-terracotta"
+        />
+        <Button
+          type="button"
+          size="sm"
+          onClick={run}
+          disabled={pending || !url.trim()}
+        >
+          {pending ? 'Reading…' : 'Import'}
+        </Button>
+      </div>
+      {error && <p className="text-xs text-rose-deep">{error}</p>}
+    </div>
+  );
+}
