@@ -35,9 +35,10 @@ test.describe('public surface', () => {
 
   test('sign-in failure always returns visible feedback', async ({ page }) => {
     await page.goto('/login');
+    const submit = page.locator('form').getByRole('button', { name: 'Sign in', exact: true });
+    await expect(submit).toBeEnabled();
     await page.getByLabel('Email or username').fill('invalid!');
     await page.getByLabel('Password').fill('incorrect-password');
-    const submit = page.locator('form').getByRole('button', { name: 'Sign in', exact: true });
     await submit.click();
     const feedback = page.getByText(
       'That email, username, or password did not work.',

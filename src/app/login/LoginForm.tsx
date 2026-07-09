@@ -1,6 +1,6 @@
 'use client';
 
-import { useActionState, useState } from 'react';
+import { useActionState, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { Button } from '@/components/ui/Button';
 import {
@@ -25,10 +25,16 @@ export function LoginForm() {
   const [password, setPassword] = useState('');
   const [status, setStatus] = useState<Status>('idle');
   const [message, setMessage] = useState('');
+  const [ready, setReady] = useState(false);
   const [createState, createAction, creating] = useActionState(
     createPasswordAccount,
     initialCreateState,
   );
+
+  useEffect(() => {
+    const frame = window.requestAnimationFrame(() => setReady(true));
+    return () => window.cancelAnimationFrame(frame);
+  }, []);
 
   async function signIn(e: React.FormEvent) {
     e.preventDefault();
@@ -145,7 +151,7 @@ export function LoginForm() {
             type="submit"
             size="lg"
             className="w-full"
-            disabled={status === 'submitting'}
+            disabled={!ready || status === 'submitting'}
             aria-busy={status === 'submitting'}
           >
             {status === 'submitting' ? 'Signing in...' : 'Sign in'}
