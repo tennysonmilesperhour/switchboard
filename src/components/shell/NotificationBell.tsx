@@ -9,26 +9,32 @@ import { Icon } from '@/components/ui/Icon';
  * invite is visible in-app even for someone who never enabled notifications.
  */
 export async function NotificationBell() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
+  // The bell lives in the shared shell, so it must never crash a page. If
+  // Supabase isn't configured or the lookup fails for any reason, fall back to
+  // a plain, badgeless bell instead of throwing.
   let count = 0;
-  if (user) {
-    const [{ count: invites }, { count: requests }] = await Promise.all([
-      supabase
-        .from('invites')
-        .select('id', { count: 'exact', head: true })
-        .eq('invitee_id', user.id)
-        .eq('status', 'sent'),
-      supabase
-        .from('connections')
-        .select('id', { count: 'exact', head: true })
-        .eq('addressee_id', user.id)
-        .eq('status', 'pending'),
-    ]);
-    count = (invites ?? 0) + (requests ?? 0);
+  try {
+    const supabase = await createClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (user) {
+      const [{ count: invites }, { count: requests }] = await Promise.all([
+        supabase
+          .from('invites')
+          .select('id', { count: 'exact', head: true })
+          .eq('invitee_id', user.id)
+          .eq('status', 'sent'),
+        supabase
+          .from('connections')
+          .select('id', { count: 'exact', head: true })
+          .eq('addressee_id', user.id)
+          .eq('status', 'pending'),
+      ]);
+      count = (invites ?? 0) + (requests ?? 0);
+    }
+  } catch {
+    // Supabase unavailable/unconfigured — render the bell without a badge.
   }
 
   const label = count > 0 ? `Notifications, ${count} waiting` : 'Notifications';
