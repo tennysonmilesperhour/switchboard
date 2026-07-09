@@ -1,7 +1,8 @@
 'use client';
 
-import { useState, useTransition } from 'react';
+import { useEffect, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
+import { createClient } from '@/lib/supabase/client';
 import { Button } from '@/components/ui/Button';
 import { Card, SectionHeader } from '@/components/ui/Card';
 import {
@@ -54,6 +55,29 @@ export function PollSection({
   const [error, setError] = useState('');
   const [pending, startTransition] = useTransition();
   const router = useRouter();
+
+  // Live consensus: a DB trigger bumps polls.tally_version on every vote change.
+  // Subscribe to this poll's row and re-fetch aggregates so the meter moves as
+  // others vote, without ever exposing an individual vote.
+  useEffect(() => {
+    const supabase = createClient();
+    const channel = supabase
+      .channel(`poll-${poll.id}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'polls',
+          filter: `id=eq.${poll.id}`,
+        },
+        () => router.refresh(),
+      )
+      .subscribe();
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [poll.id, router]);
 
   const resultFor = (optionId: string) =>
     results.find((r) => r.option_id === optionId);

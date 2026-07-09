@@ -1,13 +1,15 @@
+import type { Metadata } from 'next';
 import { notFound, redirect } from 'next/navigation';
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase/server';
-import { createAdminClient } from '@/lib/supabase/admin';
+import { createAdminClient, hasAdminCredentials } from '@/lib/supabase/admin';
 import { advanceEventCascade } from '@/lib/server/cascade-runner';
 import { AppShell } from '@/components/shell/AppShell';
 import { Card, SectionHeader } from '@/components/ui/Card';
 import { Avatar } from '@/components/ui/Avatar';
 import { PlanCard, planColor } from '@/components/ui/PlanCard';
 import { CopyButton } from '@/components/ui/CopyButton';
+import { ShareButton } from '@/components/ui/ShareButton';
 import { CascadeProgress } from '@/components/events/CascadeProgress';
 import { JoinRequests } from '@/components/events/JoinRequests';
 import { RsvpCard } from '@/components/events/RsvpCard';
@@ -27,6 +29,36 @@ import type {
   SwitchboardEvent,
 } from '@/lib/types';
 import type { Weight } from '@/lib/engine/scoring';
+
+/** Rich unfurl card for directly-shared event links (iMessage/WhatsApp/Slack). */
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}): Promise<Metadata> {
+  if (!hasAdminCredentials()) return {};
+  const { id } = await params;
+  const admin = createAdminClient();
+  const { data: event } = await admin
+    .from('events')
+    .select('title, description, starts_at, location_name')
+    .eq('id', id)
+    .maybeSingle();
+  if (!event) return {};
+  const when = event.starts_at ? formatDateTime(event.starts_at) : null;
+  const description =
+    event.description?.trim() ||
+    [when, event.location_name].filter(Boolean).join(' · ') ||
+    'A plan on Switchboard.';
+  return {
+    title: event.title,
+    openGraph: {
+      title: event.title,
+      description,
+      images: [`/api/og/event/${id}`],
+    },
+  };
+}
 
 export default async function EventPage({
   params,
@@ -260,8 +292,33 @@ export default async function EventPage({
     0,
   );
 
+  // schema.org/Event JSON-LD so the link is machine-parseable (rich results,
+  // and other tools can read the plan).
+  const jsonLd = {
+    '@context': 'https://schema.org',
+    '@type': 'Event',
+    name: event.title,
+    ...(event.description ? { description: event.description } : {}),
+    ...(event.starts_at ? { startDate: event.starts_at } : {}),
+    ...(event.ends_at ? { endDate: event.ends_at } : {}),
+    eventAttendanceMode: 'https://schema.org/OfflineEventAttendanceMode',
+    ...(event.location_name
+      ? {
+          location: {
+            '@type': 'Place',
+            name: event.location_name,
+            ...(event.location_address ? { address: event.location_address } : {}),
+          },
+        }
+      : {}),
+  };
+
   return (
     <AppShell title={event.title} back="/plans">
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+      />
       <div className="space-y-6">
         <div className="space-y-4">
           {event.cover_url && (
@@ -332,6 +389,19 @@ export default async function EventPage({
                 📦 Memory Capsule
               </Link>
             )}
+            {isHost && (
+              <a
+                href={`/api/events/${event.id}/guests.csv`}
+                className="inline-flex items-center gap-1.5 rounded-pill border border-line bg-card px-3.5 py-2 text-xs font-bold text-ink-soft shadow-lift hover:border-terracotta hover:text-terracotta-deep active:scale-[0.98] transition-all"
+              >
+                ⬇ Guest list (CSV)
+              </a>
+            )}
+            <ShareButton
+              path={`/events/${event.id}`}
+              title={event.title}
+              text={`${event.title} on Switchboard`}
+            />
           </div>
           {venuePerk && (
             <p className="rounded-card bg-gold-soft px-3.5 py-3 text-sm">

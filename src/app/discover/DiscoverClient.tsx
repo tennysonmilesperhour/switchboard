@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { Chip } from '@/components/ui/Chip';
+import { EmptyState } from '@/components/ui/EmptyState';
 import { runDiscovery } from '@/lib/actions/discovery';
 import type { Suggestion } from '@/lib/ai/discovery';
 
@@ -125,7 +126,15 @@ export function DiscoverClient({ defaultInterests }: { defaultInterests: string[
         {error && <p role="alert" className="text-sm text-rose-deep">{error}</p>}
       </div>
 
-      {suggestions && (
+      {suggestions && suggestions.length === 0 && (
+        <EmptyState
+          emoji="🧭"
+          title="Nothing quite fit"
+          body="We couldn’t find a great match for those details. Try widening the distance, loosening the budget, or a different vibe."
+        />
+      )}
+
+      {suggestions && suggestions.length > 0 && (
         <section aria-label="Recommendations" className="space-y-3">
           {suggestions.map((suggestion, i) => (
             <Card key={suggestion.title} lifted className="animate-rise" style={{ animationDelay: `${i * 60}ms` }}>

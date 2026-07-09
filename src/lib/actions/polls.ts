@@ -29,12 +29,10 @@ export async function addSuggestion(
     return { ok: false, error: 'Voting has closed' };
   }
 
-  const { data: event } = await supabase
-    .from('events')
-    .select('host_id')
-    .eq('id', poll.event_id)
-    .single();
-  const isHost = event?.host_id === user.id;
+  const { data: isHost } = await supabase.rpc('is_event_host', {
+    p_event: poll.event_id,
+    p_user: user.id,
+  });
   if (!poll.allow_suggestions && !isHost) {
     return { ok: false, error: 'Only the host can add options' };
   }
@@ -92,12 +90,12 @@ export async function closeVoting(pollId: string, eventId: string): Promise<void
   } = await supabase.auth.getUser();
   if (!user) return;
 
-  const { data: event } = await supabase
-    .from('events')
-    .select('host_id')
-    .eq('id', eventId)
-    .single();
-  if (event?.host_id !== user.id) return;
+  // Co-hosts share host powers (is_event_host covers both).
+  const { data: isHost } = await supabase.rpc('is_event_host', {
+    p_event: eventId,
+    p_user: user.id,
+  });
+  if (!isHost) return;
 
   await resolvePoll(pollId);
   revalidatePath(`/events/${eventId}`);

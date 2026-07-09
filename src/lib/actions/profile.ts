@@ -269,6 +269,22 @@ export async function updateQuietHours(formData: FormData): Promise<void> {
   revalidatePath('/settings');
 }
 
+/** Revoke the current calendar-subscription link by rotating the token. Any
+ *  calendar following the old URL simply stops updating. */
+export async function regenerateCalendarToken(): Promise<{ ok: boolean }> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false };
+  await supabase
+    .from('profiles')
+    .update({ calendar_token: crypto.randomUUID() })
+    .eq('id', user.id);
+  revalidatePath('/settings');
+  return { ok: true };
+}
+
 export async function signOut(): Promise<void> {
   const supabase = await createClient();
   await supabase.auth.signOut();

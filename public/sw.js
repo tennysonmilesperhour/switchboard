@@ -1,11 +1,77 @@
-/* Switchboard service worker — web push + PWA installability. */
+/* Switchboard service worker — web push + PWA installability + offline shell. */
 
-self.addEventListener('install', () => {
+const CACHE = 'switchboard-v2';
+// Static, non-user-specific assets safe to cache. Authenticated page HTML is
+// NEVER cached (it's per-user); navigations are network-first with a generic
+// offline fallback, so one user can't be served another's cached content.
+const PRECACHE = ['/welcome', '/manifest.webmanifest', '/icons/icon.svg'];
+
+self.addEventListener('install', (event) => {
+  event.waitUntil(
+    caches.open(CACHE).then((cache) => cache.addAll(PRECACHE)).catch(() => {}),
+  );
   self.skipWaiting();
 });
 
 self.addEventListener('activate', (event) => {
-  event.waitUntil(self.clients.claim());
+  event.waitUntil(
+    Promise.all([
+      caches
+        .keys()
+        .then((keys) =>
+          Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k))),
+        ),
+      self.clients.claim(),
+    ]),
+  );
+});
+
+function isStaticAsset(url) {
+  return (
+    url.pathname.startsWith('/_next/static/') ||
+    url.pathname.startsWith('/icons/') ||
+    url.pathname === '/manifest.webmanifest'
+  );
+}
+
+self.addEventListener('fetch', (event) => {
+  const { request } = event;
+  const url = new URL(request.url);
+
+  // Only handle same-origin GETs; never touch API routes, auth, or writes.
+  if (
+    request.method !== 'GET' ||
+    url.origin !== self.location.origin ||
+    url.pathname.startsWith('/api/') ||
+    url.pathname.startsWith('/auth/')
+  ) {
+    return;
+  }
+
+  // Static assets: cache-first (they're content-hashed / immutable enough).
+  if (isStaticAsset(url)) {
+    event.respondWith(
+      caches.match(request).then(
+        (cached) =>
+          cached ||
+          fetch(request).then((response) => {
+            const copy = response.clone();
+            caches.open(CACHE).then((cache) => cache.put(request, copy)).catch(() => {});
+            return response;
+          }),
+      ),
+    );
+    return;
+  }
+
+  // Navigations: network-first, fall back to the offline shell when offline.
+  if (request.mode === 'navigate') {
+    event.respondWith(
+      fetch(request).catch(
+        () => caches.match(request).then((cached) => cached || caches.match('/welcome')),
+      ),
+    );
+  }
 });
 
 self.addEventListener('push', (event) => {

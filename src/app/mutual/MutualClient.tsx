@@ -1,8 +1,9 @@
 'use client';
 
-import { useState, useTransition } from 'react';
+import { useEffect, useState, useTransition } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import { createClient } from '@/lib/supabase/client';
 import { Button } from '@/components/ui/Button';
 import { Card, SectionHeader } from '@/components/ui/Card';
 import { Chip } from '@/components/ui/Chip';
@@ -49,12 +50,14 @@ export interface RitualRow {
 }
 
 export function MutualClient({
+  currentUserId,
   friends,
   intents,
   matches,
   rituals = [],
   initialPersonId = null,
 }: {
+  currentUserId: string;
   friends: MutualFriend[];
   intents: MyIntent[];
   matches: MyMatch[];
@@ -75,6 +78,33 @@ export function MutualClient({
   const router = useRouter();
   const toast = useToast();
   const confirm = useConfirm();
+
+  // Realtime: when the OTHER person matches you, the DB trigger flips YOUR
+  // intent to 'matched'. Listen for that and refresh so a match appears live,
+  // without exposing anyone's unrequited interest (we only watch our own rows).
+  useEffect(() => {
+    const supabase = createClient();
+    const channel = supabase
+      .channel(`mutual-${currentUserId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'mutual_intents',
+          filter: `author_id=eq.${currentUserId}`,
+        },
+        (payload) => {
+          if ((payload.new as { status?: string }).status === 'matched') {
+            router.refresh();
+          }
+        },
+      )
+      .subscribe();
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [currentUserId, router]);
 
   function toggle(list: string[], value: string): string[] {
     return list.includes(value)
