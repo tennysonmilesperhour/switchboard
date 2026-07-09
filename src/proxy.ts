@@ -15,6 +15,7 @@ const PUBLIC_PREFIXES = [
   '/api/cron',
   '/api/og',
   '/api/health',
+  '/api/calendar', // token-authed personal calendar feed
 ];
 
 function isPublicPath(pathname: string): boolean {

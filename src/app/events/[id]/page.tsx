@@ -9,6 +9,7 @@ import { Card, SectionHeader } from '@/components/ui/Card';
 import { Avatar } from '@/components/ui/Avatar';
 import { PlanCard, planColor } from '@/components/ui/PlanCard';
 import { CopyButton } from '@/components/ui/CopyButton';
+import { ShareButton } from '@/components/ui/ShareButton';
 import { CascadeProgress } from '@/components/events/CascadeProgress';
 import { JoinRequests } from '@/components/events/JoinRequests';
 import { RsvpCard } from '@/components/events/RsvpCard';
@@ -291,8 +292,33 @@ export default async function EventPage({
     0,
   );
 
+  // schema.org/Event JSON-LD so the link is machine-parseable (rich results,
+  // and other tools can read the plan).
+  const jsonLd = {
+    '@context': 'https://schema.org',
+    '@type': 'Event',
+    name: event.title,
+    ...(event.description ? { description: event.description } : {}),
+    ...(event.starts_at ? { startDate: event.starts_at } : {}),
+    ...(event.ends_at ? { endDate: event.ends_at } : {}),
+    eventAttendanceMode: 'https://schema.org/OfflineEventAttendanceMode',
+    ...(event.location_name
+      ? {
+          location: {
+            '@type': 'Place',
+            name: event.location_name,
+            ...(event.location_address ? { address: event.location_address } : {}),
+          },
+        }
+      : {}),
+  };
+
   return (
     <AppShell title={event.title} back="/plans">
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+      />
       <div className="space-y-6">
         <div className="space-y-4">
           {event.cover_url && (
@@ -371,6 +397,11 @@ export default async function EventPage({
                 ⬇ Guest list (CSV)
               </a>
             )}
+            <ShareButton
+              path={`/events/${event.id}`}
+              title={event.title}
+              text={`${event.title} on Switchboard`}
+            />
           </div>
           {venuePerk && (
             <p className="rounded-card bg-gold-soft px-3.5 py-3 text-sm">

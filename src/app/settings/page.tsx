@@ -9,6 +9,7 @@ import { PushManager } from '@/components/push/PushManager';
 import { InterestPicker } from '@/components/profile/InterestPicker';
 import { SaveButton } from './SaveButton';
 import { AccountControls } from './AccountControls';
+import { CalendarSubscribe } from './CalendarSubscribe';
 import { INTEREST_CATEGORIES, DOWN_TO_GROUP } from '@/lib/interests';
 import {
   signOut,
@@ -36,7 +37,7 @@ export default async function SettingsPage() {
   const { data: profile } = await supabase
     .from('profiles')
     .select(
-      'display_name, handle, interests, down_to, sabbatical, sabbatical_message, quiet_hours_start, quiet_hours_end',
+      'display_name, handle, interests, down_to, sabbatical, sabbatical_message, quiet_hours_start, quiet_hours_end, calendar_token',
     )
     .eq('id', user.id)
     .single();
@@ -103,6 +104,18 @@ export default async function SettingsPage() {
             </form>
           </Card>
         </section>
+
+        {profile?.calendar_token && (
+          <section>
+            <SectionHeader
+              title="Your calendar"
+              hint="Follow your plans from any calendar app"
+            />
+            <Card>
+              <CalendarSubscribe token={profile.calendar_token} />
+            </Card>
+          </section>
+        )}
 
         <section>
           <SectionHeader
