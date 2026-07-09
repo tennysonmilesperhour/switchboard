@@ -1,7 +1,8 @@
+import type { Metadata } from 'next';
 import { notFound, redirect } from 'next/navigation';
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase/server';
-import { createAdminClient } from '@/lib/supabase/admin';
+import { createAdminClient, hasAdminCredentials } from '@/lib/supabase/admin';
 import { advanceEventCascade } from '@/lib/server/cascade-runner';
 import { AppShell } from '@/components/shell/AppShell';
 import { Card, SectionHeader } from '@/components/ui/Card';
@@ -27,6 +28,36 @@ import type {
   SwitchboardEvent,
 } from '@/lib/types';
 import type { Weight } from '@/lib/engine/scoring';
+
+/** Rich unfurl card for directly-shared event links (iMessage/WhatsApp/Slack). */
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}): Promise<Metadata> {
+  if (!hasAdminCredentials()) return {};
+  const { id } = await params;
+  const admin = createAdminClient();
+  const { data: event } = await admin
+    .from('events')
+    .select('title, description, starts_at, location_name')
+    .eq('id', id)
+    .maybeSingle();
+  if (!event) return {};
+  const when = event.starts_at ? formatDateTime(event.starts_at) : null;
+  const description =
+    event.description?.trim() ||
+    [when, event.location_name].filter(Boolean).join(' · ') ||
+    'A plan on Switchboard.';
+  return {
+    title: event.title,
+    openGraph: {
+      title: event.title,
+      description,
+      images: [`/api/og/event/${id}`],
+    },
+  };
+}
 
 export default async function EventPage({
   params,
@@ -331,6 +362,14 @@ export default async function EventPage({
               >
                 📦 Memory Capsule
               </Link>
+            )}
+            {isHost && (
+              <a
+                href={`/api/events/${event.id}/guests.csv`}
+                className="inline-flex items-center gap-1.5 rounded-pill border border-line bg-card px-3.5 py-2 text-xs font-bold text-ink-soft shadow-lift hover:border-terracotta hover:text-terracotta-deep active:scale-[0.98] transition-all"
+              >
+                ⬇ Guest list (CSV)
+              </a>
             )}
           </div>
           {venuePerk && (

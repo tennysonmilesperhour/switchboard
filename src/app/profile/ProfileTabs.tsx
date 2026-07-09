@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import Link from 'next/link';
 import { PlanCard, planColor } from '@/components/ui/PlanCard';
 import { formatDateTime } from '@/lib/format';
 
@@ -58,13 +59,63 @@ export function ProfileTabs({ created, attended }: ProfileTabsProps) {
       <div className="mt-5 space-y-3">
         {tab === 'created' && <EventList events={created} empty="No plans created yet." />}
         {tab === 'attended' && <EventList events={attended} empty="No plans attended yet." />}
-        {tab === 'activity' && (
-          <p className="py-10 text-center text-sm text-ink-faint">
-            Your activity will show up here.
-          </p>
-        )}
+        {tab === 'activity' && <ActivityFeed created={created} attended={attended} />}
       </div>
     </div>
+  );
+}
+
+/** A single time-sorted timeline merging hosted and attended plans. */
+function ActivityFeed({
+  created,
+  attended,
+}: {
+  created: ProfileEvent[];
+  attended: ProfileEvent[];
+}) {
+  const items = [
+    ...created.map((event) => ({ event, role: 'Hosted' as const })),
+    ...attended.map((event) => ({ event, role: 'Went to' as const })),
+  ].sort((a, b) => {
+    const at = a.event.starts_at ? Date.parse(a.event.starts_at) : 0;
+    const bt = b.event.starts_at ? Date.parse(b.event.starts_at) : 0;
+    return bt - at;
+  });
+
+  if (items.length === 0) {
+    return (
+      <p className="py-10 text-center text-sm text-ink-faint">
+        Your plans will show up here as a timeline.
+      </p>
+    );
+  }
+
+  return (
+    <ul className="space-y-2.5">
+      {items.map(({ event, role }) => (
+        <li
+          key={`${role}-${event.id}`}
+          className="flex items-center gap-3 rounded-card border border-line bg-card px-3.5 py-3"
+        >
+          <span className="rounded-pill bg-cream px-2 py-0.5 text-[11px] font-bold text-ink-soft shrink-0">
+            {role}
+          </span>
+          <span className="min-w-0 flex-1">
+            <Link
+              href={`/events/${event.id}`}
+              className="block truncate text-sm font-bold text-ink hover:text-terracotta-deep"
+            >
+              {event.title}
+            </Link>
+            {event.starts_at && (
+              <span className="block text-xs text-ink-faint">
+                {formatDateTime(event.starts_at)}
+              </span>
+            )}
+          </span>
+        </li>
+      ))}
+    </ul>
   );
 }
 

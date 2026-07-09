@@ -92,6 +92,7 @@ export default async function MutualPage({
   return (
     <AppShell title="Mutual">
       <MutualClient
+        currentUserId={user.id}
         friends={friends}
         intents={myIntents}
         matches={myMatches}
