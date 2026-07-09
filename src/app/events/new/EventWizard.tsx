@@ -11,7 +11,9 @@ import { suggestWindow, WINDOW_CHOICES } from '@/lib/engine/windows';
 import { simulateCascade } from '@/lib/engine/cascade';
 import { createEvent, type CreateEventInput } from '@/lib/actions/events';
 import { DescribePlan } from '@/components/events/DescribePlan';
+import { ImportFromLink } from '@/components/events/ImportFromLink';
 import type { PlanDraft } from '@/lib/actions/plan';
+import type { ImportResult } from '@/lib/actions/import';
 import type { InviteMode } from '@/lib/types';
 
 export interface WizardFriend {
@@ -224,6 +226,14 @@ export function EventWizard({
     }
   }
 
+  function applyImport(result: ImportResult) {
+    if (result.title) setTitle(result.title);
+    if (result.description) setDescription(result.description);
+    if (result.date) setDate(result.date);
+    if (result.time) setTime(result.time);
+    if (result.locationName) setLocationName(result.locationName);
+  }
+
   function toggleHousehold(household: WizardHousehold) {
     setInvitees((current) => {
       const members = household.memberIds
@@ -410,6 +420,7 @@ export function EventWizard({
       {step === 0 && (
         <div className="space-y-4 animate-rise">
           <DescribePlan onDraft={applyDraft} />
+          <ImportFromLink onImport={applyImport} />
           <div className="space-y-1.5">
             <label htmlFor="title" className="sr-only">What is the plan?</label>
             <input
