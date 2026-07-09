@@ -10,9 +10,9 @@ export { looksLikePhoneNumber, normalizePhoneNumber };
 
 export function smsEnabled(): boolean {
   return Boolean(
-    process.env.TWILIO_ACCOUNT_SID &&
-      process.env.TWILIO_AUTH_TOKEN &&
-      process.env.TWILIO_FROM_NUMBER,
+    process.env.PLIVO_AUTH_ID &&
+      process.env.PLIVO_AUTH_TOKEN &&
+      process.env.PLIVO_FROM_NUMBER,
   );
 }
 
@@ -24,24 +24,28 @@ export async function sendSms(message: SmsMessage): Promise<boolean> {
     return false;
   }
 
-  const accountSid = process.env.TWILIO_ACCOUNT_SID as string;
-  const authToken = process.env.TWILIO_AUTH_TOKEN as string;
-  const from = process.env.TWILIO_FROM_NUMBER as string;
-  const auth = Buffer.from(`${accountSid}:${authToken}`).toString('base64');
-  const body = new URLSearchParams({ To: to, From: from, Body: message.body });
+  const authId = process.env.PLIVO_AUTH_ID as string;
+  const authToken = process.env.PLIVO_AUTH_TOKEN as string;
+  const from = process.env.PLIVO_FROM_NUMBER as string;
+  const auth = Buffer.from(`${authId}:${authToken}`).toString('base64');
+
+  // Plivo expects E.164 numbers without the leading '+'.
+  const src = from.trim().replace(/^\+/, '');
+  const dst = to.replace(/^\+/, '');
 
   try {
     const response = await fetch(
-      `https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Messages.json`,
+      `https://api.plivo.com/v1/Account/${authId}/Message/`,
       {
         method: 'POST',
         headers: {
           Authorization: `Basic ${auth}`,
-          'Content-Type': 'application/x-www-form-urlencoded',
+          'Content-Type': 'application/json',
         },
-        body,
+        body: JSON.stringify({ src, dst, text: message.body }),
       },
     );
+    // Plivo returns 202 Accepted on success (response.ok covers 200-299).
     if (!response.ok) {
       console.error(`[sms:failed] ${response.status} sending to ${to}`);
       return false;
