@@ -86,7 +86,7 @@ export default async function PeoplePage() {
           <EmptyState
             emoji="☺"
             title="Your people live here"
-            body="Connect with friends by their handle. Then circles, signals, and Mutual Mode all come alive."
+            body="Connect by handle, email, phone, or selected contacts. Then circles, signals, and Mutual Mode all come alive."
           />
           <PeopleClient
             friends={friends}

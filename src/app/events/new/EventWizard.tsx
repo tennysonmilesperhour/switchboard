@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Button } from '@/components/ui/Button';
 import { Chip } from '@/components/ui/Chip';
 import { Avatar } from '@/components/ui/Avatar';
@@ -15,6 +15,7 @@ import { ImportFromLink } from '@/components/events/ImportFromLink';
 import type { PlanDraft } from '@/lib/actions/plan';
 import type { ImportResult } from '@/lib/actions/import';
 import type { InviteMode } from '@/lib/types';
+import { canPickContacts, pickContacts } from '@/lib/client/contact-picker';
 
 export interface WizardFriend {
   id: string;
@@ -165,6 +166,8 @@ export function EventWizard({
   });
   const [guestName, setGuestName] = useState('');
   const [guestContact, setGuestContact] = useState('');
+  const [contactsSupported, setContactsSupported] = useState(false);
+  const [contactsBusy, setContactsBusy] = useState(false);
 
   // Step 5 - visibility
   const [showInviteList, setShowInviteList] = useState(false);
@@ -188,6 +191,11 @@ export function EventWizard({
     const haystack = `${title} ${locationName} ${description}`.toLowerCase();
     return OUTDOOR_HINTS.some((word) => haystack.includes(word));
   }, [title, locationName, description]);
+
+  useEffect(() => {
+    const timeout = window.setTimeout(() => setContactsSupported(canPickContacts()), 0);
+    return () => window.clearTimeout(timeout);
+  }, []);
 
   function toggleFriend(friend: WizardFriend) {
     setInvitees((current) => {
@@ -278,6 +286,42 @@ export function EventWizard({
     ]);
     setGuestName('');
     setGuestContact('');
+  }
+
+  async function addContactsFromDevice() {
+    setContactsBusy(true);
+    setSubmitError(null);
+    try {
+      const contacts = await pickContacts();
+      if (contacts.length === 0) return;
+      setInvitees((current) => {
+        const existingContacts = new Set(
+          current.map((invitee) => invitee.guestContact?.toLowerCase()).filter(Boolean),
+        );
+        const additions: DraftInvitee[] = [];
+        contacts.forEach((contact, index) => {
+          const contactValue = contact.phones[0] ?? contact.emails[0] ?? '';
+          if (!contactValue || existingContacts.has(contactValue.toLowerCase())) return;
+          additions.push({
+            key: `contact-${Date.now()}-${index}`,
+            profileId: null,
+            name: contact.name || contactValue,
+            guestContact: contactValue,
+            groupStage: 0,
+            windowMinutes: suggested.windowMinutes,
+          });
+        });
+        return [...current, ...additions];
+      });
+    } catch (error) {
+      setSubmitError(
+        error instanceof Error
+          ? error.message
+          : 'Could not open contacts on this device.',
+      );
+    } finally {
+      setContactsBusy(false);
+    }
   }
 
   function move(index: number, delta: -1 | 1) {
@@ -750,6 +794,28 @@ export function EventWizard({
                 <Button type="button" variant="secondary" size="sm" onClick={addGuest}>
                   Add
                 </Button>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  disabled={!contactsSupported || contactsBusy}
+                  onClick={addContactsFromDevice}
+                  title={
+                    contactsSupported
+                      ? 'Choose contacts to invite'
+                      : 'Contact access is not available in this browser'
+                  }
+                >
+                  <Icon name="users" size={16} />
+                  {contactsBusy ? 'Opening contacts' : 'Choose contacts'}
+                </Button>
+                {!contactsSupported && (
+                  <span className="text-xs text-ink-faint">
+                    Contact access works only in supported mobile browsers.
+                  </span>
+                )}
               </div>
             </div>
           </Card>

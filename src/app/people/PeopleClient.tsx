@@ -1,6 +1,7 @@
 'use client';
 
-import { useState, useTransition } from 'react';
+import Link from 'next/link';
+import { useEffect, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/Button';
 import { Card, SectionHeader } from '@/components/ui/Card';
@@ -16,12 +17,15 @@ import {
   createCircle,
   removeConnection,
   reportProfile,
+  resolveContactMatches,
   sendConnectionRequest,
   toggleCircleMember,
+  type ContactMatch,
 } from '@/lib/actions/connections';
 import { proposeIntroduction } from '@/lib/actions/matchmaker';
 import { createHousehold, deleteHousehold } from '@/lib/actions/households';
 import { ACTIVITY_PRESETS } from '@/lib/types';
+import { canPickContacts, pickContacts } from '@/lib/client/contact-picker';
 
 export interface FriendRow {
   connectionId: string;
@@ -65,8 +69,11 @@ export function PeopleClient({
   circles: CircleRow[];
   households?: HouseholdRow[];
 }) {
-  const [handle, setHandle] = useState('');
+  const [identifier, setIdentifier] = useState('');
   const [message, setMessage] = useState<{ tone: 'ok' | 'error'; text: string } | null>(null);
+  const [contactsSupported, setContactsSupported] = useState(false);
+  const [contactMatches, setContactMatches] = useState<ContactMatch[]>([]);
+  const [contactsBusy, setContactsBusy] = useState(false);
   const [expandedFriend, setExpandedFriend] = useState<string | null>(null);
   const [newCircle, setNewCircle] = useState('');
   const [matchA, setMatchA] = useState('');
@@ -80,6 +87,11 @@ export function PeopleClient({
   const router = useRouter();
   const toast = useToast();
   const confirm = useConfirm();
+
+  useEffect(() => {
+    const timeout = window.setTimeout(() => setContactsSupported(canPickContacts()), 0);
+    return () => window.clearTimeout(timeout);
+  }, []);
 
   async function removeFriend(friend: FriendRow) {
     const ok = await confirm({
@@ -144,15 +156,58 @@ export function PeopleClient({
 
   function submitRequest(e: React.FormEvent) {
     e.preventDefault();
-    const value = handle;
+    const value = identifier;
     startTransition(async () => {
       const result = await sendConnectionRequest(value);
       setMessage(
         result.ok
-          ? { tone: 'ok', text: 'Request sent 💌' }
+          ? { tone: 'ok', text: 'Request sent.' }
           : { tone: 'error', text: result.error ?? 'Something went wrong' },
       );
-      if (result.ok) setHandle('');
+      if (result.ok) setIdentifier('');
+      router.refresh();
+    });
+  }
+
+  async function importContacts() {
+    setContactsBusy(true);
+    setMessage(null);
+    try {
+      const contacts = await pickContacts();
+      if (contacts.length === 0) return;
+      const matches = await resolveContactMatches(contacts);
+      setContactMatches(matches);
+      const matchCount = matches.filter((match) => match.profile).length;
+      setMessage({
+        tone: 'ok',
+        text:
+          matchCount === 0
+            ? 'No Switchboard accounts matched those contacts yet.'
+            : `${matchCount} ${matchCount === 1 ? 'contact is' : 'contacts are'} on Switchboard.`,
+      });
+    } catch (error) {
+      setMessage({
+        tone: 'error',
+        text:
+          error instanceof Error
+            ? error.message
+            : 'Could not open contacts on this device.',
+      });
+    } finally {
+      setContactsBusy(false);
+    }
+  }
+
+  function quickConnect(match: ContactMatch) {
+    const profile = match.profile;
+    if (!profile) return;
+    startTransition(async () => {
+      const result = await sendConnectionRequest(`@${profile.handle}`);
+      if (!result.ok) {
+        toast.error(result.error ?? 'Could not send that request.');
+        return;
+      }
+      toast.success(`Request sent to ${profile.name}.`);
       router.refresh();
     });
   }
@@ -161,22 +216,47 @@ export function PeopleClient({
     <div className="space-y-8">
       {/* Add someone */}
       <section>
-        <SectionHeader title="Add someone" hint="Ask a friend for their handle" />
-        <form onSubmit={submitRequest} className="flex gap-2">
-          <div className="flex items-center flex-1 rounded-pill border border-line bg-card focus-within:border-terracotta">
-            <span className="pl-4 text-ink-faint">@</span>
+        <SectionHeader
+          title="Add someone"
+          hint="Find friends by handle, email, phone, or selected contacts"
+        />
+        <form onSubmit={submitRequest} className="flex flex-col gap-2 sm:flex-row">
+          <div className="flex min-w-0 items-center flex-1 rounded-pill border border-line bg-card focus-within:border-terracotta">
+            <Icon name="search" size={17} className="ml-4 shrink-0 text-ink-faint" />
             <input
-              value={handle}
-              onChange={(e) => setHandle(e.target.value)}
-              placeholder="handle"
-              aria-label="Friend's handle"
-              className="flex-1 bg-transparent px-1.5 py-2.5 text-sm outline-none lowercase"
+              value={identifier}
+              onChange={(e) => setIdentifier(e.target.value)}
+              placeholder="@handle, email, or phone"
+              aria-label="Friend's handle, email, or phone"
+              className="min-w-0 flex-1 bg-transparent px-2.5 py-2.5 text-sm outline-none"
             />
           </div>
-          <Button type="submit" size="sm" disabled={pending || !handle.trim()}>
+          <Button type="submit" size="sm" disabled={pending || !identifier.trim()}>
             Connect
           </Button>
         </form>
+        <div className="mt-2 flex flex-wrap items-center gap-2">
+          <Button
+            type="button"
+            variant="secondary"
+            size="sm"
+            disabled={!contactsSupported || contactsBusy || pending}
+            onClick={importContacts}
+            title={
+              contactsSupported
+                ? 'Choose contacts to match on Switchboard'
+                : 'Contact access is not available in this browser'
+            }
+          >
+            <Icon name="users" size={16} />
+            {contactsBusy ? 'Checking contacts' : 'Choose contacts'}
+          </Button>
+          {!contactsSupported && (
+            <span className="text-xs text-ink-faint">
+              Contact access works only in supported mobile browsers.
+            </span>
+          )}
+        </div>
         {message && (
           <p
             role={message.tone === 'error' ? 'alert' : 'status'}
@@ -184,6 +264,62 @@ export function PeopleClient({
           >
             {message.text}
           </p>
+        )}
+        {contactMatches.length > 0 && (
+          <div className="mt-3 space-y-2">
+            {contactMatches.map((match) => (
+              <div
+                key={match.key}
+                className="flex items-center gap-3 rounded-card border border-line bg-card px-3.5 py-3 text-sm"
+              >
+                <Avatar
+                  name={match.profile?.name ?? match.name}
+                  seed={match.profile?.id ?? match.key}
+                  size="sm"
+                />
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate font-bold">
+                    {match.profile?.name ?? match.name}
+                  </span>
+                  <span className="block truncate text-xs text-ink-faint">
+                    {match.profile
+                      ? `@${match.profile.handle} matched by ${match.kind.replace('_', ' ')}`
+                      : match.smsTarget
+                        ? 'Not on Switchboard yet, can receive plan invites by text'
+                        : 'No Switchboard account found'}
+                  </span>
+                </span>
+                {match.profile && match.connectionStatus === 'none' && (
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="secondary"
+                    disabled={pending}
+                    onClick={() => quickConnect(match)}
+                  >
+                    Add
+                  </Button>
+                )}
+                {match.profile && match.connectionStatus !== 'none' && (
+                  <span className="rounded-pill bg-cream px-2.5 py-1 text-xs font-bold text-ink-soft">
+                    {match.connectionStatus === 'accepted'
+                      ? 'Friend'
+                      : match.connectionStatus === 'incoming'
+                        ? 'Pending'
+                        : 'Sent'}
+                  </span>
+                )}
+                {!match.profile && match.smsTarget && (
+                  <Link
+                    href="/events/new"
+                    className="rounded-pill bg-cream px-2.5 py-1 text-xs font-bold text-ink-soft hover:text-terracotta"
+                  >
+                    Invite
+                  </Link>
+                )}
+              </div>
+            ))}
+          </div>
         )}
       </section>
 
@@ -387,7 +523,7 @@ export function PeopleClient({
         <EmptyState
           emoji="👋"
           title="Your people live here"
-          body="Add a friend by their handle above. Once you're connected you can sort them into circles and quietly play matchmaker."
+          body="Add a friend above. Once you're connected you can sort them into circles and quietly play matchmaker."
         />
       )}
 

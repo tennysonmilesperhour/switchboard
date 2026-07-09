@@ -1,3 +1,0 @@
--- Placeholder for a migration version that already exists in the linked
--- Supabase project's migration history. Keeping this file in the repo makes
--- future `supabase db push` runs compare local and remote history cleanly.
