@@ -18,6 +18,7 @@ import { RunItBackButton } from '@/components/events/RunItBackButton';
 import { PollSection, type OptionResult } from '@/components/polls/PollSection';
 import { HostControls } from './HostControls';
 import { CoHostManager } from './CoHostManager';
+import { AddInvitees } from './AddInvitees';
 import { inviteExpiresAt } from '@/lib/engine/cascade';
 import { formatDateTime } from '@/lib/format';
 import { googleCalendarUrl } from '@/lib/calendar-links';
@@ -397,6 +398,16 @@ export default async function EventPage({
                 ⬇ Guest list (CSV)
               </a>
             )}
+            {canManage &&
+              event.status !== 'cancelled' &&
+              event.status !== 'past' && (
+                <Link
+                  href={`/events/${event.id}/edit`}
+                  className="inline-flex items-center gap-1.5 rounded-pill border border-line bg-card px-3.5 py-2 text-xs font-bold text-ink-soft shadow-lift hover:border-terracotta hover:text-terracotta-deep active:scale-[0.98] transition-all"
+                >
+                  ✏️ Edit plan
+                </Link>
+              )}
             <ShareButton
               path={`/events/${event.id}`}
               title={event.title}
@@ -552,6 +563,10 @@ export default async function EventPage({
               ))}
             </ul>
           </section>
+        )}
+
+        {canManage && event.status === 'inviting' && (
+          <AddInvitees eventId={event.id} />
         )}
 
         {canManage && <HostControls event={event} pollDecided={poll?.phase === 'decided'} />}

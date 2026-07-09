@@ -152,11 +152,33 @@ export async function resolveContactMatches(
 
 export async function acceptConnection(connectionId: string): Promise<ConnectionResult> {
   const supabase = await createClient();
-  const { error } = await supabase
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false, error: 'Not signed in' };
+
+  // RLS restricts this update to the addressee; the returned row is readable
+  // because the accepter is a participant on it.
+  const { data: updated, error } = await supabase
     .from('connections')
     .update({ status: 'accepted' })
-    .eq('id', connectionId);
+    .eq('id', connectionId)
+    .select('requester_id')
+    .maybeSingle();
   if (error) return { ok: false, error: error.message };
+
+  if (updated?.requester_id) {
+    const { data: me } = await supabase
+      .from('profiles')
+      .select('display_name')
+      .eq('id', user.id)
+      .maybeSingle();
+    await sendPushToUsers([updated.requester_id], {
+      title: 'You’re connected 🎉',
+      body: `${me?.display_name ?? 'Someone'} accepted your connection request.`,
+      url: '/people',
+    });
+  }
   revalidatePath('/people');
   return { ok: true };
 }

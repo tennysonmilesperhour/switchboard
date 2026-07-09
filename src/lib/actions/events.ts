@@ -8,6 +8,7 @@ import {
   advanceEventCascade,
   notifyCurrentInviteWave,
 } from '@/lib/server/cascade-runner';
+import { sendPushToUsers } from '@/lib/server/notify';
 import type { EventTheme, InviteMode } from '@/lib/types';
 import { reportOperationalError } from '@/lib/server/observability';
 import { looksLikeEmail } from '@/lib/server/email';
@@ -163,6 +164,245 @@ export async function createEvent(input: CreateEventInput): Promise<CreateEventR
   }
 
   return { ok: true, eventId };
+}
+
+export interface AddInviteesResult {
+  ok: boolean;
+  error?: string;
+  /** How many new invitees were appended to the cascade. */
+  added?: number;
+  /** Handles that couldn't be added, each with a short reason. */
+  skipped?: Array<{ handle: string; reason: string }>;
+}
+
+/**
+ * Append people to an already-live cascade by handle. New invitees join the
+ * back of the line as `queued` and go out when it's their turn (individual
+ * mode) or as a fresh trailing wave (group / all-at-once). Host/co-host only,
+ * and only while invitations are in motion.
+ */
+export async function addInviteesByHandle(
+  eventId: string,
+  handles: string[],
+): Promise<AddInviteesResult> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false, error: 'Not signed in' };
+  if (!(await canManageEvent(user.id, eventId))) {
+    return { ok: false, error: 'Only the host can add people.' };
+  }
+
+  // Normalize + de-duplicate the requested handles, keeping only well-formed ones.
+  const cleaned: string[] = [];
+  const seen = new Set<string>();
+  const skipped: Array<{ handle: string; reason: string }> = [];
+  for (const raw of handles) {
+    const handle = maybeHandle(raw);
+    if (!handle) {
+      const shown = String(raw ?? '').trim();
+      if (shown) skipped.push({ handle: shown, reason: 'not a valid handle' });
+      continue;
+    }
+    if (seen.has(handle)) continue;
+    seen.add(handle);
+    cleaned.push(handle);
+  }
+  if (cleaned.length === 0) {
+    return { ok: false, error: 'Add at least one handle.', skipped };
+  }
+
+  const admin = createAdminClient();
+  const { data: event } = await admin
+    .from('events')
+    .select('id, status, invite_mode, capacity')
+    .eq('id', eventId)
+    .maybeSingle();
+  if (!event) return { ok: false, error: 'Plan not found.' };
+  if (event.status !== 'inviting') {
+    return {
+      ok: false,
+      error: 'You can only add people while invitations are in motion.',
+    };
+  }
+
+  // Resolve handles to real profiles.
+  const { data: profiles } = await admin
+    .from('profiles')
+    .select('id, handle')
+    .in('handle', cleaned);
+  const idByHandle = new Map(
+    (profiles ?? []).map((p) => [p.handle as string, p.id as string]),
+  );
+
+  // Existing invites: compute append positions/stage and skip anyone already on.
+  const { data: existing } = await admin
+    .from('invites')
+    .select('invitee_id, position, group_stage')
+    .eq('event_id', eventId);
+  const rows = existing ?? [];
+  const already = new Set(
+    rows.map((r) => r.invitee_id).filter((id): id is string => Boolean(id)),
+  );
+  let nextPosition = rows.reduce((max, r) => Math.max(max, r.position), -1) + 1;
+  const nextStage = rows.reduce((max, r) => Math.max(max, r.group_stage), -1) + 1;
+
+  const toInsert: Array<{
+    event_id: string;
+    invitee_id: string;
+    position: number;
+    group_stage: number;
+    status: 'queued';
+  }> = [];
+  for (const handle of cleaned) {
+    const profileId = idByHandle.get(handle);
+    if (!profileId) {
+      skipped.push({ handle, reason: 'no one with that handle' });
+      continue;
+    }
+    if (profileId === user.id) {
+      skipped.push({ handle, reason: 'that’s you' });
+      continue;
+    }
+    if (already.has(profileId)) {
+      skipped.push({ handle, reason: 'already invited' });
+      continue;
+    }
+    already.add(profileId);
+    toInsert.push({
+      event_id: eventId,
+      invitee_id: profileId,
+      position: nextPosition++,
+      // Individual mode ignores stage; grouped modes get one new trailing wave.
+      group_stage: event.invite_mode === 'individual' ? 0 : nextStage,
+      status: 'queued',
+    });
+  }
+
+  if (toInsert.length === 0) {
+    return { ok: false, error: 'No new people to add.', skipped };
+  }
+
+  const { error } = await admin.from('invites').insert(toInsert);
+  if (error) {
+    await reportOperationalError('add-invitees', error, { eventId });
+    return { ok: false, error: 'Could not add people. Try again.', skipped };
+  }
+
+  // Send immediately if the cascade is ready for them (e.g. individual mode
+  // with no live invite, or a resolved prior wave). The cron sweep is the backstop.
+  try {
+    await advanceEventCascade(eventId);
+  } catch (cascadeError) {
+    await reportOperationalError('add-invitees-cascade', cascadeError, { eventId });
+  }
+
+  revalidatePath(`/events/${eventId}`);
+  return { ok: true, added: toInsert.length, skipped };
+}
+
+export interface UpdateEventInput {
+  title: string;
+  description: string | null;
+  locationName: string | null;
+  locationAddress: string | null;
+  startsAt: string | null;
+  endsAt: string | null;
+  capacity: number | null;
+  wishlistUrl: string | null;
+}
+
+/**
+ * Host/co-host edit of an already-published plan. Changing the time or place
+ * quietly pings everyone who has already accepted so nobody shows up to the
+ * old details.
+ */
+export async function updateEventDetails(
+  eventId: string,
+  input: UpdateEventInput,
+): Promise<{ ok: boolean; error?: string }> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false, error: 'Not signed in' };
+  if (!(await canManageEvent(user.id, eventId))) {
+    return { ok: false, error: 'Only the host can edit this plan.' };
+  }
+
+  const title = input.title.trim();
+  if (!title) return { ok: false, error: 'Give your plan a name.' };
+  if (input.capacity !== null && (!Number.isInteger(input.capacity) || input.capacity < 1)) {
+    return { ok: false, error: 'Capacity must be a whole number of at least 1.' };
+  }
+
+  let wishlistUrl: string | null = null;
+  if (input.wishlistUrl?.trim()) {
+    const value = input.wishlistUrl.trim();
+    const candidate = /^https?:\/\//i.test(value) ? value : `https://${value}`;
+    try {
+      const url = new URL(candidate);
+      if ((url.protocol === 'http:' || url.protocol === 'https:') && url.hostname.includes('.')) {
+        wishlistUrl = url.toString();
+      }
+    } catch {
+      wishlistUrl = null;
+    }
+  }
+
+  const admin = createAdminClient();
+  const { data: before } = await admin
+    .from('events')
+    .select('starts_at, location_name, title')
+    .eq('id', eventId)
+    .maybeSingle();
+  if (!before) return { ok: false, error: 'Plan not found.' };
+
+  const { error } = await admin
+    .from('events')
+    .update({
+      title,
+      description: input.description?.trim() || null,
+      location_name: input.locationName?.trim() || null,
+      location_address: input.locationAddress?.trim() || null,
+      starts_at: input.startsAt || null,
+      ends_at: input.endsAt || null,
+      capacity: input.capacity,
+      wishlist_url: wishlistUrl,
+    })
+    .eq('id', eventId);
+  if (error) {
+    await reportOperationalError('event-update', error, { eventId });
+    return { ok: false, error: 'Could not save your changes. Try again.' };
+  }
+
+  // Notify accepted guests only when the logistics they'd act on actually change.
+  const whenChanged = (before.starts_at ?? null) !== (input.startsAt || null);
+  const whereChanged = (before.location_name ?? null) !== (input.locationName?.trim() || null);
+  if (whenChanged || whereChanged) {
+    const { data: accepted } = await admin
+      .from('invites')
+      .select('invitee_id')
+      .eq('event_id', eventId)
+      .eq('status', 'accepted')
+      .not('invitee_id', 'is', null);
+    const recipients = (accepted ?? [])
+      .map((row) => row.invitee_id as string | null)
+      .filter((id): id is string => Boolean(id) && id !== user.id);
+    if (recipients.length > 0) {
+      const changed = whenChanged && whereChanged ? 'time and place' : whenChanged ? 'time' : 'place';
+      await sendPushToUsers(recipients, {
+        title: 'Plan updated ✏️',
+        body: `The ${changed} for ${title} changed. Tap for the latest.`,
+        url: `/events/${eventId}`,
+      });
+    }
+  }
+
+  revalidatePath(`/events/${eventId}`);
+  revalidatePath('/plans');
+  return { ok: true };
 }
 
 export async function confirmEvent(eventId: string): Promise<void> {
