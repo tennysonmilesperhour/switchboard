@@ -1,5 +1,7 @@
 import Link from 'next/link';
 import { BottomNav } from './BottomNav';
+import { NotificationBell } from './NotificationBell';
+import { NotificationNudge } from './NotificationNudge';
 import { Icon } from '@/components/ui/Icon';
 
 interface AppShellProps {
@@ -35,16 +37,9 @@ export function AppShell({ title, back, action, children }: AppShellProps) {
             switchboard
           </Link>
         )}
-        {action ?? (
-          <Link
-            href="/notifications"
-            aria-label="Notifications"
-            className="size-9 inline-flex items-center justify-center rounded-full text-terracotta-deep hover:bg-cream"
-          >
-            <Icon name="bell" size={22} />
-          </Link>
-        )}
+        {action ?? <NotificationBell />}
       </header>
+      <NotificationNudge />
       <main className="flex-1 px-4 pb-28 pt-1">{children}</main>
       <BottomNav />
     </div>

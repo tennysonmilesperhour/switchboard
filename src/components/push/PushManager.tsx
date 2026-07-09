@@ -2,14 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { Button } from '@/components/ui/Button';
-
-type PushState = 'unsupported' | 'default' | 'granted' | 'denied' | 'subscribed';
-
-function urlBase64ToUint8Array(base64: string): Uint8Array {
-  const padding = '='.repeat((4 - (base64.length % 4)) % 4);
-  const raw = atob((base64 + padding).replace(/-/g, '+').replace(/_/g, '/'));
-  return Uint8Array.from([...raw].map((char) => char.charCodeAt(0)));
-}
+import { enablePush, getPushState, type PushState } from '@/lib/client/push';
 
 export function PushManager() {
   const [state, setState] = useState<PushState>('default');
@@ -17,20 +10,9 @@ export function PushManager() {
 
   useEffect(() => {
     let cancelled = false;
-    (async () => {
-      // Yield first - never set state synchronously inside the effect body.
-      await Promise.resolve();
-      if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
-        if (!cancelled) setState('unsupported');
-        return;
-      }
-      const registration = await navigator.serviceWorker.register('/sw.js');
-      const subscription = await registration.pushManager.getSubscription();
-      if (cancelled) return;
-      setState(
-        subscription ? 'subscribed' : (Notification.permission as PushState),
-      );
-    })();
+    getPushState().then((next) => {
+      if (!cancelled) setState(next);
+    });
     return () => {
       cancelled = true;
     };
@@ -39,27 +21,7 @@ export function PushManager() {
   async function enable() {
     setBusy(true);
     try {
-      const publicKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
-      if (!publicKey) {
-        setState('unsupported');
-        return;
-      }
-      const registration = await navigator.serviceWorker.ready;
-      const permission = await Notification.requestPermission();
-      if (permission !== 'granted') {
-        setState(permission as PushState);
-        return;
-      }
-      const subscription = await registration.pushManager.subscribe({
-        userVisibleOnly: true,
-        applicationServerKey: urlBase64ToUint8Array(publicKey) as BufferSource,
-      });
-      const response = await fetch('/api/push/subscribe', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(subscription.toJSON()),
-      });
-      if (response.ok) setState('subscribed');
+      setState(await enablePush());
     } finally {
       setBusy(false);
     }
