@@ -17,34 +17,50 @@ export default async function NotificationsPage() {
   } = await supabase.auth.getUser();
   if (!user) redirect('/welcome');
 
-  const [{ data: pendingInvites }, { data: matches }, { data: announcements }] =
-    await Promise.all([
-      supabase
-        .from('invites')
-        .select('id, event:events(id, title, starts_at)')
-        .eq('invitee_id', user.id)
-        .eq('status', 'sent'),
-      supabase
-        .from('matches')
-        .select('id, activity, room_id, created_at, user_a, user_b')
-        .or(`user_a.eq.${user.id},user_b.eq.${user.id}`)
-        .order('created_at', { ascending: false })
-        .limit(8),
-      // RLS scopes announcements to events the user can see.
-      supabase
-        .from('announcements')
-        .select('id, body, created_at, event:events(id, title)')
-        .order('created_at', { ascending: false })
-        .limit(12),
-    ]);
+  const [
+    { data: pendingInvites },
+    { data: matches },
+    { data: announcements },
+    { data: connectionRequests },
+  ] = await Promise.all([
+    supabase
+      .from('invites')
+      .select('id, event:events(id, title, starts_at)')
+      .eq('invitee_id', user.id)
+      .eq('status', 'sent'),
+    supabase
+      .from('matches')
+      .select('id, activity, room_id, created_at, user_a, user_b')
+      .or(`user_a.eq.${user.id},user_b.eq.${user.id}`)
+      .order('created_at', { ascending: false })
+      .limit(8),
+    // RLS scopes announcements to events the user can see.
+    supabase
+      .from('announcements')
+      .select('id, body, created_at, event:events(id, title)')
+      .order('created_at', { ascending: false })
+      .limit(12),
+    // Incoming connection requests waiting on this user (RLS: addressee only).
+    supabase
+      .from('connections')
+      .select(
+        'id, created_at, requester:profiles!connections_requester_id_fkey(id, display_name, handle)',
+      )
+      .eq('addressee_id', user.id)
+      .eq('status', 'pending')
+      .order('created_at', { ascending: false })
+      .limit(12),
+  ]);
 
   const invites = pendingInvites ?? [];
   const matchList = matches ?? [];
   const announcementList = announcements ?? [];
+  const requestList = connectionRequests ?? [];
   const isEmpty =
     invites.length === 0 &&
     matchList.length === 0 &&
-    announcementList.length === 0;
+    announcementList.length === 0 &&
+    requestList.length === 0;
 
   return (
     <AppShell title="Notifications" back="/">
@@ -71,6 +87,38 @@ export default async function NotificationsPage() {
                         <p className="font-medium">{event.title}</p>
                         <p className="text-xs text-ink-soft mt-0.5">
                           {formatDateTime(event.starts_at)} · respond soon
+                        </p>
+                      </Card>
+                    </Link>
+                  );
+                })}
+              </div>
+            </section>
+          )}
+
+          {requestList.length > 0 && (
+            <section>
+              <SectionHeader title="Wants to connect 👋" hint="Accept or ignore in People" />
+              <div className="space-y-2">
+                {requestList.map((request) => {
+                  const requester = (
+                    Array.isArray(request.requester)
+                      ? request.requester[0]
+                      : request.requester
+                  ) as { id: string; display_name: string; handle: string | null } | null;
+                  if (!requester) return null;
+                  return (
+                    <Link key={request.id} href="/people" className="block group">
+                      <Card tone="sage" className="group-hover:shadow-lift transition-shadow">
+                        <p className="text-sm">
+                          <strong>{requester.display_name}</strong>
+                          {requester.handle ? (
+                            <span className="text-ink-faint"> @{requester.handle}</span>
+                          ) : null}{' '}
+                          wants to connect{' '}
+                          <span className="text-ink-faint">
+                            {formatRelative(request.created_at)}
+                          </span>
                         </p>
                       </Card>
                     </Link>
