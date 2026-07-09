@@ -29,3 +29,7 @@ The C2 (`reschedule_cancel_event`) and C3 (`respond_to_guest_invite`)
 authorization functions are exercised end-to-end by the Playwright suite; add
 focused pgTAP coverage for them here when the seed fixtures for events/invites
 are expanded.
+
+`launch_hardening.test.sql` verifies that atomic publication and durable rate
+limiting are installed and that internal security-definer functions cannot be
+executed by anonymous or ordinary authenticated clients.

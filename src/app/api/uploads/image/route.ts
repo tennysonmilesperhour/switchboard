@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server';
 import { createAdminClient, hasAdminCredentials } from '@/lib/supabase/admin';
 import { createClient } from '@/lib/supabase/server';
+import { checkRateLimit } from '@/lib/server/rate-limit';
+import { reportOperationalError } from '@/lib/server/observability';
 
 const MAX_UPLOAD_BYTES = 5 * 1024 * 1024;
 const ALLOWED_BUCKETS = new Set(['media', 'avatars', 'covers']);
@@ -49,6 +51,9 @@ export async function POST(request: Request) {
   if (!hasAdminCredentials()) {
     return jsonError('Image uploads are not configured on this server yet.', 503);
   }
+  if (!(await checkRateLimit(`upload:${user.id}`, 30, 60 * 60))) {
+    return jsonError('Upload limit reached. Try again later.', 429);
+  }
 
   const formData = await request.formData();
   const file = formData.get('file');
@@ -77,7 +82,11 @@ export async function POST(request: Request) {
   });
 
   if (uploadError) {
-    console.error('Image upload failed', uploadError);
+    await reportOperationalError('image-upload', uploadError, {
+      userId: user.id,
+      bucket,
+      bytes: file.size,
+    });
     return jsonError('Upload failed. Please try again.', 500);
   }
 

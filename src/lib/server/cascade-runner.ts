@@ -27,6 +27,54 @@ function toEngineConfig(event: SwitchboardEvent): CascadeConfig {
   };
 }
 
+async function deliverInvitations(
+  event: SwitchboardEvent,
+  invites: Invite[],
+  sentIds: Set<string>,
+): Promise<void> {
+  const notifyUsers = invites
+    .filter((invite) => sentIds.has(invite.id) && invite.invitee_id)
+    .map((invite) => invite.invitee_id as string);
+  if (notifyUsers.length > 0) {
+    await sendPushToUsers(notifyUsers, {
+      title: 'You’re invited ✉️',
+      body: `${event.title} - you have a little while to respond.`,
+      url: `/events/${event.id}`,
+    });
+  }
+
+  const guestEmails = invites
+    .filter(
+      (invite) =>
+        sentIds.has(invite.id) &&
+        !invite.invitee_id &&
+        invite.guest_token &&
+        looksLikeEmail(invite.guest_contact),
+    )
+    .map((invite) => ({
+      to: invite.guest_contact as string,
+      subject: `You’re invited: ${event.title}`,
+      text: guestInviteText(event, invite.guest_name, invite.guest_token as string),
+    }));
+  if (guestEmails.length > 0) await sendEmails(guestEmails);
+}
+
+/** Deliver the already-live first wave created by the atomic publish RPC. */
+export async function notifyCurrentInviteWave(eventId: string): Promise<void> {
+  const admin = createAdminClient();
+  const [{ data: event }, { data: invites }] = await Promise.all([
+    admin.from('events').select('*').eq('id', eventId).single<SwitchboardEvent>(),
+    admin
+      .from('invites')
+      .select('*')
+      .eq('event_id', eventId)
+      .eq('status', 'sent')
+      .returns<Invite[]>(),
+  ]);
+  if (!event || !invites?.length) return;
+  await deliverInvitations(event, invites, new Set(invites.map((invite) => invite.id)));
+}
+
 /**
  * Server-authoritative cascade tick for one event. Called after any invite
  * response, on event page load (lazy), and from the cron sweep.
@@ -64,40 +112,10 @@ export async function advanceEventCascade(eventId: string): Promise<void> {
     p_updates: updates,
   });
 
-  // Notify newly-sent invitees (registered users only; guests get links).
   const sentIds = new Set(
     ((sentRows as { sent_id: string }[] | null) ?? []).map((row) => row.sent_id),
   );
-  const notifyUsers = invites
-    .filter((i) => sentIds.has(i.id) && i.invitee_id)
-    .map((i) => i.invitee_id as string);
-  if (notifyUsers.length > 0) {
-    await sendPushToUsers(notifyUsers, {
-      title: 'You’re invited ✉️',
-      body: `${event.title} - you have a little while to respond.`,
-      url: `/events/${event.id}`,
-    });
-  }
-
-  // Newly-sent guests reached by their token link - no account needed. This
-  // is the off-platform delivery Partiful gets from SMS; we do it by email so
-  // a guest never has to hand over a phone number.
-  const guestEmails = invites
-    .filter(
-      (i) =>
-        sentIds.has(i.id) &&
-        !i.invitee_id &&
-        i.guest_token &&
-        looksLikeEmail(i.guest_contact),
-    )
-    .map((i) => ({
-      to: i.guest_contact as string,
-      subject: `You’re invited: ${event.title}`,
-      text: guestInviteText(event, i.guest_name, i.guest_token as string),
-    }));
-  if (guestEmails.length > 0) {
-    await sendEmails(guestEmails);
-  }
+  await deliverInvitations(event, invites, sentIds);
 }
 
 function guestInviteText(

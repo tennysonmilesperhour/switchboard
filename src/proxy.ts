@@ -5,11 +5,16 @@ import { NextResponse, type NextRequest } from 'next/server';
 const PUBLIC_PREFIXES = [
   '/welcome',
   '/login',
+  '/forgot-password',
+  '/reset-password',
+  '/privacy',
+  '/terms',
   '/auth',
   '/rsvp', // guest RSVP links
   '/design', // design direction previews
   '/api/cron',
   '/api/og',
+  '/api/health',
 ];
 
 function isPublicPath(pathname: string): boolean {

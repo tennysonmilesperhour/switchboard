@@ -32,4 +32,24 @@ test.describe('public surface', () => {
     );
     expect(overflow).toBe(false);
   });
+
+  test('sign-in failure always returns visible feedback', async ({ page }) => {
+    await page.goto('/login');
+    await page.getByLabel('Email or username').fill('missing_user');
+    await page.getByLabel('Password').fill('incorrect-password');
+    const submit = page.locator('form').getByRole('button', { name: 'Sign in', exact: true });
+    await submit.click();
+    await expect(page.getByRole('alert')).toBeVisible({ timeout: 20_000 });
+    await expect(submit).toBeEnabled();
+  });
+
+  test('password recovery and legal pages are reachable', async ({ page }) => {
+    await page.goto('/login');
+    await page.getByRole('link', { name: 'Forgot password?' }).click();
+    await expect(page.getByRole('heading', { name: 'Reset your password' })).toBeVisible();
+    await page.goto('/privacy');
+    await expect(page.getByRole('heading', { name: 'Privacy' })).toBeVisible();
+    await page.goto('/terms');
+    await expect(page.getByRole('heading', { name: 'Terms' })).toBeVisible();
+  });
 });

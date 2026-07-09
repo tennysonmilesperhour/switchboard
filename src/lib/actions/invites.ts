@@ -6,6 +6,7 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import { advanceEventCascade } from '@/lib/server/cascade-runner';
 import { sendPushToUsers } from '@/lib/server/notify';
 import type { DeclineNote } from '@/lib/types';
+import { checkRateLimit } from '@/lib/server/rate-limit';
 
 export interface RespondResult {
   ok: boolean;
@@ -170,6 +171,9 @@ export async function respondToGuestInvite(
   accept: boolean,
   answers: Record<string, string> = {},
 ): Promise<RespondResult> {
+  if (!(await checkRateLimit(`guest-rsvp:${token}`, 10, 60 * 60))) {
+    return { ok: false, error: 'Too many attempts. Try again later.' };
+  }
   const admin = createAdminClient();
 
   const { data: invite } = await admin

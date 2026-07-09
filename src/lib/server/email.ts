@@ -75,6 +75,10 @@ export async function sendEmails(messages: EmailMessage[]): Promise<number> {
 
 /** Absolute URL for a path, using the configured app origin. */
 export function appUrl(path = ''): string {
-  const base = (process.env.NEXT_PUBLIC_APP_URL ?? '').replace(/\/$/, '');
+  const configured = process.env.NEXT_PUBLIC_APP_URL;
+  if (!configured && process.env.NODE_ENV === 'production') {
+    throw new Error('NEXT_PUBLIC_APP_URL must be configured in production');
+  }
+  const base = (configured ?? 'http://localhost:3000').replace(/\/$/, '');
   return `${base}${path}`;
 }

@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { sweepCascades } from '@/lib/server/cascade-runner';
 import { sweepDuePolls } from '@/lib/server/poll-runner';
 import { sweepReminders } from '@/lib/server/reminders';
+import { checkRateLimit } from '@/lib/server/rate-limit';
 
 /**
  * Vercel cron (see vercel.json): advances every live cascade, resolves polls
@@ -20,6 +21,9 @@ export async function GET(request: Request) {
   const authHeader = request.headers.get('authorization');
   if (authHeader !== `Bearer ${secret}`) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+  if (!(await checkRateLimit('cron:cascade', 5, 60))) {
+    return NextResponse.json({ error: 'Too many requests' }, { status: 429 });
   }
 
   const [eventsAdvanced, pollsResolved, remindersSent] = await Promise.all([

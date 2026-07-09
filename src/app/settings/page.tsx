@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/Button';
 import { PushManager } from '@/components/push/PushManager';
 import { InterestPicker } from '@/components/profile/InterestPicker';
 import { SaveButton } from './SaveButton';
+import { AccountControls } from './AccountControls';
 import { INTEREST_CATEGORIES, DOWN_TO_GROUP } from '@/lib/interests';
 import {
   signOut,
@@ -186,6 +187,13 @@ export default async function SettingsPage() {
               />
               <SaveButton />
             </form>
+          </Card>
+        </section>
+
+        <section>
+          <SectionHeader title="Account" hint="Password and account controls" />
+          <Card>
+            <AccountControls />
           </Card>
         </section>
 

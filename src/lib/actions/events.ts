@@ -4,8 +4,12 @@ import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
-import { advanceEventCascade } from '@/lib/server/cascade-runner';
+import {
+  advanceEventCascade,
+  notifyCurrentInviteWave,
+} from '@/lib/server/cascade-runner';
 import type { EventTheme, InviteMode } from '@/lib/types';
+import { reportOperationalError } from '@/lib/server/observability';
 
 /** Primary host or a co-host — the people allowed to manage an event. */
 async function canManageEvent(userId: string, eventId: string): Promise<boolean> {
@@ -77,128 +81,21 @@ export async function createEvent(input: CreateEventInput): Promise<CreateEventR
     return createEventError('Add at least one person to invite before sending.');
   }
 
-  const roomId = crypto.randomUUID();
-  const eventId = crypto.randomUUID();
-
-  // Every event gets a Living Room. Use caller-scoped inserts with generated
-  // ids and no `.select()` so RLS never has to read rows before membership is
-  // established.
-  const { error: roomError } = await supabase
-    .from('rooms')
-    .insert({ id: roomId, kind: 'event', title, created_by: user.id });
-  if (roomError) {
-    console.error('Failed to create event room', roomError);
-    return createEventError('Something went wrong creating the plan room.');
-  }
-
-  const { error: memberError } = await supabase
-    .from('room_members')
-    .insert({ room_id: roomId, member_id: user.id });
-  if (memberError) {
-    console.error('Failed to add host to event room', memberError);
-    return createEventError('Something went wrong opening the plan room.');
-  }
-
-  const { error: eventError } = await supabase
-    .from('events')
-    .insert({
-      id: eventId,
-      host_id: user.id,
-      title,
-      description: input.description,
-      location_name: input.locationName,
-      location_address: input.locationAddress,
-      starts_at: input.startsAt,
-      ends_at: input.endsAt,
-      capacity: input.capacity,
-      invite_mode: input.inviteMode,
-      open_table: input.openTable && input.capacity !== null,
-      status: input.enablePoll ? 'deciding' : 'inviting',
-      show_invite_list: input.showInviteList,
-      show_accepted: input.showAccepted,
-      show_expired: input.showExpired,
-      cover_url: input.coverUrl?.trim() || null,
-      theme: input.theme ?? 'default',
-      wishlist_url: input.wishlistUrl?.trim() || null,
-      room_id: roomId,
-    });
-  if (eventError) {
-    console.error('Failed to create event', eventError);
-    return createEventError('Something went wrong saving your plan.');
-  }
-
-  const questions = (input.questions ?? [])
-    .map((q) => ({ prompt: q.prompt.trim(), required: q.required }))
-    .filter((q) => q.prompt.length > 0);
-  if (questions.length > 0) {
-    const { error: questionError } = await supabase.from('event_questions').insert(
-      questions.map((q, index) => ({
-        event_id: eventId,
-        prompt: q.prompt,
-        required: q.required,
-        position: index,
-      })),
-    );
-    if (questionError) {
-      console.error('Failed to create event questions', questionError);
-      return createEventError('Something went wrong saving the RSVP questions.');
-    }
-  }
-
-  const sentAt = input.enablePoll ? null : new Date().toISOString();
-  const inviteRows = input.invitees.map((invitee, index) => {
-    const groupStage =
-      input.inviteMode === 'individual' ? index : invitee.groupStage;
-    const startsSent =
-      !input.enablePoll &&
-      (input.inviteMode === 'individual' ? index === 0 : groupStage === 0);
-
-    return {
-      event_id: eventId,
-      invitee_id: invitee.profileId,
-      guest_name: invitee.guestName ?? null,
-      guest_contact: invitee.guestContact ?? null,
-      position: index,
-      group_stage: groupStage,
-      window_minutes: invitee.windowMinutes,
-      status: startsSent ? 'sent' : 'queued',
-      sent_at: startsSent ? sentAt : null,
-    };
+  const { data: eventId, error } = await supabase.rpc('create_event_atomic', {
+    p_input: { ...input, title },
   });
-
-  const { error: inviteError } = await supabase.from('invites').insert(inviteRows);
-  if (inviteError) {
-    console.error('Failed to create invites', inviteError);
-    return createEventError('Something went wrong saving the invitation list.');
-  }
-
-  if (input.ritualId) {
-    await supabase
-      .from('rituals')
-      .update({ last_planned_at: new Date().toISOString() })
-      .eq('id', input.ritualId);
-  }
-
-  if (input.enablePoll) {
-    const { error: pollError } = await supabase.from('polls').insert({
-      event_id: eventId,
-      resolution: input.pollResolution,
-      vote_deadline: input.voteDeadline,
-      phase: 'suggesting',
+  if (error || typeof eventId !== 'string') {
+    await reportOperationalError('event-create', error ?? 'Missing event id', {
+      userId: user.id,
     });
-    if (pollError) {
-      console.error('Failed to create poll', pollError);
-      return createEventError('Something went wrong setting up group deciding.');
-    }
-  } else {
-    // Best-effort: the event and invites already exist. If kicking off the
-    // cascade fails (e.g. admin credentials or push aren't configured), the
-    // host must still land on their new event rather than hang — the sweep
-    // will pick the cascade back up. Never let this abort the redirect below.
+    return createEventError('Something went wrong publishing your plan. Nothing was saved.');
+  }
+
+  if (!input.enablePoll) {
     try {
-      await advanceEventCascade(eventId);
+      await notifyCurrentInviteWave(eventId);
     } catch (cascadeError) {
-      console.error('Failed to start cascade for new event', cascadeError);
+      await reportOperationalError('event-initial-delivery', cascadeError, { eventId });
     }
   }
 

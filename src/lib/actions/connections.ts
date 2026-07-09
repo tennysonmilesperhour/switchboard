@@ -62,6 +62,50 @@ export async function removeConnection(connectionId: string): Promise<Connection
   return { ok: true };
 }
 
+export async function blockProfile(
+  profileId: string,
+  connectionId?: string,
+): Promise<ConnectionResult> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false, error: 'Not signed in' };
+  if (profileId === user.id) return { ok: false, error: 'You cannot block yourself.' };
+
+  const { error } = await supabase.from('profile_blocks').insert({
+    blocker_id: user.id,
+    blocked_id: profileId,
+  });
+  if (error && error.code !== '23505') return { ok: false, error: error.message };
+  if (connectionId) {
+    await supabase.from('connections').delete().eq('id', connectionId);
+  }
+  revalidatePath('/people');
+  return { ok: true };
+}
+
+export async function reportProfile(
+  profileId: string,
+  reason: string,
+): Promise<ConnectionResult> {
+  const cleanReason = reason.trim().slice(0, 500);
+  if (!cleanReason) return { ok: false, error: 'Add a short reason.' };
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false, error: 'Not signed in' };
+
+  const { error } = await supabase.from('user_reports').insert({
+    reporter_id: user.id,
+    reported_id: profileId,
+    reason: cleanReason,
+  });
+  if (error) return { ok: false, error: error.message };
+  return { ok: true };
+}
+
 export async function toggleCircleMember(
   circleId: string,
   memberId: string,

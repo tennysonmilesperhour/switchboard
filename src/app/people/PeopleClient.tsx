@@ -12,8 +12,10 @@ import { useToast } from '@/components/ui/Toast';
 import { useConfirm } from '@/components/ui/ConfirmDialog';
 import {
   acceptConnection,
+  blockProfile,
   createCircle,
   removeConnection,
+  reportProfile,
   sendConnectionRequest,
   toggleCircleMember,
 } from '@/lib/actions/connections';
@@ -94,6 +96,31 @@ export function PeopleClient({
         return;
       }
       router.refresh();
+    });
+  }
+
+  async function blockFriend(friend: FriendRow) {
+    const ok = await confirm({
+      title: `Block ${friend.name}?`,
+      body: 'They will be removed from your connections and will not be able to reconnect with you.',
+      confirmLabel: 'Block',
+      danger: true,
+    });
+    if (!ok) return;
+    startTransition(async () => {
+      const result = await blockProfile(friend.id, friend.connectionId);
+      if (!result.ok) return toast.error(result.error ?? 'Could not block that person.');
+      router.refresh();
+    });
+  }
+
+  async function reportFriend(friend: FriendRow) {
+    const reason = window.prompt(`Briefly describe why you are reporting ${friend.name}.`);
+    if (!reason) return;
+    startTransition(async () => {
+      const result = await reportProfile(friend.id, reason);
+      if (!result.ok) return toast.error(result.error ?? 'Could not send the report.');
+      toast.success('Report received.');
     });
   }
 
@@ -292,6 +319,22 @@ export function PeopleClient({
                       >
                         <Icon name="close" size={14} />
                         Remove connection
+                      </button>
+                      <button
+                        type="button"
+                        disabled={pending}
+                        onClick={() => reportFriend(friend)}
+                        className="ml-3 rounded-pill px-1 py-1 text-xs font-semibold text-ink-faint hover:text-rose-deep focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-terracotta"
+                      >
+                        Report
+                      </button>
+                      <button
+                        type="button"
+                        disabled={pending}
+                        onClick={() => blockFriend(friend)}
+                        className="ml-3 rounded-pill px-1 py-1 text-xs font-semibold text-rose-deep focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-terracotta"
+                      >
+                        Block
                       </button>
                     </div>
                   )}

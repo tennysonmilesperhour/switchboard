@@ -1,6 +1,7 @@
 'use client';
 
 import { useActionState, useState } from 'react';
+import Link from 'next/link';
 import { Button } from '@/components/ui/Button';
 import {
   createPasswordAccount,
@@ -34,18 +35,31 @@ export function LoginForm() {
     setStatus('submitting');
     setMessage('');
 
-    const result = await signInWithPasswordIdentifier({
-      identifier,
-      password,
-    });
+    try {
+      const result = await Promise.race([
+        signInWithPasswordIdentifier({ identifier, password }),
+        new Promise<AuthActionResult>((resolve) =>
+          window.setTimeout(
+            () => resolve({
+              ok: false,
+              error: 'Sign-in took too long. Check your connection and try again.',
+            }),
+            15_000,
+          ),
+        ),
+      ]);
 
-    if (!result.ok) {
-      setMessage(result.error ?? 'That email, username, or password did not work.');
+      if (!result.ok) {
+        setMessage(result.error ?? 'That email, username, or password did not work.');
+        setStatus('error');
+        return;
+      }
+
+      window.location.assign('/');
+    } catch {
+      setMessage('Sign-in could not connect. Check your connection and try again.');
       setStatus('error');
-      return;
     }
-
-    window.location.assign('/');
   }
 
   async function signInWithGoogle() {
@@ -135,6 +149,11 @@ export function LoginForm() {
           >
             {status === 'submitting' ? 'Signing in...' : 'Sign in'}
           </Button>
+          <div className="text-right">
+            <Link href="/forgot-password" className="text-sm font-bold text-terracotta">
+              Forgot password?
+            </Link>
+          </div>
         </form>
       ) : createState.ok && createState.username ? (
         <div className="rounded-card bg-sage-soft p-5 animate-rise">

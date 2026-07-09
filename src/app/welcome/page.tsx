@@ -123,8 +123,10 @@ export default function WelcomePage() {
         </Link>
       </section>
 
-      <footer className="pb-10 text-center text-xs text-ink-faint">
-        © 2026 Switchboard
+      <footer className="flex items-center justify-center gap-3 pb-10 text-center text-xs text-ink-faint">
+        <span>© 2026 Switchboard</span>
+        <Link href="/privacy" className="hover:text-ink">Privacy</Link>
+        <Link href="/terms" className="hover:text-ink">Terms</Link>
       </footer>
     </div>
   );
