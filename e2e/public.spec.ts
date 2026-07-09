@@ -35,11 +35,15 @@ test.describe('public surface', () => {
 
   test('sign-in failure always returns visible feedback', async ({ page }) => {
     await page.goto('/login');
-    await page.getByLabel('Email or username').fill('missing_user');
+    await page.getByLabel('Email or username').fill('invalid!');
     await page.getByLabel('Password').fill('incorrect-password');
     const submit = page.locator('form').getByRole('button', { name: 'Sign in', exact: true });
     await submit.click();
-    await expect(page.getByRole('alert')).toBeVisible({ timeout: 20_000 });
+    const feedback = page.getByText(
+      'That email, username, or password did not work.',
+      { exact: true },
+    );
+    await expect(feedback).toBeVisible({ timeout: 20_000 });
     await expect(submit).toBeEnabled();
   });
 

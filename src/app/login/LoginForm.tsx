@@ -33,7 +33,7 @@ export function LoginForm() {
   async function signIn(e: React.FormEvent) {
     e.preventDefault();
     setStatus('submitting');
-    setMessage('');
+    setMessage('Checking your account...');
 
     try {
       const result = await Promise.race([
@@ -44,7 +44,7 @@ export function LoginForm() {
               ok: false,
               error: 'Sign-in took too long. Check your connection and try again.',
             }),
-            15_000,
+            8_000,
           ),
         ),
       ]);
@@ -146,6 +146,7 @@ export function LoginForm() {
             size="lg"
             className="w-full"
             disabled={status === 'submitting'}
+            aria-busy={status === 'submitting'}
           >
             {status === 'submitting' ? 'Signing in...' : 'Sign in'}
           </Button>

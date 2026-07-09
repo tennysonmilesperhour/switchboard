@@ -96,6 +96,9 @@ export async function signInWithPasswordIdentifier({
   if (!normalized || password.length === 0) {
     return authError('Enter your email or username and password.');
   }
+  if (!isEmailIdentifier(normalized) && !isValidUsername(normalized)) {
+    return authError('That email, username, or password did not work.');
+  }
 
   try {
     const allowed = await checkRateLimit(`signin:${normalized}`, 8, 10 * 60);
