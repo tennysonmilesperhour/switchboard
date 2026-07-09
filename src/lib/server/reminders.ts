@@ -1,6 +1,7 @@
 import { createAdminClient } from '@/lib/supabase/admin';
 import { sendPushToUsers } from '@/lib/server/notify';
 import { sendEmails, looksLikeEmail, appUrl } from '@/lib/server/email';
+import { sendSmsMessages, looksLikePhoneNumber } from '@/lib/server/sms';
 import { formatDateTime } from '@/lib/format';
 import type { Invite, SwitchboardEvent } from '@/lib/types';
 
@@ -107,8 +108,20 @@ async function remindOneEvent(
         `\nDetails: ${appUrl(`/rsvp/${i.guest_token}`)}\n\n— Switchboard`,
     }));
 
+  // Guest attendees reachable by phone → the same reminder over SMS.
+  const attendeeTexts = accepted
+    .filter((i) => !i.invitee_id && looksLikePhoneNumber(i.guest_contact) && i.guest_token)
+    .map((i) => ({
+      to: i.guest_contact as string,
+      body:
+        `${event.title} is ${kind === 'soon' ? 'starting soon' : 'coming up'} - ${when}. ` +
+        (event.location_name ? `At ${event.location_name}. ` : '') +
+        `Details: ${appUrl(`/rsvp/${i.guest_token}`)}`,
+    }));
+
   // On the day-before pass, gently nudge people still holding a live invite.
   let nudgeEmails: typeof attendeeEmails = [];
+  let nudgeTexts: typeof attendeeTexts = [];
   if (kind === 'day_before') {
     const pending = rows.filter((i) => i.status === 'sent');
     const pendingUsers = pending
@@ -131,10 +144,21 @@ async function remindOneEvent(
           `${event.title} is coming up - ${when}. Your invitation is still ` +
           `open, no pressure.\n\nRSVP: ${appUrl(`/rsvp/${i.guest_token}`)}\n\n— Switchboard`,
       }));
+    nudgeTexts = pending
+      .filter((i) => !i.invitee_id && looksLikePhoneNumber(i.guest_contact) && i.guest_token)
+      .map((i) => ({
+        to: i.guest_contact as string,
+        body:
+          `${event.title} is coming up - ${when}. Your invite is still open, ` +
+          `no pressure: ${appUrl(`/rsvp/${i.guest_token}`)}`,
+      }));
   }
 
   if (attendeeEmails.length + nudgeEmails.length > 0) {
     await sendEmails([...attendeeEmails, ...nudgeEmails]);
+  }
+  if (attendeeTexts.length + nudgeTexts.length > 0) {
+    await sendSmsMessages([...attendeeTexts, ...nudgeTexts]);
   }
   // The window was already marked (claimed) at the top of this function.
 }
