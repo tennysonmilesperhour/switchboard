@@ -221,6 +221,44 @@ export async function updateInterests(formData: FormData): Promise<void> {
   revalidatePath('/settings');
 }
 
+function compactLines(raw: FormDataEntryValue | null, maxItems = 12): string[] {
+  return String(raw ?? '')
+    .split(/\r?\n|,/)
+    .map((value) => value.trim())
+    .filter(Boolean)
+    .slice(0, maxItems)
+    .map((value) => value.slice(0, 60));
+}
+
+export async function updateDiscoverability(formData: FormData): Promise<void> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) redirect('/login');
+
+  const discoverable = formData.get('discoverable') === 'on';
+  await supabase
+    .from('profiles')
+    .update({
+      discoverable,
+      discovery_geography: discoverable && formData.get('discovery_geography') === 'on',
+      discovery_demographics:
+        discoverable && formData.get('discovery_demographics') === 'on',
+      discovery_interests: discoverable && formData.get('discovery_interests') === 'on',
+      discovery_involvements:
+        discoverable && formData.get('discovery_involvements') === 'on',
+      discovery_mutuals: discoverable && formData.get('discovery_mutuals') === 'on',
+      discovery_contexts: discoverable
+        ? compactLines(formData.get('discovery_contexts'))
+        : [],
+    })
+    .eq('id', user.id);
+
+  revalidatePath('/settings');
+  revalidatePath('/discover');
+}
+
 export async function updateSabbatical(formData: FormData): Promise<void> {
   const supabase = await createClient();
   const {

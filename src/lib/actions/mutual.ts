@@ -59,8 +59,10 @@ export async function downToConnect(
       body:
         kind === 'down_to_connect'
           ? `You both want to ${activity.toLowerCase()}. Say hi!`
+          : kind === 'discover_connect'
+            ? `You both want to connect around ${activity.toLowerCase()}.`
           : 'You’d both rather reschedule - no one has to be the bad guy.',
-      url: '/mutual',
+      url: kind === 'discover_connect' ? '/discover' : '/mutual',
     });
 
     if (kind === 'open_to_reschedule' && eventId) {
@@ -72,6 +74,7 @@ export async function downToConnect(
   }
 
   revalidatePath('/mutual');
+  revalidatePath('/discover');
   return { ok: true, matched };
 }
 

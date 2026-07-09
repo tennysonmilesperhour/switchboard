@@ -221,7 +221,7 @@ export interface PollVote {
   weight: Weight;
 }
 
-export type IntentKind = 'down_to_connect' | 'open_to_reschedule';
+export type IntentKind = 'down_to_connect' | 'open_to_reschedule' | 'discover_connect';
 export type IntentStatus = 'active' | 'matched' | 'withdrawn';
 
 export interface MutualIntent {

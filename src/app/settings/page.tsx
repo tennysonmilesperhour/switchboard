@@ -14,6 +14,7 @@ import { INTEREST_CATEGORIES, DOWN_TO_GROUP } from '@/lib/interests';
 import {
   signOut,
   updateInterests,
+  updateDiscoverability,
   updateQuietHours,
   updateSabbatical,
 } from '@/lib/actions/profile';
@@ -37,7 +38,7 @@ export default async function SettingsPage() {
   const { data: profile } = await supabase
     .from('profiles')
     .select(
-      'display_name, handle, interests, down_to, sabbatical, sabbatical_message, quiet_hours_start, quiet_hours_end, calendar_token',
+      'display_name, handle, interests, down_to, sabbatical, sabbatical_message, quiet_hours_start, quiet_hours_end, calendar_token, discoverable, discovery_geography, discovery_demographics, discovery_interests, discovery_involvements, discovery_mutuals, discovery_contexts',
     )
     .eq('id', user.id)
     .single();
@@ -46,6 +47,7 @@ export default async function SettingsPage() {
   const downTo: string[] = profile?.down_to ?? [];
   const sabbatical: boolean = profile?.sabbatical ?? false;
   const sabbaticalMessage: string = profile?.sabbatical_message ?? '';
+  const discoveryContexts: string[] = profile?.discovery_contexts ?? [];
 
   return (
     <AppShell title="Settings" back="/profile">
@@ -116,6 +118,76 @@ export default async function SettingsPage() {
             </Card>
           </section>
         )}
+
+        <section>
+          <SectionHeader
+            title="Discoverability"
+            hint="Choose how new people can find you. Interest stays private unless it is mutual."
+          />
+          <Card>
+            <form action={updateDiscoverability} className="space-y-4">
+              <label className="flex items-start gap-3 cursor-pointer">
+                <input
+                  type="checkbox"
+                  name="discoverable"
+                  defaultChecked={profile?.discoverable ?? false}
+                  className="mt-1 size-4 accent-terracotta"
+                />
+                <span>
+                  <span className="font-medium">Show me in people discovery</span>
+                  <span className="block text-sm text-ink-soft mt-0.5 leading-relaxed">
+                    People can quietly mark interest in connecting around a shared context.
+                    No one is notified unless you choose each other.
+                  </span>
+                </span>
+              </label>
+
+              <div className="grid gap-2 sm:grid-cols-2">
+                {[
+                  ['discovery_geography', 'Geography', 'Use your profile location.'],
+                  ['discovery_demographics', 'Demographics', 'Use visible profile details.'],
+                  ['discovery_interests', 'Interests', 'Use your selected interests.'],
+                  ['discovery_involvements', 'Involvements', 'Use contexts you list below.'],
+                  ['discovery_mutuals', 'Mutual friends', 'Rank higher with shared friends.'],
+                ].map(([name, label, hint]) => (
+                  <label
+                    key={name}
+                    className="flex items-start gap-2 rounded-card border border-line bg-paper px-3 py-2.5"
+                  >
+                    <input
+                      type="checkbox"
+                      name={name}
+                      defaultChecked={Boolean(profile?.[name as keyof typeof profile])}
+                      className="mt-1 size-4 accent-terracotta"
+                    />
+                    <span>
+                      <span className="block text-sm font-bold text-ink">{label}</span>
+                      <span className="block text-xs text-ink-faint">{hint}</span>
+                    </span>
+                  </label>
+                ))}
+              </div>
+
+              <div className="space-y-1.5">
+                <label htmlFor="discovery_contexts" className="text-sm font-medium">
+                  Contexts you are open to
+                </label>
+                <textarea
+                  id="discovery_contexts"
+                  name="discovery_contexts"
+                  defaultValue={discoveryContexts.join('\n')}
+                  rows={4}
+                  placeholder="Local volunteering&#10;Startup friends&#10;Parents nearby&#10;Trail running"
+                  className="w-full rounded-card border border-line bg-paper px-3.5 py-2.5 text-sm outline-none focus:border-terracotta"
+                />
+                <p className="text-xs text-ink-faint">
+                  One per line. These become the specific contexts people can mutually match around.
+                </p>
+              </div>
+              <SaveButton />
+            </form>
+          </Card>
+        </section>
 
         <section>
           <SectionHeader
