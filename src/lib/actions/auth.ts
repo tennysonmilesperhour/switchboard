@@ -277,13 +277,20 @@ export async function requestPasswordReset(
           const { data: link } = await admin.auth.admin.generateLink({
             type: 'recovery',
             email: authUser.user.email,
-            options: { redirectTo: appUrl('/auth/callback?next=/reset-password') },
+            options: { redirectTo: appUrl('/auth/confirm?next=/reset-password') },
           });
-          if (link.properties?.action_link) {
+          // Build the link through our own /auth/confirm route using the token
+          // hash, so recovery never depends on Supabase's verify-redirect or a
+          // particular email-template shape. Fall back to the raw action link.
+          const hashed = link.properties?.hashed_token;
+          const recoveryUrl = hashed
+            ? appUrl(`/auth/confirm?token_hash=${hashed}&type=recovery&next=/reset-password`)
+            : link.properties?.action_link;
+          if (recoveryUrl) {
             await sendEmail({
               to: profile.contact_email,
               subject: 'Reset your Switchboard password',
-              text: `Reset your Switchboard password:\n\n${link.properties.action_link}\n\nIf you did not request this, you can ignore this email.`,
+              text: `Reset your Switchboard password:\n\n${recoveryUrl}\n\nIf you did not request this, you can ignore this email.`,
             });
           }
         }
