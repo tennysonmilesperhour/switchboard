@@ -17,6 +17,7 @@ import { JoinRequests } from '@/components/events/JoinRequests';
 import { RsvpCard } from '@/components/events/RsvpCard';
 import { Announcements, type AnnouncementView } from '@/components/events/Announcements';
 import { EventThread, type ThreadCommentView } from '@/components/events/EventThread';
+import { VoiceNote } from '@/components/ui/VoiceNote';
 import { RunItBackButton } from '@/components/events/RunItBackButton';
 import { ScheduleNextButton } from '@/components/events/ScheduleNextButton';
 import { PollSection, type OptionResult } from '@/components/polls/PollSection';
@@ -304,7 +305,9 @@ export default async function EventPage({
   if (threadGateInfo.visibleCount > 0) {
     let commentsQuery = admin
       .from('event_comments')
-      .select('id, body, created_at, author_id, author:profiles(display_name)')
+      .select(
+        'id, body, voice_url, voice_duration_seconds, created_at, author_id, author:profiles(display_name)',
+      )
       .eq('event_id', id)
       .order('created_at', { ascending: true });
     if (!canAccessThread) commentsQuery = commentsQuery.limit(THREAD_PREVIEW_COUNT);
@@ -313,7 +316,9 @@ export default async function EventPage({
       const author = Array.isArray(row.author) ? row.author[0] : row.author;
       return {
         id: row.id as string,
-        body: row.body as string,
+        body: (row.body as string | null) ?? null,
+        voice_url: (row.voice_url as string | null) ?? null,
+        voice_duration_seconds: (row.voice_duration_seconds as number | null) ?? null,
         created_at: row.created_at as string,
         author_id: row.author_id as string,
         author_name: author?.display_name ?? 'Guest',
@@ -458,6 +463,23 @@ export default async function EventPage({
           />
           {event.description && (
             <p className="text-ink-soft text-[15px] leading-relaxed">{event.description}</p>
+          )}
+          {event.status === 'cancelled' && (event.cancel_reason || event.cancel_voice_url) && (
+            <Card tone="terracotta">
+              <p className="text-xs font-bold uppercase tracking-wide text-terracotta-deep">
+                Why it was called off
+              </p>
+              {event.cancel_reason && (
+                <p className="mt-1.5 whitespace-pre-wrap text-sm leading-relaxed text-ink">
+                  {event.cancel_reason}
+                </p>
+              )}
+              {event.cancel_voice_url && (
+                <div className="mt-2.5">
+                  <VoiceNote url={event.cancel_voice_url} tone="soft" />
+                </div>
+              )}
+            </Card>
           )}
           <div className="flex gap-2 flex-wrap">
             {event.recurrence && event.recurrence !== 'none' && (

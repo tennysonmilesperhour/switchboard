@@ -6,12 +6,17 @@ import Link from 'next/link';
 import { Button } from '@/components/ui/Button';
 import { Card, SectionHeader } from '@/components/ui/Card';
 import { Avatar } from '@/components/ui/Avatar';
+import { VoiceRecorder, type RecordedClip } from '@/components/ui/VoiceRecorder';
+import { VoiceNote } from '@/components/ui/VoiceNote';
 import { postComment, deleteComment } from '@/lib/actions/event-thread';
+import { uploadAudio } from '@/lib/client/upload-audio';
 import { formatRelative } from '@/lib/format';
 
 export interface ThreadCommentView {
   id: string;
-  body: string;
+  body: string | null;
+  voice_url: string | null;
+  voice_duration_seconds: number | null;
   created_at: string;
   author_id: string;
   author_name: string;
@@ -47,21 +52,41 @@ export function EventThread({
   blurRows,
 }: EventThreadProps) {
   const [body, setBody] = useState('');
+  const [clip, setClip] = useState<RecordedClip | null>(null);
   const [error, setError] = useState('');
   const [pending, startTransition] = useTransition();
   const router = useRouter();
 
   function send() {
     const trimmed = body.trim();
-    if (!trimmed) return;
+    if (!trimmed && !clip) return;
     setError('');
     startTransition(async () => {
-      const result = await postComment(eventId, trimmed);
+      let voiceUrl: string | undefined;
+      let voiceDurationSeconds: number | undefined;
+      if (clip) {
+        try {
+          const uploaded = await uploadAudio(clip.blob, clip.durationSeconds);
+          voiceUrl = uploaded.url;
+          voiceDurationSeconds = uploaded.durationSeconds;
+        } catch (uploadError) {
+          setError(
+            uploadError instanceof Error ? uploadError.message : 'Could not upload the voice note.',
+          );
+          return;
+        }
+      }
+      const result = await postComment(eventId, {
+        body: trimmed || undefined,
+        voiceUrl,
+        voiceDurationSeconds,
+      });
       if (!result.ok) {
         setError(result.error ?? 'Something went wrong');
         return;
       }
       setBody('');
+      setClip(null);
       router.refresh();
     });
   }
@@ -105,11 +130,12 @@ export function EventThread({
               {error}
             </p>
           )}
-          <div className="mt-2 flex justify-end">
+          <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
+            <VoiceRecorder value={clip} onChange={setClip} disabled={pending} />
             <Button
               type="button"
               size="sm"
-              disabled={pending || body.trim().length === 0}
+              disabled={pending || (body.trim().length === 0 && !clip)}
               onClick={send}
             >
               {pending ? 'Posting…' : 'Post'}
@@ -145,9 +171,19 @@ export function EventThread({
                         {formatRelative(comment.created_at)}
                       </span>
                     </div>
-                    <p className="text-sm text-ink whitespace-pre-wrap leading-relaxed mt-0.5">
-                      {comment.body}
-                    </p>
+                    {comment.body && (
+                      <p className="text-sm text-ink whitespace-pre-wrap leading-relaxed mt-0.5">
+                        {comment.body}
+                      </p>
+                    )}
+                    {comment.voice_url && (
+                      <div className="mt-1.5">
+                        <VoiceNote
+                          url={comment.voice_url}
+                          durationSeconds={comment.voice_duration_seconds}
+                        />
+                      </div>
+                    )}
                     {(mine || canModerate) && (
                       <button
                         type="button"
