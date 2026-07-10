@@ -15,7 +15,9 @@ import {
   acceptConnection,
   blockProfile,
   createCircle,
+  deleteCircle,
   removeConnection,
+  renameCircle,
   reportProfile,
   resolveContactMatches,
   sendConnectionRequest,
@@ -75,6 +77,10 @@ export function PeopleClient({
   const [contactMatches, setContactMatches] = useState<ContactMatch[]>([]);
   const [contactsBusy, setContactsBusy] = useState(false);
   const [expandedFriend, setExpandedFriend] = useState<string | null>(null);
+  const [expandedCircle, setExpandedCircle] = useState<string | null>(null);
+  const [circleEmoji, setCircleEmoji] = useState('✨');
+  const [editName, setEditName] = useState('');
+  const [editEmoji, setEditEmoji] = useState('');
   const [newCircle, setNewCircle] = useState('');
   const [matchA, setMatchA] = useState('');
   const [matchB, setMatchB] = useState('');
@@ -151,6 +157,60 @@ export function PeopleClient({
       } catch {
         toast.error('Could not delete the household. Try again.');
       }
+    });
+  }
+
+  function toggleCircleOpen(circle: CircleRow) {
+    if (expandedCircle === circle.id) {
+      setExpandedCircle(null);
+      return;
+    }
+    // Seed the inline editor with the circle's current name/emoji.
+    setExpandedCircle(circle.id);
+    setEditName(circle.name);
+    setEditEmoji(circle.emoji);
+  }
+
+  function setCircleMembership(circleId: string, friendId: string, add: boolean) {
+    startTransition(async () => {
+      const result = await toggleCircleMember(circleId, friendId, add);
+      if (!result.ok) {
+        toast.error(result.error ?? 'Could not update circle.');
+        return;
+      }
+      router.refresh();
+    });
+  }
+
+  function saveCircleName(circle: CircleRow) {
+    const name = editName.trim();
+    if (!name || (name === circle.name && editEmoji.trim() === circle.emoji)) return;
+    startTransition(async () => {
+      const result = await renameCircle(circle.id, name, editEmoji.trim() || undefined);
+      if (!result.ok) {
+        toast.error(result.error ?? 'Could not rename the circle.');
+        return;
+      }
+      router.refresh();
+    });
+  }
+
+  async function removeCircle(circle: CircleRow) {
+    const ok = await confirm({
+      title: `Delete “${circle.name}”?`,
+      body: 'The circle is removed. Everyone in it stays your friend — only this grouping goes away.',
+      confirmLabel: 'Delete circle',
+      danger: true,
+    });
+    if (!ok) return;
+    startTransition(async () => {
+      const result = await deleteCircle(circle.id);
+      if (!result.ok) {
+        toast.error(result.error ?? 'Could not delete the circle.');
+        return;
+      }
+      setExpandedCircle(null);
+      router.refresh();
     });
   }
 
@@ -711,43 +771,190 @@ export function PeopleClient({
 
       {/* Circles */}
       <section>
-        <SectionHeader title="Your circles" hint="Reused everywhere you choose an audience" />
-        <div className="space-y-2">
-          {circles.map((circle) => (
-            <div
-              key={circle.id}
-              className="flex items-center gap-3 rounded-card bg-cream px-3.5 py-3 text-sm"
-            >
-              <span className="text-lg" aria-hidden>{circle.emoji}</span>
-              <span className="font-bold flex-1">{circle.name}</span>
-              <span className="text-xs text-ink-faint">
-                {circle.memberCount} {circle.memberCount === 1 ? 'person' : 'people'}
-              </span>
-            </div>
-          ))}
-        </div>
+        <SectionHeader
+          title="Your circles"
+          hint="Private groupings, reused everywhere you choose an audience. Tap one to see and add people."
+        />
+        {circles.length === 0 ? (
+          <Card tone="cream">
+            <p className="text-sm text-ink-soft leading-relaxed">
+              Circles are your own private groupings — Close Friends, Book Club,
+              Neighbors. Nobody sees them but you. Make your first one below, then
+              tap it to add people.
+            </p>
+          </Card>
+        ) : (
+          <div className="space-y-2">
+            {circles.map((circle) => {
+              const members = friends.filter((f) => f.circleIds.includes(circle.id));
+              const available = friends.filter((f) => !f.circleIds.includes(circle.id));
+              const expanded = expandedCircle === circle.id;
+              return (
+                <Card key={circle.id}>
+                  <button
+                    type="button"
+                    className="w-full flex items-center gap-3 text-left rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-terracotta"
+                    aria-expanded={expanded}
+                    onClick={() => toggleCircleOpen(circle)}
+                  >
+                    <span className="grid size-9 shrink-0 place-items-center rounded-full bg-cream text-lg" aria-hidden>
+                      {circle.emoji}
+                    </span>
+                    <span className="flex-1 min-w-0">
+                      <span className="font-bold block truncate">{circle.name}</span>
+                      <span className="text-xs text-ink-faint">
+                        {members.length} {members.length === 1 ? 'person' : 'people'}
+                      </span>
+                    </span>
+                    <Icon
+                      name="back"
+                      size={18}
+                      className={`text-ink-faint transition-transform ${expanded ? 'rotate-90' : '-rotate-90'}`}
+                    />
+                  </button>
+
+                  {expanded && (
+                    <div className="mt-3 pt-3 border-t border-line animate-rise space-y-4">
+                      {/* Who's in it */}
+                      <div>
+                        <p className="text-xs font-bold uppercase tracking-wide text-ink-faint mb-2">
+                          In this circle
+                        </p>
+                        {members.length === 0 ? (
+                          <p className="text-sm text-ink-faint">
+                            No one yet — add people below.
+                          </p>
+                        ) : (
+                          <ul className="space-y-1.5">
+                            {members.map((member) => (
+                              <li key={member.id} className="flex items-center gap-2.5">
+                                <Avatar name={member.name} seed={member.id} size="sm" />
+                                <span className="flex-1 min-w-0">
+                                  <span className="text-sm font-semibold block truncate">
+                                    {member.name}
+                                  </span>
+                                  <span className="text-xs text-ink-faint">@{member.handle}</span>
+                                </span>
+                                <button
+                                  type="button"
+                                  disabled={pending}
+                                  aria-label={`Remove ${member.name} from ${circle.name}`}
+                                  onClick={() => setCircleMembership(circle.id, member.id, false)}
+                                  className="shrink-0 rounded-full p-1 text-ink-faint hover:text-rose-deep focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-terracotta"
+                                >
+                                  <Icon name="close" size={16} />
+                                </button>
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+                      </div>
+
+                      {/* Add people */}
+                      <div>
+                        <p className="text-xs font-bold uppercase tracking-wide text-ink-faint mb-2">
+                          Add people
+                        </p>
+                        {friends.length === 0 ? (
+                          <p className="text-sm text-ink-faint">
+                            Connect with people first — then you can sort them in here.
+                          </p>
+                        ) : available.length === 0 ? (
+                          <p className="text-sm text-ink-faint">
+                            Everyone you’re connected with is already in this circle.
+                          </p>
+                        ) : (
+                          <div className="flex flex-wrap gap-2">
+                            {available.map((friend) => (
+                              <Chip
+                                key={friend.id}
+                                emoji="+"
+                                disabled={pending}
+                                onClick={() => setCircleMembership(circle.id, friend.id, true)}
+                              >
+                                {friend.name.split(' ')[0]}
+                              </Chip>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Rename / delete */}
+                      <div className="flex flex-wrap items-center gap-2 pt-1">
+                        <input
+                          value={expanded ? editEmoji : circle.emoji}
+                          onChange={(e) => setEditEmoji(e.target.value)}
+                          aria-label={`Emoji for ${circle.name}`}
+                          maxLength={4}
+                          className="w-12 rounded-card border border-line bg-paper px-2 py-2 text-center text-base outline-none focus:border-terracotta"
+                        />
+                        <input
+                          value={expanded ? editName : circle.name}
+                          onChange={(e) => setEditName(e.target.value)}
+                          aria-label={`Rename ${circle.name}`}
+                          maxLength={40}
+                          className="flex-1 min-w-0 rounded-card border border-line bg-paper px-3 py-2 text-sm outline-none focus:border-terracotta"
+                        />
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="secondary"
+                          disabled={
+                            pending ||
+                            !editName.trim() ||
+                            (editName.trim() === circle.name && editEmoji.trim() === circle.emoji)
+                          }
+                          onClick={() => saveCircleName(circle)}
+                        >
+                          Save
+                        </Button>
+                        <button
+                          type="button"
+                          disabled={pending}
+                          onClick={() => removeCircle(circle)}
+                          className="inline-flex items-center gap-1 rounded-pill px-2 py-1 text-xs font-semibold text-rose-deep hover:text-rose-deep/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-terracotta"
+                        >
+                          <Icon name="trash" size={14} />
+                          Delete
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </Card>
+              );
+            })}
+          </div>
+        )}
         <form
           className="flex gap-2 mt-3"
           onSubmit={(e) => {
             e.preventDefault();
             const name = newCircle;
             startTransition(async () => {
-              const result = await createCircle(name, '✨');
+              const result = await createCircle(name, circleEmoji);
               if (!result.ok) {
                 toast.error(result.error ?? 'Could not create the circle.');
                 return;
               }
               setNewCircle('');
+              setCircleEmoji('✨');
               router.refresh();
             });
           }}
         >
           <input
+            value={circleEmoji}
+            onChange={(e) => setCircleEmoji(e.target.value)}
+            aria-label="New circle emoji"
+            maxLength={4}
+            className="w-12 rounded-pill border border-line bg-card px-2 py-2.5 text-center text-base outline-none focus:border-terracotta"
+          />
+          <input
             value={newCircle}
             onChange={(e) => setNewCircle(e.target.value)}
             placeholder="New circle (e.g. Book Club)"
             aria-label="New circle name"
-            className="flex-1 rounded-pill border border-line bg-card px-4 py-2.5 text-sm outline-none focus:border-terracotta"
+            className="flex-1 min-w-0 rounded-pill border border-line bg-card px-4 py-2.5 text-sm outline-none focus:border-terracotta"
           />
           <Button type="submit" size="sm" variant="secondary" disabled={pending || !newCircle.trim()}>
             Add

@@ -344,7 +344,52 @@ export async function createCircle(name: string, emoji: string): Promise<Connect
   if (!trimmed) return { ok: false, error: 'Circle needs a name' };
   const { error } = await supabase
     .from('circles')
-    .insert({ owner_id: user.id, name: trimmed, emoji: emoji || '👥' });
+    .insert({ owner_id: user.id, name: trimmed.slice(0, 40), emoji: emoji.trim().slice(0, 8) || '👥' });
+  if (error) return { ok: false, error: error.message };
+  revalidatePath('/people');
+  return { ok: true };
+}
+
+export async function renameCircle(
+  circleId: string,
+  name: string,
+  emoji?: string,
+): Promise<ConnectionResult> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false, error: 'Not signed in' };
+  const trimmed = name.trim();
+  if (!trimmed) return { ok: false, error: 'Circle needs a name' };
+  const patch: { name: string; emoji?: string } = { name: trimmed.slice(0, 40) };
+  const cleanEmoji = emoji?.trim().slice(0, 8);
+  if (cleanEmoji) patch.emoji = cleanEmoji;
+  // RLS already scopes this to the owner; the owner_id filter is defense in
+  // depth so a stray id can never touch someone else's circle (SB-20).
+  const { error } = await supabase
+    .from('circles')
+    .update(patch)
+    .eq('id', circleId)
+    .eq('owner_id', user.id);
+  if (error) return { ok: false, error: error.message };
+  revalidatePath('/people');
+  return { ok: true };
+}
+
+export async function deleteCircle(circleId: string): Promise<ConnectionResult> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false, error: 'Not signed in' };
+  // circle_members rows cascade-delete with the circle (FK on delete cascade);
+  // the connections themselves are untouched — only this grouping goes away.
+  const { error } = await supabase
+    .from('circles')
+    .delete()
+    .eq('id', circleId)
+    .eq('owner_id', user.id);
   if (error) return { ok: false, error: error.message };
   revalidatePath('/people');
   return { ok: true };
