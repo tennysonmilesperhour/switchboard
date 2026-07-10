@@ -85,48 +85,46 @@ function maybeHandle(
   return HANDLE_PATTERN.test(normalized) ? normalized : null;
 }
 
+/**
+ * Look up an existing account for one free-typed identifier (handle, email, or
+ * phone). Delegates to the `resolve_profile_contact` RPC so an invite finds a
+ * profile the same way friend search does — critically, it matches the
+ * account's *sign-in* email (auth.users.email), not only the opt-in
+ * `contact_email` column, which is null for anyone who never filled it in. Runs
+ * as the signed-in host, so it also skips self and blocked accounts.
+ */
+async function resolveProfileByContact(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  identifier: string,
+): Promise<{ id: string; name: string } | null> {
+  const { data } = await supabase
+    .rpc('resolve_profile_contact', { p_identifier: identifier })
+    .maybeSingle<{ id: string; display_name: string | null; handle: string | null }>();
+  if (!data?.id) return null;
+  return { id: data.id, name: data.display_name ?? data.handle ?? 'Friend' };
+}
+
 async function resolveInvitees(
+  supabase: Awaited<ReturnType<typeof createClient>>,
   invitees: WizardInvitee[],
 ): Promise<WizardInvitee[]> {
-  const admin = createAdminClient();
   return Promise.all(
     invitees.map(async (invitee) => {
       if (invitee.profileId) return invitee;
       const contact = invitee.guestContact?.trim() || null;
-      const handle =
-        maybeHandle(contact) ?? maybeHandle(invitee.guestName, { requireAt: true });
+      // Resolve by whatever the host typed: a contact (handle / email / phone)
+      // or an `@handle` still sitting in the name field.
+      const identifier =
+        contact ?? maybeHandle(invitee.guestName, { requireAt: true });
+      if (!identifier) return invitee;
+
+      const match = await resolveProfileByContact(supabase, identifier);
+      if (!match) return invitee;
+
       const phone = normalizePhoneNumber(contact);
-
-      let profileId: string | null = null;
-      if (handle) {
-        const { data } = await admin
-          .from('profiles')
-          .select('id')
-          .eq('handle', handle)
-          .maybeSingle();
-        profileId = data?.id ?? null;
-      } else if (phone) {
-        const { data } = await admin
-          .from('profiles')
-          .select('id')
-          .eq('contact_phone_normalized', phone)
-          .limit(1)
-          .maybeSingle();
-        profileId = data?.id ?? null;
-      } else if (contact && looksLikeEmail(contact)) {
-        const { data } = await admin
-          .from('profiles')
-          .select('id')
-          .ilike('contact_email', contact)
-          .limit(1)
-          .maybeSingle();
-        profileId = data?.id ?? null;
-      }
-
-      if (!profileId) return invitee;
       return {
         ...invitee,
-        profileId,
+        profileId: match.id,
         guestContact: phone ?? contact ?? undefined,
       };
     }),
@@ -146,7 +144,7 @@ export async function createEvent(input: CreateEventInput): Promise<CreateEventR
     return createEventError('Add at least one person to invite before sending.');
   }
 
-  const invitees = await resolveInvitees(input.invitees);
+  const invitees = await resolveInvitees(supabase, input.invitees);
 
   const { data: eventId, error } = await supabase.rpc('create_event_atomic', {
     p_input: { ...input, title, invitees },
@@ -189,36 +187,22 @@ type ResolvedAddition =
  * invite (with a shareable link, and an email if we have one).
  */
 async function resolveAddition(
-  admin: ReturnType<typeof createAdminClient>,
+  supabase: Awaited<ReturnType<typeof createClient>>,
   parsed: ParsedInviteEntry,
 ): Promise<ResolvedAddition | null> {
   if (parsed.kind === 'handle') {
-    const { data } = await admin
-      .from('profiles')
-      .select('id')
-      .eq('handle', parsed.value)
-      .maybeSingle();
-    if (!data) return null; // unknown handle — reported as skipped
-    return { kind: 'member', profileId: data.id as string, label: parsed.display };
+    const match = await resolveProfileByContact(supabase, parsed.value);
+    if (!match) return null; // unknown handle — reported as skipped
+    return { kind: 'member', profileId: match.id, label: parsed.display };
   }
   if (parsed.kind === 'email') {
-    const { data } = await admin
-      .from('profiles')
-      .select('id')
-      .ilike('contact_email', parsed.value)
-      .limit(1)
-      .maybeSingle();
-    if (data) return { kind: 'member', profileId: data.id as string, label: parsed.display };
+    const match = await resolveProfileByContact(supabase, parsed.value);
+    if (match) return { kind: 'member', profileId: match.id, label: parsed.display };
     return { kind: 'guest', name: parsed.value, contact: parsed.value, label: parsed.display };
   }
   if (parsed.kind === 'phone') {
-    const { data } = await admin
-      .from('profiles')
-      .select('id')
-      .eq('contact_phone_normalized', parsed.value)
-      .limit(1)
-      .maybeSingle();
-    if (data) return { kind: 'member', profileId: data.id as string, label: parsed.display };
+    const match = await resolveProfileByContact(supabase, parsed.value);
+    if (match) return { kind: 'member', profileId: match.id, label: parsed.display };
     return { kind: 'guest', name: parsed.display, contact: parsed.value, label: parsed.display };
   }
   // Plain name — an off-platform guest reachable via their guest link.
@@ -302,7 +286,7 @@ export async function addPeopleToEvent(
   const resolutions = await Promise.all(
     parsedEntries.map(async (parsed) => ({
       parsed,
-      resolved: await resolveAddition(admin, parsed),
+      resolved: await resolveAddition(supabase, parsed),
     })),
   );
   const additions: ResolvedAddition[] = [];
