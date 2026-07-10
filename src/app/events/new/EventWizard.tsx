@@ -14,6 +14,7 @@ import {
   type RecurrenceKind,
 } from '@/lib/engine/recurrence';
 import { simulateCascade } from '@/lib/engine/cascade';
+import { hostSuggestions } from '@/lib/engine/suggestions';
 import {
   createEvent,
   lookupInviteeByHandle,
@@ -21,6 +22,7 @@ import {
 } from '@/lib/actions/events';
 import { normalizePhoneNumber } from '@/lib/phone';
 import { DescribePlan } from '@/components/events/DescribePlan';
+import { HostSuggestions } from '@/components/events/HostSuggestions';
 import { ImportFromLink } from '@/components/events/ImportFromLink';
 import type { PlanDraft } from '@/lib/actions/plan';
 import type { ImportResult } from '@/lib/actions/import';
@@ -488,6 +490,23 @@ export function EventWizard({
       new Date(),
     );
   }, [invitees, inviteMode, capacity]);
+
+  const suggestions = useMemo(
+    () =>
+      hostSuggestions({
+        startsAt: startsAt ? new Date(startsAt) : null,
+        now: new Date(),
+        inviteMode,
+        invitees: invitees.map((i) => ({
+          windowMinutes: i.windowMinutes,
+          groupStage: i.groupStage,
+        })),
+        capacity: capacity ? Number(capacity) : null,
+        hasLocation: locationName.trim().length > 0,
+        enablePoll,
+      }),
+    [startsAt, inviteMode, invitees, capacity, locationName, enablePoll],
+  );
 
   const canNext = [
     title.trim().length > 0,
@@ -1264,6 +1283,8 @@ export function EventWizard({
               </p>
             )}
           </Card>
+
+          <HostSuggestions suggestions={suggestions} />
 
           {looksOutdoor && (
             <Card tone="gold">
