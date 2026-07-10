@@ -18,7 +18,9 @@ import { RsvpCard } from '@/components/events/RsvpCard';
 import { Announcements, type AnnouncementView } from '@/components/events/Announcements';
 import { EventThread, type ThreadCommentView } from '@/components/events/EventThread';
 import { RunItBackButton } from '@/components/events/RunItBackButton';
+import { ScheduleNextButton } from '@/components/events/ScheduleNextButton';
 import { PollSection, type OptionResult } from '@/components/polls/PollSection';
+import { recurrenceLabel } from '@/lib/engine/recurrence';
 import { HostControls } from './HostControls';
 import { CoHostManager } from './CoHostManager';
 import { AddInvitees } from './AddInvitees';
@@ -458,6 +460,11 @@ export default async function EventPage({
             <p className="text-ink-soft text-[15px] leading-relaxed">{event.description}</p>
           )}
           <div className="flex gap-2 flex-wrap">
+            {event.recurrence && event.recurrence !== 'none' && (
+              <span className="inline-flex items-center gap-1.5 rounded-pill bg-terracotta-soft px-3.5 py-2 text-xs font-bold text-terracotta-deep">
+                🔁 {recurrenceLabel(event.recurrence, event.recurrence_interval_days)}
+              </span>
+            )}
             <a
               href={`/api/events/${event.id}/ics`}
               className="inline-flex items-center gap-1.5 rounded-pill border border-line bg-card px-3.5 py-2 text-xs font-bold text-ink-soft shadow-lift hover:border-terracotta hover:text-terracotta-deep active:scale-[0.98] transition-all"
@@ -721,8 +728,20 @@ export default async function EventPage({
 
         {isHost && <CoHostManager eventId={event.id} cohosts={cohosts} />}
 
-        {/* Run it back: available to the host once the plan is behind them. */}
+        {/* Standing plan: a recurring host always has a one-tap "next one". */}
+        {isHost && event.recurrence && event.recurrence !== 'none' && (
+          <section className="border-t border-line pt-6">
+            <p className="text-sm text-ink-soft mb-2.5">
+              This is a standing plan ({recurrenceLabel(event.recurrence, event.recurrence_interval_days)?.toLowerCase()}).
+              Ready for the next one with the same crew?
+            </p>
+            <ScheduleNextButton eventId={event.id} />
+          </section>
+        )}
+
+        {/* Run it back: a one-off plan the host can re-clone once it's behind them. */}
         {isHost &&
+          (!event.recurrence || event.recurrence === 'none') &&
           (event.status === 'past' ||
             event.status === 'cancelled' ||
             (event.starts_at && new Date(event.starts_at) < new Date())) && (

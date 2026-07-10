@@ -8,6 +8,11 @@ import { Card } from '@/components/ui/Card';
 import { Icon } from '@/components/ui/Icon';
 import { ImageInput } from '@/components/ui/ImageInput';
 import { suggestWindow, WINDOW_CHOICES } from '@/lib/engine/windows';
+import {
+  RECURRENCE_CHOICES,
+  recurrenceLabel,
+  type RecurrenceKind,
+} from '@/lib/engine/recurrence';
 import { simulateCascade } from '@/lib/engine/cascade';
 import {
   createEvent,
@@ -143,6 +148,8 @@ export function EventWizard({
   const [locationName, setLocationName] = useState('');
   const [date, setDate] = useState('');
   const [time, setTime] = useState('');
+  const [recurrence, setRecurrence] = useState<RecurrenceKind>('none');
+  const [customDays, setCustomDays] = useState('14');
   const [capacity, setCapacity] = useState('');
   const [coverUrl, setCoverUrl] = useState('');
   const [wishlistUrl, setWishlistUrl] = useState('');
@@ -513,6 +520,9 @@ export function EventWizard({
         voteDeadline: null,
         coverUrl: coverUrl.trim() || null,
         wishlistUrl: wishlistUrl.trim() || null,
+        recurrence,
+        recurrenceIntervalDays:
+          recurrence === 'custom' ? Number(customDays) || null : null,
         questions: questions
           .map((q) => ({ prompt: q.prompt.trim(), required: q.required }))
           .filter((q) => q.prompt.length > 0),
@@ -615,6 +625,46 @@ export function EventWizard({
                 className={`${FIELD} min-w-0`}
               />
             </div>
+          </div>
+          <div className="space-y-1.5">
+            <label htmlFor="recurrence" className={FIELD_LABEL}>
+              Repeats?
+            </label>
+            <div className="flex gap-2">
+              <select
+                id="recurrence"
+                value={recurrence}
+                onChange={(e) => setRecurrence(e.target.value as RecurrenceKind)}
+                className={`${FIELD} flex-1`}
+              >
+                {RECURRENCE_CHOICES.map((choice) => (
+                  <option key={choice.kind} value={choice.kind}>
+                    {choice.label}
+                  </option>
+                ))}
+              </select>
+              {recurrence === 'custom' && (
+                <span className="flex items-center gap-2 whitespace-nowrap">
+                  <span className="text-sm text-ink-soft">every</span>
+                  <input
+                    type="number"
+                    min={1}
+                    max={365}
+                    value={customDays}
+                    onChange={(e) => setCustomDays(e.target.value)}
+                    aria-label="Repeat every how many days"
+                    className={`${FIELD} w-20`}
+                  />
+                  <span className="text-sm text-ink-soft">days</span>
+                </span>
+              )}
+            </div>
+            {recurrence !== 'none' && (
+              <p className="text-xs text-ink-faint">
+                🔁 We’ll tag this as a standing plan. When it’s behind you, one
+                tap gathers the same crew for the next one.
+              </p>
+            )}
           </div>
           <div className="space-y-1.5">
             <label htmlFor="location" className={FIELD_LABEL}>
@@ -1208,6 +1258,11 @@ export function EventWizard({
               {capacity ? ` · ${capacity} spots` : ''}
               {enablePoll ? ' · group decides activity' : ''}
             </p>
+            {recurrence !== 'none' && (
+              <p className="mt-2 inline-flex items-center gap-1.5 rounded-pill bg-terracotta-soft px-3 py-1 text-xs font-bold text-terracotta-deep">
+                🔁 {recurrenceLabel(recurrence, Number(customDays) || null)}
+              </p>
+            )}
           </Card>
 
           {looksOutdoor && (
