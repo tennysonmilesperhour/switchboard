@@ -153,6 +153,14 @@ export interface Announcement {
   created_at: string;
 }
 
+export interface EventComment {
+  id: string;
+  event_id: string;
+  author_id: string;
+  body: string;
+  created_at: string;
+}
+
 export interface EventQuestion {
   id: string;
   event_id: string;
