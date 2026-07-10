@@ -142,6 +142,9 @@ export interface SwitchboardEvent {
   reminders_enabled: boolean;
   reminded_day_before_at: string | null;
   reminded_soon_at: string | null;
+  /** Cancellation context (set when the host calls a plan off) */
+  cancel_reason: string | null;
+  cancel_voice_url: string | null;
   created_at: string;
 }
 

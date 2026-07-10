@@ -1,9 +1,13 @@
 'use client';
 
-import { useTransition } from 'react';
+import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/Button';
+import { Card } from '@/components/ui/Card';
+import { VoiceRecorder, type RecordedClip } from '@/components/ui/VoiceRecorder';
+import { useToast } from '@/components/ui/Toast';
 import { cancelEvent, confirmEvent, startInviting } from '@/lib/actions/events';
+import { uploadAudio } from '@/lib/client/upload-audio';
 import type { SwitchboardEvent } from '@/lib/types';
 
 interface HostControlsProps {
@@ -13,11 +17,41 @@ interface HostControlsProps {
 
 export function HostControls({ event, pollDecided }: HostControlsProps) {
   const [pending, startTransition] = useTransition();
+  const [cancelling, setCancelling] = useState(false);
+  const [reason, setReason] = useState('');
+  const [clip, setClip] = useState<RecordedClip | null>(null);
   const router = useRouter();
+  const toast = useToast();
 
   function run(action: () => Promise<void>) {
     startTransition(async () => {
       await action();
+      router.refresh();
+    });
+  }
+
+  function resetCancel() {
+    setCancelling(false);
+    setReason('');
+    setClip(null);
+  }
+
+  function confirmCancel() {
+    startTransition(async () => {
+      let voiceUrl: string | undefined;
+      if (clip) {
+        try {
+          const uploaded = await uploadAudio(clip.blob, clip.durationSeconds);
+          voiceUrl = uploaded.url;
+        } catch (uploadError) {
+          toast.error(
+            uploadError instanceof Error ? uploadError.message : 'Could not upload the voice note.',
+          );
+          return;
+        }
+      }
+      await cancelEvent(event.id, reason.trim() || undefined, voiceUrl);
+      resetCancel();
       router.refresh();
     });
   }
@@ -49,18 +83,53 @@ export function HostControls({ event, pollDecided }: HostControlsProps) {
           Lock it in - confirm the plan ✓
         </Button>
       )}
-      <Button
-        variant="ghost"
-        className="w-full"
-        disabled={pending}
-        onClick={() => {
-          if (window.confirm('Cancel this plan? Everyone accepted will be notified.')) {
-            run(() => cancelEvent(event.id));
-          }
-        }}
-      >
-        Cancel this plan
-      </Button>
+
+      {cancelling ? (
+        <Card tone="terracotta" className="space-y-2.5">
+          <div>
+            <p className="text-sm font-bold text-ink">Cancel this plan?</p>
+            <p className="text-xs text-ink-soft mt-0.5">
+              Everyone who’s in will be notified. Add a reason so they know why — type it,
+              record a voice note, or both. All optional.
+            </p>
+          </div>
+          <label htmlFor="cancel-reason" className="sr-only">
+            Reason for cancelling
+          </label>
+          <textarea
+            id="cancel-reason"
+            value={reason}
+            rows={2}
+            maxLength={2000}
+            onChange={(e) => setReason(e.target.value)}
+            placeholder="Weather’s turning, let’s reschedule…"
+            className="w-full rounded-card border border-line bg-paper px-3.5 py-2.5 text-sm outline-none transition-colors focus:border-terracotta focus:ring-2 focus:ring-terracotta-soft resize-none"
+          />
+          <VoiceRecorder value={clip} onChange={setClip} disabled={pending} />
+          <div className="flex gap-2 pt-0.5">
+            <Button
+              variant="danger"
+              className="flex-1"
+              disabled={pending}
+              onClick={confirmCancel}
+            >
+              {pending ? 'Cancelling…' : 'Call it off'}
+            </Button>
+            <Button variant="ghost" disabled={pending} onClick={resetCancel}>
+              Never mind
+            </Button>
+          </div>
+        </Card>
+      ) : (
+        <Button
+          variant="ghost"
+          className="w-full"
+          disabled={pending}
+          onClick={() => setCancelling(true)}
+        >
+          Cancel this plan
+        </Button>
+      )}
     </section>
   );
 }

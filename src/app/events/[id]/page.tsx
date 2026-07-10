@@ -15,6 +15,8 @@ import { CascadeProgress } from '@/components/events/CascadeProgress';
 import { JoinRequests } from '@/components/events/JoinRequests';
 import { RsvpCard } from '@/components/events/RsvpCard';
 import { Announcements, type AnnouncementView } from '@/components/events/Announcements';
+import { Comments, type CommentView } from '@/components/events/Comments';
+import { VoiceNote } from '@/components/ui/VoiceNote';
 import { RunItBackButton } from '@/components/events/RunItBackButton';
 import { PollSection, type OptionResult } from '@/components/polls/PollSection';
 import { HostControls } from './HostControls';
@@ -259,6 +261,27 @@ export default async function EventPage({
     };
   });
 
+  // Plan comments (two-way: host + live invitees), newest first, with authors.
+  const { data: commentRows } = await supabase
+    .from('event_comments')
+    .select(
+      'id, author_id, body, voice_url, voice_duration_seconds, created_at, author:profiles(display_name)',
+    )
+    .eq('event_id', id)
+    .order('created_at', { ascending: false });
+  const comments: CommentView[] = (commentRows ?? []).map((row) => {
+    const author = Array.isArray(row.author) ? row.author[0] : row.author;
+    return {
+      id: row.id as string,
+      author_id: row.author_id as string,
+      body: (row.body as string | null) ?? null,
+      voice_url: (row.voice_url as string | null) ?? null,
+      voice_duration_seconds: (row.voice_duration_seconds as number | null) ?? null,
+      created_at: row.created_at as string,
+      author_name: author?.display_name ?? 'Someone',
+    };
+  });
+
   // True accepted count (independent of visibility) so the host knows the reach.
   const { count: acceptedCount } = await admin
     .from('invites')
@@ -397,6 +420,23 @@ export default async function EventPage({
           {event.description && (
             <p className="text-ink-soft text-[15px] leading-relaxed">{event.description}</p>
           )}
+          {event.status === 'cancelled' && (event.cancel_reason || event.cancel_voice_url) && (
+            <Card tone="terracotta">
+              <p className="text-xs font-bold uppercase tracking-wide text-terracotta-deep">
+                Why it was called off
+              </p>
+              {event.cancel_reason && (
+                <p className="mt-1.5 whitespace-pre-wrap text-sm leading-relaxed text-ink">
+                  {event.cancel_reason}
+                </p>
+              )}
+              {event.cancel_voice_url && (
+                <div className="mt-2.5">
+                  <VoiceNote url={event.cancel_voice_url} tone="soft" />
+                </div>
+              )}
+            </Card>
+          )}
           <div className="flex gap-2 flex-wrap">
             <a
               href={`/api/events/${event.id}/ics`}
@@ -528,6 +568,15 @@ export default async function EventPage({
           isHost={isHost}
           canReach={acceptedCount ?? 0}
           announcements={announcements}
+        />
+
+        {/* Two-way comments (text + voice) */}
+        <Comments
+          eventId={event.id}
+          currentUserId={user.id}
+          isHost={isHost}
+          canPost={event.status !== 'cancelled'}
+          comments={comments}
         />
 
         {/* Host-only: RSVP question answers */}

@@ -662,7 +662,11 @@ export async function confirmEvent(eventId: string): Promise<void> {
   revalidatePath('/plans');
 }
 
-export async function cancelEvent(eventId: string): Promise<void> {
+export async function cancelEvent(
+  eventId: string,
+  reason?: string,
+  voiceUrl?: string,
+): Promise<void> {
   const supabase = await createClient();
   const {
     data: { user },
@@ -671,14 +675,31 @@ export async function cancelEvent(eventId: string): Promise<void> {
   if (!(await canManageEvent(user.id, eventId))) return;
   const admin = createAdminClient();
 
+  const cleanReason = reason?.trim().slice(0, 2000) || null;
+  const cleanVoiceUrl =
+    voiceUrl && /^https:\/\//.test(voiceUrl.trim()) ? voiceUrl.trim() : null;
+
   const { data: event } = await admin
     .from('events')
     .select('title')
     .eq('id', eventId)
     .maybeSingle();
-  await admin.from('events').update({ status: 'cancelled' }).eq('id', eventId);
+  await admin
+    .from('events')
+    .update({
+      status: 'cancelled',
+      cancel_reason: cleanReason,
+      cancel_voice_url: cleanVoiceUrl,
+    })
+    .eq('id', eventId);
 
   const title = event?.title ?? 'the plan';
+  // A one-line tail for notifications: the written reason, or a nudge to listen.
+  const reasonTail = cleanReason
+    ? ` Reason: ${cleanReason}`
+    : cleanVoiceUrl
+      ? ' The host left a voice note — tap to listen.'
+      : '';
 
   // Tell everyone who had accepted — across every channel they came in on —
   // that it's off, so nobody shows up to a cancelled plan.
@@ -696,7 +717,7 @@ export async function cancelEvent(eventId: string): Promise<void> {
     await notifyUsers(memberIds, {
       kind: 'event_cancelled',
       title: 'Plan cancelled',
-      body: `${title} has been called off.`,
+      body: `${title} has been called off.${reasonTail}`,
       url: `/events/${eventId}`,
     });
   }
@@ -705,17 +726,21 @@ export async function cancelEvent(eventId: string): Promise<void> {
     .filter((r) => !r.invitee_id)
     .map((r) => r.guest_contact as string | null)
     .filter((c): c is string => Boolean(c));
+  const reasonLine = cleanReason ? `\n\nReason: ${cleanReason}` : '';
   const guestEmails = guestContacts
     .filter((c) => looksLikeEmail(c))
     .map((to) => ({
       to,
       subject: `Cancelled: ${title}`,
-      text: `${title} has been cancelled. Apologies for the change of plans.\n\n— Switchboard`,
+      text: `${title} has been cancelled. Apologies for the change of plans.${reasonLine}\n\n— Switchboard`,
     }));
   if (guestEmails.length > 0) await sendEmails(guestEmails);
   const guestSms = guestContacts
     .filter((c) => looksLikePhoneNumber(c))
-    .map((to) => ({ to, body: `${title} on Switchboard has been cancelled.` }));
+    .map((to) => ({
+      to,
+      body: `${title} on Switchboard has been cancelled.${cleanReason ? ` Reason: ${cleanReason}` : ''}`,
+    }));
   if (guestSms.length > 0) await sendSmsMessages(guestSms);
 
   // Retire any invite still in motion so the (now belt-and-suspenders) RSVP
