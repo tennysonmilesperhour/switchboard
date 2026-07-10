@@ -121,6 +121,17 @@ export function PeopleDiscoveryClient({
         </Card>
       </Link>
 
+      <Card tone="cream">
+        <p className="text-sm leading-relaxed text-ink-soft">
+          Marking interest means you are open to connecting for the selected
+          context. Nothing is sent unless it is mutual. If it matches, show up
+          for that context with curiosity, kindness, and generous assumptions.
+          <Link href="/community" className="ml-1 font-bold text-terracotta">
+            Read the covenant.
+          </Link>
+        </p>
+      </Card>
+
       {!discoverable && (
         <Card tone="terracotta">
           <p className="text-sm font-bold text-terracotta-deep">You are not discoverable.</p>

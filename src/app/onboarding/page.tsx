@@ -9,6 +9,7 @@ const ERROR_MESSAGES: Record<string, string> = {
   name: 'Please tell us your name.',
   handle: 'Handles are 3-24 characters: lowercase letters, numbers, underscores.',
   handle_taken: 'That handle is taken - try another.',
+  agreement: 'Please acknowledge the Terms, Privacy Notice, and Community Covenant.',
   save: 'Something went wrong saving your profile. Try again.',
 };
 

@@ -12,17 +12,22 @@ import { PlanCard, planColor } from '@/components/ui/PlanCard';
 import { CopyButton } from '@/components/ui/CopyButton';
 import { ShareButton } from '@/components/ui/ShareButton';
 import { CascadeProgress } from '@/components/events/CascadeProgress';
+import { HostCard, type HostCardData } from '@/components/events/HostCard';
 import { JoinRequests } from '@/components/events/JoinRequests';
 import { RsvpCard } from '@/components/events/RsvpCard';
 import { Announcements, type AnnouncementView } from '@/components/events/Announcements';
-import { Comments, type CommentView } from '@/components/events/Comments';
+import { EventThread, type ThreadCommentView } from '@/components/events/EventThread';
 import { VoiceNote } from '@/components/ui/VoiceNote';
 import { RunItBackButton } from '@/components/events/RunItBackButton';
+import { ScheduleNextButton } from '@/components/events/ScheduleNextButton';
 import { PollSection, type OptionResult } from '@/components/polls/PollSection';
+import { recurrenceLabel } from '@/lib/engine/recurrence';
 import { HostControls } from './HostControls';
 import { CoHostManager } from './CoHostManager';
 import { AddInvitees } from './AddInvitees';
+import { getRelationship, getMutualConnections } from '@/lib/server/relationship';
 import { inviteExpiresAt } from '@/lib/engine/cascade';
+import { threadGate, THREAD_PREVIEW_COUNT } from '@/lib/engine/thread';
 import { formatDateTime } from '@/lib/format';
 import { googleCalendarUrl } from '@/lib/calendar-links';
 import { looksLikeEmail } from '@/lib/server/email';
@@ -120,6 +125,29 @@ export default async function EventPage({
       id: p.id as string,
       name: (p.display_name as string) ?? 'Co-host',
     }));
+  }
+
+  // "Hosted by" identity for anyone who isn't the host: the host's public
+  // profile, how the viewer is already connected, and any mutual friends. The
+  // host doesn't need to be told they're hosting their own plan.
+  let hostCard: {
+    host: HostCardData;
+    relationship: Awaited<ReturnType<typeof getRelationship>>;
+    mutuals: Awaited<ReturnType<typeof getMutualConnections>>;
+  } | null = null;
+  if (!isHost) {
+    const { data: hostProfile } = await supabase
+      .from('profiles')
+      .select('id, display_name, handle, avatar_url, tagline')
+      .eq('id', event.host_id)
+      .maybeSingle<HostCardData>();
+    if (hostProfile) {
+      const [relationship, mutuals] = await Promise.all([
+        getRelationship(supabase, user.id, event.host_id),
+        getMutualConnections(admin, user.id, event.host_id),
+      ]);
+      hostCard = { host: hostProfile, relationship, mutuals };
+    }
   }
 
   // Host/co-host: full cascade view. Invitee: their own invite.
@@ -261,26 +289,42 @@ export default async function EventPage({
     };
   });
 
-  // Plan comments (two-way: host + live invitees), newest first, with authors.
-  const { data: commentRows } = await supabase
+  // Event thread (RSVP-gated commentary). Full access — read all + post — for
+  // hosts/co-hosts and accepted invitees; everyone else who can see the event
+  // gets only the opening messages, which blur out below. We read with the
+  // admin client and slice server-side so a locked viewer is never sent the
+  // gated bodies (the RLS SELECT policy refuses them either way).
+  const canAccessThread = canManage || myInvite?.status === 'accepted';
+  const { count: threadTotal } = await admin
     .from('event_comments')
-    .select(
-      'id, author_id, body, voice_url, voice_duration_seconds, created_at, author:profiles(display_name)',
-    )
-    .eq('event_id', id)
-    .order('created_at', { ascending: false });
-  const comments: CommentView[] = (commentRows ?? []).map((row) => {
-    const author = Array.isArray(row.author) ? row.author[0] : row.author;
-    return {
-      id: row.id as string,
-      author_id: row.author_id as string,
-      body: (row.body as string | null) ?? null,
-      voice_url: (row.voice_url as string | null) ?? null,
-      voice_duration_seconds: (row.voice_duration_seconds as number | null) ?? null,
-      created_at: row.created_at as string,
-      author_name: author?.display_name ?? 'Someone',
-    };
-  });
+    .select('id', { count: 'exact', head: true })
+    .eq('event_id', id);
+  const threadGateInfo = threadGate(threadTotal ?? 0, canAccessThread);
+
+  let threadComments: ThreadCommentView[] = [];
+  if (threadGateInfo.visibleCount > 0) {
+    let commentsQuery = admin
+      .from('event_comments')
+      .select(
+        'id, body, voice_url, voice_duration_seconds, created_at, author_id, author:profiles(display_name)',
+      )
+      .eq('event_id', id)
+      .order('created_at', { ascending: true });
+    if (!canAccessThread) commentsQuery = commentsQuery.limit(THREAD_PREVIEW_COUNT);
+    const { data: commentRows } = await commentsQuery;
+    threadComments = (commentRows ?? []).map((row) => {
+      const author = Array.isArray(row.author) ? row.author[0] : row.author;
+      return {
+        id: row.id as string,
+        body: (row.body as string | null) ?? null,
+        voice_url: (row.voice_url as string | null) ?? null,
+        voice_duration_seconds: (row.voice_duration_seconds as number | null) ?? null,
+        created_at: row.created_at as string,
+        author_id: row.author_id as string,
+        author_name: author?.display_name ?? 'Guest',
+      };
+    });
+  }
 
   // True accepted count (independent of visibility) so the host knows the reach.
   const { count: acceptedCount } = await admin
@@ -438,6 +482,11 @@ export default async function EventPage({
             </Card>
           )}
           <div className="flex gap-2 flex-wrap">
+            {event.recurrence && event.recurrence !== 'none' && (
+              <span className="inline-flex items-center gap-1.5 rounded-pill bg-terracotta-soft px-3.5 py-2 text-xs font-bold text-terracotta-deep">
+                🔁 {recurrenceLabel(event.recurrence, event.recurrence_interval_days)}
+              </span>
+            )}
             <a
               href={`/api/events/${event.id}/ics`}
               className="inline-flex items-center gap-1.5 rounded-pill border border-line bg-card px-3.5 py-2 text-xs font-bold text-ink-soft shadow-lift hover:border-terracotta hover:text-terracotta-deep active:scale-[0.98] transition-all"
@@ -512,8 +561,18 @@ export default async function EventPage({
           )}
         </div>
 
+        {/* Who's hosting this plan */}
+        {hostCard && (
+          <HostCard
+            host={hostCard.host}
+            relationship={hostCard.relationship}
+            mutuals={hostCard.mutuals}
+          />
+        )}
+
         {/* Invitee RSVP */}
         {myInvite?.status === 'sent' && (
+          <div id={`rsvp-${event.id}`} className="scroll-mt-20">
           <RsvpCard
             inviteId={myInvite.id}
             questions={questions.map((q) => ({
@@ -532,6 +591,7 @@ export default async function EventPage({
               })?.toISOString() ?? null
             }
           />
+          </div>
         )}
         {myInvite?.status === 'accepted' && (
           <Card tone="sage" lifted>
@@ -570,14 +630,20 @@ export default async function EventPage({
           announcements={announcements}
         />
 
-        {/* Two-way comments (text + voice) */}
-        <Comments
-          eventId={event.id}
-          currentUserId={user.id}
-          isHost={isHost}
-          canPost={event.status !== 'cancelled'}
-          comments={comments}
-        />
+        {/* RSVP-gated thread — full for anyone who's in, a blurred preview
+            otherwise. Skipped only for a locked viewer with nothing to see
+            (empty thread + no access), so it never teases an empty room. */}
+        {(canAccessThread || (threadTotal ?? 0) > 0) && (
+          <EventThread
+            eventId={event.id}
+            unlocked={threadGateInfo.unlocked}
+            canModerate={canManage}
+            currentUserId={user.id}
+            comments={threadComments}
+            hiddenCount={threadGateInfo.hiddenCount}
+            blurRows={threadGateInfo.blurRows}
+          />
+        )}
 
         {/* Host-only: RSVP question answers */}
         {isHost && answersByGuest.length > 0 && (
@@ -684,8 +750,20 @@ export default async function EventPage({
 
         {isHost && <CoHostManager eventId={event.id} cohosts={cohosts} />}
 
-        {/* Run it back: available to the host once the plan is behind them. */}
+        {/* Standing plan: a recurring host always has a one-tap "next one". */}
+        {isHost && event.recurrence && event.recurrence !== 'none' && (
+          <section className="border-t border-line pt-6">
+            <p className="text-sm text-ink-soft mb-2.5">
+              This is a standing plan ({recurrenceLabel(event.recurrence, event.recurrence_interval_days)?.toLowerCase()}).
+              Ready for the next one with the same crew?
+            </p>
+            <ScheduleNextButton eventId={event.id} />
+          </section>
+        )}
+
+        {/* Run it back: a one-off plan the host can re-clone once it's behind them. */}
         {isHost &&
+          (!event.recurrence || event.recurrence === 'none') &&
           (event.status === 'past' ||
             event.status === 'cancelled' ||
             (event.starts_at && new Date(event.starts_at) < new Date())) && (

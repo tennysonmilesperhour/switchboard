@@ -123,10 +123,12 @@ export default function WelcomePage() {
         </Link>
       </section>
 
-      <footer className="flex items-center justify-center gap-3 pb-10 text-center text-xs text-ink-faint">
+      <footer className="flex flex-wrap items-center justify-center gap-3 pb-10 text-center text-xs text-ink-faint">
         <span>© 2026 Switchboard</span>
         <Link href="/privacy" className="hover:text-ink">Privacy</Link>
         <Link href="/terms" className="hover:text-ink">Terms</Link>
+        <Link href="/community" className="hover:text-ink">Community</Link>
+        <Link href="/copyright" className="hover:text-ink">Copyright</Link>
       </footer>
     </div>
   );

@@ -1,16 +1,70 @@
 import Link from 'next/link';
 
+const SECTIONS = [
+  {
+    title: 'What We Collect',
+    body: [
+      'Account details such as your name, handle, login email, optional contact email, optional phone number, profile photo, profile text, interests, activities, and settings.',
+      'Social graph and planning data such as connections, circles, household groups, plans, invitations, RSVPs, messages, rooms, polls, votes, availability signals, discovery settings, mutual-interest signals, matches, reports, and blocks.',
+      'Uploaded media such as profile images and plan cover images. Profile and plan images are public if you attach them to public or shared surfaces.',
+      'Technical data needed to run the service, including authentication sessions, push subscriptions, rate-limit records, operational logs, and device/browser information sent by your browser.',
+    ],
+  },
+  {
+    title: 'How We Use It',
+    body: [
+      'To create accounts, authenticate users, show profiles, send invitations, run RSVPs, support plan rooms, manage notifications, prevent abuse, and provide customer or operational support.',
+      'To power privacy-preserving features, including anonymous weighted input, mutual-interest matching, people discovery, and contact matching.',
+      'To improve reliability and safety, including debugging errors, enforcing rate limits, handling reports, and blocking abusive behavior.',
+    ],
+  },
+  {
+    title: 'Privacy by Design',
+    body: [
+      'Mutual-interest signals are private unless both people independently choose each other for the same context. Unmatched interest is not shown to the other person.',
+      'People discovery is opt-in. You choose whether to appear and which categories or contexts can be used.',
+      'Contact matching is used to help you find people you already know or invite guests. We do not sell personal information.',
+      'Private poll votes and mutual-interest signals are protected by database access policies and should not be visible to other users except as aggregated or matched outcomes.',
+    ],
+  },
+  {
+    title: 'Choices and Deletion',
+    body: [
+      'You can edit your profile, contact details, interests, discoverability, quiet hours, notification settings, and password from the app.',
+      'You can delete your account from Settings. Deletion removes your profile and associated personal data according to the database relationships in the service.',
+      'You can turn off discoverability at any time. Existing mutual matches or rooms may remain unless you leave or delete them.',
+    ],
+  },
+] as const;
+
 export default function PrivacyPage() {
   return (
     <main className="mx-auto max-w-2xl px-6 py-16 text-ink">
-      <h1 className="text-4xl font-black">Privacy</h1>
-      <div className="mt-8 space-y-5 leading-relaxed text-ink-soft">
-        <p>Switchboard stores the profile, connection, plan, message, RSVP, and notification data needed to provide the service.</p>
-        <p>Private votes and mutual-interest signals are protected by database access policies. We do not sell personal information.</p>
-        <p>Uploaded images are stored publicly when you attach them to a profile or plan. Do not upload sensitive information.</p>
-        <p>You can change your password or permanently delete your account from Settings. Contact the operator for access or correction requests.</p>
+      <p className="text-sm font-bold text-terracotta">Effective July 9, 2026</p>
+      <h1 className="mt-2 text-4xl font-black">Privacy Notice</h1>
+      <p className="mt-4 text-sm leading-relaxed text-ink-soft">
+        This notice explains how Switchboard handles information for an early-access
+        social planning app. It is written plainly so people can understand what
+        they are sharing and why.
+      </p>
+      <div className="mt-8 space-y-8">
+        {SECTIONS.map((section) => (
+          <section key={section.title}>
+            <h2 className="text-xl font-extrabold text-ink">{section.title}</h2>
+            <div className="mt-3 space-y-3 leading-relaxed text-ink-soft">
+              {section.body.map((paragraph) => (
+                <p key={paragraph}>{paragraph}</p>
+              ))}
+            </div>
+          </section>
+        ))}
       </div>
-      <Link href="/welcome" className="mt-8 inline-block font-bold text-terracotta">Back to Switchboard</Link>
+      <div className="mt-10 flex flex-wrap gap-4 text-sm font-bold text-terracotta">
+        <Link href="/terms">Terms</Link>
+        <Link href="/community">Community Covenant</Link>
+        <Link href="/copyright">Copyright</Link>
+        <Link href="/welcome">Back to Switchboard</Link>
+      </div>
     </main>
   );
 }

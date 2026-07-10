@@ -109,6 +109,54 @@ export async function sendConnectionRequest(identifier: string): Promise<Connect
   return { ok: true };
 }
 
+/**
+ * Send a connection request to a known profile id. Used where the target is
+ * already resolved (e.g. an event host) so we don't need to round-trip a
+ * handle — and it works even for accounts without a handle set.
+ */
+export async function sendConnectionRequestToId(
+  targetId: string,
+): Promise<ConnectionResult> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false, error: 'Not signed in' };
+
+  if (!UUID_RE.test(targetId)) return { ok: false, error: 'Unknown person.' };
+  if (targetId === user.id) return { ok: false, error: 'That is you.' };
+
+  if (!(await checkRateLimit(`connect-request:${user.id}`, 30, 60 * 60))) {
+    return { ok: false, error: 'You’re sending a lot of requests. Try again later.' };
+  }
+
+  // Confirm the target actually exists before inserting; a bad id would
+  // otherwise surface only as an opaque FK error.
+  const { data: target } = await supabase
+    .from('profiles')
+    .select('id')
+    .eq('id', targetId)
+    .maybeSingle();
+  if (!target) return { ok: false, error: 'That account no longer exists.' };
+
+  const { error } = await supabase.from('connections').insert({
+    requester_id: user.id,
+    addressee_id: targetId,
+  });
+  if (error) {
+    if (error.code === '23505') return { ok: false, error: 'Request already sent' };
+    return { ok: false, error: error.message };
+  }
+
+  await sendPushToUsers([targetId], {
+    title: 'New connection request',
+    body: 'Someone wants to connect on Switchboard.',
+    url: '/people',
+  });
+  revalidatePath('/people');
+  return { ok: true };
+}
+
 export async function resolveContactMatches(
   contacts: ContactCandidate[],
 ): Promise<ContactMatch[]> {
