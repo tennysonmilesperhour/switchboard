@@ -50,10 +50,16 @@ export default async function ProfilePage() {
   const { data: profile } = await supabase
     .from('profiles')
     .select(
-      'display_name, handle, avatar_url, cover_url, bio, tagline, pronouns, location, links, socials, contact_email, contact_phone, contact_public, interests, down_to',
+      'display_name, handle, avatar_url, cover_url, bio, tagline, pronouns, location, links, socials, contact_public, interests, down_to',
     )
     .eq('id', user.id)
     .single();
+
+  // contact_email / contact_phone are withheld from the general profiles API
+  // surface; the owner reads their own via the security-definer accessor (SB-01).
+  const { data: privateProfile } = await supabase
+    .rpc('my_private_profile')
+    .maybeSingle<{ calendar_token: string; contact_email: string | null; contact_phone: string | null }>();
 
   const [{ data: created }, { data: attendedRows }] = await Promise.all([
     supabase
@@ -84,8 +90,8 @@ export default async function ProfilePage() {
     (s) => SOCIAL_BY_ID[s.platform],
   );
   const contactPublic = Boolean(profile?.contact_public);
-  const email = profile?.contact_email ?? null;
-  const phone = profile?.contact_phone ?? null;
+  const email = privateProfile?.contact_email ?? null;
+  const phone = privateProfile?.contact_phone ?? null;
   const hasContact = Boolean(email || phone);
 
   // vCard embeds contact details only when the user opted them into sharing.

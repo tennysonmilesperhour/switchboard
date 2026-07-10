@@ -18,10 +18,16 @@ export default async function EditProfilePage() {
   const { data: profile } = await supabase
     .from('profiles')
     .select(
-      'display_name, handle, avatar_url, cover_url, bio, tagline, pronouns, location, links, socials, contact_email, contact_phone, contact_public',
+      'display_name, handle, avatar_url, cover_url, bio, tagline, pronouns, location, links, socials, contact_public',
     )
     .eq('id', user.id)
     .single();
+
+  // contact_email / contact_phone are withheld from the general profiles API
+  // surface; the owner reads their own via the security-definer accessor (SB-01).
+  const { data: privateProfile } = await supabase
+    .rpc('my_private_profile')
+    .maybeSingle<{ calendar_token: string; contact_email: string | null; contact_phone: string | null }>();
 
   const links: ProfileLink[] = Array.isArray(profile?.links) ? profile!.links : [];
   const socials: ProfileSocial[] = (Array.isArray(profile?.socials) ? profile!.socials : []).filter(
@@ -42,8 +48,8 @@ export default async function EditProfilePage() {
         location={profile?.location ?? ''}
         links={links}
         socials={socials}
-        contactEmail={profile?.contact_email ?? ''}
-        contactPhone={profile?.contact_phone ?? ''}
+        contactEmail={privateProfile?.contact_email ?? ''}
+        contactPhone={privateProfile?.contact_phone ?? ''}
         contactPublic={Boolean(profile?.contact_public)}
       />
     </AppShell>
