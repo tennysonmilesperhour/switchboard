@@ -8,11 +8,13 @@ import {
   advanceEventCascade,
   notifyCurrentInviteWave,
 } from '@/lib/server/cascade-runner';
-import { sendPushToUsers } from '@/lib/server/notify';
+import { notifyUsers } from '@/lib/server/notify';
 import type { EventTheme, InviteMode } from '@/lib/types';
 import { reportOperationalError } from '@/lib/server/observability';
-import { looksLikeEmail } from '@/lib/server/email';
+import { looksLikeEmail, sendEmails } from '@/lib/server/email';
+import { looksLikePhoneNumber, sendSmsMessages } from '@/lib/server/sms';
 import { normalizePhoneNumber } from '@/lib/phone';
+import { suggestWindow } from '@/lib/engine/windows';
 import { parseInviteEntries, type ParsedInviteEntry } from '@/lib/invite-entry';
 
 /** Primary host or a co-host — the people allowed to manage an event. */
@@ -247,10 +249,17 @@ export async function addPeopleToEvent(
   const admin = createAdminClient();
   const { data: event } = await admin
     .from('events')
-    .select('id, status, invite_mode')
+    .select('id, status, invite_mode, starts_at')
     .eq('id', eventId)
     .maybeSingle();
   if (!event) return { ok: false, error: 'Plan not found.' };
+
+  // Match the response window to how soon the event is, like the wizard does,
+  // instead of letting these rows fall back to the 24h table default (which
+  // can outlive an imminent event and stall an individual-mode line).
+  const windowMinutes = event.starts_at
+    ? suggestWindow(new Date(event.starts_at), new Date()).windowMinutes
+    : 1440;
   if (event.status !== 'inviting') {
     return {
       ok: false,
@@ -342,6 +351,7 @@ export async function addPeopleToEvent(
         invitee_id: addition.profileId,
         position: nextPosition++,
         group_stage: groupStage,
+        window_minutes: windowMinutes,
         status: 'queued',
       });
     } else {
@@ -358,6 +368,7 @@ export async function addPeopleToEvent(
         guest_contact: addition.contact,
         position: nextPosition++,
         group_stage: groupStage,
+        window_minutes: windowMinutes,
         status: 'queued',
       });
     }
@@ -457,6 +468,25 @@ export async function resendInvite(
   const reopenable = ['expired', 'declined', 'cancelled'];
   if (!reopenable.includes(invite.status as string)) {
     return { ok: false, error: 'That invite is still active.' };
+  }
+
+  // Don't re-queue into a full event — the cascade would immediately cancel it
+  // again, leaving the host no feedback that the resend was futile.
+  const { data: capacityRow } = await admin
+    .from('events')
+    .select('capacity, invite_mode')
+    .eq('id', eventId)
+    .maybeSingle();
+  const { count: acceptedCount } = await admin
+    .from('invites')
+    .select('id', { count: 'exact', head: true })
+    .eq('event_id', eventId)
+    .eq('status', 'accepted');
+  const cap =
+    capacityRow?.capacity ??
+    (capacityRow?.invite_mode === 'individual' ? 1 : null);
+  if (cap !== null && (acceptedCount ?? 0) >= cap) {
+    return { ok: false, error: 'This plan is already full.' };
   }
 
   const { error } = await admin
@@ -569,7 +599,8 @@ export async function updateEventDetails(
       .filter((id): id is string => Boolean(id) && id !== user.id);
     if (recipients.length > 0) {
       const changed = whenChanged && whereChanged ? 'time and place' : whenChanged ? 'time' : 'place';
-      await sendPushToUsers(recipients, {
+      await notifyUsers(recipients, {
+        kind: 'event_updated',
         title: 'Plan updated ✏️',
         body: `The ${changed} for ${title} changed. Tap for the latest.`,
         url: `/events/${eventId}`,
@@ -591,7 +622,16 @@ export async function confirmEvent(eventId: string): Promise<void> {
   if (!(await canManageEvent(user.id, eventId))) return;
   const admin = createAdminClient();
   await admin.from('events').update({ status: 'confirmed' }).eq('id', eventId);
+  // The guest list is locked in — retire anything still in motion so nobody is
+  // left in a permanently invisible 'queued'/'sent' limbo the cascade (which
+  // only runs while 'inviting') will never touch again.
+  await admin
+    .from('invites')
+    .update({ status: 'cancelled' })
+    .eq('event_id', eventId)
+    .in('status', ['queued', 'sent', 'requested']);
   revalidatePath(`/events/${eventId}`);
+  revalidatePath('/plans');
 }
 
 export async function cancelEvent(eventId: string): Promise<void> {
@@ -602,7 +642,62 @@ export async function cancelEvent(eventId: string): Promise<void> {
   if (!user) redirect('/login');
   if (!(await canManageEvent(user.id, eventId))) return;
   const admin = createAdminClient();
+
+  const { data: event } = await admin
+    .from('events')
+    .select('title')
+    .eq('id', eventId)
+    .maybeSingle();
   await admin.from('events').update({ status: 'cancelled' }).eq('id', eventId);
+
+  const title = event?.title ?? 'the plan';
+
+  // Tell everyone who had accepted — across every channel they came in on —
+  // that it's off, so nobody shows up to a cancelled plan.
+  const { data: accepted } = await admin
+    .from('invites')
+    .select('invitee_id, guest_contact')
+    .eq('event_id', eventId)
+    .eq('status', 'accepted');
+  const rows = accepted ?? [];
+
+  const memberIds = rows
+    .map((r) => r.invitee_id as string | null)
+    .filter((id): id is string => Boolean(id));
+  if (memberIds.length > 0) {
+    await notifyUsers(memberIds, {
+      kind: 'event_cancelled',
+      title: 'Plan cancelled',
+      body: `${title} has been called off.`,
+      url: `/events/${eventId}`,
+    });
+  }
+
+  const guestContacts = rows
+    .filter((r) => !r.invitee_id)
+    .map((r) => r.guest_contact as string | null)
+    .filter((c): c is string => Boolean(c));
+  const guestEmails = guestContacts
+    .filter((c) => looksLikeEmail(c))
+    .map((to) => ({
+      to,
+      subject: `Cancelled: ${title}`,
+      text: `${title} has been cancelled. Apologies for the change of plans.\n\n— Switchboard`,
+    }));
+  if (guestEmails.length > 0) await sendEmails(guestEmails);
+  const guestSms = guestContacts
+    .filter((c) => looksLikePhoneNumber(c))
+    .map((to) => ({ to, body: `${title} on Switchboard has been cancelled.` }));
+  if (guestSms.length > 0) await sendSmsMessages(guestSms);
+
+  // Retire any invite still in motion so the (now belt-and-suspenders) RSVP
+  // guard has nothing live to act on.
+  await admin
+    .from('invites')
+    .update({ status: 'cancelled' })
+    .eq('event_id', eventId)
+    .in('status', ['queued', 'sent', 'waitlisted', 'requested']);
+
   revalidatePath(`/events/${eventId}`);
   revalidatePath('/plans');
 }

@@ -48,7 +48,13 @@ export function DiscoverClient({ defaultInterests }: { defaultInterests: string[
         great fits - not a hundred search results.
       </p>
 
-      <div className="space-y-4">
+      <form
+        className="space-y-4"
+        onSubmit={(e) => {
+          e.preventDefault();
+          search();
+        }}
+      >
         <div className="grid grid-cols-2 gap-3">
           <div className="space-y-1.5">
             <label htmlFor="loc" className="text-sm font-medium">Where?</label>
@@ -120,11 +126,11 @@ export function DiscoverClient({ defaultInterests }: { defaultInterests: string[
           </div>
         </div>
 
-        <Button size="lg" className="w-full" disabled={pending} onClick={search}>
+        <Button type="submit" size="lg" className="w-full" disabled={pending}>
           {pending ? 'Curating…' : 'Find something great ✨'}
         </Button>
         {error && <p role="alert" className="text-sm text-rose-deep">{error}</p>}
-      </div>
+      </form>
 
       {suggestions && suggestions.length === 0 && (
         <EmptyState

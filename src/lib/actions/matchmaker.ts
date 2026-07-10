@@ -2,7 +2,9 @@
 
 import { revalidatePath } from 'next/cache';
 import { createClient } from '@/lib/supabase/server';
-import { sendPushToUsers } from '@/lib/server/notify';
+import { createAdminClient } from '@/lib/supabase/admin';
+import { notifyUsers, sendPushToUsers } from '@/lib/server/notify';
+import { checkRateLimit } from '@/lib/server/rate-limit';
 
 export async function proposeIntroduction(
   personA: string,
@@ -16,6 +18,24 @@ export async function proposeIntroduction(
   } = await supabase.auth.getUser();
   if (!user) return { ok: false, error: 'Not signed in' };
   if (personA === personB) return { ok: false, error: 'Pick two different friends' };
+
+  const cleanActivity = activity.trim().slice(0, 80);
+  if (!cleanActivity) return { ok: false, error: 'What would they do together?' };
+
+  if (!(await checkRateLimit(`matchmaker:${user.id}`, 20, 60 * 60))) {
+    return { ok: false, error: 'You’ve sent a lot of intros. Try again later.' };
+  }
+
+  // You can only introduce people you're actually connected to — matches the
+  // product intent, and stops the endpoint being used to fire push at arbitrary
+  // user ids (SB-08).
+  const [{ data: connA }, { data: connB }] = await Promise.all([
+    supabase.rpc('are_connected', { a: user.id, b: personA }),
+    supabase.rpc('are_connected', { a: user.id, b: personB }),
+  ]);
+  if (!connA || !connB) {
+    return { ok: false, error: 'You can only introduce people you’re connected to.' };
+  }
 
   // Don't propose anyone who's taking a quiet season.
   const { data: resting } = await supabase
@@ -31,14 +51,14 @@ export async function proposeIntroduction(
     proposer_id: user.id,
     person_a: personA,
     person_b: personB,
-    activity,
-    note: note.trim() || null,
+    activity: cleanActivity,
+    note: note.trim().slice(0, 280) || null,
   });
   if (error) return { ok: false, error: error.message };
 
   await sendPushToUsers([personA, personB], {
     title: 'A friend thinks you two would hit it off',
-    body: `Someone you both know suggested ${activity.toLowerCase()}. Only revealed if you both say yes.`,
+    body: `Someone you both know suggested ${cleanActivity.toLowerCase()}. Only revealed if you both say yes.`,
     url: '/',
   });
   revalidatePath('/people');
@@ -57,6 +77,25 @@ export async function respondToIntroduction(
   if (error) return { ok: false, matched: false, error: error.message };
 
   const matched = data === 'matched';
+  if (matched) {
+    // Both said yes — identities are revealed, so tell both. Previously a
+    // match notified nobody and the whole payoff was silent.
+    const admin = createAdminClient();
+    const { data: proposal } = await admin
+      .from('matchmaker_proposals')
+      .select('person_a, person_b, activity')
+      .eq('id', proposalId)
+      .maybeSingle();
+    if (proposal?.person_a && proposal?.person_b) {
+      const activity = proposal.activity ? String(proposal.activity).toLowerCase() : null;
+      await notifyUsers([proposal.person_a, proposal.person_b], {
+        kind: 'match',
+        title: '✨ It’s a match',
+        body: activity ? `You both said yes to ${activity}. Say hi!` : 'You both said yes. Say hi!',
+        url: '/people',
+      });
+    }
+  }
   revalidatePath('/');
   return { ok: true, matched };
 }

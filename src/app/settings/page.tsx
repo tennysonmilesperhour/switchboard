@@ -38,10 +38,17 @@ export default async function SettingsPage() {
   const { data: profile } = await supabase
     .from('profiles')
     .select(
-      'display_name, handle, interests, down_to, sabbatical, sabbatical_message, quiet_hours_start, quiet_hours_end, calendar_token, discoverable, discovery_geography, discovery_demographics, discovery_interests, discovery_involvements, discovery_mutuals, discovery_contexts',
+      'display_name, handle, interests, down_to, sabbatical, sabbatical_message, quiet_hours_start, quiet_hours_end, discoverable, discovery_geography, discovery_demographics, discovery_interests, discovery_involvements, discovery_mutuals, discovery_contexts',
     )
     .eq('id', user.id)
     .single();
+
+  // calendar_token is withheld from the general profiles API surface; fetch the
+  // caller's own value through the security-definer accessor (see SB-01).
+  const { data: privateProfile } = await supabase
+    .rpc('my_private_profile')
+    .maybeSingle<{ calendar_token: string; contact_email: string | null; contact_phone: string | null }>();
+  const calendarToken = privateProfile?.calendar_token ?? null;
 
   const interests: string[] = profile?.interests ?? [];
   const downTo: string[] = profile?.down_to ?? [];
@@ -107,14 +114,14 @@ export default async function SettingsPage() {
           </Card>
         </section>
 
-        {profile?.calendar_token && (
+        {calendarToken && (
           <section>
             <SectionHeader
               title="Your calendar"
               hint="Follow your plans from any calendar app"
             />
             <Card>
-              <CalendarSubscribe token={profile.calendar_token} />
+              <CalendarSubscribe token={calendarToken} />
             </Card>
           </section>
         )}

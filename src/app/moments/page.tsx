@@ -46,40 +46,53 @@ export default async function MomentsPage() {
     );
 
     const admin = createAdminClient();
-    candidates = await Promise.all(
-      ((found ?? []) as Array<{ id: string; experiences: string[]; headline: string | null }>).map(
-        async (candidate) => {
-          const stage = (stageByOther.get(candidate.id) ?? 'none') as Candidate['stage'];
-          let intro: Candidate['intro'] = null;
-          if (stage === 'revealed' || stage === 'accepted') {
-            // Mutual curiosity confirmed - a gentle introduction is allowed.
-            const { data: otherMoment } = await admin
-              .from('moments')
-              .select('user_id, headline, profile:profiles(display_name, interests)')
-              .eq('id', candidate.id)
-              .single();
-            const profile = Array.isArray(otherMoment?.profile)
-              ? otherMoment?.profile[0]
-              : otherMoment?.profile;
-            if (profile) {
-              intro = {
-                name: profile.display_name,
-                interests: (profile.interests ?? []).slice(0, 4),
-                headline: otherMoment?.headline ?? null,
-              };
-            }
-          }
-          return {
-            id: candidate.id,
-            experiences: candidate.experiences,
-            headline: candidate.headline,
-            stage,
-            intro,
-          };
-        },
-      ),
-    );
-    candidates = candidates.filter((c) => c.stage !== 'passed');
+    const foundList = (found ?? []) as Array<{
+      id: string;
+      experiences: string[];
+      headline: string | null;
+    }>;
+
+    // Only the mutually-curious candidates get a gentle introduction. Fetch all
+    // of their moments in one query rather than one round trip per candidate.
+    const introIds = foundList
+      .map((candidate) => candidate.id)
+      .filter((id) => {
+        const stage = stageByOther.get(id) ?? 'none';
+        return stage === 'revealed' || stage === 'accepted';
+      });
+    const introById = new Map<string, Candidate['intro']>();
+    if (introIds.length > 0) {
+      const { data: others } = await admin
+        .from('moments')
+        .select('id, headline, profile:profiles(display_name, interests)')
+        .in('id', introIds);
+      for (const other of others ?? []) {
+        const profile = Array.isArray(other.profile) ? other.profile[0] : other.profile;
+        if (profile) {
+          introById.set(other.id, {
+            name: profile.display_name,
+            interests: (profile.interests ?? []).slice(0, 4),
+            headline: other.headline ?? null,
+          });
+        }
+      }
+    }
+
+    candidates = foundList
+      .map((candidate) => {
+        const stage = (stageByOther.get(candidate.id) ?? 'none') as Candidate['stage'];
+        return {
+          id: candidate.id,
+          experiences: candidate.experiences,
+          headline: candidate.headline,
+          stage,
+          intro:
+            stage === 'revealed' || stage === 'accepted'
+              ? introById.get(candidate.id) ?? null
+              : null,
+        };
+      })
+      .filter((c) => c.stage !== 'passed');
   }
 
   return (

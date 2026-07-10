@@ -166,6 +166,17 @@ describe('group mode', () => {
     expect(updates).toEqual([{ id: 'd', status: 'cancelled' }]);
   });
 
+  test('cancels pending open-table join requests when the event fills', () => {
+    const invites = [
+      invite({ id: 'a', position: 0, groupStage: 0, status: 'accepted' }),
+      invite({ id: 'b', position: 1, groupStage: 0, status: 'accepted' }),
+      invite({ id: 'c', position: 2, groupStage: 0, status: 'accepted' }),
+      invite({ id: 'req', position: 3, groupStage: 0, status: 'requested' }),
+    ];
+    const updates = advanceCascade(invites, GROUP, NOW);
+    expect(updates).toEqual([{ id: 'req', status: 'cancelled' }]);
+  });
+
   test('expired stage advances to the next stage in one pass', () => {
     const invites = [
       invite({ id: 'a', position: 0, groupStage: 0, status: 'sent', sentAt: EARLIER, windowMinutes: 30 }),

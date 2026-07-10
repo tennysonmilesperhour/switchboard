@@ -17,12 +17,19 @@ export async function addCapsuleEntry(
   } = await supabase.auth.getUser();
   if (!user) return { ok: false, error: 'Not signed in' };
 
+  // Only accept a photo that lives in our own public media bucket — don't store
+  // an arbitrary attacker-supplied URL (SB-28).
+  const photo = photoUrl.trim() || null;
+  if (photo && !/\/storage\/v1\/object\/public\/media\//.test(photo)) {
+    return { ok: false, error: 'Unexpected image location — please re-upload.' };
+  }
+
   const { error } = await supabase.from('capsule_entries').upsert(
     {
       event_id: eventId,
       user_id: user.id,
       line: trimmed.slice(0, 280),
-      photo_url: photoUrl.trim() || null,
+      photo_url: photo,
     },
     { onConflict: 'event_id,user_id' },
   );

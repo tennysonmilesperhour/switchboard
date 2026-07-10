@@ -1,5 +1,5 @@
 import { createAdminClient } from '@/lib/supabase/admin';
-import { sendPushToUsers } from '@/lib/server/notify';
+import { notifyUsers } from '@/lib/server/notify';
 import { sendEmails, looksLikeEmail, appUrl } from '@/lib/server/email';
 import { sendSmsMessages, looksLikePhoneNumber } from '@/lib/server/sms';
 import { formatDateTime } from '@/lib/format';
@@ -80,12 +80,17 @@ async function remindOneEvent(
   const when = formatDateTime(event.starts_at);
   const url = `/events/${event.id}`;
 
-  // Registered attendees → push (quiet-hours aware inside sendPushToUsers).
+  // Registered attendees → in-app notification (always) + push (quiet-hours
+  // aware). Recording the in-app row is what fixes SB-06: the reminder window
+  // is claimed before sending, and push silently drops quiet-hours users, so a
+  // push-only "starting soon" landing in quiet hours was lost forever. The
+  // in-app row is never quiet-hours gated, so the reminder still surfaces.
   const attendeeUsers = accepted
     .map((i) => i.invitee_id)
     .filter((id): id is string => Boolean(id));
   if (attendeeUsers.length > 0) {
-    await sendPushToUsers(attendeeUsers, {
+    await notifyUsers(attendeeUsers, {
+      kind: 'reminder',
       title: kind === 'soon' ? 'Starting soon ⏰' : 'Coming up tomorrow 📅',
       body: `${event.title} - ${when}.`,
       url,
@@ -128,7 +133,8 @@ async function remindOneEvent(
       .map((i) => i.invitee_id)
       .filter((id): id is string => Boolean(id));
     if (pendingUsers.length > 0) {
-      await sendPushToUsers(pendingUsers, {
+      await notifyUsers(pendingUsers, {
+        kind: 'reminder',
         title: 'Still hoping you can make it 💛',
         body: `${event.title} - ${when}. Your invitation is still open.`,
         url,

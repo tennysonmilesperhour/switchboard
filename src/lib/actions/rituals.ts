@@ -2,7 +2,8 @@
 
 import { revalidatePath } from 'next/cache';
 import { createClient } from '@/lib/supabase/server';
-import { sendPushToUsers } from '@/lib/server/notify';
+import { notifyUsers } from '@/lib/server/notify';
+import { checkRateLimit } from '@/lib/server/rate-limit';
 
 export async function proposeRitual(
   partnerId: string,
@@ -15,17 +16,25 @@ export async function proposeRitual(
   } = await supabase.auth.getUser();
   if (!user) return { ok: false, error: 'Not signed in' };
 
+  const cleanActivity = activity.trim().slice(0, 80);
+  if (!cleanActivity) return { ok: false, error: 'Name the ritual first.' };
+
+  if (!(await checkRateLimit(`ritual:${user.id}`, 20, 60 * 60))) {
+    return { ok: false, error: 'You’ve sent a lot of proposals. Try again later.' };
+  }
+
   const { error } = await supabase.from('rituals').insert({
     creator_id: user.id,
     partner_id: partnerId,
-    activity,
+    activity: cleanActivity,
     cadence_days: cadenceDays,
   });
   if (error) return { ok: false, error: error.message };
 
-  await sendPushToUsers([partnerId], {
+  await notifyUsers([partnerId], {
+    kind: 'ritual',
     title: 'A standing ritual, proposed',
-    body: `Someone wants to make "${activity}" a regular thing with you.`,
+    body: `Someone wants to make "${cleanActivity}" a regular thing with you.`,
     url: '/mutual',
   });
   revalidatePath('/mutual');
