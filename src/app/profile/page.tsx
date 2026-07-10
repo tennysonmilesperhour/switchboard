@@ -11,6 +11,7 @@ import { buildVCard, qrSvg } from '@/lib/vcard';
 import type { SwitchboardEvent, ProfileLink, ProfileSocial } from '@/lib/types';
 import { ProfileTabs, type ProfileEvent } from './ProfileTabs';
 import { ProfileShare } from './ProfileShare';
+import { ProfileStrength } from '@/components/profile/ProfileStrength';
 
 export const metadata: Metadata = { title: 'Profile' };
 
@@ -230,6 +231,25 @@ export default async function ProfilePage() {
             ) : null}
           </div>
         </div>
+
+        {/* Profile completion nudge — leads with photo + contact so friends
+            can recognize and invite you by phone or email. */}
+        <ProfileStrength
+          input={{
+            avatarUrl: profile?.avatar_url ?? null,
+            coverUrl: profile?.cover_url ?? null,
+            bio: profile?.bio ?? null,
+            tagline: profile?.tagline ?? null,
+            pronouns: profile?.pronouns ?? null,
+            location: profile?.location ?? null,
+            interests,
+            downTo,
+            links,
+            socials,
+            contactEmail: email,
+            contactPhone: phone,
+          }}
+        />
 
         {/* Links */}
         {links.length > 0 ? (
