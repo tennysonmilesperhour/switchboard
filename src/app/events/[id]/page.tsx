@@ -12,6 +12,7 @@ import { PlanCard, planColor } from '@/components/ui/PlanCard';
 import { CopyButton } from '@/components/ui/CopyButton';
 import { ShareButton } from '@/components/ui/ShareButton';
 import { CascadeProgress } from '@/components/events/CascadeProgress';
+import { HostCard, type HostCardData } from '@/components/events/HostCard';
 import { JoinRequests } from '@/components/events/JoinRequests';
 import { RsvpCard } from '@/components/events/RsvpCard';
 import { Announcements, type AnnouncementView } from '@/components/events/Announcements';
@@ -21,6 +22,7 @@ import { PollSection, type OptionResult } from '@/components/polls/PollSection';
 import { HostControls } from './HostControls';
 import { CoHostManager } from './CoHostManager';
 import { AddInvitees } from './AddInvitees';
+import { getRelationship, getMutualConnections } from '@/lib/server/relationship';
 import { inviteExpiresAt } from '@/lib/engine/cascade';
 import { threadGate, THREAD_PREVIEW_COUNT } from '@/lib/engine/thread';
 import { formatDateTime } from '@/lib/format';
@@ -120,6 +122,29 @@ export default async function EventPage({
       id: p.id as string,
       name: (p.display_name as string) ?? 'Co-host',
     }));
+  }
+
+  // "Hosted by" identity for anyone who isn't the host: the host's public
+  // profile, how the viewer is already connected, and any mutual friends. The
+  // host doesn't need to be told they're hosting their own plan.
+  let hostCard: {
+    host: HostCardData;
+    relationship: Awaited<ReturnType<typeof getRelationship>>;
+    mutuals: Awaited<ReturnType<typeof getMutualConnections>>;
+  } | null = null;
+  if (!isHost) {
+    const { data: hostProfile } = await supabase
+      .from('profiles')
+      .select('id, display_name, handle, avatar_url, tagline')
+      .eq('id', event.host_id)
+      .maybeSingle<HostCardData>();
+    if (hostProfile) {
+      const [relationship, mutuals] = await Promise.all([
+        getRelationship(supabase, user.id, event.host_id),
+        getMutualConnections(admin, user.id, event.host_id),
+      ]);
+      hostCard = { host: hostProfile, relationship, mutuals };
+    }
   }
 
   // Host/co-host: full cascade view. Invitee: their own invite.
@@ -506,6 +531,15 @@ export default async function EventPage({
             </p>
           )}
         </div>
+
+        {/* Who's hosting this plan */}
+        {hostCard && (
+          <HostCard
+            host={hostCard.host}
+            relationship={hostCard.relationship}
+            mutuals={hostCard.mutuals}
+          />
+        )}
 
         {/* Invitee RSVP */}
         {myInvite?.status === 'sent' && (
