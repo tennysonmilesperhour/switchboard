@@ -92,11 +92,17 @@ export function advanceCascade(
     }
   }
 
-  // 2. If the event is full, retire everything still waiting.
+  // 2. If the event is full, retire everything still waiting — including
+  //    open-table join requests ('requested'), which can never be approved
+  //    once there are no spots and would otherwise sit pending forever.
   const spots = spotsRemaining(list, config);
   if (spots <= 0) {
     for (const invite of list) {
-      if (invite.status === 'queued' || invite.status === 'sent') {
+      if (
+        invite.status === 'queued' ||
+        invite.status === 'sent' ||
+        invite.status === 'requested'
+      ) {
         invite.status = 'cancelled';
         updates.push({ id: invite.id, status: 'cancelled' });
       }
