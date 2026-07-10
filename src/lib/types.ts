@@ -116,6 +116,7 @@ export interface Connection {
 export type EventStatus = 'draft' | 'deciding' | 'inviting' | 'confirmed' | 'cancelled' | 'past';
 export type InviteMode = 'individual' | 'group' | 'all_at_once';
 export type EventTheme = 'default' | 'sunrise' | 'dusk' | 'meadow' | 'ink' | 'blossom';
+export type RecurrenceKind = 'none' | 'daily' | 'weekly' | 'biweekly' | 'monthly' | 'custom';
 
 export interface SwitchboardEvent {
   id: string;
@@ -138,6 +139,9 @@ export interface SwitchboardEvent {
   cover_url: string | null;
   theme: EventTheme;
   wishlist_url: string | null;
+  /** Recurrence: how often the plan repeats, and the day-count for a custom cadence. */
+  recurrence: RecurrenceKind;
+  recurrence_interval_days: number | null;
   /** Reminders */
   reminders_enabled: boolean;
   reminded_day_before_at: string | null;

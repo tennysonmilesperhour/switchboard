@@ -9,7 +9,11 @@ import {
   notifyCurrentInviteWave,
 } from '@/lib/server/cascade-runner';
 import { notifyUsers } from '@/lib/server/notify';
-import type { EventTheme, InviteMode } from '@/lib/types';
+import type { EventTheme, InviteMode, RecurrenceKind } from '@/lib/types';
+import {
+  nextOccurrenceAfter,
+  normalizeCustomInterval,
+} from '@/lib/engine/recurrence';
 import { reportOperationalError } from '@/lib/server/observability';
 import { looksLikeEmail, sendEmails } from '@/lib/server/email';
 import { looksLikePhoneNumber, sendSmsMessages } from '@/lib/server/sms';
@@ -56,6 +60,9 @@ export interface CreateEventInput {
   coverUrl?: string | null;
   theme?: EventTheme;
   wishlistUrl?: string | null;
+  /** How often the plan repeats; day-count only when recurrence is 'custom'. */
+  recurrence?: RecurrenceKind;
+  recurrenceIntervalDays?: number | null;
   /** Host-defined RSVP questions, in order. */
   questions?: Array<{ prompt: string; required: boolean }>;
   /** Standing ritual this plan fulfills, if any. */
@@ -715,23 +722,26 @@ export async function cancelEvent(eventId: string): Promise<void> {
 }
 
 /**
- * Run It Back: clone a past plan into a fresh one - same people, same place,
- * new date TBD. Anyone who said "not my thing" is quietly left off; everyone
- * else keeps their place in the order. The host lands on the new draft.
+ * Clone a plan into a fresh one - same crew, same place, carrying the invite
+ * mode, visibility, presentation, and recurrence forward. Anyone who said "not
+ * my thing" is quietly left off; everyone else keeps their place in the order.
+ * `startsAt` lets the caller either leave the new date TBD (Run It Back) or
+ * pre-fill the next occurrence (a recurring plan's "Schedule the next one").
+ * Returns the new event id, or null if the source can't be cloned by this user.
  */
-export async function runItBack(eventId: string): Promise<never> {
+async function cloneEventForReuse(
+  userId: string,
+  sourceId: string,
+  startsAt: string | null,
+): Promise<string | null> {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) redirect('/login');
 
   const { data: source } = await supabase
     .from('events')
     .select('*')
-    .eq('id', eventId)
+    .eq('id', sourceId)
     .single();
-  if (!source || source.host_id !== user.id) redirect('/plans');
+  if (!source || source.host_id !== userId) return null;
 
   // Writes go through the service-role client for the same reason as
   // createEvent: the host can't read back a room they don't yet belong to
@@ -740,22 +750,22 @@ export async function runItBack(eventId: string): Promise<never> {
 
   const { data: room } = await admin
     .from('rooms')
-    .insert({ kind: 'event', title: source.title, created_by: user.id })
+    .insert({ kind: 'event', title: source.title, created_by: userId })
     .select('id')
     .single();
   if (room) {
-    await admin.from('room_members').insert({ room_id: room.id, member_id: user.id });
+    await admin.from('room_members').insert({ room_id: room.id, member_id: userId });
   }
 
   const { data: clone } = await admin
     .from('events')
     .insert({
-      host_id: user.id,
+      host_id: userId,
       title: source.title,
       description: source.description,
       location_name: source.location_name,
       location_address: source.location_address,
-      starts_at: null, // new date TBD - the group can settle it in the room
+      starts_at: startsAt,
       capacity: source.capacity,
       invite_mode: source.invite_mode,
       open_table: source.open_table,
@@ -766,16 +776,19 @@ export async function runItBack(eventId: string): Promise<never> {
       cover_url: source.cover_url,
       theme: source.theme,
       wishlist_url: source.wishlist_url,
+      // Keep it a standing plan: the clone repeats on the same cadence.
+      recurrence: source.recurrence,
+      recurrence_interval_days: source.recurrence_interval_days,
       room_id: room?.id ?? null,
     })
     .select('id')
     .single();
-  if (!clone) redirect(`/events/${eventId}`);
+  if (!clone) return null;
 
   const { data: priorInvites } = await supabase
     .from('invites')
     .select('invitee_id, guest_name, guest_contact, position, group_stage, window_minutes, decline_note')
-    .eq('event_id', eventId)
+    .eq('event_id', sourceId)
     .order('position');
 
   const carryOver = (priorInvites ?? []).filter(
@@ -798,7 +811,7 @@ export async function runItBack(eventId: string): Promise<never> {
   const { data: questions } = await supabase
     .from('event_questions')
     .select('prompt, required, position')
-    .eq('event_id', eventId);
+    .eq('event_id', sourceId);
   if (questions && questions.length > 0) {
     await admin.from('event_questions').insert(
       questions.map((q) => ({ ...q, event_id: clone.id })),
@@ -808,10 +821,61 @@ export async function runItBack(eventId: string): Promise<never> {
   try {
     await advanceEventCascade(clone.id);
   } catch (cascadeError) {
-    console.error('Failed to start cascade for run-it-back', cascadeError);
+    console.error('Failed to start cascade for reused plan', cascadeError);
   }
 
-  redirect(`/events/${clone.id}`);
+  return clone.id as string;
+}
+
+/**
+ * Run It Back: clone a past plan into a fresh one - same people, same place,
+ * new date TBD. Anyone who said "not my thing" is quietly left off; everyone
+ * else keeps their place in the order. The host lands on the new draft.
+ */
+export async function runItBack(eventId: string): Promise<never> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) redirect('/login');
+
+  // new date TBD - the group can settle it in the room
+  const cloneId = await cloneEventForReuse(user.id, eventId, null);
+  redirect(cloneId ? `/events/${cloneId}` : `/events/${eventId}`);
+}
+
+/**
+ * Schedule the next occurrence of a recurring plan: clone the crew forward onto
+ * the upcoming date its cadence produces. Host only. If the source doesn't
+ * repeat or has no start time to count from, the new date is left TBD.
+ */
+export async function scheduleNextOccurrence(eventId: string): Promise<never> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) redirect('/login');
+
+  const { data: source } = await supabase
+    .from('events')
+    .select('host_id, starts_at, recurrence, recurrence_interval_days')
+    .eq('id', eventId)
+    .single();
+  if (!source || source.host_id !== user.id) redirect('/plans');
+
+  let startsAt: string | null = null;
+  if (source.starts_at && source.recurrence && source.recurrence !== 'none') {
+    const next = nextOccurrenceAfter(
+      new Date(source.starts_at),
+      source.recurrence as RecurrenceKind,
+      normalizeCustomInterval(source.recurrence_interval_days),
+      new Date(),
+    );
+    startsAt = next ? next.toISOString() : null;
+  }
+
+  const cloneId = await cloneEventForReuse(user.id, eventId, startsAt);
+  redirect(cloneId ? `/events/${cloneId}` : `/events/${eventId}`);
 }
 
 /** Host closes voting and moves an AWI event into the inviting phase. */
