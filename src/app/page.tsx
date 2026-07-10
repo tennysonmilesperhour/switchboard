@@ -4,6 +4,7 @@ import { createClient } from '@/lib/supabase/server';
 import { AppShell } from '@/components/shell/AppShell';
 import { Card, SectionHeader } from '@/components/ui/Card';
 import { Avatar } from '@/components/ui/Avatar';
+import { Icon } from '@/components/ui/Icon';
 import { PlanCard, planColor } from '@/components/ui/PlanCard';
 import { SignalBar } from '@/components/signals/SignalBar';
 import {
@@ -39,6 +40,7 @@ export default async function HomePage() {
     { data: pendingInvites },
     { data: upcoming },
     { data: recentMatches },
+    { count: friendCount },
   ] = await Promise.all([
     supabase
       .from('availability_signals')
@@ -71,6 +73,11 @@ export default async function HomePage() {
       .or(`user_a.eq.${user.id},user_b.eq.${user.id}`)
       .order('created_at', { ascending: false })
       .limit(3),
+    supabase
+      .from('connections')
+      .select('id', { count: 'exact', head: true })
+      .eq('status', 'accepted')
+      .or(`requester_id.eq.${user.id},addressee_id.eq.${user.id}`),
   ]);
 
   // Innovations: matchmaker proposals, rituals, radar, energy prompts.
@@ -167,6 +174,23 @@ export default async function HomePage() {
         </div>
 
         <SignalBar active={mySignals ?? []} circles={circles ?? []} />
+
+        {/* First-run nudge: nothing works until you have people */}
+        {(friendCount ?? 0) === 0 && (
+          <Link href="/people" className="block group">
+            <Card tone="gold" lifted className="group-hover:shadow-lift transition-shadow">
+              <p className="font-display text-lg text-ink">Find your people</p>
+              <p className="text-sm text-ink-soft mt-1">
+                Add friends by handle, email, phone, or your contacts — then signals,
+                circles, and Mutual Mode all come alive.
+              </p>
+              <span className="mt-3 inline-flex items-center gap-1 text-sm font-bold text-terracotta-deep">
+                Add friends
+                <Icon name="back" size={16} className="rotate-180" />
+              </span>
+            </Card>
+          </Link>
+        )}
 
         {/* Plan feed - the heart of Home */}
         {(upcoming?.length ?? 0) > 0 ? (
@@ -365,21 +389,40 @@ export default async function HomePage() {
         {/* Quick actions */}
         <section>
           <SectionHeader title="Make something happen" />
-          <div className="grid grid-cols-2 gap-3">
-            {[
-              { href: '/events/new', emoji: '🪜', title: 'New plan', body: 'Cascading invites' },
-              { href: '/discover', emoji: '🧭', title: 'Discover', body: 'What should we do?' },
-              { href: '/mutual', emoji: '◐', title: 'Mutual', body: 'Down to connect?' },
-              { href: '/moments', emoji: '✨', title: 'Moments', body: 'Who’s nearby' },
-            ].map((action) => (
-              <Link key={action.href} href={action.href} className="group">
-                <Card className="h-full group-hover:border-terracotta group-hover:shadow-lift transition-all">
-                  <span className="text-2xl" aria-hidden>{action.emoji}</span>
-                  <p className="font-medium mt-2">{action.title}</p>
-                  <p className="text-xs text-ink-faint mt-0.5">{action.body}</p>
-                </Card>
-              </Link>
-            ))}
+          <div className="space-y-3">
+            <Link href="/people" className="group block">
+              <Card
+                tone="cream"
+                className="group-hover:border-terracotta group-hover:shadow-lift transition-all"
+              >
+                <div className="flex items-center gap-3">
+                  <span className="text-2xl" aria-hidden>👋</span>
+                  <span className="flex-1">
+                    <span className="block font-medium">Find &amp; add friends</span>
+                    <span className="block text-xs text-ink-faint mt-0.5">
+                      By handle, email, phone, or contacts
+                    </span>
+                  </span>
+                  <Icon name="back" size={18} className="rotate-180 text-ink-faint" />
+                </div>
+              </Card>
+            </Link>
+            <div className="grid grid-cols-2 gap-3">
+              {[
+                { href: '/events/new', emoji: '🪜', title: 'New plan', body: 'Cascading invites' },
+                { href: '/discover', emoji: '🧭', title: 'Discover', body: 'What should we do?' },
+                { href: '/mutual', emoji: '◐', title: 'Mutual', body: 'Down to connect?' },
+                { href: '/moments', emoji: '✨', title: 'Moments', body: 'Who’s nearby' },
+              ].map((action) => (
+                <Link key={action.href} href={action.href} className="group">
+                  <Card className="h-full group-hover:border-terracotta group-hover:shadow-lift transition-all">
+                    <span className="text-2xl" aria-hidden>{action.emoji}</span>
+                    <p className="font-medium mt-2">{action.title}</p>
+                    <p className="text-xs text-ink-faint mt-0.5">{action.body}</p>
+                  </Card>
+                </Link>
+              ))}
+            </div>
           </div>
         </section>
       </div>
