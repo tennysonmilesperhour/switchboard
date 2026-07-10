@@ -7,6 +7,46 @@ export interface PushPayload {
   url?: string;
 }
 
+export interface NotificationPayload extends PushPayload {
+  /** Coarse category, e.g. 'connection_accepted', 'match', 'reminder'. */
+  kind: string;
+}
+
+/**
+ * The unified notification path: record a durable in-app notification for each
+ * user AND push it. The in-app row is the reliable surface — always written,
+ * independent of quiet hours, visible even to users who never enabled push — so
+ * nothing that matters is push-only. The push is best-effort on top. Use this
+ * instead of sendPushToUsers for anything a user should find later in
+ * /notifications.
+ */
+export async function notifyUsers(
+  userIds: string[],
+  payload: NotificationPayload,
+): Promise<void> {
+  const ids = [...new Set(userIds)].filter((id): id is string => Boolean(id));
+  if (ids.length === 0) return;
+
+  const admin = createAdminClient();
+  const { error } = await admin.from('notifications').insert(
+    ids.map((user_id) => ({
+      user_id,
+      kind: payload.kind,
+      title: payload.title,
+      body: payload.body,
+      url: payload.url ?? null,
+    })),
+  );
+  // In-app recording is best-effort — never block the domain action on it.
+  if (error) console.error('[notify:record]', error.message);
+
+  await sendPushToUsers(ids, {
+    title: payload.title,
+    body: payload.body,
+    url: payload.url,
+  });
+}
+
 let vapidConfigured = false;
 
 function configureVapid(): boolean {

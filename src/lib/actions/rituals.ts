@@ -2,7 +2,7 @@
 
 import { revalidatePath } from 'next/cache';
 import { createClient } from '@/lib/supabase/server';
-import { sendPushToUsers } from '@/lib/server/notify';
+import { notifyUsers } from '@/lib/server/notify';
 import { checkRateLimit } from '@/lib/server/rate-limit';
 
 export async function proposeRitual(
@@ -31,7 +31,8 @@ export async function proposeRitual(
   });
   if (error) return { ok: false, error: error.message };
 
-  await sendPushToUsers([partnerId], {
+  await notifyUsers([partnerId], {
+    kind: 'ritual',
     title: 'A standing ritual, proposed',
     body: `Someone wants to make "${cleanActivity}" a regular thing with you.`,
     url: '/mutual',

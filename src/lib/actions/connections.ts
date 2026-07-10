@@ -2,7 +2,7 @@
 
 import { revalidatePath } from 'next/cache';
 import { createClient } from '@/lib/supabase/server';
-import { sendPushToUsers } from '@/lib/server/notify';
+import { notifyUsers, sendPushToUsers } from '@/lib/server/notify';
 import { normalizePhoneNumber } from '@/lib/phone';
 import { checkRateLimit } from '@/lib/server/rate-limit';
 
@@ -200,7 +200,8 @@ export async function acceptConnection(connectionId: string): Promise<Connection
       .select('display_name')
       .eq('id', user.id)
       .maybeSingle();
-    await sendPushToUsers([updated.requester_id], {
+    await notifyUsers([updated.requester_id], {
+      kind: 'connection_accepted',
       title: 'You’re connected 🎉',
       body: `${me?.display_name ?? 'Someone'} accepted your connection request.`,
       url: '/people',

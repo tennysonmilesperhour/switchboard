@@ -22,6 +22,7 @@ export default async function NotificationsPage() {
     { data: matches },
     { data: announcements },
     { data: connectionRequests },
+    { data: recentNotifications },
   ] = await Promise.all([
     supabase
       .from('invites')
@@ -50,17 +51,36 @@ export default async function NotificationsPage() {
       .eq('status', 'pending')
       .order('created_at', { ascending: false })
       .limit(12),
+    // Durable notifications: everything that used to be push-only lands here.
+    supabase
+      .from('notifications')
+      .select('id, kind, title, body, url, read_at, created_at')
+      .eq('user_id', user.id)
+      .order('created_at', { ascending: false })
+      .limit(20),
   ]);
 
   const invites = pendingInvites ?? [];
   const matchList = matches ?? [];
   const announcementList = announcements ?? [];
   const requestList = connectionRequests ?? [];
+  const notificationList = recentNotifications ?? [];
+
+  // Viewing the page clears the unread badge.
+  if (notificationList.some((n) => !n.read_at)) {
+    await supabase
+      .from('notifications')
+      .update({ read_at: new Date().toISOString() })
+      .eq('user_id', user.id)
+      .is('read_at', null);
+  }
+
   const isEmpty =
     invites.length === 0 &&
     matchList.length === 0 &&
     announcementList.length === 0 &&
-    requestList.length === 0;
+    requestList.length === 0 &&
+    notificationList.length === 0;
 
   return (
     <AppShell title="Notifications" back="/">
@@ -72,6 +92,37 @@ export default async function NotificationsPage() {
         />
       ) : (
         <div className="space-y-8">
+          {notificationList.length > 0 && (
+            <section>
+              <SectionHeader title="Recent 🔔" />
+              <div className="space-y-2">
+                {notificationList.map((n) => {
+                  const card = (
+                    <Card
+                      tone={n.read_at ? undefined : 'gold'}
+                      className="group-hover:shadow-lift transition-shadow"
+                    >
+                      <p className="text-sm font-medium">{n.title}</p>
+                      {n.body ? (
+                        <p className="text-xs text-ink-soft mt-0.5">{n.body}</p>
+                      ) : null}
+                      <p className="text-xs text-ink-faint mt-1">
+                        {formatRelative(n.created_at)}
+                      </p>
+                    </Card>
+                  );
+                  return n.url ? (
+                    <Link key={n.id} href={n.url} className="block group">
+                      {card}
+                    </Link>
+                  ) : (
+                    <div key={n.id}>{card}</div>
+                  );
+                })}
+              </div>
+            </section>
+          )}
+
           {invites.length > 0 && (
             <section>
               <SectionHeader title="Waiting on you 💌" />

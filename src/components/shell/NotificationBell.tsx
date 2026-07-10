@@ -19,7 +19,7 @@ export async function NotificationBell() {
       data: { user },
     } = await supabase.auth.getUser();
     if (user) {
-      const [{ count: invites }, { count: requests }] = await Promise.all([
+      const [{ count: invites }, { count: requests }, { count: unread }] = await Promise.all([
         supabase
           .from('invites')
           .select('id', { count: 'exact', head: true })
@@ -30,8 +30,15 @@ export async function NotificationBell() {
           .select('id', { count: 'exact', head: true })
           .eq('addressee_id', user.id)
           .eq('status', 'pending'),
+        // Unread durable notifications — connection accepts, matches, join
+        // approvals, reminders, and everything else that's no longer push-only.
+        supabase
+          .from('notifications')
+          .select('id', { count: 'exact', head: true })
+          .eq('user_id', user.id)
+          .is('read_at', null),
       ]);
-      count = (invites ?? 0) + (requests ?? 0);
+      count = (invites ?? 0) + (requests ?? 0) + (unread ?? 0);
     }
   } catch {
     // Supabase unavailable/unconfigured — render the bell without a badge.

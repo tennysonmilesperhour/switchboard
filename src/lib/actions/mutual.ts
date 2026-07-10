@@ -2,7 +2,7 @@
 
 import { revalidatePath } from 'next/cache';
 import { createClient } from '@/lib/supabase/server';
-import { sendPushToUsers } from '@/lib/server/notify';
+import { notifyUsers } from '@/lib/server/notify';
 import { checkRateLimit } from '@/lib/server/rate-limit';
 import type { IntentKind } from '@/lib/types';
 
@@ -62,7 +62,8 @@ export async function downToConnect(
     .single();
   const matched = after?.status === 'matched';
   if (matched) {
-    await sendPushToUsers([user.id, targetId], {
+    await notifyUsers([user.id, targetId], {
+      kind: 'match',
       title: '✨ It’s mutual',
       body:
         kind === 'down_to_connect'

@@ -8,7 +8,7 @@ import {
   advanceEventCascade,
   notifyCurrentInviteWave,
 } from '@/lib/server/cascade-runner';
-import { sendPushToUsers } from '@/lib/server/notify';
+import { notifyUsers } from '@/lib/server/notify';
 import type { EventTheme, InviteMode } from '@/lib/types';
 import { reportOperationalError } from '@/lib/server/observability';
 import { looksLikeEmail, sendEmails } from '@/lib/server/email';
@@ -599,7 +599,8 @@ export async function updateEventDetails(
       .filter((id): id is string => Boolean(id) && id !== user.id);
     if (recipients.length > 0) {
       const changed = whenChanged && whereChanged ? 'time and place' : whenChanged ? 'time' : 'place';
-      await sendPushToUsers(recipients, {
+      await notifyUsers(recipients, {
+        kind: 'event_updated',
         title: 'Plan updated ✏️',
         body: `The ${changed} for ${title} changed. Tap for the latest.`,
         url: `/events/${eventId}`,
@@ -664,7 +665,8 @@ export async function cancelEvent(eventId: string): Promise<void> {
     .map((r) => r.invitee_id as string | null)
     .filter((id): id is string => Boolean(id));
   if (memberIds.length > 0) {
-    await sendPushToUsers(memberIds, {
+    await notifyUsers(memberIds, {
+      kind: 'event_cancelled',
       title: 'Plan cancelled',
       body: `${title} has been called off.`,
       url: `/events/${eventId}`,

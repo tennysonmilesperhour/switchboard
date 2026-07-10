@@ -4,7 +4,7 @@ import { revalidatePath } from 'next/cache';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { advanceEventCascade } from '@/lib/server/cascade-runner';
-import { sendPushToUsers } from '@/lib/server/notify';
+import { notifyUsers } from '@/lib/server/notify';
 import type { DeclineNote } from '@/lib/types';
 import { checkRateLimit } from '@/lib/server/rate-limit';
 
@@ -100,7 +100,8 @@ export async function respondToInvite(
             .from('room_members')
             .upsert({ room_id: event.room_id, member_id: user.id });
         }
-        await sendPushToUsers([event.host_id], {
+        await notifyUsers([event.host_id], {
+          kind: 'rsvp_accepted',
           title: 'Someone’s in 🎉',
           body: `Your invitation to ${event.title} was accepted.`,
           url: `/events/${event.id}`,
@@ -119,6 +120,24 @@ export async function requestToJoin(eventId: string): Promise<RespondResult> {
   const supabase = await createClient();
   const { error } = await supabase.rpc('request_to_join', { p_event: eventId });
   if (error) return { ok: false, error: error.message };
+
+  // Let the host know a request is waiting — previously this fired nothing at
+  // all, so requests sat unseen until the host happened to open the event.
+  const admin = createAdminClient();
+  const { data: event } = await admin
+    .from('events')
+    .select('id, title, host_id')
+    .eq('id', eventId)
+    .maybeSingle();
+  if (event?.host_id) {
+    await notifyUsers([event.host_id], {
+      kind: 'join_request',
+      title: 'Someone wants in 👋',
+      body: `A new request to join ${event.title} is waiting for your OK.`,
+      url: `/events/${event.id}`,
+    });
+  }
+
   revalidatePath('/discover');
   return { ok: true, outcome: 'requested' };
 }
@@ -142,7 +161,8 @@ export async function approveJoinRequest(
       .single();
     const event = Array.isArray(invite?.event) ? invite?.event[0] : invite?.event;
     if (invite?.invitee_id) {
-      await sendPushToUsers([invite.invitee_id], {
+      await notifyUsers([invite.invitee_id], {
+        kind: 'join_approved',
         title: 'You are in 🎉',
         body: `The host welcomed you to ${event?.title ?? 'the event'}.`,
         url: `/events/${eventId}`,
@@ -209,7 +229,8 @@ export async function respondToGuestInvite(
       .eq('id', invite.event_id)
       .single();
     if (event) {
-      await sendPushToUsers([event.host_id], {
+      await notifyUsers([event.host_id], {
+        kind: 'rsvp_accepted',
         title: 'Someone’s in 🎉',
         body: `${invite.guest_name ?? 'A guest'} accepted your invitation to ${event.title}.`,
         url: `/events/${event.id}`,

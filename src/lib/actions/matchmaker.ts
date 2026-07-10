@@ -2,7 +2,8 @@
 
 import { revalidatePath } from 'next/cache';
 import { createClient } from '@/lib/supabase/server';
-import { sendPushToUsers } from '@/lib/server/notify';
+import { createAdminClient } from '@/lib/supabase/admin';
+import { notifyUsers, sendPushToUsers } from '@/lib/server/notify';
 import { checkRateLimit } from '@/lib/server/rate-limit';
 
 export async function proposeIntroduction(
@@ -76,6 +77,25 @@ export async function respondToIntroduction(
   if (error) return { ok: false, matched: false, error: error.message };
 
   const matched = data === 'matched';
+  if (matched) {
+    // Both said yes — identities are revealed, so tell both. Previously a
+    // match notified nobody and the whole payoff was silent.
+    const admin = createAdminClient();
+    const { data: proposal } = await admin
+      .from('matchmaker_proposals')
+      .select('person_a, person_b, activity')
+      .eq('id', proposalId)
+      .maybeSingle();
+    if (proposal?.person_a && proposal?.person_b) {
+      const activity = proposal.activity ? String(proposal.activity).toLowerCase() : null;
+      await notifyUsers([proposal.person_a, proposal.person_b], {
+        kind: 'match',
+        title: '✨ It’s a match',
+        body: activity ? `You both said yes to ${activity}. Say hi!` : 'You both said yes. Say hi!',
+        url: '/people',
+      });
+    }
+  }
   revalidatePath('/');
   return { ok: true, matched };
 }
