@@ -22,6 +22,9 @@ from working sessions. Newest thinking lives here so nothing evaporates.
 - **Faster invitee selection** — circles + households as one-tap group chips,
   collapsible friends list (auto-collapses past 12), smaller two-column cards,
   and a **Custom…** response-window option (any minutes/hours/days).
+- **Calendar as a photo grid** — new `tile` PlanCard variant shows the event
+  cover near full-strength; "Coming up" (Waiting-on-you / Hosting / Going) is a
+  two-column grid of those tiles instead of long horizontal cards.
 
 ---
 
@@ -90,6 +93,11 @@ Move away from numbers/icons toward something spatial and intuitive.
 
 - **Geo-tagged, opt-in-public events** (esp. recurring) — the foundation. Events
   today have only a text location; no coordinates, no public flag, no map.
+- **Opt-in device location** — the app has never used `navigator.geolocation`.
+  First consumer: a **proximity slider in Moments** ("proximity of willingness")
+  beside the existing time slider, filtering by distance from me. Needs
+  coordinates on moments (today just a text `place_name`) + location-sharing on.
+  Show "within X mi", never anyone's exact pin.
 - **Dashboard = two living streams** — *Around me* (locality + interests,
   calendar-aware) and *Your people* (friends' public plans, who's down to hang).
   Raw material exists: signals + discovery.
