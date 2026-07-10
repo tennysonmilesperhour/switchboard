@@ -128,6 +128,21 @@ describe('group mode', () => {
     expect(advanceCascade(invites, GROUP, NOW)).toEqual([]);
   });
 
+  test('sends a late addition dropped into the live wave right away', () => {
+    // "Everyone at once" plans keep every invitee in stage 0. Someone added
+    // after send lands in that same live wave as `queued`, and must go out
+    // immediately — not wait for the already-sent invitees to respond first.
+    const invites = [
+      invite({ id: 'a', position: 0, groupStage: 0, status: 'sent', sentAt: NOW.toISOString() }),
+      invite({ id: 'b', position: 1, groupStage: 0, status: 'sent', sentAt: NOW.toISOString() }),
+      invite({ id: 'late', position: 2, groupStage: 0, status: 'queued' }),
+    ];
+    const updates = advanceCascade(invites, GROUP, NOW);
+    expect(updates).toEqual([
+      { id: 'late', status: 'sent', sentAt: NOW.toISOString() },
+    ]);
+  });
+
   test('advances to stage 2 when stage 1 resolves with spots left', () => {
     const invites = [
       invite({ id: 'a', position: 0, groupStage: 0, status: 'accepted' }),

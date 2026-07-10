@@ -314,9 +314,16 @@ export async function addPeopleToEvent(
   );
   let nextPosition = rows.reduce((max, r) => Math.max(max, r.position), -1) + 1;
   const nextStage = rows.reduce((max, r) => Math.max(max, r.group_stage), -1) + 1;
-  // Grouped modes send the additions as one fresh trailing wave; individual
-  // mode ignores stage and orders purely by position.
-  const groupStage = event.invite_mode === 'individual' ? 0 : nextStage;
+  // Staged group mode sends the additions as one fresh trailing wave. Individual
+  // mode ignores stage and orders purely by position. "Everyone at once" has no
+  // staging: additions must join the live wave (stage 0) so the cascade sends
+  // them right away — parking them in a trailing stage would leave them queued
+  // (and thus invisible: no invite, no in-app notification) until every original
+  // invitee happened to respond, which in an all-at-once plan may never happen.
+  const groupStage =
+    event.invite_mode === 'group'
+      ? nextStage
+      : 0;
 
   const toInsert: Array<Record<string, unknown>> = [];
   for (const addition of additions) {
