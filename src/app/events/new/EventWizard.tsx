@@ -627,21 +627,22 @@ export function EventWizard({
               className="w-full rounded-card border-2 border-line bg-card px-5 py-4 text-xl font-semibold text-ink outline-none transition-colors placeholder:font-normal placeholder:text-ink-faint focus:border-terracotta focus:ring-4 focus:ring-terracotta-soft"
             />
           </div>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div className="space-y-1.5 min-w-0">
               <label htmlFor="date" className={FIELD_LABEL}>Date</label>
               <input
                 id="date" type="date" value={date}
                 onChange={(e) => setDate(e.target.value)}
-                className={`${FIELD} min-w-0`}
+                className={`${FIELD} min-w-0 appearance-none [color-scheme:light]`}
               />
             </div>
             <div className="space-y-1.5 min-w-0">
               <label htmlFor="time" className={FIELD_LABEL}>Time</label>
               <input
                 id="time" type="time" value={time}
+                step={300}
                 onChange={(e) => setTime(e.target.value)}
-                className={`${FIELD} min-w-0`}
+                className={`${FIELD} min-w-0 appearance-none [color-scheme:light]`}
               />
             </div>
           </div>
