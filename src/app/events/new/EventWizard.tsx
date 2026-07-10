@@ -9,7 +9,12 @@ import { Icon } from '@/components/ui/Icon';
 import { ImageInput } from '@/components/ui/ImageInput';
 import { suggestWindow, WINDOW_CHOICES } from '@/lib/engine/windows';
 import { simulateCascade } from '@/lib/engine/cascade';
-import { createEvent, type CreateEventInput } from '@/lib/actions/events';
+import {
+  createEvent,
+  lookupInviteeByHandle,
+  type CreateEventInput,
+} from '@/lib/actions/events';
+import { normalizePhoneNumber } from '@/lib/phone';
 import { DescribePlan } from '@/components/events/DescribePlan';
 import { ImportFromLink } from '@/components/events/ImportFromLink';
 import type { PlanDraft } from '@/lib/actions/plan';
@@ -167,6 +172,8 @@ export function EventWizard({
   });
   const [guestName, setGuestName] = useState('');
   const [guestContact, setGuestContact] = useState('');
+  const [guestError, setGuestError] = useState<string | null>(null);
+  const [resolvingGuest, setResolvingGuest] = useState(false);
   const [contactsSupported, setContactsSupported] = useState(false);
   const [contactsBusy, setContactsBusy] = useState(false);
   const [contactMatches, setContactMatches] = useState<ContactMatch[]>([]);
@@ -271,10 +278,7 @@ export function EventWizard({
     });
   }
 
-  function addGuest() {
-    const name = guestName.trim();
-    const contact = guestContact.trim();
-    if (!name && !contact) return;
+  function addGuestInvite(name: string, contact: string) {
     const label = name || contact.replace(/^@/, '');
     setInvitees((current) => [
       ...current,
@@ -289,6 +293,61 @@ export function EventWizard({
     ]);
     setGuestName('');
     setGuestContact('');
+  }
+
+  async function addGuest() {
+    const name = guestName.trim();
+    const contact = guestContact.trim();
+    if (!name && !contact) return;
+    setGuestError(null);
+
+    const isEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(contact);
+    const isPhone = normalizePhoneNumber(contact) !== null;
+
+    // A username (anything in the contact box that isn't an email or phone)
+    // must map to a real account. We never silently invite a typo'd handle as
+    // an off-platform guest — email and phone are the guest paths.
+    if (contact && !isEmail && !isPhone) {
+      const handle = contact.replace(/^@/, '').toLowerCase();
+      if (!/^[a-z0-9_]{3,24}$/.test(handle)) {
+        setGuestError('Enter a valid username, email, or phone number.');
+        return;
+      }
+      setResolvingGuest(true);
+      try {
+        const found = await lookupInviteeByHandle(handle);
+        if (!found) {
+          setGuestError(`No account with the username @${handle}. Invite them by email or phone instead.`);
+          return;
+        }
+        if (found.id === userId) {
+          setGuestError('That’s you — you’re already the host.');
+          return;
+        }
+        setInvitees((current) =>
+          current.some((i) => i.profileId === found.id)
+            ? current
+            : [
+                ...current,
+                {
+                  key: `member-${found.id}`,
+                  profileId: found.id,
+                  name: found.name,
+                  groupStage: 0,
+                  windowMinutes: suggested.windowMinutes,
+                },
+              ],
+        );
+        setGuestName('');
+        setGuestContact('');
+      } finally {
+        setResolvingGuest(false);
+      }
+      return;
+    }
+
+    // Email / phone / name-only → off-platform guest (link, email, or text).
+    addGuestInvite(name, contact);
   }
 
   // The invite target we'd stage for a matched contact: a real profile if the
@@ -540,20 +599,20 @@ export function EventWizard({
             />
           </div>
           <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1.5">
+            <div className="space-y-1.5 min-w-0">
               <label htmlFor="date" className={FIELD_LABEL}>Date</label>
               <input
                 id="date" type="date" value={date}
                 onChange={(e) => setDate(e.target.value)}
-                className={FIELD}
+                className={`${FIELD} min-w-0`}
               />
             </div>
-            <div className="space-y-1.5">
+            <div className="space-y-1.5 min-w-0">
               <label htmlFor="time" className={FIELD_LABEL}>Time</label>
               <input
                 id="time" type="time" value={time}
                 onChange={(e) => setTime(e.target.value)}
-                className={FIELD}
+                className={`${FIELD} min-w-0`}
               />
             </div>
           </div>
@@ -849,14 +908,28 @@ export function EventWizard({
               <div className="flex gap-2">
                 <input
                   value={guestContact}
-                  onChange={(e) => setGuestContact(e.target.value)}
+                  onChange={(e) => {
+                    setGuestContact(e.target.value);
+                    if (guestError) setGuestError(null);
+                  }}
                   placeholder="@username, email, or phone"
                   className="flex-1 rounded-card border border-line bg-paper px-3.5 py-2.5 text-sm outline-none transition-colors focus:border-terracotta focus:ring-2 focus:ring-terracotta-soft"
                 />
-                <Button type="button" variant="secondary" size="sm" onClick={addGuest}>
-                  Add
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  disabled={resolvingGuest}
+                  onClick={addGuest}
+                >
+                  {resolvingGuest ? 'Checking…' : 'Add'}
                 </Button>
               </div>
+              {guestError && (
+                <p role="alert" className="text-xs text-rose-deep">
+                  {guestError}
+                </p>
+              )}
               <div className="flex flex-wrap items-center gap-2">
                 <Button
                   type="button"

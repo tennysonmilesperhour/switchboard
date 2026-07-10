@@ -226,6 +226,34 @@ async function resolveAddition(
 }
 
 /**
+ * Resolve a username to a real account for the invite flow. Returns null when
+ * no profile has that handle, so the UI can say the user doesn't exist rather
+ * than silently creating an off-platform guest for a typo'd username.
+ */
+export async function lookupInviteeByHandle(
+  handle: string,
+): Promise<{ id: string; name: string; handle: string } | null> {
+  const cleaned = handle.trim().toLowerCase().replace(/^@/, '');
+  if (!HANDLE_PATTERN.test(cleaned)) return null;
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return null;
+  const { data } = await supabase
+    .from('profiles')
+    .select('id, display_name, handle')
+    .eq('handle', cleaned)
+    .maybeSingle();
+  if (!data) return null;
+  return {
+    id: data.id as string,
+    name: (data.display_name as string) ?? cleaned,
+    handle: (data.handle as string) ?? cleaned,
+  };
+}
+
+/**
  * Append people to an already-live cascade. Accepts free-typed entries
  * (handle / email / phone / name) and explicitly-picked connection ids. New
  * invitees join the back of the line as `queued` and go out when it's their

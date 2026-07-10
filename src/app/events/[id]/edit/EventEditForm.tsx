@@ -88,25 +88,25 @@ export function EventEditForm({ event }: { event: SwitchboardEvent }) {
       </div>
 
       <div className="grid grid-cols-2 gap-3">
-        <div className="space-y-1.5">
+        <div className="space-y-1.5 min-w-0">
           <label htmlFor="startsAt" className={FIELD_LABEL}>Starts</label>
           <input
             id="startsAt"
             type="datetime-local"
             value={startsAt}
             onChange={(e) => setStartsAt(e.target.value)}
-            className={FIELD}
+            className={`${FIELD} min-w-0`}
             suppressHydrationWarning
           />
         </div>
-        <div className="space-y-1.5">
+        <div className="space-y-1.5 min-w-0">
           <label htmlFor="endsAt" className={FIELD_LABEL}>Ends</label>
           <input
             id="endsAt"
             type="datetime-local"
             value={endsAt}
             onChange={(e) => setEndsAt(e.target.value)}
-            className={FIELD}
+            className={`${FIELD} min-w-0`}
             suppressHydrationWarning
           />
         </div>
