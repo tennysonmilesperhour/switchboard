@@ -23,6 +23,8 @@ import { AddInvitees } from './AddInvitees';
 import { inviteExpiresAt } from '@/lib/engine/cascade';
 import { formatDateTime } from '@/lib/format';
 import { googleCalendarUrl } from '@/lib/calendar-links';
+import { looksLikeEmail } from '@/lib/server/email';
+import { looksLikePhoneNumber } from '@/lib/phone';
 import type {
   EventQuestion,
   Invite,
@@ -307,10 +309,23 @@ export default async function EventPage({
   const guestLinks = canManage
     ? hostInvites
         .filter((i) => !i.invitee_id && i.guest_token && i.status === 'sent')
-        .map((i) => ({
-          name: i.invitee_name,
-          url: `${appUrl}/rsvp/${i.guest_token}`,
-        }))
+        .map((i) => {
+          // When someone is invited by email or phone, guest_name is the raw
+          // contact string. Don't leak that into the name slot — show a
+          // friendly label and surface the contact on its own line.
+          const rawName = i.guest_name?.trim() ?? '';
+          const contact = i.guest_contact?.trim() || null;
+          const nameIsContact =
+            !rawName ||
+            rawName === contact ||
+            looksLikeEmail(rawName) ||
+            looksLikePhoneNumber(rawName);
+          return {
+            name: nameIsContact ? 'Guest' : rawName,
+            contact,
+            url: `${appUrl}/rsvp/${i.guest_token}`,
+          };
+        })
     : [];
 
   const statusLabel: Record<SwitchboardEvent['status'], string> = {
@@ -590,11 +605,21 @@ export default async function EventPage({
         {/* Guest links for the host to share */}
         {guestLinks.length > 0 && (
           <section>
-            <SectionHeader title="Guest links" hint="Send these to your guests - no account needed" />
+            <SectionHeader title="Guest links" hint="For people you invited who aren’t on Switchboard" />
+            <p className="text-sm text-ink-soft mb-2.5 leading-relaxed">
+              Each link opens a private RSVP page for that person — no account
+              or app needed. Copy it and send it however you like (text, email,
+              DM); they’ll see the plan and can reply right there.
+            </p>
             <ul className="space-y-2">
               {guestLinks.map((guest) => (
                 <li key={guest.url} className="flex items-center justify-between gap-2 rounded-card bg-cream px-3.5 py-3">
-                  <span className="text-sm font-bold">{guest.name}</span>
+                  <span className="min-w-0">
+                    <span className="block text-sm font-bold truncate">{guest.name}</span>
+                    {guest.contact && (
+                      <span className="block text-xs text-ink-faint truncate">{guest.contact}</span>
+                    )}
+                  </span>
                   <CopyButton text={guest.url} />
                 </li>
               ))}
