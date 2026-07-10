@@ -53,8 +53,8 @@ test.describe('public surface', () => {
     await page.getByRole('link', { name: 'Forgot password?' }).click();
     await expect(page.getByRole('heading', { name: 'Reset your password' })).toBeVisible();
     await page.goto('/privacy');
-    await expect(page.getByRole('heading', { name: 'Privacy' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Privacy Notice' })).toBeVisible();
     await page.goto('/terms');
-    await expect(page.getByRole('heading', { name: 'Terms' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Terms of Use' })).toBeVisible();
   });
 });
