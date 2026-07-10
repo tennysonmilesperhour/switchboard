@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { after } from 'next/server';
 import { notFound, redirect } from 'next/navigation';
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase/server';
@@ -73,12 +74,16 @@ export default async function EventPage({
   } = await supabase.auth.getUser();
   if (!user) redirect('/login');
 
-  // Lazy cascade tick - the cron sweep is the backstop, this keeps pages live.
-  try {
-    await advanceEventCascade(id);
-  } catch {
-    // Advancement is best-effort on page load.
-  }
+  // Lazy cascade tick — the cron sweep is the backstop. Run it *after* the
+  // response so a plain page view never blocks on write-side work or outbound
+  // SMS (SB-07); the tick's effects show on the next load.
+  after(async () => {
+    try {
+      await advanceEventCascade(id);
+    } catch {
+      // Advancement is best-effort.
+    }
+  });
 
   const { data: event } = await supabase
     .from('events')

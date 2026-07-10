@@ -28,7 +28,8 @@ export default async function BoardPage({
       .from('board_posts')
       .select('*')
       .eq('board_id', board.id)
-      .order('created_at', { ascending: false }),
+      .order('created_at', { ascending: false })
+      .limit(50),
     supabase
       .from('board_members')
       .select('member_id, role, profile:profiles(display_name)')
