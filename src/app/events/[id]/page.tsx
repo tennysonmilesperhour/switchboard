@@ -15,12 +15,14 @@ import { CascadeProgress } from '@/components/events/CascadeProgress';
 import { JoinRequests } from '@/components/events/JoinRequests';
 import { RsvpCard } from '@/components/events/RsvpCard';
 import { Announcements, type AnnouncementView } from '@/components/events/Announcements';
+import { EventThread, type ThreadCommentView } from '@/components/events/EventThread';
 import { RunItBackButton } from '@/components/events/RunItBackButton';
 import { PollSection, type OptionResult } from '@/components/polls/PollSection';
 import { HostControls } from './HostControls';
 import { CoHostManager } from './CoHostManager';
 import { AddInvitees } from './AddInvitees';
 import { inviteExpiresAt } from '@/lib/engine/cascade';
+import { threadGate, THREAD_PREVIEW_COUNT } from '@/lib/engine/thread';
 import { formatDateTime } from '@/lib/format';
 import { googleCalendarUrl } from '@/lib/calendar-links';
 import type {
@@ -257,6 +259,39 @@ export default async function EventPage({
     };
   });
 
+  // Event thread (RSVP-gated commentary). Full access — read all + post — for
+  // hosts/co-hosts and accepted invitees; everyone else who can see the event
+  // gets only the opening messages, which blur out below. We read with the
+  // admin client and slice server-side so a locked viewer is never sent the
+  // gated bodies (the RLS SELECT policy refuses them either way).
+  const canAccessThread = canManage || myInvite?.status === 'accepted';
+  const { count: threadTotal } = await admin
+    .from('event_comments')
+    .select('id', { count: 'exact', head: true })
+    .eq('event_id', id);
+  const threadGateInfo = threadGate(threadTotal ?? 0, canAccessThread);
+
+  let threadComments: ThreadCommentView[] = [];
+  if (threadGateInfo.visibleCount > 0) {
+    let commentsQuery = admin
+      .from('event_comments')
+      .select('id, body, created_at, author_id, author:profiles(display_name)')
+      .eq('event_id', id)
+      .order('created_at', { ascending: true });
+    if (!canAccessThread) commentsQuery = commentsQuery.limit(THREAD_PREVIEW_COUNT);
+    const { data: commentRows } = await commentsQuery;
+    threadComments = (commentRows ?? []).map((row) => {
+      const author = Array.isArray(row.author) ? row.author[0] : row.author;
+      return {
+        id: row.id as string,
+        body: row.body as string,
+        created_at: row.created_at as string,
+        author_id: row.author_id as string,
+        author_name: author?.display_name ?? 'Guest',
+      };
+    });
+  }
+
   // True accepted count (independent of visibility) so the host knows the reach.
   const { count: acceptedCount } = await admin
     .from('invites')
@@ -459,6 +494,7 @@ export default async function EventPage({
 
         {/* Invitee RSVP */}
         {myInvite?.status === 'sent' && (
+          <div id={`rsvp-${event.id}`} className="scroll-mt-20">
           <RsvpCard
             inviteId={myInvite.id}
             questions={questions.map((q) => ({
@@ -477,6 +513,7 @@ export default async function EventPage({
               })?.toISOString() ?? null
             }
           />
+          </div>
         )}
         {myInvite?.status === 'accepted' && (
           <Card tone="sage" lifted>
@@ -514,6 +551,21 @@ export default async function EventPage({
           canReach={acceptedCount ?? 0}
           announcements={announcements}
         />
+
+        {/* RSVP-gated thread — full for anyone who's in, a blurred preview
+            otherwise. Skipped only for a locked viewer with nothing to see
+            (empty thread + no access), so it never teases an empty room. */}
+        {(canAccessThread || (threadTotal ?? 0) > 0) && (
+          <EventThread
+            eventId={event.id}
+            unlocked={threadGateInfo.unlocked}
+            canModerate={canManage}
+            currentUserId={user.id}
+            comments={threadComments}
+            hiddenCount={threadGateInfo.hiddenCount}
+            blurRows={threadGateInfo.blurRows}
+          />
+        )}
 
         {/* Host-only: RSVP question answers */}
         {isHost && answersByGuest.length > 0 && (
