@@ -33,25 +33,40 @@ export default async function NewEventPage({
   } = await supabase.auth.getUser();
   if (!user) redirect('/login');
 
-  const [{ data: connections }, { data: householdRows }] = await Promise.all([
-    supabase
-      .from('connections')
-      .select(
-        'requester_id, addressee_id, requester:profiles!connections_requester_id_fkey(id, display_name, handle, avatar_url), addressee:profiles!connections_addressee_id_fkey(id, display_name, handle, avatar_url)',
-      )
-      .eq('status', 'accepted')
-      .or(`requester_id.eq.${user.id},addressee_id.eq.${user.id}`),
-    supabase
-      .from('households')
-      .select('id, name, emoji, household_members(member_id)')
-      .eq('owner_id', user.id),
-  ]);
+  const [{ data: connections }, { data: householdRows }, { data: circleRows }] =
+    await Promise.all([
+      supabase
+        .from('connections')
+        .select(
+          'requester_id, addressee_id, requester:profiles!connections_requester_id_fkey(id, display_name, handle, avatar_url), addressee:profiles!connections_addressee_id_fkey(id, display_name, handle, avatar_url)',
+        )
+        .eq('status', 'accepted')
+        .or(`requester_id.eq.${user.id},addressee_id.eq.${user.id}`),
+      supabase
+        .from('households')
+        .select('id, name, emoji, household_members(member_id)')
+        .eq('owner_id', user.id),
+      supabase
+        .from('circles')
+        .select('id, name, emoji, circle_members(member_id)')
+        .eq('owner_id', user.id)
+        .order('created_at'),
+    ]);
 
   const households = (householdRows ?? []).map((row) => ({
     id: row.id,
     name: row.name,
     emoji: row.emoji,
     memberIds: (row.household_members ?? []).map(
+      (member: { member_id: string }) => member.member_id,
+    ),
+  }));
+
+  const circles = (circleRows ?? []).map((row) => ({
+    id: row.id,
+    name: row.name,
+    emoji: row.emoji,
+    memberIds: (row.circle_members ?? []).map(
       (member: { member_id: string }) => member.member_id,
     ),
   }));
@@ -75,6 +90,7 @@ export default async function NewEventPage({
         userId={user.id}
         friends={friends}
         households={households}
+        circles={circles}
         initialTitle={title ?? ''}
         initialDescription={description ?? ''}
         ritualId={ritual ?? null}
