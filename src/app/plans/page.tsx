@@ -30,10 +30,11 @@ function EventCard({
 }) {
   return (
     <PlanCard
-      variant="compact"
+      variant="tile"
       href={`/events/${event.id}`}
       title={event.title}
       color={planColor(index)}
+      imageUrl={event.cover_url}
       when={formatDateTime(event.starts_at)}
       where={event.location_name ?? undefined}
       dateLabel={note ?? STATUS_LABELS[event.status] ?? event.status}
@@ -98,7 +99,7 @@ export default async function PlansPage() {
           {needsResponse.length > 0 && (
             <section>
               <SectionHeader title="Waiting on you" hint="These invitations have a timer" />
-              <div className="space-y-3">
+              <div className="grid grid-cols-2 gap-3">
                 {needsResponse.map(({ event }, i) => (
                   <EventCard key={event.id} event={event} index={i} note="Respond soon" />
                 ))}
@@ -108,7 +109,7 @@ export default async function PlansPage() {
           {(hosting?.length ?? 0) > 0 && (
             <section>
               <SectionHeader title="Hosting" />
-              <div className="space-y-3">
+              <div className="grid grid-cols-2 gap-3">
                 {(hosting as SwitchboardEvent[]).map((event, i) => (
                   <EventCard key={event.id} event={event} index={i} />
                 ))}
@@ -118,7 +119,7 @@ export default async function PlansPage() {
           {going.length > 0 && (
             <section>
               <SectionHeader title="Going" />
-              <div className="space-y-3">
+              <div className="grid grid-cols-2 gap-3">
                 {going.map(({ event }, i) => (
                   <EventCard key={event.id} event={event} index={i} />
                 ))}
