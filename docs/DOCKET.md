@@ -25,6 +25,9 @@ from working sessions. Newest thinking lives here so nothing evaporates.
 - **Calendar as a photo grid** — new `tile` PlanCard variant shows the event
   cover near full-strength; "Coming up" (Waiting-on-you / Hosting / Going) is a
   two-column grid of those tiles instead of long horizontal cards.
+- **"Add your own" in the interest/activity picker** — `InterestPicker` now
+  takes free-text custom values (interests + "down to", in Settings/Onboarding).
+  First cut of the global "custom answers everywhere" principle.
 
 ---
 
@@ -50,6 +53,23 @@ from working sessions. Newest thinking lives here so nothing evaporates.
 ---
 
 ## 🎨 In design / workshop
+
+- **Custom answers everywhere (rollout).** Flagship done (`InterestPicker`).
+  Extend the same "add your own" affordance to the remaining preset pickers:
+  discover budget/vibe/group-size chips, matchmaker `ACTIVITY_PRESETS`, moment
+  experiences, poll options (already custom). Principle: any fixed list gets a
+  free-text escape hatch.
+- **Zones: richer curation + presence-gated announcements.** Give zone
+  organizers more detail fields, plus a comment/announcement layer (reuse the
+  Boards post pattern) **gated to people who are both checked in *and* verified
+  physically present** via location sharing (optional). Needs a zone check-in
+  concept + the geo foundation for the presence check.
+- **Moments: a real filter/gate system.** On opening Moments, surface far more
+  preset filters + general presets. Add *negative* filters ("what I don't
+  want") with **exceptions/overrides** — e.g. "don't talk to me *unless* we're
+  already friends / from the same city / share preference X." This is a small
+  rules engine (deny-by-default gates + allowlist exceptions); overlaps the
+  ex-filter and get-to-know-you preference model. Keep it private + easy.
 
 - **Connect-request context layers.** When sending a request, pick a *closeness
   tier* (acquaintance → friend → close) the recipient sees as soft framing, plus
