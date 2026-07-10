@@ -106,6 +106,21 @@ export function PeopleDiscoveryClient({
         }
       />
 
+      <Link href="/people" className="block group">
+        <Card className="group-hover:border-terracotta transition-colors">
+          <div className="flex items-center gap-3">
+            <span className="text-xl" aria-hidden>👋</span>
+            <span className="min-w-0 flex-1 text-sm">
+              <span className="block font-bold">Already know someone?</span>
+              <span className="block text-xs text-ink-faint">
+                Add friends directly by handle, email, phone, or contacts.
+              </span>
+            </span>
+            <span className="text-sm font-bold text-terracotta whitespace-nowrap">Add →</span>
+          </div>
+        </Card>
+      </Link>
+
       {!discoverable && (
         <Card tone="terracotta">
           <p className="text-sm font-bold text-terracotta-deep">You are not discoverable.</p>
