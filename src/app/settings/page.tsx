@@ -5,6 +5,7 @@ import { AppShell } from '@/components/shell/AppShell';
 import { Card, SectionHeader } from '@/components/ui/Card';
 import { Avatar } from '@/components/ui/Avatar';
 import { Button } from '@/components/ui/Button';
+import Link from 'next/link';
 import { PushManager } from '@/components/push/PushManager';
 import { InterestPicker } from '@/components/profile/InterestPicker';
 import { SaveButton } from './SaveButton';
@@ -286,6 +287,26 @@ export default async function SettingsPage() {
           <SectionHeader title="Account" hint="Password and account controls" />
           <Card>
             <AccountControls />
+          </Card>
+        </section>
+
+        <section>
+          <SectionHeader title="Legal" hint="Privacy, terms, copyright, and community expectations" />
+          <Card>
+            <div className="grid grid-cols-2 gap-2 text-sm font-bold text-terracotta">
+              <Link href="/privacy" className="rounded-card bg-paper px-3 py-2 hover:text-terracotta-deep">
+                Privacy
+              </Link>
+              <Link href="/terms" className="rounded-card bg-paper px-3 py-2 hover:text-terracotta-deep">
+                Terms
+              </Link>
+              <Link href="/community" className="rounded-card bg-paper px-3 py-2 hover:text-terracotta-deep">
+                Community
+              </Link>
+              <Link href="/copyright" className="rounded-card bg-paper px-3 py-2 hover:text-terracotta-deep">
+                Copyright
+              </Link>
+            </div>
           </Card>
         </section>
 

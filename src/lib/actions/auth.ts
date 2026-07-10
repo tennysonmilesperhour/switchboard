@@ -14,6 +14,7 @@ import {
   normalizeUsername,
   usernameToAuthEmail,
 } from '@/lib/auth-identity';
+import { LEGAL_VERSION } from '@/lib/legal';
 
 export interface AuthActionResult {
   ok: boolean;
@@ -130,6 +131,8 @@ export async function createPasswordAccount(
   const displayName = String(formData.get('display_name') ?? '').trim();
   const identifier = normalizeIdentifier(String(formData.get('identifier') ?? ''));
   const password = String(formData.get('password') ?? '');
+  const acceptedTerms = formData.get('terms_agreement') === 'on';
+  const acceptedCovenant = formData.get('community_agreement') === 'on';
 
   if (!displayName) return authError('Add your name.');
   if (!isEmailIdentifier(identifier) && !isValidUsername(identifier)) {
@@ -137,6 +140,9 @@ export async function createPasswordAccount(
   }
   if (password.length < PASSWORD_MIN_LENGTH) {
     return authError(`Password must be at least ${PASSWORD_MIN_LENGTH} characters.`);
+  }
+  if (!acceptedTerms || !acceptedCovenant) {
+    return authError('Please acknowledge the Terms, Privacy Notice, and Community Covenant.');
   }
 
   if (!hasAdminCredentials()) {
@@ -198,6 +204,9 @@ export async function createPasswordAccount(
           id: userId,
           display_name: displayName.slice(0, 80),
           handle: username,
+          legal_terms_version: LEGAL_VERSION,
+          legal_terms_accepted_at: new Date().toISOString(),
+          community_covenant_accepted_at: new Date().toISOString(),
         },
         { onConflict: 'id' },
       );

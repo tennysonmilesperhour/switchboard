@@ -13,6 +13,7 @@ import {
   normalizeIdentifier,
 } from '@/lib/auth-identity';
 import { createClient } from '@/lib/supabase/client';
+import { COMMUNITY_COVENANT_SUMMARY } from '@/lib/legal';
 
 type Mode = 'signin' | 'create';
 type Status = 'idle' | 'submitting' | 'error';
@@ -229,6 +230,51 @@ export function LoginForm() {
             placeholder="Password"
             className="w-full rounded-card border border-line bg-card px-4 py-3.5 text-ink placeholder:text-ink-faint outline-none focus:border-terracotta transition-colors"
           />
+
+          <div className="rounded-card border border-line bg-cream p-4 text-sm text-ink-soft">
+            <p className="font-bold text-ink">Before you join</p>
+            <p className="mt-1 leading-relaxed">
+              Switchboard is for people who are trying to create safer, warmer,
+              more nourishing human connection.
+            </p>
+            <ul className="mt-3 space-y-1.5">
+              {COMMUNITY_COVENANT_SUMMARY.map((item) => (
+                <li key={item} className="flex gap-2">
+                  <span aria-hidden className="text-terracotta">•</span>
+                  <span>{item}</span>
+                </li>
+              ))}
+            </ul>
+            <label className="mt-4 flex items-start gap-2">
+              <input
+                type="checkbox"
+                name="community_agreement"
+                required
+                className="mt-1 size-4 accent-terracotta"
+              />
+              <span>
+                I agree to use Switchboard with kindness, curiosity, openness,
+                generous assumptions, and respect for each matching context.
+              </span>
+            </label>
+            <label className="mt-3 flex items-start gap-2">
+              <input
+                type="checkbox"
+                name="terms_agreement"
+                required
+                className="mt-1 size-4 accent-terracotta"
+              />
+              <span>
+                I agree to the{' '}
+                <Link href="/terms" className="font-bold text-terracotta">Terms</Link>
+                ,{' '}
+                <Link href="/privacy" className="font-bold text-terracotta">Privacy Notice</Link>
+                , and{' '}
+                <Link href="/community" className="font-bold text-terracotta">Community Covenant</Link>
+                .
+              </span>
+            </label>
+          </div>
 
           {createState.error ? (
             <p role="alert" className="text-sm text-rose-deep">

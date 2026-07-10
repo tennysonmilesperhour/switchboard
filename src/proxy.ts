@@ -9,6 +9,8 @@ const PUBLIC_PREFIXES = [
   '/reset-password',
   '/privacy',
   '/terms',
+  '/community',
+  '/copyright',
   '/auth',
   '/rsvp', // guest RSVP links
   '/design', // design direction previews

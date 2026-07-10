@@ -5,6 +5,7 @@ import { revalidatePath } from 'next/cache';
 import { createClient } from '@/lib/supabase/server';
 import { SOCIAL_BY_ID } from '@/lib/socials';
 import { USERNAME_PATTERN } from '@/lib/auth-identity';
+import { LEGAL_VERSION } from '@/lib/legal';
 import type { ProfileLink, ProfileSocial } from '@/lib/types';
 
 const HANDLE_PATTERN = USERNAME_PATTERN;
@@ -164,9 +165,12 @@ export async function completeOnboarding(formData: FormData): Promise<void> {
     .toLowerCase();
   const interests = formData.getAll('interests').map(String).filter(Boolean);
   const downTo = formData.getAll('down_to').map(String).filter(Boolean);
+  const acceptedTerms = formData.get('terms_agreement') === 'on';
+  const acceptedCovenant = formData.get('community_agreement') === 'on';
 
   if (!displayName) redirect('/onboarding?error=name');
   if (!HANDLE_PATTERN.test(handle)) redirect('/onboarding?error=handle');
+  if (!acceptedTerms || !acceptedCovenant) redirect('/onboarding?error=agreement');
 
   const { error: profileError } = await supabase
     .from('profiles')
@@ -177,6 +181,9 @@ export async function completeOnboarding(formData: FormData): Promise<void> {
       down_to: downTo,
       timezone: String(formData.get('timezone') || 'UTC'),
       onboarded: true,
+      legal_terms_version: LEGAL_VERSION,
+      legal_terms_accepted_at: new Date().toISOString(),
+      community_covenant_accepted_at: new Date().toISOString(),
     })
     .eq('id', user.id);
 
