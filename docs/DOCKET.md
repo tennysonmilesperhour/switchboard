@@ -110,8 +110,21 @@ Move away from numbers/icons toward something spatial and intuitive.
   Guardrail: build the *intrinsic/delight* version, not leaderboards/streak-guilt
   or spend-funnels (PRODUCT.md anti-reference: no manipulative growth loops).
 
+### The serendipity engine (the ambitious one)
+
+**Adventure Mode for Zones** — dispatch N people into a zone, each with a
+*different* quest/task series, choreographed so their paths converge and they
+"bump into" each other. This is the meetcute matchmaker (very first idea of the
+session) at zone scale, with the quest as the cover story. Four layers: Zones
+(exist) → geo foundation (locate people, place waypoints) → a quest engine (a
+distinct path per person) → orchestration that lays the paths to intersect (the
+hard routing/scheduling problem). The reveal rides Moments' three-moments-of-
+consent. **Highest-trust surface in the app:** opt-in only, busy/public venues,
+playful quests, consented reveal, one-tap exit. Feeds the challenge/tier game.
+
 Privacy spine for all of the above: public = opt-in *per event*, the map shows
 *events people chose to share* (never live people), "down to hang" stays
-circle-scoped.
+circle-scoped. Anything that steers people physically toward each other is
+opt-in and consent-gated, always.
 
 *(Open threads still to hear back on: SLC Lunatics — the story got cut off.)*
