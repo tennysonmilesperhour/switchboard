@@ -16,6 +16,7 @@ import type { PlanDraft } from '@/lib/actions/plan';
 import type { ImportResult } from '@/lib/actions/import';
 import type { InviteMode } from '@/lib/types';
 import { canPickContacts, pickContacts } from '@/lib/client/contact-picker';
+import { resolveContactMatches, type ContactMatch } from '@/lib/actions/connections';
 
 export interface WizardFriend {
   id: string;
@@ -87,7 +88,7 @@ const STEP_META: Array<{ heading: string; sub: string }> = [
   },
   {
     heading: 'Who is coming?',
-    sub: 'Tap friends, or invite by username, email, or phone.',
+    sub: 'Tap friends, pull matches from your contacts, or invite by username, email, or phone.',
   },
   {
     heading: 'Set the order',
@@ -168,6 +169,8 @@ export function EventWizard({
   const [guestContact, setGuestContact] = useState('');
   const [contactsSupported, setContactsSupported] = useState(false);
   const [contactsBusy, setContactsBusy] = useState(false);
+  const [contactMatches, setContactMatches] = useState<ContactMatch[]>([]);
+  const [contactsNote, setContactsNote] = useState<string | null>(null);
 
   // Step 5 - visibility
   const [showInviteList, setShowInviteList] = useState(false);
@@ -288,31 +291,90 @@ export function EventWizard({
     setGuestContact('');
   }
 
-  async function addContactsFromDevice() {
+  // The invite target we'd stage for a matched contact: a real profile if the
+  // contact is on Switchboard, otherwise a textable phone/email guest. Matches
+  // with neither (name-only, no account) can't be invited, so we skip them.
+  function inviteTargetFor(match: ContactMatch) {
+    if (match.profile) return { profileId: match.profile.id, contact: null as string | null };
+    const contact = match.smsTarget ?? match.identifier ?? null;
+    if (!contact) return null;
+    return { profileId: null as string | null, contact };
+  }
+
+  function isMatchSelected(match: ContactMatch) {
+    const target = inviteTargetFor(match);
+    if (!target) return false;
+    return invitees.some((invitee) =>
+      target.profileId
+        ? invitee.profileId === target.profileId
+        : invitee.profileId === null && invitee.guestContact === target.contact,
+    );
+  }
+
+  function toggleContactMatch(match: ContactMatch) {
+    const target = inviteTargetFor(match);
+    if (!target) return;
+    setInvitees((current) => {
+      if (target.profileId) {
+        if (current.some((i) => i.profileId === target.profileId)) {
+          return current.filter((i) => i.profileId !== target.profileId);
+        }
+        return [
+          ...current,
+          {
+            key: target.profileId,
+            profileId: target.profileId,
+            name: match.profile?.name ?? match.name,
+            groupStage: 0,
+            windowMinutes: suggested.windowMinutes,
+          },
+        ];
+      }
+      const existing = current.find(
+        (i) => i.profileId === null && i.guestContact === target.contact,
+      );
+      if (existing) {
+        return current.filter((i) => i.key !== existing.key);
+      }
+      return [
+        ...current,
+        {
+          key: `contact-${target.contact}`,
+          profileId: null,
+          name: match.name || target.contact!,
+          guestContact: target.contact!,
+          groupStage: 0,
+          windowMinutes: suggested.windowMinutes,
+        },
+      ];
+    });
+  }
+
+  async function matchContactsFromDevice() {
     setContactsBusy(true);
     setSubmitError(null);
+    setContactsNote(null);
     try {
       const contacts = await pickContacts();
       if (contacts.length === 0) return;
-      setInvitees((current) => {
-        const existingContacts = new Set(
-          current.map((invitee) => invitee.guestContact?.toLowerCase()).filter(Boolean),
-        );
-        const additions: DraftInvitee[] = [];
-        contacts.forEach((contact, index) => {
-          const contactValue = contact.phones[0] ?? contact.emails[0] ?? '';
-          if (!contactValue || existingContacts.has(contactValue.toLowerCase())) return;
-          additions.push({
-            key: `contact-${Date.now()}-${index}`,
-            profileId: null,
-            name: contact.name || contactValue,
-            guestContact: contactValue,
-            groupStage: 0,
-            windowMinutes: suggested.windowMinutes,
-          });
-        });
-        return [...current, ...additions];
-      });
+      const matches = await resolveContactMatches(contacts);
+      // Drop yourself and anyone with no way to be invited (no account and no
+      // textable number); on-Switchboard matches float to the top.
+      const invitable = matches
+        .filter((match) => match.connectionStatus !== 'self')
+        .filter((match) => Boolean(inviteTargetFor(match)))
+        .sort((a, b) => Number(Boolean(b.profile)) - Number(Boolean(a.profile)));
+      setContactMatches(invitable);
+      const onApp = invitable.filter((match) => match.profile).length;
+      setContactsNote(
+        invitable.length === 0
+          ? 'None of those contacts can be invited yet — no matching accounts or numbers.'
+          : onApp === 0
+            ? `${invitable.length} ${invitable.length === 1 ? 'contact' : 'contacts'} can be invited by text.`
+            : `${onApp} on Switchboard${
+                invitable.length - onApp > 0 ? `, ${invitable.length - onApp} by text` : ''
+              }. Tap to add them.`,
+      );
     } catch (error) {
       setSubmitError(
         error instanceof Error
@@ -801,15 +863,15 @@ export function EventWizard({
                   variant="secondary"
                   size="sm"
                   disabled={!contactsSupported || contactsBusy}
-                  onClick={addContactsFromDevice}
+                  onClick={matchContactsFromDevice}
                   title={
                     contactsSupported
-                      ? 'Choose contacts to invite'
+                      ? 'Match your contacts against Switchboard'
                       : 'Contact access is not available in this browser'
                   }
                 >
                   <Icon name="users" size={16} />
-                  {contactsBusy ? 'Opening contacts' : 'Choose contacts'}
+                  {contactsBusy ? 'Checking contacts' : 'From my contacts'}
                 </Button>
                 {!contactsSupported && (
                   <span className="text-xs text-ink-faint">
@@ -817,7 +879,68 @@ export function EventWizard({
                   </span>
                 )}
               </div>
+              {contactsNote && (
+                <p role="status" className="text-xs text-ink-soft">
+                  {contactsNote}
+                </p>
+              )}
             </div>
+
+            {contactMatches.length > 0 && (
+              <ul className="mt-3 space-y-2">
+                {contactMatches.map((match) => {
+                  const selected = isMatchSelected(match);
+                  const onApp = Boolean(match.profile);
+                  return (
+                    <li key={match.key}>
+                      <button
+                        type="button"
+                        onClick={() => toggleContactMatch(match)}
+                        aria-pressed={selected}
+                        className={`w-full flex items-center gap-3 rounded-card border-2 p-3 transition-all active:scale-[0.99] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-terracotta ${
+                          selected
+                            ? 'border-terracotta bg-terracotta-soft'
+                            : 'border-line bg-paper hover:border-terracotta/50'
+                        }`}
+                      >
+                        <Avatar
+                          name={match.profile?.name ?? match.name}
+                          seed={match.profile?.id ?? match.key}
+                          size="sm"
+                        />
+                        <span className="flex-1 min-w-0 text-left">
+                          <span className="font-bold block truncate">
+                            {match.profile?.name ?? match.name}
+                          </span>
+                          <span className="text-xs text-ink-faint block truncate">
+                            {onApp ? (
+                              <>on Switchboard · @{match.profile!.handle}</>
+                            ) : (
+                              'not on Switchboard yet · invite by text'
+                            )}
+                          </span>
+                        </span>
+                        {onApp && (
+                          <span className="shrink-0 rounded-pill bg-sage-soft px-2 py-0.5 text-[11px] font-bold text-sage-deep">
+                            In app
+                          </span>
+                        )}
+                        <span
+                          aria-hidden
+                          className={`grid size-6 shrink-0 place-items-center rounded-pill border-2 transition-colors ${
+                            selected
+                              ? 'border-terracotta bg-terracotta text-white'
+                              : 'border-line text-ink-faint'
+                          }`}
+                        >
+                          <Icon name={selected ? 'check' : 'add'} size={14} />
+                        </span>
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
           </Card>
 
           {invitees.length > 0 && (
