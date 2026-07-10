@@ -60,6 +60,25 @@ export async function castVote(
   } = await supabase.auth.getUser();
   if (!user) return { ok: false, error: 'Not signed in' };
 
+  // Only accept a ballot for an option that actually belongs to this poll, and
+  // only while voting is open — don't trust the client-supplied optionId/phase.
+  const { data: option } = await supabase
+    .from('poll_options')
+    .select('poll_id')
+    .eq('id', optionId)
+    .maybeSingle();
+  if (!option || option.poll_id !== pollId) {
+    return { ok: false, error: 'That option is not on this poll.' };
+  }
+  const { data: pollRow } = await supabase
+    .from('polls')
+    .select('phase')
+    .eq('id', pollId)
+    .maybeSingle();
+  if (pollRow?.phase !== 'voting') {
+    return { ok: false, error: 'Voting is not open on this poll.' };
+  }
+
   const { error } = await supabase.from('poll_votes').upsert({
     poll_id: pollId,
     option_id: optionId,
@@ -74,6 +93,17 @@ export async function castVote(
 
 export async function openVoting(pollId: string, eventId: string): Promise<void> {
   const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return;
+  // Host/co-host only (parity with closeVoting); RLS also enforces this, but
+  // check here so a non-host gets a clean no-op rather than relying on it.
+  const { data: isHost } = await supabase.rpc('is_event_host', {
+    p_event: eventId,
+    p_user: user.id,
+  });
+  if (!isHost) return;
   await supabase.from('polls').update({ phase: 'voting' }).eq('id', pollId);
   revalidatePath(`/events/${eventId}`);
 }
@@ -107,6 +137,16 @@ export async function pickWinner(
   optionId: string,
 ): Promise<void> {
   const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return;
+  // Host/co-host only (parity with closeVoting); RLS also enforces this.
+  const { data: isHost } = await supabase.rpc('is_event_host', {
+    p_event: eventId,
+    p_user: user.id,
+  });
+  if (!isHost) return;
   await supabase
     .from('polls')
     .update({ phase: 'decided', winning_option_id: optionId })

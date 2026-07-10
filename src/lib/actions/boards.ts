@@ -52,6 +52,17 @@ export async function inviteToBoard(
   const cleanHandle = handle.trim().toLowerCase().replace(/^@/, '');
   if (!cleanHandle) return { ok: false, error: 'Enter a handle.' };
 
+  // Only a board moderator may add people — don't rely solely on RLS (SB-20).
+  const { data: myRole } = await supabase
+    .from('board_members')
+    .select('role')
+    .eq('board_id', boardId)
+    .eq('member_id', user.id)
+    .maybeSingle();
+  if (myRole?.role !== 'moderator') {
+    return { ok: false, error: 'Only a board organizer can add people.' };
+  }
+
   const { data: profile } = await supabase
     .from('profiles')
     .select('id')

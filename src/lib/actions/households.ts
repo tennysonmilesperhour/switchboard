@@ -15,6 +15,24 @@ export async function createHousehold(
   const trimmed = name.trim();
   if (!trimmed) return { ok: false, error: 'Household needs a name' };
 
+  // Only group people you're actually connected to — don't let anyone be
+  // silently filed into a household without consent (SB-20).
+  let allowed: string[] = [];
+  const requested = Array.from(new Set(memberIds)).filter((id) => id && id !== user.id);
+  if (requested.length > 0) {
+    const { data: connected } = await supabase
+      .from('connections')
+      .select('requester_id, addressee_id')
+      .eq('status', 'accepted')
+      .or(`requester_id.eq.${user.id},addressee_id.eq.${user.id}`);
+    const connectedIds = new Set(
+      (connected ?? []).map((row) =>
+        row.requester_id === user.id ? row.addressee_id : row.requester_id,
+      ),
+    );
+    allowed = requested.filter((id) => connectedIds.has(id));
+  }
+
   const { data: household, error } = await supabase
     .from('households')
     .insert({ owner_id: user.id, name: trimmed })
@@ -22,9 +40,9 @@ export async function createHousehold(
     .single();
   if (error || !household) return { ok: false, error: error?.message };
 
-  if (memberIds.length > 0) {
+  if (allowed.length > 0) {
     await supabase.from('household_members').insert(
-      memberIds.map((memberId) => ({
+      allowed.map((memberId) => ({
         household_id: household.id,
         member_id: memberId,
       })),

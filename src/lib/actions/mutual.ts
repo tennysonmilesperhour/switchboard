@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import { createClient } from '@/lib/supabase/server';
 import { sendPushToUsers } from '@/lib/server/notify';
+import { checkRateLimit } from '@/lib/server/rate-limit';
 import type { IntentKind } from '@/lib/types';
 
 export interface MutualResult {
@@ -28,13 +29,20 @@ export async function downToConnect(
   } = await supabase.auth.getUser();
   if (!user) return { ok: false, error: 'Not signed in' };
 
+  const cleanActivity = activity.trim().slice(0, 80);
+  if (!cleanActivity) return { ok: false, error: 'What are you down to do?' };
+
+  if (!(await checkRateLimit(`down-to:${user.id}`, 40, 60 * 60))) {
+    return { ok: false, error: 'Give it a moment before sending more.' };
+  }
+
   const { data: intent, error } = await supabase
     .from('mutual_intents')
     .upsert(
       {
         author_id: user.id,
         target_id: targetId,
-        activity,
+        activity: cleanActivity,
         kind,
         event_id: eventId,
         status: 'active',
@@ -58,9 +66,9 @@ export async function downToConnect(
       title: '✨ It’s mutual',
       body:
         kind === 'down_to_connect'
-          ? `You both want to ${activity.toLowerCase()}. Say hi!`
+          ? `You both want to ${cleanActivity.toLowerCase()}. Say hi!`
           : kind === 'discover_connect'
-            ? `You both want to connect around ${activity.toLowerCase()}.`
+            ? `You both want to connect around ${cleanActivity.toLowerCase()}.`
           : 'You’d both rather reschedule - no one has to be the bad guy.',
       url: kind === 'discover_connect' ? '/discover' : '/mutual',
     });

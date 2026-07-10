@@ -4,6 +4,15 @@ import { revalidatePath } from 'next/cache';
 import { createClient } from '@/lib/supabase/server';
 import { sendPushToUsers } from '@/lib/server/notify';
 import { normalizePhoneNumber } from '@/lib/phone';
+import { checkRateLimit } from '@/lib/server/rate-limit';
+
+/** PostgREST `.or()` filters are built by string interpolation below; only ever
+ *  feed them DB-issued UUIDs. Assert that before interpolating (SB-29). */
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+function assertUuid(value: string): string {
+  if (!UUID_RE.test(value)) throw new Error('Expected a UUID');
+  return value;
+}
 
 export interface ConnectionResult {
   ok: boolean;
@@ -53,6 +62,8 @@ async function connectionStatusFor(
   targetId: string,
 ): Promise<ContactMatch['connectionStatus']> {
   if (targetId === userId) return 'self';
+  assertUuid(userId);
+  assertUuid(targetId);
   const { data } = await supabase
     .from('connections')
     .select('requester_id, addressee_id, status')
@@ -69,6 +80,10 @@ export async function sendConnectionRequest(identifier: string): Promise<Connect
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) return { ok: false, error: 'Not signed in' };
+
+  if (!(await checkRateLimit(`connect-request:${user.id}`, 30, 60 * 60))) {
+    return { ok: false, error: 'You’re sending a lot of requests. Try again later.' };
+  }
 
   const cleaned = identifier.trim();
   if (!cleaned) return { ok: false, error: 'Enter a handle, email, or phone number.' };
@@ -102,6 +117,12 @@ export async function resolveContactMatches(
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) return [];
+
+  // resolveProfile is an account-existence oracle; throttle bulk lookups so a
+  // contact list can't be used to enumerate who's on Switchboard (SB-12).
+  if (!(await checkRateLimit(`contact-match:${user.id}`, 10, 60 * 60))) {
+    return [];
+  }
 
   const cleanedContacts = contacts.slice(0, 100).map((contact, index) => ({
     key: `${index}-${contact.name || contact.emails[0] || contact.phones[0] || 'contact'}`,
@@ -166,6 +187,12 @@ export async function acceptConnection(connectionId: string): Promise<Connection
     .select('requester_id')
     .maybeSingle();
   if (error) return { ok: false, error: error.message };
+  // RLS restricts this update to the addressee; a null row means nothing was
+  // updated (not the addressee, or already gone) — report it instead of a
+  // false success (SB-18).
+  if (!updated) {
+    return { ok: false, error: 'That request is no longer available.' };
+  }
 
   if (updated?.requester_id) {
     const { data: me } = await supabase
@@ -225,6 +252,11 @@ export async function reportProfile(
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) return { ok: false, error: 'Not signed in' };
+
+  // Throttle so reports can't be used to flood moderation / mass-target a user.
+  if (!(await checkRateLimit(`report:${user.id}`, 10, 60 * 60))) {
+    return { ok: false, error: 'You’ve filed several reports. Try again later.' };
+  }
 
   const { error } = await supabase.from('user_reports').insert({
     reporter_id: user.id,
