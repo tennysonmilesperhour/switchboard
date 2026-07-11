@@ -53,6 +53,10 @@ create table public.facet_prefs (
   -- Opt this facet into being seen by accepted connections as a
   -- revealed-preference signal. Off by default; reversible any time.
   shared_with_connections boolean not null default false,
+  -- The collaborative verdict: the model offers each read as a hypothesis the
+  -- owner confirms or rejects. A 'rejected' facet is suppressed everywhere —
+  -- the owner's own view, reflections, sharing, and compatibility.
+  verdict text check (verdict in ('confirmed', 'rejected')),
   updated_at timestamptz not null default now(),
   primary key (user_id, facet_key)
 );
@@ -88,6 +92,11 @@ as $$
   where f.user_id = p_target
     and p.shared_with_connections
     and not p.hidden
+    -- A read the owner disowned ("Not quite") is never broadcast, even if the
+    -- share toggle was left on — rejection suppresses everywhere.
+    and (p.verdict is distinct from 'rejected')
+    -- Defense in depth: never surface across a block, mirroring discovery.
+    and not public.are_blocked(auth.uid(), p_target)
     and exists (
       select 1 from public.connections c
       where c.status = 'accepted'

@@ -22,6 +22,13 @@ const READ_DOT: Record<string, string> = {
   strong: 'bg-sage',
 };
 
+// Text equivalent so confidence is never conveyed by color alone (WCAG 1.4.1).
+const READ_CONF_LABEL: Record<string, string> = {
+  emerging: 'Still forming',
+  clear: 'Taking shape',
+  strong: 'A clear pattern',
+};
+
 interface PublicProfile {
   id: string;
   display_name: string;
@@ -283,8 +290,11 @@ export default async function PublicProfilePage({
                     aria-hidden
                   />
                   <span className="min-w-0">
-                    <span className="block text-xs font-bold uppercase tracking-wide text-ink-faint">
+                    <span className="flex flex-wrap items-center gap-x-2 text-xs font-bold uppercase tracking-wide text-ink-faint">
                       {read.title}
+                      <span className="font-semibold normal-case text-ink-faint/80">
+                        · {READ_CONF_LABEL[read.confidence] ?? 'Still forming'}
+                      </span>
                     </span>
                     <span className="block text-sm leading-relaxed text-ink">
                       {read.summary}

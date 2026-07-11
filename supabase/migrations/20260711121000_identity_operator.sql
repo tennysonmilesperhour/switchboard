@@ -15,10 +15,9 @@
 --      so a user can revisit them.
 -- Plus a consented cross-user compatibility read.
 
--- ————————————————————— collaborative confirm / reject —————————————————————
-alter table public.facet_prefs
-  add column if not exists verdict text
-    check (verdict in ('confirmed', 'rejected'));
+-- The collaborative verdict column lives with facet_prefs in the first identity
+-- migration; the confirm/reject spine and its suppression rules are enforced
+-- there and in the functions below.
 
 -- ————————————————————————— opt-in operator layer —————————————————————————
 create table public.operator_settings (
@@ -52,6 +51,26 @@ create policy identity_reflections_owner on public.identity_reflections
   for all to authenticated
   using (user_id = auth.uid())
   with check (user_id = auth.uid());
+
+-- Whether a facet still counts — not hidden and not rejected by its owner.
+-- A missing prefs row means "live" (the defaults). Definer-internal only:
+-- deliberately NOT granted to authenticated, so it can't be used to probe
+-- whether another user has hidden or disowned a given facet; the security-
+-- definer functions below own it and can call it regardless.
+create or replace function public.facet_live(p_user uuid, p_key text)
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select not exists (
+    select 1 from public.facet_prefs pp
+    where pp.user_id = p_user and pp.facet_key = p_key
+      and (pp.hidden or pp.verdict = 'rejected')
+  );
+$$;
+revoke all on function public.facet_live(uuid, text) from public, anon;
 
 -- ———————————————————————— consented compatibility ————————————————————————
 -- A one-line compatibility read between the caller and `p_other`, computed
@@ -87,6 +106,7 @@ begin
         and ((c.requester_id = v_me and c.addressee_id = p_other)
           or (c.requester_id = p_other and c.addressee_id = v_me))
     )
+    and not public.are_blocked(v_me, p_other)
     and exists (
       select 1 from public.operator_settings s
       where s.user_id = v_me and s.setting_key = 'facet_compatibility' and s.enabled
@@ -101,15 +121,23 @@ begin
     return;
   end if;
 
+  -- A facet only contributes if BOTH people still stand behind it — a hidden or
+  -- rejected facet is suppressed from the shared read exactly as it is elsewhere.
+  -- The `facet_ok` guard below yields NULL for a suppressed facet, which then
+  -- fails the equality checks and drops out of the basis.
   select detail->>'fills' into v_my_fills
-  from public.identity_facets where user_id = v_me and facet_key = 'energy_map';
+  from public.identity_facets f where f.user_id = v_me and f.facet_key = 'energy_map'
+    and public.facet_live(v_me, 'energy_map');
   select detail->>'fills' into v_their_fills
-  from public.identity_facets where user_id = p_other and facet_key = 'energy_map';
+  from public.identity_facets f where f.user_id = p_other and f.facet_key = 'energy_map'
+    and public.facet_live(p_other, 'energy_map');
 
   select detail->>'planningStyle' into v_my_plan
-  from public.identity_facets where user_id = v_me and facet_key = 'cadence';
+  from public.identity_facets f where f.user_id = v_me and f.facet_key = 'cadence'
+    and public.facet_live(v_me, 'cadence');
   select detail->>'planningStyle' into v_their_plan
-  from public.identity_facets where user_id = p_other and facet_key = 'cadence';
+  from public.identity_facets f where f.user_id = p_other and f.facet_key = 'cadence'
+    and public.facet_live(p_other, 'cadence');
 
   -- Interests you both not only claim but actually turn out for.
   select array(
@@ -117,10 +145,12 @@ begin
       select jsonb_array_elements_text(a.detail->'living') as x
       from public.identity_facets a
       where a.user_id = v_me and a.facet_key = 'interest_alignment'
+        and public.facet_live(v_me, 'interest_alignment')
       intersect
       select jsonb_array_elements_text(b.detail->'living')
       from public.identity_facets b
       where b.user_id = p_other and b.facet_key = 'interest_alignment'
+        and public.facet_live(p_other, 'interest_alignment')
     ) q
   ) into v_shared_living;
 

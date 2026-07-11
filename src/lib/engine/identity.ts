@@ -355,9 +355,14 @@ export function computeInterestAlignment(input: InterestInputs): Facet | null {
   if (professed.length === 0) return null;
 
   const evidence = input.evidence.map(norm).filter(Boolean);
+  // Whole-word match, so "art" isn't "lived" by a "party" and "jazz" isn't
+  // matched by "jazzercise". Multi-word interests match as a contiguous phrase.
   const isLived = (token: string) => {
     const t = norm(token);
-    return evidence.some((e) => e.includes(t) || t.includes(e));
+    if (!t) return false;
+    const escaped = t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const re = new RegExp(`(^|[^a-z0-9])${escaped}([^a-z0-9]|$)`, 'i');
+    return evidence.some((e) => re.test(e));
   };
 
   const living = professed.filter(isLived);
@@ -469,15 +474,16 @@ export function computeSeasons(input: SeasonInputs): Facet | null {
 }
 
 // ————————————————————————————— contexts (#3) —————————————————————————————
-// Who you are in different rooms. Legitimate self-knowledge — but strictly by
-// *context* (one-on-one vs. a crowd), never by named person. The model does not
-// and must not say "X drains you"; only "you're different in big rooms vs. small".
+// How full you come away from small rooms vs. big ones. Legitimate
+// self-knowledge — strictly by gathering size (headcount), never by named
+// person. The copy speaks only to what the data measures — the size of the
+// room — not to relationships or intimacy it can't actually see.
 
 export interface ContextInputs {
-  /** Average feeling (−1..1) in intimate settings (1:1s, rituals, matches). */
+  /** Average feeling (−1..1) at small gatherings (≤3 people). */
   soloAvg: number | null;
   soloN: number;
-  /** Average feeling (−1..1) in group settings. */
+  /** Average feeling (−1..1) at bigger gatherings (≥6 people). */
   groupAvg: number | null;
   groupN: number;
 }
@@ -489,12 +495,12 @@ export function computeContexts(input: ContextInputs): Facet | null {
 
   const intimate = input.soloAvg > input.groupAvg;
   const summary = intimate
-    ? `You're most yourself one-on-one — smaller rooms leave you fuller than crowds do.`
-    : `Crowds light you up more than quiet one-on-ones do — you come alive in a full room.`;
+    ? `Small rooms leave you fuller than big ones — you come away better from a handful of people than a crowd.`
+    : `A full room lifts you more than a small one does — bigger gatherings tend to leave you better than intimate ones.`;
 
   return {
     key: 'contexts',
-    title: 'Who you are in different rooms',
+    title: 'Small rooms vs. big ones',
     summary,
     detail: {
       soloAvg: input.soloAvg,

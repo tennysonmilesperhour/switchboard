@@ -168,6 +168,17 @@ describe('computeInterestAlignment', () => {
     expect(facet.detail.aspirational).toEqual([]);
     expect(facet.summary.toLowerCase()).toContain('no gap');
   });
+
+  it('matches whole words only — no substring false positives', () => {
+    const facet = computeInterestAlignment({
+      professed: ['Art', 'Jazz', 'Live music'],
+      // "party" must not satisfy "art"; "jazzercise" must not satisfy "jazz";
+      // the multi-word "live music" must match as a phrase.
+      evidence: ['house party', 'jazzercise class', 'a live music night'],
+    })!;
+    expect(facet.detail.living).toEqual(['Live music']);
+    expect(facet.detail.aspirational).toEqual(['Art', 'Jazz']);
+  });
 });
 
 describe('computeDivergence', () => {
@@ -230,7 +241,7 @@ describe('computeSeasons', () => {
 });
 
 describe('computeContexts', () => {
-  it('names the room you thrive in without naming people', () => {
+  it('names the room size you thrive in, by headcount not people', () => {
     const facet = computeContexts({
       soloAvg: 0.8,
       soloN: 4,
@@ -238,7 +249,9 @@ describe('computeContexts', () => {
       groupN: 5,
     })!;
     expect(facet.detail.leansIntimate).toBe(true);
-    expect(facet.summary.toLowerCase()).toContain('one-on-one');
+    expect(facet.summary.toLowerCase()).toContain('small rooms');
+    // Must not overclaim relational intimacy the data can't see.
+    expect(facet.summary.toLowerCase()).not.toContain('one-on-one');
   });
 
   it('stays quiet when the two contexts feel about the same', () => {

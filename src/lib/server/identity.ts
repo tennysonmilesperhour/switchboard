@@ -232,9 +232,12 @@ export async function loadMyIdentity(): Promise<DisplayFacet[]> {
   const declaredChronotype =
     qhStart === null || qhStart === undefined
       ? null
-      : qhStart >= 23 || qhStart <= 1
+      : // Quiet from late evening through the small hours ⇒ up late.
+      qhStart >= 22 || qhStart <= 4
       ? 'a night owl'
-      : qhStart <= 21
+      : // Quiet from early evening (6–9pm) ⇒ early to bed. The 10am–5pm band is
+      // ambiguous (quiet hours set for work, not sleep), so claim nothing.
+      qhStart >= 18 && qhStart <= 21
       ? 'an early night'
       : null;
   const revealedTime = (
@@ -283,10 +286,12 @@ export async function loadMyIdentity(): Promise<DisplayFacet[]> {
     enabledFeatures,
   });
 
-  // Refresh the cache: full replace is safe because prefs live separately.
-  await supabase.from('identity_facets').delete().eq('user_id', user.id);
+  // Refresh the cache by upserting the fresh rows, then pruning only the keys
+  // that no longer exist. Upsert-then-prune (rather than delete-then-insert)
+  // means a failed write never leaves the portrait blank. Prefs live separately.
+  const freshKeys = facets.map((f) => f.key);
   if (facets.length > 0) {
-    await supabase.from('identity_facets').insert(
+    const { error: upsertError } = await supabase.from('identity_facets').upsert(
       facets.map((f) => ({
         user_id: user.id,
         facet_key: f.key,
@@ -295,8 +300,20 @@ export async function loadMyIdentity(): Promise<DisplayFacet[]> {
         detail: f.detail,
         confidence: f.confidence,
         sample_size: f.sampleSize,
+        computed_at: new Date().toISOString(),
       })),
+      { onConflict: 'user_id,facet_key' },
     );
+    if (!upsertError) {
+      await supabase
+        .from('identity_facets')
+        .delete()
+        .eq('user_id', user.id)
+        .not('facet_key', 'in', `(${freshKeys.join(',')})`);
+    }
+  } else {
+    // No facets this pass — clear any stale cache.
+    await supabase.from('identity_facets').delete().eq('user_id', user.id);
   }
 
   const prefs = new Map<string, FacetPref>();
@@ -330,13 +347,27 @@ export async function loadOperatorSettings(): Promise<Record<string, boolean>> {
   return out;
 }
 
-/** Whether the caller has enough behavioral history for a worthwhile reflection. */
+/**
+ * Whether the caller has enough behavioral history for a worthwhile reflection.
+ * Counts only facets the user hasn't rejected — the exact set requestReflection
+ * reflects over — so the button never appears for a reflection that would then
+ * be refused.
+ */
 export async function reflectionReady(): Promise<boolean> {
   const supabase = await createClient();
-  const { count } = await supabase
-    .from('identity_facets')
-    .select('facet_key', { count: 'exact', head: true });
-  return (count ?? 0) >= 3;
+  const [{ data: facetRows }, { data: prefRows }] = await Promise.all([
+    supabase.from('identity_facets').select('facet_key'),
+    supabase.from('facet_prefs').select('facet_key, verdict'),
+  ]);
+  const rejected = new Set(
+    (prefRows ?? [])
+      .filter((p) => p.verdict === 'rejected')
+      .map((p) => p.facet_key as string),
+  );
+  const usable = (facetRows ?? []).filter(
+    (f) => !rejected.has(f.facet_key as string),
+  );
+  return usable.length >= 3;
 }
 
 export interface Reflection {

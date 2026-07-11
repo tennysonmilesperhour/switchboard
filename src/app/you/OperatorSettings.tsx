@@ -11,6 +11,8 @@ interface OperatorToggle {
   desc: string;
   /** 'read' unlocks an optional facet; 'behavior' lets the app act for you. */
   kind: 'read' | 'behavior';
+  /** Not yet wired into any flow — shown but disabled so it can't overclaim. */
+  soon?: boolean;
 }
 
 const TOGGLES: OperatorToggle[] = [
@@ -31,12 +33,14 @@ const TOGGLES: OperatorToggle[] = [
     label: 'Capacity nudge',
     desc: 'A gentle heads-up when a stretch of draining plans is stacking up. Never blocks anything.',
     kind: 'behavior',
+    soon: true,
   },
   {
     key: 'tune_windows',
     label: 'Tune my defaults',
     desc: 'Let your tempo set smarter default response windows when you make plans.',
     kind: 'behavior',
+    soon: true,
   },
 ];
 
@@ -92,11 +96,17 @@ function ToggleRow({
     });
   }
 
+  // Behaviors that aren't wired yet are shown but disabled, so the control can
+  // never imply the app is acting when it isn't.
+  const disabled = pending || Boolean(toggle.soon);
+
   return (
     <div className={`flex items-start gap-3 px-4 py-3.5 ${first ? '' : 'border-t border-line'}`}>
       <span className="min-w-0 flex-1">
-        <span className="flex items-center gap-2">
-          <span className="text-sm font-bold text-ink">{toggle.label}</span>
+        <span className="flex flex-wrap items-center gap-2">
+          <span className={`text-sm font-bold ${toggle.soon ? 'text-ink-soft' : 'text-ink'}`}>
+            {toggle.label}
+          </span>
           <span
             className={`rounded-pill px-1.5 py-0.5 text-[10px] font-bold ${
               toggle.kind === 'read' ? 'bg-cream text-ink-faint' : 'bg-gold-soft text-gold-deep'
@@ -104,25 +114,32 @@ function ToggleRow({
           >
             {toggle.kind === 'read' ? 'Read' : 'Acts for you'}
           </span>
+          {toggle.soon ? (
+            <span className="rounded-pill bg-cream px-1.5 py-0.5 text-[10px] font-bold text-ink-faint">
+              Soon
+            </span>
+          ) : null}
         </span>
         <span className="mt-0.5 block text-[11px] leading-snug text-ink-faint">
           {toggle.desc}
+          {toggle.soon ? ' Not wired up yet — you can turn it on once it is.' : ''}
         </span>
       </span>
       <button
         type="button"
         role="switch"
-        aria-checked={on}
+        aria-checked={toggle.soon ? false : on}
         aria-label={toggle.label}
+        aria-disabled={disabled}
         onClick={flip}
-        disabled={pending}
-        className={`mt-0.5 inline-flex h-6 w-10 shrink-0 items-center rounded-full px-0.5 transition-colors disabled:opacity-50 ${
-          on ? 'bg-sage' : 'bg-line'
+        disabled={disabled}
+        className={`mt-0.5 inline-flex h-6 w-10 shrink-0 items-center rounded-full px-0.5 transition-colors disabled:opacity-40 ${
+          on && !toggle.soon ? 'bg-sage' : 'bg-line'
         }`}
       >
         <span
           className={`size-5 rounded-full bg-card shadow-sm transition-transform ${
-            on ? 'translate-x-4' : 'translate-x-0'
+            on && !toggle.soon ? 'translate-x-4' : 'translate-x-0'
           }`}
         />
       </button>
