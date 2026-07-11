@@ -16,11 +16,13 @@ import {
   blockProfile,
   createCircle,
   deleteCircle,
+  giveSpace,
   removeConnection,
   renameCircle,
   reportProfile,
   resolveContactMatches,
   sendConnectionRequest,
+  stopGivingSpace,
   toggleCircleMember,
   type ContactMatch,
 } from '@/lib/actions/connections';
@@ -35,6 +37,7 @@ export interface FriendRow {
   name: string;
   handle: string;
   circleIds: string[];
+  isAvoided: boolean;
 }
 
 export interface RequestRow {
@@ -128,6 +131,24 @@ export function PeopleClient({
     startTransition(async () => {
       const result = await blockProfile(friend.id, friend.connectionId);
       if (!result.ok) return toast.error(result.error ?? 'Could not block that person.');
+      router.refresh();
+    });
+  }
+
+  function toggleGiveSpace(friend: FriendRow) {
+    startTransition(async () => {
+      const result = friend.isAvoided
+        ? await stopGivingSpace(friend.id)
+        : await giveSpace(friend.id);
+      if (!result.ok) {
+        toast.error(result.error ?? 'Could not update. Try again.');
+        return;
+      }
+      toast.success(
+        friend.isAvoided
+          ? `Space warnings about ${friend.name} are off.`
+          : `You’ll get a quiet heads-up if ${friend.name} is somewhere you’re headed. They’re never told.`,
+      );
       router.refresh();
     });
   }
@@ -506,6 +527,26 @@ export function PeopleClient({
                             </Chip>
                           );
                         })}
+                      </div>
+                      <div className="mt-4 pt-3 border-t border-line">
+                        <button
+                          type="button"
+                          disabled={pending}
+                          onClick={() => toggleGiveSpace(friend)}
+                          className={`inline-flex items-center gap-1.5 rounded-pill px-3 py-1.5 text-xs font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-terracotta ${
+                            friend.isAvoided
+                              ? 'bg-gold-soft text-gold-deep'
+                              : 'text-ink-faint hover:text-ink'
+                          }`}
+                        >
+                          <Icon name={friend.isAvoided ? 'check' : 'bell'} size={14} />
+                          {friend.isAvoided ? 'Giving space' : 'Give space'}
+                        </button>
+                        <p className="mt-1 text-[11px] leading-snug text-ink-faint">
+                          {friend.isAvoided
+                            ? `We’ll quietly warn you if ${friend.name.split(' ')[0]} is somewhere you’re headed. They’re never told.`
+                            : 'A private heads-up before events where they’ll be — no block, and they’re never notified.'}
+                        </p>
                       </div>
                       <button
                         type="button"

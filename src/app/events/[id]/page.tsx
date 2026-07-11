@@ -224,6 +224,21 @@ export default async function EventPage({
     });
   }
 
+  // Private "give space" heads-up. Only computed against attendees the viewer
+  // can already see, so it never becomes an "is X going?" oracle for hidden
+  // guest lists — and it names only people the viewer themselves flagged.
+  let avoidedGoing: string[] = [];
+  if (attendees.length > 0) {
+    const { data: avoids } = await supabase
+      .from('profile_avoids')
+      .select('avoided_id')
+      .eq('avoider_id', user.id);
+    const avoidedSet = new Set((avoids ?? []).map((row) => row.avoided_id as string));
+    avoidedGoing = attendees
+      .filter((attendee) => avoidedSet.has(attendee.id))
+      .map((attendee) => attendee.name);
+  }
+
   // Poll (Anonymous Weighted Input)
   const { data: poll } = await supabase
     .from('polls')
@@ -438,6 +453,22 @@ export default async function EventPage({
         dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
       />
       <div className="space-y-6">
+        {avoidedGoing.length > 0 && (
+          <div className="rounded-card bg-gold-soft px-4 py-3">
+            <p className="text-sm text-ink">
+              <span aria-hidden className="mr-1">👀</span>
+              <span className="font-bold">Heads up —</span>{' '}
+              {avoidedGoing.length === 1
+                ? `${avoidedGoing[0]} is going, and you’ve asked for space from them.`
+                : `${avoidedGoing.slice(0, -1).join(', ')} and ${
+                    avoidedGoing[avoidedGoing.length - 1]
+                  } are going, and you’ve asked for space from them.`}
+            </p>
+            <p className="mt-1 text-xs text-ink-soft">
+              Only you can see this — totally your call whether to go.
+            </p>
+          </div>
+        )}
         <div className="space-y-4">
           {event.cover_url && (
             // eslint-disable-next-line @next/next/no-img-element
