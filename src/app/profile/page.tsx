@@ -16,6 +16,7 @@ import { ProfileStrength } from '@/components/profile/ProfileStrength';
 export const metadata: Metadata = { title: 'Profile' };
 
 const FEATURE_LINKS: { href: string; label: string; icon: IconName }[] = [
+  { href: '/you', label: 'Your Read', icon: 'sparkle' },
   { href: '/people', label: 'People', icon: 'users' },
   { href: '/mutual', label: 'Mutual', icon: 'sparkle' },
   { href: '/moments', label: 'Moments', icon: 'chat' },
