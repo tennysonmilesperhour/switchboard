@@ -14,6 +14,7 @@ import {
   type RecurrenceKind,
 } from '@/lib/engine/recurrence';
 import { simulateCascade } from '@/lib/engine/cascade';
+import { hostSuggestions } from '@/lib/engine/suggestions';
 import {
   createEvent,
   lookupInviteeByHandle,
@@ -21,6 +22,7 @@ import {
 } from '@/lib/actions/events';
 import { normalizePhoneNumber } from '@/lib/phone';
 import { DescribePlan } from '@/components/events/DescribePlan';
+import { HostSuggestions } from '@/components/events/HostSuggestions';
 import { ImportFromLink } from '@/components/events/ImportFromLink';
 import type { PlanDraft } from '@/lib/actions/plan';
 import type { ImportResult } from '@/lib/actions/import';
@@ -35,6 +37,13 @@ export interface WizardFriend {
 }
 
 export interface WizardHousehold {
+  id: string;
+  name: string;
+  emoji: string;
+  memberIds: string[];
+}
+
+export interface WizardCircle {
   id: string;
   name: string;
   emoji: string;
@@ -119,10 +128,25 @@ const FIELD =
   'w-full rounded-card border border-line bg-card px-4 py-3 text-[15px] text-ink outline-none transition-colors focus:border-terracotta focus:ring-2 focus:ring-terracotta-soft';
 const FIELD_LABEL = 'text-sm font-semibold text-ink';
 
+// Custom response-window support: a window is any positive number of minutes,
+// but we let the host enter it in whichever unit reads naturally.
+type WindowUnit = 'minutes' | 'hours' | 'days';
+const UNIT_FACTORS: Record<WindowUnit, number> = {
+  minutes: 1,
+  hours: 60,
+  days: 1440,
+};
+function splitWindow(minutes: number): { amount: number; unit: WindowUnit } {
+  if (minutes % 1440 === 0) return { amount: minutes / 1440, unit: 'days' };
+  if (minutes % 60 === 0) return { amount: minutes / 60, unit: 'hours' };
+  return { amount: minutes, unit: 'minutes' };
+}
+
 export function EventWizard({
   userId,
   friends,
   households = [],
+  circles = [],
   initialTitle = '',
   initialDescription = '',
   ritualId = null,
@@ -132,6 +156,7 @@ export function EventWizard({
   userId: string;
   friends: WizardFriend[];
   households?: WizardHousehold[];
+  circles?: WizardCircle[];
   initialTitle?: string;
   initialDescription?: string;
   ritualId?: string | null;
@@ -185,6 +210,9 @@ export function EventWizard({
   const [contactsBusy, setContactsBusy] = useState(false);
   const [contactMatches, setContactMatches] = useState<ContactMatch[]>([]);
   const [contactsNote, setContactsNote] = useState<string | null>(null);
+  // Long friend lists get long; collapse by default so the group chips and
+  // guest box below stay reachable without a marathon scroll.
+  const [friendsOpen, setFriendsOpen] = useState(friends.length <= 12);
 
   // Step 5 - visibility
   const [showInviteList, setShowInviteList] = useState(false);
@@ -259,14 +287,14 @@ export function EventWizard({
     if (result.locationName) setLocationName(result.locationName);
   }
 
-  function toggleHousehold(household: WizardHousehold) {
+  function toggleGroup(memberIds: string[]) {
     setInvitees((current) => {
-      const members = household.memberIds
+      const members = memberIds
         .map((id) => friends.find((f) => f.id === id))
         .filter((f): f is WizardFriend => Boolean(f));
-      const allIn = members.every((m) =>
-        current.some((i) => i.profileId === m.id),
-      );
+      const allIn =
+        members.length > 0 &&
+        members.every((m) => current.some((i) => i.profileId === m.id));
       if (allIn) {
         return current.filter(
           (i) => !members.some((m) => m.id === i.profileId),
@@ -283,6 +311,14 @@ export function EventWizard({
         }));
       return [...current, ...additions];
     });
+  }
+
+  function toggleHousehold(household: WizardHousehold) {
+    toggleGroup(household.memberIds);
+  }
+
+  function toggleCircle(circle: WizardCircle) {
+    toggleGroup(circle.memberIds);
   }
 
   function addGuestInvite(name: string, contact: string) {
@@ -489,6 +525,25 @@ export function EventWizard({
     );
   }, [invitees, inviteMode, capacity]);
 
+  const suggestions = useMemo(
+    () =>
+      hostSuggestions({
+        startsAt: startsAt ? new Date(startsAt) : null,
+        now: new Date(),
+        inviteMode,
+        invitees: invitees.map((i) => ({
+          windowMinutes: i.windowMinutes,
+          groupStage: i.groupStage,
+        })),
+        capacity: capacity ? Number(capacity) : null,
+        hasLocation: locationName.trim().length > 0,
+        enablePoll,
+      }),
+    [startsAt, inviteMode, invitees, capacity, locationName, enablePoll],
+  );
+
+  const selectedFriendCount = invitees.filter((i) => i.profileId).length;
+
   const canNext = [
     title.trim().length > 0,
     true,
@@ -608,21 +663,22 @@ export function EventWizard({
               className="w-full rounded-card border-2 border-line bg-card px-5 py-4 text-xl font-semibold text-ink outline-none transition-colors placeholder:font-normal placeholder:text-ink-faint focus:border-terracotta focus:ring-4 focus:ring-terracotta-soft"
             />
           </div>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div className="space-y-1.5 min-w-0">
               <label htmlFor="date" className={FIELD_LABEL}>Date</label>
               <input
                 id="date" type="date" value={date}
                 onChange={(e) => setDate(e.target.value)}
-                className={`${FIELD} min-w-0`}
+                className={`${FIELD} min-w-0 appearance-none [color-scheme:light]`}
               />
             </div>
             <div className="space-y-1.5 min-w-0">
               <label htmlFor="time" className={FIELD_LABEL}>Time</label>
               <input
                 id="time" type="time" value={time}
+                step={300}
                 onChange={(e) => setTime(e.target.value)}
-                className={`${FIELD} min-w-0`}
+                className={`${FIELD} min-w-0 appearance-none [color-scheme:light]`}
               />
             </div>
           </div>
@@ -874,31 +930,38 @@ export function EventWizard({
 
       {step === 2 && (
         <div className="space-y-4 animate-rise">
-          {households.length > 0 && (
+          {(households.length > 0 || circles.length > 0) && (
             <div>
-              <p className="text-sm font-bold text-ink mb-2">Whole households</p>
+              <p className="text-sm font-bold text-ink mb-2">
+                Tap a group to add everyone
+              </p>
               <div className="flex flex-wrap gap-2">
-                {households.map((household) => {
-                  const members = household.memberIds.filter((id) =>
+                {[
+                  ...households.map((h) => ({ group: h, toggle: () => toggleHousehold(h) })),
+                  ...circles.map((c) => ({ group: c, toggle: () => toggleCircle(c) })),
+                ].map(({ group, toggle }) => {
+                  const members = group.memberIds.filter((id) =>
                     friends.some((f) => f.id === id),
                   );
-                  const allIn =
-                    members.length > 0 &&
-                    members.every((id) =>
-                      invitees.some((i) => i.profileId === id),
-                    );
+                  if (members.length === 0) return null;
+                  const allIn = members.every((id) =>
+                    invitees.some((i) => i.profileId === id),
+                  );
                   return (
                     <Chip
-                      key={household.id}
-                      emoji={household.emoji}
+                      key={group.id}
+                      emoji={group.emoji}
                       selected={allIn}
-                      onClick={() => toggleHousehold(household)}
+                      onClick={toggle}
                     >
-                      {household.name} ({members.length})
+                      {group.name} ({members.length})
                     </Chip>
                   );
                 })}
               </div>
+              <p className="mt-1.5 text-xs text-ink-faint">
+                Adds the whole group — then tap anyone below to drop them.
+              </p>
             </div>
           )}
           {friends.length === 0 && (
@@ -910,41 +973,66 @@ export function EventWizard({
               </p>
             </Card>
           )}
-          <ul className="space-y-2">
-            {friends.map((friend) => {
-              const selected = invitees.some((i) => i.profileId === friend.id);
-              return (
-                <li key={friend.id}>
-                  <button
-                    type="button"
-                    onClick={() => toggleFriend(friend)}
-                    aria-pressed={selected}
-                    className={`w-full flex items-center gap-3 rounded-card border-2 p-3 transition-all active:scale-[0.99] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-terracotta ${
-                      selected
-                        ? 'border-terracotta bg-terracotta-soft'
-                        : 'border-line bg-card hover:border-terracotta/50'
-                    }`}
-                  >
-                    <Avatar name={friend.name} seed={friend.id} size="sm" />
-                    <span className="flex-1 text-left">
-                      <span className="font-bold block">{friend.name}</span>
-                      <span className="text-xs text-ink-faint">@{friend.handle}</span>
-                    </span>
-                    <span
-                      aria-hidden
-                      className={`grid size-6 shrink-0 place-items-center rounded-pill border-2 transition-colors ${
-                        selected
-                          ? 'border-terracotta bg-terracotta text-white'
-                          : 'border-line text-ink-faint'
-                      }`}
-                    >
-                      <Icon name={selected ? 'check' : 'add'} size={14} />
-                    </span>
-                  </button>
-                </li>
-              );
-            })}
-          </ul>
+          {friends.length > 0 && (
+            <div>
+              <button
+                type="button"
+                onClick={() => setFriendsOpen((open) => !open)}
+                aria-expanded={friendsOpen}
+                className="w-full flex items-center gap-2 mb-2 rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-terracotta"
+              >
+                <span className="flex-1 text-left text-sm font-bold text-ink">
+                  Friends · {friends.length}
+                  {selectedFriendCount > 0 && (
+                    <span className="text-terracotta"> · {selectedFriendCount} selected</span>
+                  )}
+                </span>
+                <Icon
+                  name="back"
+                  size={18}
+                  className={`text-ink-faint transition-transform ${friendsOpen ? 'rotate-90' : '-rotate-90'}`}
+                />
+              </button>
+              {friendsOpen && (
+                <div className="grid grid-cols-2 gap-2">
+                  {friends.map((friend) => {
+                    const selected = invitees.some((i) => i.profileId === friend.id);
+                    return (
+                      <button
+                        key={friend.id}
+                        type="button"
+                        onClick={() => toggleFriend(friend)}
+                        aria-pressed={selected}
+                        className={`flex items-center gap-2 rounded-card border-2 p-2 text-left transition-all active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-terracotta ${
+                          selected
+                            ? 'border-terracotta bg-terracotta-soft'
+                            : 'border-line bg-card hover:border-terracotta/50'
+                        }`}
+                      >
+                        <Avatar name={friend.name} seed={friend.id} size="sm" />
+                        <span className="flex-1 min-w-0">
+                          <span className="font-bold text-sm block truncate">{friend.name}</span>
+                          <span className="text-[11px] text-ink-faint block truncate">
+                            @{friend.handle}
+                          </span>
+                        </span>
+                        <span
+                          aria-hidden
+                          className={`grid size-5 shrink-0 place-items-center rounded-pill border-2 transition-colors ${
+                            selected
+                              ? 'border-terracotta bg-terracotta text-white'
+                              : 'border-line text-ink-faint'
+                          }`}
+                        >
+                          <Icon name={selected ? 'check' : 'add'} size={12} />
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
 
           <Card>
             <p className="text-sm font-bold text-ink mb-2">Invite by username, email, or phone</p>
@@ -1149,20 +1237,70 @@ export function EventWizard({
                       ))}
                     </select>
                   )}
-                  <select
-                    value={invitee.windowMinutes}
-                    onChange={(e) =>
-                      updateInvitee(index, { windowMinutes: Number(e.target.value) })
-                    }
-                    aria-label={`Response window for ${invitee.name}`}
-                    className="rounded-pill border border-line bg-paper px-3 py-1.5 text-sm font-medium text-ink outline-none transition-colors focus:border-terracotta"
-                  >
-                    {WINDOW_CHOICES.map((choice) => (
-                      <option key={choice.windowMinutes} value={choice.windowMinutes}>
-                        {choice.label} to respond
-                      </option>
-                    ))}
-                  </select>
+                  {(() => {
+                    const isCustom = !WINDOW_CHOICES.some(
+                      (c) => c.windowMinutes === invitee.windowMinutes,
+                    );
+                    const { amount, unit } = splitWindow(invitee.windowMinutes);
+                    return (
+                      <>
+                        <select
+                          value={isCustom ? 'custom' : invitee.windowMinutes}
+                          onChange={(e) =>
+                            updateInvitee(index, {
+                              windowMinutes:
+                                e.target.value === 'custom'
+                                  ? 120
+                                  : Number(e.target.value),
+                            })
+                          }
+                          aria-label={`Response window for ${invitee.name}`}
+                          className="rounded-pill border border-line bg-paper px-3 py-1.5 text-sm font-medium text-ink outline-none transition-colors focus:border-terracotta"
+                        >
+                          {WINDOW_CHOICES.map((choice) => (
+                            <option key={choice.windowMinutes} value={choice.windowMinutes}>
+                              {choice.label} to respond
+                            </option>
+                          ))}
+                          <option value="custom">Custom…</option>
+                        </select>
+                        {isCustom && (
+                          <span className="inline-flex items-center gap-1.5">
+                            <input
+                              type="number"
+                              min={1}
+                              value={amount}
+                              onChange={(e) =>
+                                updateInvitee(index, {
+                                  windowMinutes:
+                                    Math.max(1, Math.floor(Number(e.target.value)) || 1) *
+                                    UNIT_FACTORS[unit],
+                                })
+                              }
+                              aria-label={`Custom window amount for ${invitee.name}`}
+                              className="w-16 rounded-pill border border-line bg-paper px-3 py-1.5 text-sm font-medium text-ink outline-none focus:border-terracotta"
+                            />
+                            <select
+                              value={unit}
+                              onChange={(e) =>
+                                updateInvitee(index, {
+                                  windowMinutes:
+                                    Math.max(1, amount) *
+                                    UNIT_FACTORS[e.target.value as WindowUnit],
+                                })
+                              }
+                              aria-label={`Custom window unit for ${invitee.name}`}
+                              className="rounded-pill border border-line bg-paper px-3 py-1.5 text-sm font-medium text-ink outline-none focus:border-terracotta"
+                            >
+                              <option value="minutes">min</option>
+                              <option value="hours">hours</option>
+                              <option value="days">days</option>
+                            </select>
+                          </span>
+                        )}
+                      </>
+                    );
+                  })()}
                 </div>
               </li>
             ))}
@@ -1264,6 +1402,8 @@ export function EventWizard({
               </p>
             )}
           </Card>
+
+          <HostSuggestions suggestions={suggestions} />
 
           {looksOutdoor && (
             <Card tone="gold">
