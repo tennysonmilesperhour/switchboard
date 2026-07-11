@@ -12,7 +12,15 @@ import {
   getMutualConnections,
   describeMutuals,
 } from '@/lib/server/relationship';
+import { loadSharedFacets } from '@/lib/server/identity';
 import type { ProfileLink, ProfileSocial } from '@/lib/types';
+
+// Confidence → dot color for a shared read (mirrors the owner's /you view).
+const READ_DOT: Record<string, string> = {
+  emerging: 'bg-line',
+  clear: 'bg-gold',
+  strong: 'bg-sage',
+};
 
 interface PublicProfile {
   id: string;
@@ -90,6 +98,12 @@ export default async function PublicProfilePage({
       ? getMutualConnections(createAdminClient(), user.id, profile.id)
       : Promise.resolve({ count: 0, names: [] }),
   ]);
+
+  // Revealed-preference facets this person opted into sharing. The RPC itself
+  // gates on an accepted connection, so this is empty for anyone else; the
+  // status check just avoids a needless round-trip.
+  const sharedReads =
+    relationship.status === 'accepted' ? await loadSharedFacets(profile.id) : [];
 
   const displayName = profile.display_name || 'Someone';
   const links: ProfileLink[] = Array.isArray(profile.links) ? profile.links : [];
@@ -219,6 +233,47 @@ export default async function PublicProfilePage({
             ) : null}
           </div>
         </div>
+
+        {/* Shared reads — revealed-preference signals this person chose to show
+            their connections. Summary lines only; the evidence stays private. */}
+        {sharedReads.length > 0 ? (
+          <section>
+            <h3 className="mb-2 flex items-center gap-2 text-xs font-bold uppercase tracking-wide text-ink-faint">
+              What {displayName.split(' ')[0]} shares
+              <span className="rounded-pill bg-cream px-1.5 py-0.5 text-[10px] font-bold normal-case text-ink-faint">
+                From their Read
+              </span>
+            </h3>
+            <div className="overflow-hidden rounded-card border border-line bg-card">
+              {sharedReads.map((read, i) => (
+                <div
+                  key={read.facet_key}
+                  className={`flex items-start gap-3 px-4 py-3.5 ${
+                    i > 0 ? 'border-t border-line' : ''
+                  }`}
+                >
+                  <span
+                    className={`mt-1.5 size-2 shrink-0 rounded-full ${
+                      READ_DOT[read.confidence] ?? 'bg-line'
+                    }`}
+                    aria-hidden
+                  />
+                  <span className="min-w-0">
+                    <span className="block text-xs font-bold uppercase tracking-wide text-ink-faint">
+                      {read.title}
+                    </span>
+                    <span className="block text-sm leading-relaxed text-ink">
+                      {read.summary}
+                    </span>
+                  </span>
+                </div>
+              ))}
+            </div>
+            <p className="mt-1.5 text-[11px] text-ink-faint">
+              Drawn from what they actually do — shared with connections by choice.
+            </p>
+          </section>
+        ) : null}
 
         {/* Links */}
         {links.length > 0 ? (
