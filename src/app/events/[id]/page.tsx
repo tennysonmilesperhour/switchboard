@@ -30,7 +30,7 @@ import { inviteExpiresAt } from '@/lib/engine/cascade';
 import { threadGate, THREAD_PREVIEW_COUNT } from '@/lib/engine/thread';
 import { formatDateTime } from '@/lib/format';
 import { googleCalendarUrl } from '@/lib/calendar-links';
-import { looksLikeEmail } from '@/lib/server/email';
+import { appUrl, looksLikeEmail } from '@/lib/server/email';
 import { looksLikePhoneNumber } from '@/lib/phone';
 import type {
   EventQuestion,
@@ -378,7 +378,6 @@ export default async function EventPage({
     }));
   }
 
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? '';
   const calendarEvent = event.starts_at
     ? {
         title: event.title,
@@ -405,7 +404,10 @@ export default async function EventPage({
           return {
             name: nameIsContact ? 'Guest' : rawName,
             contact,
-            url: `${appUrl}/rsvp/${i.guest_token}`,
+            // Build from the one canonical origin helper (same one the email/SMS
+            // send paths use) so a copied guest link can never be stamped with
+            // an ephemeral preview deployment origin or a bare relative path.
+            url: appUrl(`/rsvp/${i.guest_token}`),
           };
         })
     : [];
