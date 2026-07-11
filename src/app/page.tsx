@@ -209,7 +209,7 @@ export default async function HomePage() {
             ))}
           </section>
         ) : (
-          <Link href="/events/new" className="block">
+          <Link href="/create" className="block">
             <PlanCard
               title="Start something"
               color="pink"
@@ -409,7 +409,7 @@ export default async function HomePage() {
             </Link>
             <div className="grid grid-cols-2 gap-3">
               {[
-                { href: '/events/new', emoji: '🪜', title: 'New plan', body: 'Cascading invites' },
+                { href: '/create', emoji: '🪜', title: 'New plan', body: 'Cascading invites' },
                 { href: '/discover', emoji: '🧭', title: 'Discover', body: 'What should we do?' },
                 { href: '/mutual', emoji: '◐', title: 'Mutual', body: 'Down to connect?' },
                 { href: '/moments', emoji: '✨', title: 'Moments', body: 'Who’s nearby' },
