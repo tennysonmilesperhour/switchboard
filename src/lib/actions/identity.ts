@@ -2,6 +2,7 @@
 
 import { revalidatePath } from 'next/cache';
 import { createClient } from '@/lib/supabase/server';
+import { checkRateLimit } from '@/lib/server/rate-limit';
 import { FACET_KEYS, type FacetKey } from '@/lib/engine/identity';
 import { generateReflection, type ReflectionKind } from '@/lib/ai/reflection';
 
@@ -135,22 +136,30 @@ export async function requestReflection(
   } = await supabase.auth.getUser();
   if (!user) return { ok: false, reason: 'auth' };
 
-  // Reflect only over facets the user hasn't rejected — respect their verdicts.
+  // Gate the external AI call + row insert, like every other model-invoking
+  // action (matchmaker, rituals): 20 an hour is plenty for a human.
+  if (!(await checkRateLimit(`reflection:${user.id}`, 20, 60 * 60))) {
+    return { ok: false, reason: 'rate' };
+  }
+
+  // Reflect only over facets the user hasn't set aside — respect both a "not
+  // me" verdict and a facet hidden from their own portrait. Rejection and
+  // hiding both suppress everywhere, the rule the migration states.
   const [{ data: facetRows }, { data: prefRows }] = await Promise.all([
     supabase
       .from('identity_facets')
       .select('facet_key, title, summary')
       .eq('user_id', user.id),
-    supabase.from('facet_prefs').select('facet_key, verdict').eq('user_id', user.id),
+    supabase.from('facet_prefs').select('facet_key, verdict, hidden').eq('user_id', user.id),
   ]);
 
-  const rejected = new Set(
+  const setAside = new Set(
     (prefRows ?? [])
-      .filter((p) => p.verdict === 'rejected')
+      .filter((p) => p.verdict === 'rejected' || p.hidden === true)
       .map((p) => p.facet_key as string),
   );
   const facets = (facetRows ?? [])
-    .filter((f) => !rejected.has(f.facet_key as string))
+    .filter((f) => !setAside.has(f.facet_key as string))
     .map((f) => ({ title: f.title as string, summary: f.summary as string }));
 
   if (facets.length < 3) return { ok: false, reason: 'not_ready' };
