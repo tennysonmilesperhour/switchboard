@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import { createAdminClient, hasAdminCredentials } from '@/lib/supabase/admin';
+import { reportOperationalError } from '@/lib/server/observability';
 import { formatDateTime } from '@/lib/format';
 import { Icon } from '@/components/ui/Icon';
 import { GuestRsvpClient } from './GuestRsvpClient';
@@ -39,6 +40,20 @@ export default async function GuestRsvpPage({
 }) {
   const { token } = await params;
   const admin = hasAdminCredentials() ? createAdminClient() : null;
+
+  // Without a service-role key this page can look up *no* invite, so it would
+  // tell every guest their invitation "isn't here anymore" — a server
+  // misconfiguration masquerading as an expired link. In production, fail
+  // loudly (logged + error boundary) instead of quietly misleading guests;
+  // locally and in CI, where admin creds are routinely absent, keep the
+  // graceful fallback so the not-found copy still renders.
+  if (!admin && process.env.NODE_ENV === 'production') {
+    await reportOperationalError(
+      'rsvp.lookup',
+      new Error('Supabase admin credentials are not configured'),
+    );
+    throw new Error('Guest RSVP is unavailable: server is misconfigured');
+  }
 
   const { data: invite } = admin
     ? await admin
