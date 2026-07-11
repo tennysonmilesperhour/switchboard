@@ -544,6 +544,54 @@ export interface UpdateEventInput {
  * quietly pings everyone who has already accepted so nobody shows up to the
  * old details.
  */
+/** Reorder a queued invite up or down the line (host/co-host, individual mode). */
+export async function moveQueuedInvite(
+  eventId: string,
+  inviteId: string,
+  up: boolean,
+): Promise<{ ok: boolean; error?: string }> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false, error: 'Not signed in' };
+  if (!(await canManageEvent(user.id, eventId))) {
+    return { ok: false, error: 'Only the host can manage invites.' };
+  }
+  // Authorization + queued-only + the atomic position swap all live in the
+  // security-definer function.
+  const { error } = await supabase.rpc('move_queued_invite', {
+    p_invite: inviteId,
+    p_up: up,
+  });
+  if (error) return { ok: false, error: error.message };
+  revalidatePath(`/events/${eventId}`);
+  return { ok: true };
+}
+
+/** Change the response window on a not-yet-sent invite (host/co-host). */
+export async function setInviteWindow(
+  eventId: string,
+  inviteId: string,
+  minutes: number,
+): Promise<{ ok: boolean; error?: string }> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false, error: 'Not signed in' };
+  if (!(await canManageEvent(user.id, eventId))) {
+    return { ok: false, error: 'Only the host can manage invites.' };
+  }
+  const { error } = await supabase.rpc('set_invite_window', {
+    p_invite: inviteId,
+    p_minutes: minutes,
+  });
+  if (error) return { ok: false, error: error.message };
+  revalidatePath(`/events/${eventId}`);
+  return { ok: true };
+}
+
 export async function updateEventDetails(
   eventId: string,
   input: UpdateEventInput,

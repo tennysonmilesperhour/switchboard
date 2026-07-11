@@ -739,7 +739,7 @@ export default async function EventPage({
           <section>
             <SectionHeader
               title="Invitation flow"
-              hint="Live view - only you can see this"
+              hint="Only you see this — reorder or re-time anyone still in line"
             />
             <CascadeProgress
               invites={hostInvites.filter((invite) => invite.status !== 'requested')}

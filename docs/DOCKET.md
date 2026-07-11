@@ -93,7 +93,14 @@ density + safety, not the next sprint.
 
 ## 🛠️ Queued to build
 
-- **Post-send cascade editing.** Edit the queued tail freely (reorder, add,
+- **Post-send cascade editing.** 🟡 *v1 built — held as a draft PR for SQL
+  review.* `CascadeProgress` (host live view, already did remove/resend) now
+  also lets the host **reorder** the queued line (individual mode) and **change
+  a queued invite's response window**. Two security-definer functions
+  (`move_queued_invite`, `set_invite_window`) — host-checked, queued-only, so
+  history can't be rewritten. Not auto-merged: the SQL functions couldn't be
+  live-tested without a database. Remaining ideas below.
+  Original scope: Edit the queued tail freely (reorder, add,
   remove, adjust windows); handle already-sent/accepted invites with explicit,
   consequence-aware actions ("skip to next", "cancel this invite"). Note the
   `position` unique constraint needs careful renumbering; host/co-host only.
