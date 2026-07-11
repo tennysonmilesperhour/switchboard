@@ -349,23 +349,23 @@ export async function loadOperatorSettings(): Promise<Record<string, boolean>> {
 
 /**
  * Whether the caller has enough behavioral history for a worthwhile reflection.
- * Counts only facets the user hasn't rejected — the exact set requestReflection
- * reflects over — so the button never appears for a reflection that would then
- * be refused.
+ * Counts only facets the user hasn't set aside — rejected or hidden — the exact
+ * set requestReflection reflects over, so the button never appears for a
+ * reflection that would then be refused.
  */
 export async function reflectionReady(): Promise<boolean> {
   const supabase = await createClient();
   const [{ data: facetRows }, { data: prefRows }] = await Promise.all([
     supabase.from('identity_facets').select('facet_key'),
-    supabase.from('facet_prefs').select('facet_key, verdict'),
+    supabase.from('facet_prefs').select('facet_key, verdict, hidden'),
   ]);
-  const rejected = new Set(
+  const setAside = new Set(
     (prefRows ?? [])
-      .filter((p) => p.verdict === 'rejected')
+      .filter((p) => p.verdict === 'rejected' || p.hidden === true)
       .map((p) => p.facet_key as string),
   );
   const usable = (facetRows ?? []).filter(
-    (f) => !rejected.has(f.facet_key as string),
+    (f) => !setAside.has(f.facet_key as string),
   );
   return usable.length >= 3;
 }
