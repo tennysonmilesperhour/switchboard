@@ -290,6 +290,47 @@ export async function blockProfile(
   return { ok: true };
 }
 
+/**
+ * "Give space" — a private, one-directional avoidance. Unlike a block, you stay
+ * connected; it only powers a quiet heads-up when this person is going to be
+ * somewhere you are. Invisible to them (RLS scopes the row to the avoider), and
+ * it never removes anyone from anything: warn, never remove.
+ */
+export async function giveSpace(profileId: string): Promise<ConnectionResult> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false, error: 'Not signed in' };
+  if (!UUID_RE.test(profileId)) return { ok: false, error: 'Unknown person.' };
+  if (profileId === user.id) return { ok: false, error: 'That is you.' };
+
+  const { error } = await supabase
+    .from('profile_avoids')
+    .insert({ avoider_id: user.id, avoided_id: profileId });
+  // Already on the list is a no-op success, not an error.
+  if (error && error.code !== '23505') return { ok: false, error: error.message };
+  revalidatePath('/people');
+  return { ok: true };
+}
+
+export async function stopGivingSpace(profileId: string): Promise<ConnectionResult> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false, error: 'Not signed in' };
+
+  const { error } = await supabase
+    .from('profile_avoids')
+    .delete()
+    .eq('avoider_id', user.id)
+    .eq('avoided_id', profileId);
+  if (error) return { ok: false, error: error.message };
+  revalidatePath('/people');
+  return { ok: true };
+}
+
 export async function reportProfile(
   profileId: string,
   reason: string,

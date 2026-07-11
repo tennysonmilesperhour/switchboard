@@ -140,11 +140,14 @@ density + safety, not the next sprint.
   verification*: start with join links/codes + request-to-approve; email-domain
   and address-radius later. Second gap: board events are notices, not real
   plans — spawn a real event scoped to the board.
-- **"Ex-filter" / give-me-space.** A private, one-directional "warn me if
-  they'll be there" edge, invisible to the other person (softer sibling of the
-  existing block). Guardrail: **warn, never remove** — the avoided person is
-  never told or excluded. Separate, host-private "these two don't mix" note for
-  guest-list hygiene. Open: warn on invited vs accepted; wording.
+- **"Ex-filter" / give-me-space.** ✅ *v1 shipped* — `profile_avoids` (mirrors
+  `profile_blocks`), `giveSpace`/`stopGivingSpace`, a "Give space" control on
+  each person in `/people`, and a private heads-up on the event page when an
+  *already-visible* avoided attendee is going (never computed against hidden
+  guest lists, so it can't be an "is X going?" oracle). Guardrail held: **warn,
+  never remove**; invisible to the other person. *Remaining:* set "give space"
+  from a public profile / on non-friends; the host-private "these two don't mix"
+  note for guest-list hygiene; fold into the shared reachability engine.
 - **Get-to-know-you games.** Solo / duo (reveal simultaneously, like mutual
   intents) / group icebreakers. Doubles as a sensor that enriches matching.
   Model: explicit interests (shared/editable) vs private inferences (tune-only,
