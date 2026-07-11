@@ -15,9 +15,10 @@ export default async function NewEventPage({
     ritual?: string;
     invite?: string;
     error?: string;
+    decide?: string;
   }>;
 }) {
-  const { title, description, ritual, invite, error } = await searchParams;
+  const { title, description, ritual, invite, error, decide } = await searchParams;
 
   const errorMessage =
     error === 'title'
@@ -95,6 +96,7 @@ export default async function NewEventPage({
         initialDescription={description ?? ''}
         ritualId={ritual ?? null}
         initialInviteeId={invite ?? null}
+        initialDecide={decide === '1'}
         initialError={errorMessage}
       />
     </AppShell>

@@ -151,6 +151,7 @@ export function EventWizard({
   initialDescription = '',
   ritualId = null,
   initialInviteeId = null,
+  initialDecide = false,
   initialError = null,
 }: {
   userId: string;
@@ -161,6 +162,7 @@ export function EventWizard({
   initialDescription?: string;
   ritualId?: string | null;
   initialInviteeId?: string | null;
+  initialDecide?: boolean;
   initialError?: string | null;
 }) {
   const [step, setStep] = useState(0);
@@ -184,7 +186,9 @@ export function EventWizard({
 
   // Step 2 - style
   const [inviteMode, setInviteMode] = useState<InviteMode>('individual');
-  const [enablePoll, setEnablePoll] = useState(false);
+  // Arriving via the "Help me figure it out" door starts the plan in deciding
+  // mode, so the group votes on what to do before invites go out.
+  const [enablePoll, setEnablePoll] = useState(initialDecide);
   const [pollResolution, setPollResolution] =
     useState<CreateEventInput['pollResolution']>('host_pick');
 
