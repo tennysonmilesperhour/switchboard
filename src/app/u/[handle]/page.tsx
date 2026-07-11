@@ -12,7 +12,7 @@ import {
   getMutualConnections,
   describeMutuals,
 } from '@/lib/server/relationship';
-import { loadSharedFacets } from '@/lib/server/identity';
+import { loadSharedFacets, loadCompatibility } from '@/lib/server/identity';
 import type { ProfileLink, ProfileSocial } from '@/lib/types';
 
 // Confidence → dot color for a shared read (mirrors the owner's /you view).
@@ -102,8 +102,13 @@ export default async function PublicProfilePage({
   // Revealed-preference facets this person opted into sharing. The RPC itself
   // gates on an accepted connection, so this is empty for anyone else; the
   // status check just avoids a needless round-trip.
-  const sharedReads =
-    relationship.status === 'accepted' ? await loadSharedFacets(profile.id) : [];
+  const [sharedReads, compatibility] =
+    relationship.status === 'accepted'
+      ? await Promise.all([
+          loadSharedFacets(profile.id),
+          loadCompatibility(profile.id),
+        ])
+      : [[], null];
 
   const displayName = profile.display_name || 'Someone';
   const links: ProfileLink[] = Array.isArray(profile.links) ? profile.links : [];
@@ -233,6 +238,25 @@ export default async function PublicProfilePage({
             ) : null}
           </div>
         </div>
+
+        {/* Compatibility — a read computed from both your behaviors, shown only
+            because you and {name} both turned it on. Neither of you sees the
+            other's underlying evidence, just this result. */}
+        {compatibility ? (
+          <section>
+            <div className="rounded-card border border-terracotta/40 bg-terracotta-soft/50 p-4">
+              <h3 className="mb-1 flex items-center gap-2 text-xs font-bold uppercase tracking-wide text-terracotta-deep">
+                <Icon name="sparkle" size={14} />
+                How you two fit
+              </h3>
+              <p className="text-sm leading-relaxed text-ink">{compatibility.summary}</p>
+              <p className="mt-1.5 text-[11px] text-ink-faint">
+                Computed from what you both do — visible because you each turned
+                compatibility on.
+              </p>
+            </div>
+          </section>
+        ) : null}
 
         {/* Shared reads — revealed-preference signals this person chose to show
             their connections. Summary lines only; the evidence stays private. */}

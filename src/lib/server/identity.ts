@@ -16,12 +16,18 @@ import {
   type Feeling,
 } from '@/lib/engine/identity';
 
+export type Verdict = 'confirmed' | 'rejected' | null;
+
 export interface FacetPref {
   hidden: boolean;
   sharedWithConnections: boolean;
+  verdict: Verdict;
 }
 
 export interface DisplayFacet extends Facet, FacetPref {}
+
+const FEELING_VALUE: Record<Feeling, number> = { filled: 1, neutral: 0, drained: -1 };
+const DAY_MS = 86_400_000;
 
 /** Local hour 0–23 of an ISO instant in the given IANA zone; null on bad input. */
 function localHour(iso: string | null, timeZone: string): number | null {
@@ -71,10 +77,11 @@ export async function loadMyIdentity(): Promise<DisplayFacet[]> {
     { count: circlesOwned },
     { data: matchRows },
     { data: prefRows },
+    { data: settingRows },
   ] = await Promise.all([
     supabase
       .from('profiles')
-      .select('interests, down_to, timezone')
+      .select('interests, down_to, timezone, quiet_hours_start')
       .eq('id', user.id)
       .maybeSingle(),
     supabase
@@ -101,10 +108,18 @@ export async function loadMyIdentity(): Promise<DisplayFacet[]> {
       .from('matches')
       .select('activity')
       .or(`user_a.eq.${user.id},user_b.eq.${user.id}`),
-    supabase.from('facet_prefs').select('facet_key, hidden, shared_with_connections'),
+    supabase.from('facet_prefs').select('facet_key, hidden, shared_with_connections, verdict'),
+    supabase.from('operator_settings').select('setting_key, enabled'),
   ]);
 
+  const enabledFeatures = new Set(
+    (settingRows ?? [])
+      .filter((s) => s.enabled)
+      .map((s) => s.setting_key as string),
+  );
+
   const timeZone = profile?.timezone || 'UTC';
+  const now = Date.now();
 
   // Headcount is only knowable for events the owner hosted (RLS hides other
   // hosts' invite lists), so size is best-effort; the engine tolerates null.
@@ -137,6 +152,11 @@ export async function loadMyIdentity(): Promise<DisplayFacet[]> {
   let invitesAccepted = 0;
   let invitesResolved = 0;
   const attendedTitles: string[] = [];
+  // Seasons: yeses in the last 30 days vs. the 30 before that.
+  let recentAccepts = 0;
+  let earlierAccepts = 0;
+  // Divergence: histogram of the local hour of the plans you actually accept.
+  const acceptedHourCounts = { daytime: 0, evening: 0, 'late night': 0 };
   for (const inv of inviteRows ?? []) {
     const status = inv.status as string;
     const ev = one<{ title: string | null; starts_at: string | null }>(inv.event);
@@ -146,6 +166,17 @@ export async function loadMyIdentity(): Promise<DisplayFacet[]> {
     if (status === 'accepted') {
       invitesAccepted += 1;
       if (ev?.title) attendedTitles.push(ev.title);
+      const resp = inv.responded_at ? Date.parse(inv.responded_at as string) : NaN;
+      if (Number.isFinite(resp)) {
+        const ageDays = (now - resp) / DAY_MS;
+        if (ageDays <= 30) recentAccepts += 1;
+        else if (ageDays <= 60) earlierAccepts += 1;
+      }
+      const h = localHour(ev?.starts_at ?? null, timeZone);
+      if (h !== null) {
+        const label = h >= 5 && h < 17 ? 'daytime' : h >= 17 && h < 22 ? 'evening' : 'late night';
+        acceptedHourCounts[label] += 1;
+      }
     }
     if (status === 'accepted' || status === 'declined') {
       const sent = inv.sent_at ? Date.parse(inv.sent_at as string) : NaN;
@@ -181,6 +212,49 @@ export async function loadMyIdentity(): Promise<DisplayFacet[]> {
     ...(matchRows ?? []).map((m) => m.activity as string),
   ];
 
+  // Contexts (#3): average feeling in intimate rooms vs. crowds, by size.
+  const solo = { sum: 0, n: 0 };
+  const group = { sum: 0, n: 0 };
+  for (const s of energy) {
+    if (s.size === null) continue;
+    if (s.size <= 3) {
+      solo.sum += FEELING_VALUE[s.feeling];
+      solo.n += 1;
+    } else if (s.size >= 6) {
+      group.sum += FEELING_VALUE[s.feeling];
+      group.n += 1;
+    }
+  }
+
+  // Divergence (#1): declared chronotype (from quiet-hours) vs. the time of day
+  // you actually accept plans. Only a clear contradiction becomes a claim.
+  const qhStart = profile?.quiet_hours_start as number | null | undefined;
+  const declaredChronotype =
+    qhStart === null || qhStart === undefined
+      ? null
+      : qhStart >= 23 || qhStart <= 1
+      ? 'a night owl'
+      : qhStart <= 21
+      ? 'an early night'
+      : null;
+  const revealedTime = (
+    Object.entries(acceptedHourCounts) as [keyof typeof acceptedHourCounts, number][]
+  ).sort((a, b) => b[1] - a[1])[0];
+  const revealedChronotype =
+    revealedTime && revealedTime[1] > 0 ? revealedTime[0] : null;
+  const chronotypeContradicts =
+    (declaredChronotype === 'a night owl' && revealedChronotype === 'daytime') ||
+    (declaredChronotype === 'an early night' && revealedChronotype === 'late night');
+  const divergenceClaims = chronotypeContradicts
+    ? [
+        {
+          label: 'yeses',
+          declared: declaredChronotype!,
+          revealed: revealedChronotype!,
+        },
+      ]
+    : [];
+
   const facets = computeFacets({
     energy,
     tempo,
@@ -192,6 +266,21 @@ export async function loadMyIdentity(): Promise<DisplayFacet[]> {
       invitesResolved,
     },
     interests: { professed, evidence },
+    divergence: { claims: divergenceClaims },
+    seasons: {
+      recentAccepts,
+      earlierAccepts,
+      recentDrainedShare: null,
+      earlierDrainedShare: null,
+      windowLabel: 'month',
+    },
+    contexts: {
+      soloAvg: solo.n > 0 ? solo.sum / solo.n : null,
+      soloN: solo.n,
+      groupAvg: group.n > 0 ? group.sum / group.n : null,
+      groupN: group.n,
+    },
+    enabledFeatures,
   });
 
   // Refresh the cache: full replace is safe because prefs live separately.
@@ -215,6 +304,7 @@ export async function loadMyIdentity(): Promise<DisplayFacet[]> {
     prefs.set(p.facet_key as string, {
       hidden: Boolean(p.hidden),
       sharedWithConnections: Boolean(p.shared_with_connections),
+      verdict: (p.verdict as Verdict) ?? null,
     });
   }
 
@@ -222,7 +312,50 @@ export async function loadMyIdentity(): Promise<DisplayFacet[]> {
     ...f,
     hidden: prefs.get(f.key)?.hidden ?? false,
     sharedWithConnections: prefs.get(f.key)?.sharedWithConnections ?? false,
+    verdict: prefs.get(f.key)?.verdict ?? null,
   }));
+}
+
+export interface OperatorSetting {
+  key: string;
+  enabled: boolean;
+}
+
+/** The caller's operator settings, defaulted so every known key has a value. */
+export async function loadOperatorSettings(): Promise<Record<string, boolean>> {
+  const supabase = await createClient();
+  const { data } = await supabase.from('operator_settings').select('setting_key, enabled');
+  const out: Record<string, boolean> = {};
+  for (const row of data ?? []) out[row.setting_key as string] = Boolean(row.enabled);
+  return out;
+}
+
+/** Whether the caller has enough behavioral history for a worthwhile reflection. */
+export async function reflectionReady(): Promise<boolean> {
+  const supabase = await createClient();
+  const { count } = await supabase
+    .from('identity_facets')
+    .select('facet_key', { count: 'exact', head: true });
+  return (count ?? 0) >= 3;
+}
+
+export interface Reflection {
+  id: string;
+  kind: string;
+  body: string;
+  source: string;
+  created_at: string;
+}
+
+/** The caller's saved reflections, newest first. */
+export async function loadReflections(): Promise<Reflection[]> {
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from('identity_reflections')
+    .select('id, kind, body, source, created_at')
+    .order('created_at', { ascending: false })
+    .limit(5);
+  return (data as Reflection[] | null) ?? [];
 }
 
 export interface SharedFacet {
@@ -238,4 +371,22 @@ export async function loadSharedFacets(targetId: string): Promise<SharedFacet[]>
   const supabase = await createClient();
   const { data } = await supabase.rpc('shared_facets_of', { p_target: targetId });
   return (data as SharedFacet[] | null) ?? [];
+}
+
+export interface Compatibility {
+  summary: string;
+  basis: string[];
+}
+
+/**
+ * A consented compatibility read between the caller and `targetId`. Non-null
+ * only when both are connected and both turned on 'facet_compatibility'; the
+ * database computes it from both users' facets and returns only the summary.
+ */
+export async function loadCompatibility(targetId: string): Promise<Compatibility | null> {
+  const supabase = await createClient();
+  const { data } = await supabase.rpc('compatibility_between', { p_other: targetId });
+  const row = Array.isArray(data) ? data[0] : data;
+  if (!row?.summary) return null;
+  return { summary: row.summary as string, basis: (row.basis as string[]) ?? [] };
 }

@@ -6,9 +6,11 @@ import { Card } from '@/components/ui/Card';
 import { Icon } from '@/components/ui/Icon';
 import { useToast } from '@/components/ui/Toast';
 import { EmptyState } from '@/components/ui/EmptyState';
-import { setFacetPref } from '@/lib/actions/identity';
-import type { DisplayFacet } from '@/lib/server/identity';
-import type { Confidence } from '@/lib/engine/identity';
+import { setFacetPref, setFacetVerdict } from '@/lib/actions/identity';
+import type { DisplayFacet, Reflection } from '@/lib/server/identity';
+import { OPTIONAL_FACETS, type Confidence } from '@/lib/engine/identity';
+import { OperatorSettings } from './OperatorSettings';
+import { Reflections } from './Reflections';
 
 const CONF_STYLE: Record<Confidence, string> = {
   emerging: 'bg-cream text-ink-faint',
@@ -22,20 +24,34 @@ const CONF_LABEL: Record<Confidence, string> = {
   strong: 'A clear pattern',
 };
 
-export function YouClient({ facets }: { facets: DisplayFacet[] }) {
-  const visible = facets.filter((f) => !f.hidden);
-  const hidden = facets.filter((f) => f.hidden);
+interface YouClientProps {
+  facets: DisplayFacet[];
+  settings: Record<string, boolean>;
+  reflections: Reflection[];
+  reflectionReady: boolean;
+}
+
+export function YouClient({
+  facets,
+  settings,
+  reflections,
+  reflectionReady,
+}: YouClientProps) {
+  // A rejected facet ("not me") is set aside just like a hidden one, but labeled
+  // differently — the model heard you, and keeps the correction as signal.
+  const visible = facets.filter((f) => !f.hidden && f.verdict !== 'rejected');
+  const setAside = facets.filter((f) => f.hidden || f.verdict === 'rejected');
 
   return (
     <div className="space-y-6">
       <p className="text-sm leading-relaxed text-ink-soft">
         This is the you that Switchboard can see from what you actually do — the
         plans you say yes and no to, the circles you show up for, and how you
-        feel afterward. It&apos;s a mirror only you hold. Nothing here is shared
-        unless you choose to share it.
+        feel afterward. It&apos;s a mirror only you hold. Every read is a
+        hunch you can confirm or wave off, and nothing is shared unless you say so.
       </p>
 
-      {visible.length === 0 && hidden.length === 0 ? (
+      {facets.length === 0 ? (
         <EmptyState
           emoji="🪞"
           title="Nothing to reflect yet"
@@ -55,18 +71,22 @@ export function YouClient({ facets }: { facets: DisplayFacet[] }) {
         <FacetCard key={facet.key} facet={facet} />
       ))}
 
-      {hidden.length > 0 ? (
+      {setAside.length > 0 ? (
         <details className="rounded-card border border-line bg-card/60 px-4 py-3">
           <summary className="cursor-pointer text-sm font-semibold text-ink-faint">
-            {hidden.length} hidden {hidden.length === 1 ? 'read' : 'reads'}
+            {setAside.length} set aside
           </summary>
           <div className="mt-3 space-y-2">
-            {hidden.map((facet) => (
-              <HiddenRow key={facet.key} facet={facet} />
+            {setAside.map((facet) => (
+              <SetAsideRow key={facet.key} facet={facet} />
             ))}
           </div>
         </details>
       ) : null}
+
+      <Reflections reflections={reflections} ready={reflectionReady} />
+
+      <OperatorSettings settings={settings} />
     </div>
   );
 }
@@ -75,7 +95,9 @@ function FacetCard({ facet }: { facet: DisplayFacet }) {
   const toast = useToast();
   const [pending, startTransition] = useTransition();
   const [shared, setShared] = useState(facet.sharedWithConnections);
+  const [verdict, setVerdict] = useState(facet.verdict);
   const [open, setOpen] = useState(false);
+  const isOptional = Boolean(OPTIONAL_FACETS[facet.key]);
 
   function toggleShare() {
     const next = !shared;
@@ -98,11 +120,36 @@ function FacetCard({ facet }: { facet: DisplayFacet }) {
     });
   }
 
+  function judge(next: 'confirmed' | 'rejected') {
+    // Confirming toggles off if already confirmed; rejecting sets it aside.
+    const value = verdict === next ? null : next;
+    setVerdict(value);
+    startTransition(async () => {
+      const res = await setFacetVerdict(facet.key, value);
+      if (!res.ok) {
+        setVerdict(verdict);
+        toast.error('Could not save that');
+      } else if (value === 'confirmed') {
+        toast.success('Noted — that’s you');
+      }
+    });
+  }
+
   return (
     <Card lifted className="space-y-3">
       <div className="flex items-start justify-between gap-3">
-        <div>
+        <div className="flex flex-wrap items-center gap-2">
           <h2 className="font-display text-lg text-ink">{facet.title}</h2>
+          {isOptional ? (
+            <span className="rounded-pill bg-cream px-1.5 py-0.5 text-[10px] font-bold text-ink-faint">
+              Optional read · on
+            </span>
+          ) : null}
+          {verdict === 'confirmed' ? (
+            <span className="inline-flex items-center gap-0.5 rounded-pill bg-sage-soft px-1.5 py-0.5 text-[10px] font-bold text-sage-deep">
+              <Icon name="check" size={10} /> That’s you
+            </span>
+          ) : null}
         </div>
         <span
           className={`shrink-0 rounded-pill px-2 py-0.5 text-[10px] font-bold ${CONF_STYLE[facet.confidence]}`}
@@ -114,6 +161,32 @@ function FacetCard({ facet }: { facet: DisplayFacet }) {
       <p className="text-[15px] leading-relaxed text-ink">{facet.summary}</p>
 
       <FacetEvidence facet={facet} open={open} />
+
+      {/* Collaborative spine: every read is a hypothesis you confirm or wave off. */}
+      <div className="flex items-center gap-2">
+        <button
+          type="button"
+          onClick={() => judge('confirmed')}
+          disabled={pending}
+          aria-pressed={verdict === 'confirmed'}
+          className={`rounded-pill px-3 py-1 text-xs font-bold transition-colors disabled:opacity-50 ${
+            verdict === 'confirmed'
+              ? 'bg-sage text-white'
+              : 'bg-cream text-ink-soft hover:bg-sage-soft'
+          }`}
+        >
+          That’s me
+        </button>
+        <button
+          type="button"
+          onClick={() => judge('rejected')}
+          disabled={pending}
+          aria-pressed={verdict === 'rejected'}
+          className="rounded-pill bg-cream px-3 py-1 text-xs font-bold text-ink-soft transition-colors hover:bg-rose-soft disabled:opacity-50"
+        >
+          Not quite
+        </button>
+      </div>
 
       <div className="flex items-center justify-between border-t border-line pt-3">
         <button
@@ -163,25 +236,33 @@ function FacetCard({ facet }: { facet: DisplayFacet }) {
   );
 }
 
-function HiddenRow({ facet }: { facet: DisplayFacet }) {
+function SetAsideRow({ facet }: { facet: DisplayFacet }) {
   const toast = useToast();
   const [pending, startTransition] = useTransition();
+  const rejected = facet.verdict === 'rejected';
 
   function restore() {
     startTransition(async () => {
-      const res = await setFacetPref(facet.key, { hidden: false });
+      const res = rejected
+        ? await setFacetVerdict(facet.key, null)
+        : await setFacetPref(facet.key, { hidden: false });
       if (!res.ok) toast.error('Could not restore this');
     });
   }
 
   return (
     <div className="flex items-center justify-between gap-3 rounded-btn bg-cream px-3 py-2">
-      <span className="text-sm text-ink-soft">{facet.title}</span>
+      <span className="min-w-0">
+        <span className="block truncate text-sm text-ink-soft">{facet.title}</span>
+        <span className="text-[10px] font-semibold uppercase tracking-wide text-ink-faint">
+          {rejected ? 'You said not you' : 'Hidden'}
+        </span>
+      </span>
       <button
         type="button"
         onClick={restore}
         disabled={pending}
-        className="text-xs font-semibold text-terracotta-deep disabled:opacity-50"
+        className="shrink-0 text-xs font-semibold text-terracotta-deep disabled:opacity-50"
       >
         Restore
       </button>

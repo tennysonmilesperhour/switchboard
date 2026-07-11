@@ -2,7 +2,12 @@ import type { Metadata } from 'next';
 import { redirect } from 'next/navigation';
 import { getUser } from '@/lib/supabase/server';
 import { AppShell } from '@/components/shell/AppShell';
-import { loadMyIdentity } from '@/lib/server/identity';
+import {
+  loadMyIdentity,
+  loadOperatorSettings,
+  loadReflections,
+  reflectionReady,
+} from '@/lib/server/identity';
 import { YouClient } from './YouClient';
 
 export const metadata: Metadata = { title: 'Your Read' };
@@ -14,11 +19,22 @@ export default async function YouPage() {
   const user = await getUser();
   if (!user) redirect('/login');
 
+  // Facets must compute first so reflection-readiness reflects this visit.
   const facets = await loadMyIdentity();
+  const [settings, reflections, ready] = await Promise.all([
+    loadOperatorSettings(),
+    loadReflections(),
+    reflectionReady(),
+  ]);
 
   return (
     <AppShell title="Your Read" back="/profile">
-      <YouClient facets={facets} />
+      <YouClient
+        facets={facets}
+        settings={settings}
+        reflections={reflections}
+        reflectionReady={ready}
+      />
     </AppShell>
   );
 }

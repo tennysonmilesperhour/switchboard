@@ -23,8 +23,19 @@ export const FACET_KEYS = [
   'cadence',
   'circle_gravity',
   'interest_alignment',
+  'divergence',
+  'seasons',
+  'contexts',
 ] as const;
 export type FacetKey = (typeof FACET_KEYS)[number];
+
+/**
+ * Facets the user must explicitly turn on (they're more pointed, so they're
+ * opt-in). Each carries the operator_settings key that gates it.
+ */
+export const OPTIONAL_FACETS: Partial<Record<FacetKey, string>> = {
+  divergence: 'facet_divergence',
+};
 
 export interface Facet {
   key: FacetKey;
@@ -167,7 +178,9 @@ export function computeEnergyMap(samples: EnergySample[]): Facet | null {
   } else if (counts.filled >= counts.drained) {
     summary = `You mostly come away from plans filled — ${counts.filled} of your last ${samples.length} left you better than you arrived.`;
   } else {
-    summary = `Lately more plans have drained you than filled you. Worth noticing what kind.`;
+    // Not every drain is a mistake — some of it is the good, stretching kind.
+    // Name the pattern without prescribing that you avoid it.
+    summary = `A lot of your recent plans have taken more than they gave back. Some of that's worth it; the map below is just so you can tell which.`;
   }
 
   return {
@@ -372,6 +385,129 @@ export function computeInterestAlignment(input: InterestInputs): Facet | null {
   };
 }
 
+// ———————————————————————————— divergence (#1) ————————————————————————————
+// The gap between who you *said* you are and who your behavior says you are.
+// This is the most pointed read, so it's opt-in. It draws only on signals you
+// declared vs. signals you produced — never a value judgment.
+
+export interface DivergenceInputs {
+  /** Declared self-descriptions worth checking against behavior. */
+  claims: { label: string; declared: string; revealed: string | null }[];
+}
+
+export function computeDivergence(input: DivergenceInputs): Facet | null {
+  const gaps = input.claims.filter(
+    (c) => c.revealed !== null && norm(c.declared) !== norm(c.revealed),
+  );
+  if (gaps.length === 0) return null;
+
+  const first = gaps[0];
+  const summary =
+    gaps.length === 1
+      ? `You describe yourself as ${first.declared.toLowerCase()}, but your ${first.label} lean ${first.revealed!.toLowerCase()}.`
+      : `A couple of places where the you on paper and the you in practice don't line up — starting with ${first.label}.`;
+
+  return {
+    key: 'divergence',
+    title: 'On paper vs. in practice',
+    summary,
+    detail: { gaps },
+    confidence: confidenceFor(gaps.length * 4),
+    sampleSize: gaps.length,
+  };
+}
+
+// ————————————————————————————— seasons (#2) —————————————————————————————
+// Identity as a trajectory, not a snapshot. Frames change as a *season*, not a
+// scoreboard: "lately you've been more of a homebody" reads as self-knowledge;
+// a line chart of your sociability reads as surveillance.
+
+export interface SeasonInputs {
+  /** Accepted-invite counts, older window then recent window (same length). */
+  recentAccepts: number;
+  earlierAccepts: number;
+  recentDrainedShare: number | null; // 0–1 over the recent window
+  earlierDrainedShare: number | null;
+  windowLabel: string; // e.g. "month"
+}
+
+export function computeSeasons(input: SeasonInputs): Facet | null {
+  const total = input.recentAccepts + input.earlierAccepts;
+  if (total < 4) return null;
+
+  const delta = input.recentAccepts - input.earlierAccepts;
+  const dir =
+    delta > Math.max(1, input.earlierAccepts * 0.3)
+      ? 'out more'
+      : delta < -Math.max(1, input.earlierAccepts * 0.3)
+      ? 'pulling inward'
+      : 'holding steady';
+
+  let summary: string;
+  if (dir === 'out more') {
+    summary = `This ${input.windowLabel} you've been saying yes more than the one before — a more outward season.`;
+  } else if (dir === 'pulling inward') {
+    summary = `You've been pulling inward this ${input.windowLabel} — fewer yeses than the ${input.windowLabel} before. Could be a quieter season by design.`;
+  } else {
+    summary = `Your rhythm's been steady across the last couple of ${input.windowLabel}s.`;
+  }
+
+  return {
+    key: 'seasons',
+    title: 'The season you’re in',
+    summary,
+    detail: {
+      recentAccepts: input.recentAccepts,
+      earlierAccepts: input.earlierAccepts,
+      direction: dir,
+      recentDrainedShare: input.recentDrainedShare,
+      earlierDrainedShare: input.earlierDrainedShare,
+    },
+    confidence: confidenceFor(total),
+    sampleSize: total,
+  };
+}
+
+// ————————————————————————————— contexts (#3) —————————————————————————————
+// Who you are in different rooms. Legitimate self-knowledge — but strictly by
+// *context* (one-on-one vs. a crowd), never by named person. The model does not
+// and must not say "X drains you"; only "you're different in big rooms vs. small".
+
+export interface ContextInputs {
+  /** Average feeling (−1..1) in intimate settings (1:1s, rituals, matches). */
+  soloAvg: number | null;
+  soloN: number;
+  /** Average feeling (−1..1) in group settings. */
+  groupAvg: number | null;
+  groupN: number;
+}
+
+export function computeContexts(input: ContextInputs): Facet | null {
+  if (input.soloN < 2 || input.groupN < 2) return null;
+  if (input.soloAvg === null || input.groupAvg === null) return null;
+  if (Math.abs(input.soloAvg - input.groupAvg) < 0.4) return null;
+
+  const intimate = input.soloAvg > input.groupAvg;
+  const summary = intimate
+    ? `You're most yourself one-on-one — smaller rooms leave you fuller than crowds do.`
+    : `Crowds light you up more than quiet one-on-ones do — you come alive in a full room.`;
+
+  return {
+    key: 'contexts',
+    title: 'Who you are in different rooms',
+    summary,
+    detail: {
+      soloAvg: input.soloAvg,
+      soloN: input.soloN,
+      groupAvg: input.groupAvg,
+      groupN: input.groupN,
+      leansIntimate: intimate,
+    },
+    confidence: confidenceFor(input.soloN + input.groupN),
+    sampleSize: input.soloN + input.groupN,
+  };
+}
+
 // ————————————————————————————— aggregate —————————————————————————————
 
 export interface IdentityInputs {
@@ -379,14 +515,27 @@ export interface IdentityInputs {
   tempo: TempoSample[];
   circles: CircleInputs;
   interests: InterestInputs;
+  divergence: DivergenceInputs;
+  seasons: SeasonInputs;
+  contexts: ContextInputs;
+  /** operator_settings keys that are enabled — gates the optional facets. */
+  enabledFeatures: Set<string>;
 }
 
 /** Compute every facet that has enough evidence to exist. Order is stable. */
 export function computeFacets(input: IdentityInputs): Facet[] {
-  return [
+  const all = [
     computeEnergyMap(input.energy),
     computeCadence(input.tempo),
     computeCircleGravity(input.circles),
     computeInterestAlignment(input.interests),
-  ].filter((f): f is Facet => f !== null);
+    computeSeasons(input.seasons),
+    computeContexts(input.contexts),
+    computeDivergence(input.divergence),
+  ];
+  return all.filter((f): f is Facet => {
+    if (f === null) return false;
+    const gate = OPTIONAL_FACETS[f.key];
+    return gate ? input.enabledFeatures.has(gate) : true;
+  });
 }

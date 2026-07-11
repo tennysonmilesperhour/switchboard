@@ -4,6 +4,9 @@ import {
   computeCadence,
   computeCircleGravity,
   computeInterestAlignment,
+  computeDivergence,
+  computeSeasons,
+  computeContexts,
   computeFacets,
   confidenceFor,
   type EnergySample,
@@ -167,24 +170,131 @@ describe('computeInterestAlignment', () => {
   });
 });
 
+describe('computeDivergence', () => {
+  it('surfaces only claims that contradict behavior', () => {
+    const facet = computeDivergence({
+      claims: [
+        { label: 'yeses', declared: 'a night owl', revealed: 'daytime' },
+        { label: 'pace', declared: 'spontaneous', revealed: 'spontaneous' },
+      ],
+    })!;
+    expect(facet.sampleSize).toBe(1);
+    expect(facet.summary.toLowerCase()).toContain('night owl');
+  });
+
+  it('returns null when nothing diverges or evidence is missing', () => {
+    expect(
+      computeDivergence({
+        claims: [{ label: 'yeses', declared: 'day', revealed: 'day' }],
+      }),
+    ).toBeNull();
+    expect(
+      computeDivergence({
+        claims: [{ label: 'yeses', declared: 'day', revealed: null }],
+      }),
+    ).toBeNull();
+  });
+});
+
+describe('computeSeasons', () => {
+  it('reads a rise in yeses as a more outward season', () => {
+    const facet = computeSeasons({
+      recentAccepts: 8,
+      earlierAccepts: 3,
+      recentDrainedShare: 0.2,
+      earlierDrainedShare: 0.1,
+      windowLabel: 'month',
+    })!;
+    expect(facet.detail.direction).toBe('out more');
+  });
+
+  it('reads a drop as pulling inward, and stays quiet on thin data', () => {
+    expect(
+      computeSeasons({
+        recentAccepts: 1,
+        earlierAccepts: 1,
+        recentDrainedShare: null,
+        earlierDrainedShare: null,
+        windowLabel: 'month',
+      }),
+    ).toBeNull();
+    const facet = computeSeasons({
+      recentAccepts: 2,
+      earlierAccepts: 9,
+      recentDrainedShare: null,
+      earlierDrainedShare: null,
+      windowLabel: 'month',
+    })!;
+    expect(facet.detail.direction).toBe('pulling inward');
+  });
+});
+
+describe('computeContexts', () => {
+  it('names the room you thrive in without naming people', () => {
+    const facet = computeContexts({
+      soloAvg: 0.8,
+      soloN: 4,
+      groupAvg: -0.2,
+      groupN: 5,
+    })!;
+    expect(facet.detail.leansIntimate).toBe(true);
+    expect(facet.summary.toLowerCase()).toContain('one-on-one');
+  });
+
+  it('stays quiet when the two contexts feel about the same', () => {
+    expect(
+      computeContexts({ soloAvg: 0.5, soloN: 3, groupAvg: 0.4, groupN: 3 }),
+    ).toBeNull();
+  });
+});
+
 describe('computeFacets', () => {
+  const base = {
+    energy: [
+      { feeling: 'filled', hour: 11, size: 3 },
+      { feeling: 'filled', hour: 12, size: 4 },
+      { feeling: 'drained', hour: 23, size: 30 },
+    ] as EnergySample[],
+    tempo: [] as TempoSample[],
+    circles: {
+      boards: [],
+      ritualsActive: 0,
+      circlesOwned: 0,
+      invitesAccepted: 0,
+      invitesResolved: 0,
+    },
+    interests: { professed: ['Jazz'], evidence: [] },
+    seasons: {
+      recentAccepts: 0,
+      earlierAccepts: 0,
+      recentDrainedShare: null,
+      earlierDrainedShare: null,
+      windowLabel: 'month',
+    },
+    contexts: { soloAvg: null, soloN: 0, groupAvg: null, groupN: 0 },
+  };
+
   it('emits only facets with enough evidence, in stable order', () => {
     const facets = computeFacets({
-      energy: [
-        { feeling: 'filled', hour: 11, size: 3 },
-        { feeling: 'filled', hour: 12, size: 4 },
-        { feeling: 'drained', hour: 23, size: 30 },
-      ],
-      tempo: [],
-      circles: {
-        boards: [],
-        ritualsActive: 0,
-        circlesOwned: 0,
-        invitesAccepted: 0,
-        invitesResolved: 0,
-      },
-      interests: { professed: ['Jazz'], evidence: [] },
+      ...base,
+      divergence: { claims: [] },
+      enabledFeatures: new Set(),
     });
     expect(facets.map((f) => f.key)).toEqual(['energy_map', 'interest_alignment']);
+  });
+
+  it('hides an optional facet until its feature is toggled on', () => {
+    const divergence = {
+      claims: [{ label: 'yeses', declared: 'a night owl', revealed: 'daytime' }],
+    };
+    const off = computeFacets({ ...base, divergence, enabledFeatures: new Set() });
+    expect(off.map((f) => f.key)).not.toContain('divergence');
+
+    const on = computeFacets({
+      ...base,
+      divergence,
+      enabledFeatures: new Set(['facet_divergence']),
+    });
+    expect(on.map((f) => f.key)).toContain('divergence');
   });
 });
