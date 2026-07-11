@@ -7,6 +7,54 @@ from working sessions. Newest thinking lives here so nothing evaporates.
 
 ---
 
+## 🧭 Strategy (the frame for everything below)
+
+**Launch city: Salt Lake City.** Still open: who are the first 100 users, and
+what do they open the app to do on day one?
+
+**The ~dozen ideas collapse into three primitives.** Most of the backlog is one
+of these wearing a costume — build each once, surface it everywhere:
+
+1. **A reachability policy** — *who can reach me, and on what terms.* Powers
+   connect-tiers, the ex-filter, Moments gates-with-exceptions, mutual reveals,
+   and get-to-know-you prefs. One engine, many surfaces.
+2. **The geo foundation** — opt-in device location + real coordinates. The
+   keystone under the map, Moments proximity, public events, verified-presence
+   Zones, and Adventure Mode. Nothing spatial exists until it's poured.
+3. **Engineered serendipity** — make real-world encounters happen *without
+   pressure*. The app's soul: meetcute → Moments → Adventure Mode → the map.
+
+**The strategic fork to decide, not drift through.** PRODUCT.md is emphatic —
+no manipulative growth loops, no status games, not a generic feed, privacy
+first. The points / tiers / public rankings / merchant-funnel / business-ads
+cluster pulls the *opposite* way from the intimacy that makes Switchboard
+different. Either (a) keep that layer late and strictly intrinsic (private
+progress, delight, invitations as reward — never pressuring leaderboards), or
+(b) consciously become a more commercial "things to do near you" product with
+intimacy as a feature. Both valid; drifting between them is the risk.
+
+**The existential gaps no feature addresses yet:**
+- **Cold-start / density.** Map, proximity, matching, Adventure Mode are all
+  worthless at low density and magical at high. What's valuable to the 30th
+  person in SLC before the 3,000th arrives?
+- **Three products in one.** Intimate coordination (cascade/circles) vs
+  stranger-serendipity (moments/map) vs local-business marketplace (Explore).
+  Different users, different trust. **Which is the wedge?**
+- **Physical-stakes safety.** Routing strangers together is a different
+  liability universe than a chat app. T&S, verification, moderation.
+- **Staying calm.** Streams + pings + quests + reconfirms can become the noisy
+  attention-machine the app is running *from.* "Calm" is a design constraint.
+- **Business model.** B2B, transactional, or subscription? Undecided; it
+  bounds what Explore may become.
+
+**Recommended sequencing.** Two tracks: (1) keep polishing the intimate core
+loop — already differentiated, works at *any* density (even two friends); this
+is the wedge unless decided otherwise. (2) Pour the geo foundation
+deliberately; treat map/serendipity/business as *expansion* gated behind
+density + safety, not the next sprint.
+
+---
+
 ## ✅ Shipped (PR #36 — branch `claude/feature-ideas-suggestions-iic2b0`)
 
 - **Opt-out host suggestions** on the plan review step. Pure, unit-tested rule
@@ -29,16 +77,22 @@ from working sessions. Newest thinking lives here so nothing evaporates.
   takes free-text custom values (interests + "down to", in Settings/Onboarding).
   First cut of the global "custom answers everywhere" principle.
 
+### Shipped (follow-up PR, off updated `main`)
+
+- **Settings autosave.** `AutosaveForm` + `AutosaveStatus` replace the per-form
+  Save buttons; changes debounce (~600ms) and submit via the same server
+  action, with an inline "Saving… / Saved ✓". `InterestPicker` emits a
+  synthetic `input` event so chip changes autosave too.
+- **Intent launchpad** (`/create`). The broad "what kind of thing is this?"
+  layer before the wizard: *I've got a plan* → wizard; *Help me figure it out*
+  → wizard with poll/`deciding` pre-enabled (`?decide=1`); *Find something to
+  do* → discover. Primary create CTAs (FAB, home, empty states) repoint here;
+  prefill deep-links still go straight to the wizard.
+
 ---
 
 ## 🛠️ Queued to build
 
-- **Settings autosave.** Replace the per-section Save buttons with
-  autosave-on-change (debounced ~600ms) + an inline "Saved ✓"; toggles save
-  instantly, text fields on blur/pause. Self-contained.
-- **Intent launchpad** (a broader, simpler layer before the 6-step wizard —
-  see design note below). *Awaiting green light.* Step 1 = the chooser screen;
-  "Help me figure it out" reuses the existing poll/`deciding` engine.
 - **Post-send cascade editing.** Edit the queued tail freely (reorder, add,
   remove, adjust windows); handle already-sent/accepted invites with explicit,
   consequence-aware actions ("skip to next", "cancel this invite"). Note the
