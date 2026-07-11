@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Chip } from '@/components/ui/Chip';
 import type { InterestGroup } from '@/lib/interests';
 
@@ -34,6 +34,19 @@ export function InterestPicker({
   const [selected, setSelected] = useState<string[]>(initialSelected);
   const [query, setQuery] = useState('');
   const [customDraft, setCustomDraft] = useState('');
+
+  // Toggling a chip changes hidden inputs programmatically, which fires no DOM
+  // event — so an enclosing AutosaveForm wouldn't notice. Emit a bubbling
+  // `input` after mount so autosave (and anything else listening) picks it up.
+  const rootRef = useRef<HTMLDivElement>(null);
+  const mounted = useRef(false);
+  useEffect(() => {
+    if (!mounted.current) {
+      mounted.current = true;
+      return;
+    }
+    rootRef.current?.dispatchEvent(new Event('input', { bubbles: true }));
+  }, [selected]);
 
   const atLimit = max != null && selected.length >= max;
 
@@ -83,7 +96,7 @@ export function InterestPicker({
   }, [groups, q]);
 
   return (
-    <div className="space-y-4">
+    <div ref={rootRef} className="space-y-4">
       {searchable && (
         <input
           type="search"
