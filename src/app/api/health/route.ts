@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createAdminClient, hasAdminCredentials } from '@/lib/supabase/admin';
 import { smsEnabled } from '@/lib/server/sms';
+import { bearerMatches } from '@/lib/server/secret';
 
 /**
  * The `<ref>` subdomain of a Supabase URL (`https://<ref>.supabase.co`) — the
@@ -19,7 +20,7 @@ function projectRef(url: string | undefined): string | null {
   }
 }
 
-export async function GET() {
+export async function GET(request: Request) {
   const checks = {
     supabasePublic: Boolean(
       process.env.NEXT_PUBLIC_SUPABASE_URL &&
@@ -35,6 +36,29 @@ export async function GET() {
       process.env.VAPID_PRIVATE_KEY,
     ),
   };
+
+  // The per-service matrix, project ref, and the admin DB probe are operator
+  // diagnostics, not public data: which integrations a deployment has wired up
+  // is reconnaissance, and the probe runs two unauthenticated service-role
+  // queries per hit. Gate all of it behind the CRON_SECRET the operator already
+  // holds; anonymous callers get only a coarse liveness boolean (env presence,
+  // no DB round-trip). Fail closed if the secret is unset.
+  const authorized = bearerMatches(
+    request.headers.get('authorization'),
+    process.env.CRON_SECRET,
+  );
+
+  if (!authorized) {
+    const envReady =
+      checks.supabasePublic && checks.supabaseAdmin && checks.appUrl && checks.cron;
+    return NextResponse.json(
+      { ok: envReady },
+      {
+        status: envReady ? 200 : 503,
+        headers: { 'Cache-Control': 'no-store' },
+      },
+    );
+  }
 
   let database = false;
   let schema = false;
