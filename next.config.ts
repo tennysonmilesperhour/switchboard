@@ -14,21 +14,10 @@ const securityHeaders = [
     key: 'Permissions-Policy',
     value: 'camera=(), microphone=(), geolocation=()',
   },
-  {
-    // Pragmatic v1 CSP. TODO: move to nonce-based script-src via proxy.ts.
-    key: 'Content-Security-Policy',
-    value: [
-      "default-src 'self'",
-      "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
-      "style-src 'self' 'unsafe-inline'",
-      "img-src 'self' data: blob: https:",
-      "font-src 'self' data:",
-      "connect-src 'self' https://*.supabase.co wss://*.supabase.co",
-      "frame-src 'none'",
-      "object-src 'none'",
-      "base-uri 'self'",
-    ].join('; '),
-  },
+  // The Content-Security-Policy is set per-request in src/proxy.ts so it can
+  // carry a fresh nonce for script-src (no 'unsafe-inline'/'unsafe-eval' in
+  // production). It must NOT also be set here: two CSP headers combine
+  // restrictively and would break the nonce policy.
 ];
 
 const nextConfig: NextConfig = {
