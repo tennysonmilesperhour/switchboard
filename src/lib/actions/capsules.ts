@@ -2,7 +2,7 @@
 
 import { revalidatePath } from 'next/cache';
 import { createClient } from '@/lib/supabase/server';
-import { isStoredMediaPath } from '@/lib/server/media';
+import { isStoredMediaPath, isOwnPublicStorageUrl } from '@/lib/server/media';
 
 export async function addCapsuleEntry(
   eventId: string,
@@ -22,11 +22,7 @@ export async function addCapsuleEntry(
   // (new uploads) or a legacy public media URL — never an arbitrary
   // attacker-supplied URL (SB-28).
   const photo = photoUrl.trim() || null;
-  if (
-    photo &&
-    !isStoredMediaPath(photo) &&
-    !/\/storage\/v1\/object\/public\/media\//.test(photo)
-  ) {
+  if (photo && !isStoredMediaPath(photo) && !isOwnPublicStorageUrl(photo, ['media'])) {
     return { ok: false, error: 'Unexpected image location — please re-upload.' };
   }
 

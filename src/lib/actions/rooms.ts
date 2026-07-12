@@ -59,21 +59,3 @@ export async function toggleTask(
   revalidatePath(`/rooms/${roomId}`);
 }
 
-export async function addRoomNote(
-  roomId: string,
-  title: string,
-): Promise<{ ok: boolean }> {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user || !title.trim()) return { ok: false };
-  await supabase.from('room_items').insert({
-    room_id: roomId,
-    kind: 'note',
-    title: title.trim().slice(0, 120),
-    created_by: user.id,
-  });
-  revalidatePath(`/rooms/${roomId}`);
-  return { ok: true };
-}

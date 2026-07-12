@@ -20,13 +20,6 @@ export function formatDate(iso: string | null): string {
   }).format(new Date(iso));
 }
 
-export function formatTime(iso: string): string {
-  return new Intl.DateTimeFormat('en-US', {
-    hour: 'numeric',
-    minute: '2-digit',
-  }).format(new Date(iso));
-}
-
 export function formatWindow(minutes: number): string {
   if (minutes < 60) return `${minutes} min`;
   if (minutes < 24 * 60) {

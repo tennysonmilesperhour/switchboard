@@ -333,11 +333,6 @@ export async function loadMyIdentity(): Promise<DisplayFacet[]> {
   }));
 }
 
-export interface OperatorSetting {
-  key: string;
-  enabled: boolean;
-}
-
 /** The caller's operator settings, defaulted so every known key has a value. */
 export async function loadOperatorSettings(): Promise<Record<string, boolean>> {
   const supabase = await createClient();

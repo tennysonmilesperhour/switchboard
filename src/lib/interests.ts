@@ -138,8 +138,3 @@ export const DOWN_TO_GROUP: InterestGroup = {
     'Bike ride', 'Explore the city', 'Grab a call', 'Study session',
   ],
 };
-
-/** The full set of interest option strings — handy for validation/search. */
-export const ALL_INTEREST_OPTIONS: string[] = INTEREST_CATEGORIES.flatMap(
-  (group) => group.options,
-);

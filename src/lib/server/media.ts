@@ -31,6 +31,17 @@ export function isValidMediaRef(ref: string): boolean {
 }
 
 /**
+ * True if `url` is a public URL into one of our own Supabase Storage buckets,
+ * e.g. `…/storage/v1/object/public/avatars/…`. The single gate for "this image
+ * lives in our storage, not an attacker-chosen origin" — used by the profile
+ * and capsule validators instead of each re-deriving the path shape.
+ */
+export function isOwnPublicStorageUrl(url: string, buckets: string[]): boolean {
+  const alt = buckets.join('|');
+  return new RegExp(`/storage/v1/object/public/(?:${alt})/`).test(url);
+}
+
+/**
  * Resolve a stored media reference to a URL the browser can load. Private-bucket
  * paths become short-lived signed URLs (minted with the service-role client, so
  * the caller must already have passed the app's row-level authorization to see
