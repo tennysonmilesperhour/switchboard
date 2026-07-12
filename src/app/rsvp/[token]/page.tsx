@@ -14,14 +14,20 @@ export async function generateMetadata({
 
   const { token } = await params;
   const admin = createAdminClient();
+  // Direct lookups rather than a PostgREST-embedded join (see the page
+  // component below) so metadata still resolves under FK/schema drift.
   const { data: invite } = await admin
     .from('invites')
-    .select('event_id, event:events(title)')
+    .select('event_id')
     .eq('guest_token', token)
-    .maybeSingle();
-  const event = invite
-    ? (Array.isArray(invite.event) ? invite.event[0] : invite.event)
-    : null;
+    .maybeSingle<{ event_id: string }>();
+  const { data: event } = invite
+    ? await admin
+        .from('events')
+        .select('title')
+        .eq('id', invite.event_id)
+        .maybeSingle<{ title: string }>()
+    : { data: null };
   const title = event?.title ? `You’re invited: ${event.title}` : 'You’re invited';
   return {
     title,
@@ -55,14 +61,57 @@ export default async function GuestRsvpPage({
     throw new Error('Guest RSVP is unavailable: server is misconfigured');
   }
 
-  const { data: invite } = admin
+  // Fetch the invite, its event, and the host as three direct lookups by id
+  // rather than one PostgREST-embedded join. The embedded form
+  // (`event:events(..., host:profiles(...))`) depends on the invites→events and
+  // events→profiles foreign keys being resolvable in *this* database; a
+  // deployment whose DB has FK/schema drift makes that query error, and because
+  // the error was previously discarded, every guest link silently rendered
+  // "isn't here anymore." Lookups by primary key are immune to that, and we now
+  // surface a genuine query error (logged + error boundary) instead of
+  // swallowing it into a fake not-found. A truly missing token still returns a
+  // null row with no error, so the friendly not-found copy still shows.
+  const { data: invite, error: inviteError } = admin
     ? await admin
         .from('invites')
-        .select(
-          'id, event_id, status, guest_name, event:events(title, description, location_name, starts_at, host:profiles(display_name))',
-        )
+        .select('id, event_id, status, guest_name')
         .eq('guest_token', token)
-        .maybeSingle()
+        .maybeSingle<{
+          id: string;
+          event_id: string;
+          status: string;
+          guest_name: string | null;
+        }>()
+    : { data: null, error: null };
+  if (inviteError) {
+    await reportOperationalError('rsvp.invite-lookup', inviteError, {});
+    throw new Error('Guest RSVP lookup failed');
+  }
+
+  const { data: event, error: eventError } = invite && admin
+    ? await admin
+        .from('events')
+        .select('title, description, location_name, starts_at, host_id')
+        .eq('id', invite.event_id)
+        .maybeSingle<{
+          title: string;
+          description: string | null;
+          location_name: string | null;
+          starts_at: string | null;
+          host_id: string;
+        }>()
+    : { data: null, error: null };
+  if (eventError) {
+    await reportOperationalError('rsvp.event-lookup', eventError, {});
+    throw new Error('Guest RSVP lookup failed');
+  }
+
+  const { data: host } = event && admin
+    ? await admin
+        .from('profiles')
+        .select('display_name')
+        .eq('id', event.host_id)
+        .maybeSingle<{ display_name: string }>()
     : { data: null };
 
   // Host-defined RSVP questions, if any.
@@ -78,21 +127,6 @@ export default async function GuestRsvpPage({
     prompt: q.prompt as string,
     required: q.required as boolean,
   }));
-
-  const event = invite
-    ? ((Array.isArray(invite.event) ? invite.event[0] : invite.event) as {
-        title: string;
-        description: string | null;
-        location_name: string | null;
-        starts_at: string | null;
-        host: { display_name: string } | Array<{ display_name: string }> | null;
-      } | null)
-    : null;
-  const host = event
-    ? Array.isArray(event.host)
-      ? event.host[0]
-      : event.host
-    : null;
 
   return (
     <div className="mx-auto max-w-lg min-h-dvh flex flex-col px-6">
