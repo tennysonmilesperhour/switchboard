@@ -42,7 +42,7 @@ export function HostControls({ event, pollDecided }: HostControlsProps) {
       if (clip) {
         try {
           const uploaded = await uploadAudio(clip.blob, clip.durationSeconds);
-          voiceUrl = uploaded.url;
+          voiceUrl = uploaded.path;
         } catch (uploadError) {
           toast.error(
             uploadError instanceof Error ? uploadError.message : 'Could not upload the voice note.',

@@ -205,22 +205,39 @@ integrations a deployment has wired up is reconnaissance, not public data.
 - `supabase/tests/launch_hardening.test.sql` — least-privilege on definer
   functions and durable rate limiting.
 
+## Media privacy (gated content)
+
+Access-gated media (event-thread and cancellation voice notes, capsule photos)
+lives in the **private** `media-private` bucket, which has no public-read policy.
+Uploads (`/api/uploads/*`) return a storage **path**, which is what gets stored
+in the DB column. The render site — always a server component that has already
+passed the row's RLS gate — mints a short-lived signed URL with `signMediaRef()`
+(`src/lib/server/media.ts`) just before rendering, so a viewer must pass the
+app's authorization to ever receive a URL. `signMediaRef` also passes through
+legacy/external `https://` values unchanged, so old public-bucket rows keep
+working. Genuinely public media (profile avatars/covers, event covers) stays in
+the public buckets. When adding a new gated-media surface, upload to
+`media-private` and sign at the (server) render site — never store or render a
+public URL for gated content.
+
 ## Known residual risks / follow-ups
 
 These are accepted or deferred, documented so they aren't rediscovered as
 surprises:
 
-- **Public media bucket (F4).** RSVP-gated voice notes and capsule photos live
-  in a public bucket; access is gated by the row (DB) but the underlying object
-  is fetchable by anyone with the unguessable URL. Moving thread/cancellation
-  voice notes and capsule media to a private bucket with signed URLs is the
-  proper fix.
 - **Room member add (F3, reduced).** Bare user-created rooms are no longer
   possible (the `rooms_insert` policy was removed; rooms are minted only by
   definer flows). A legitimate event host can still add a member to their own
   event's Living Room; fully consent-gating that needs a product change.
-- **CSP allows `unsafe-inline`/`unsafe-eval`** in `next.config.ts` (pragmatic
-  v1). Moving to nonce-based `script-src` removes an XSS amplifier.
+- **`style-src 'unsafe-inline'`.** `script-src` is nonce-locked with no
+  `'unsafe-inline'`/`'unsafe-eval'` in production (`src/proxy.ts`), but
+  `style-src` keeps `'unsafe-inline'` because inline `style={{…}}` attributes
+  are pervasive and CSP nonces don't cover style attributes. Style injection is
+  far lower risk than script injection.
 - **OG image route** renders public event metadata (title/time/location) for any
   event id without auth by design (link unfurling). Keep it to non-sensitive
   fields only.
+- **Legacy public media objects.** Rows created before the private-bucket
+  migration still point at public URLs; `signMediaRef` serves them as-is. A
+  one-time copy of existing `capsule-`/`voice-` objects into `media-private`
+  would retroactively secure them.

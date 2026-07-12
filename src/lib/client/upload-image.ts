@@ -6,7 +6,7 @@ export async function uploadImage({
   pathPrefix,
 }: {
   file: File;
-  bucket: 'media' | 'avatars' | 'covers';
+  bucket: 'media' | 'avatars' | 'covers' | 'media-private';
   pathPrefix: string;
 }): Promise<string> {
   const formData = new FormData();
@@ -20,12 +20,16 @@ export async function uploadImage({
   });
   const body = (await response.json().catch(() => null)) as {
     url?: string;
+    path?: string;
     error?: string;
   } | null;
 
-  if (!response.ok || !body?.url) {
+  // Public buckets return a URL; the private bucket returns a storage path that
+  // the render site signs. Either way the caller stores the returned reference.
+  const ref = body?.url ?? body?.path;
+  if (!response.ok || !ref) {
     throw new Error(body?.error ?? 'Upload failed. Check your connection and try again.');
   }
 
-  return body.url;
+  return ref;
 }

@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { notifyUsers } from '@/lib/server/notify';
+import { isValidMediaRef } from '@/lib/server/media';
 import type { SwitchboardEvent } from '@/lib/types';
 
 export interface ThreadResult {
@@ -17,13 +18,6 @@ interface CommentInput {
   voiceDurationSeconds?: number | null;
 }
 
-function isHttpsUrl(value: string): boolean {
-  try {
-    return new URL(value).protocol === 'https:';
-  } catch {
-    return false;
-  }
-}
 
 /**
  * Post to an event thread — text, a voice note, or both. Two-way commentary,
@@ -48,7 +42,7 @@ export async function postComment(
 
   if (!trimmed && !voiceUrl) return { ok: false, error: 'Add a message or a voice note.' };
   if (trimmed.length > 2000) return { ok: false, error: 'That’s a bit long' };
-  if (voiceUrl && !isHttpsUrl(voiceUrl)) {
+  if (voiceUrl && !isValidMediaRef(voiceUrl)) {
     return { ok: false, error: 'That voice note could not be saved.' };
   }
 

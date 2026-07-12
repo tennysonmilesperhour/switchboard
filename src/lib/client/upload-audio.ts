@@ -1,12 +1,14 @@
 export interface UploadedVoiceNote {
-  url: string;
+  /** Storage path in the private bucket; the render site signs it. */
+  path: string;
   durationSeconds: number;
 }
 
 /**
- * Upload a recorded voice note to the `media` bucket via `/api/uploads/audio`.
- * Returns the public URL plus the duration (measured while recording) so the
- * player can show it without probing the file.
+ * Upload a recorded voice note to the private `media-private` bucket via
+ * `/api/uploads/audio`. Returns the storage PATH (voice notes are access-gated,
+ * so they are served via short-lived signed URLs, not a public link) plus the
+ * duration measured while recording.
  */
 export async function uploadAudio(
   blob: Blob,
@@ -25,15 +27,15 @@ export async function uploadAudio(
     body: formData,
   });
   const body = (await response.json().catch(() => null)) as {
-    url?: string;
+    path?: string;
     error?: string;
   } | null;
 
-  if (!response.ok || !body?.url) {
+  if (!response.ok || !body?.path) {
     throw new Error(body?.error ?? 'Could not save that voice note. Try again.');
   }
 
-  return { url: body.url, durationSeconds: Math.max(1, Math.round(durationSeconds)) };
+  return { path: body.path, durationSeconds: Math.max(1, Math.round(durationSeconds)) };
 }
 
 function extensionForType(type: string): string {
