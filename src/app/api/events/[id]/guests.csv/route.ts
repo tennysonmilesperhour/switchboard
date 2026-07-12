@@ -1,10 +1,5 @@
 import { createClient } from '@/lib/supabase/server';
-
-function csvField(value: string | null | undefined): string {
-  const v = value ?? '';
-  // Quote if it contains a comma, quote, or newline; double any quotes.
-  return /[",\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v;
-}
+import { csvCell } from '@/lib/security';
 
 /** Host-only guest-list export. RLS: only the host can read all invites. */
 export async function GET(
@@ -38,11 +33,11 @@ export async function GET(
   const rows = (invites ?? []).map((row) => {
     const profile = Array.isArray(row.invitee) ? row.invitee[0] : row.invitee;
     return [
-      csvField(profile?.display_name ?? row.guest_name),
-      csvField(profile?.handle ? `@${profile.handle}` : ''),
-      csvField(profile ? '' : row.guest_contact),
-      csvField(row.status),
-      csvField(row.responded_at),
+      csvCell(profile?.display_name ?? row.guest_name),
+      csvCell(profile?.handle ? `@${profile.handle}` : ''),
+      csvCell(profile ? '' : row.guest_contact),
+      csvCell(row.status),
+      csvCell(row.responded_at),
     ].join(',');
   });
   const csv = [header.join(','), ...rows].join('\r\n');

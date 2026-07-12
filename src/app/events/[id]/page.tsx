@@ -4,6 +4,7 @@ import { notFound, redirect } from 'next/navigation';
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient, hasAdminCredentials } from '@/lib/supabase/admin';
+import { serializeJsonLd } from '@/lib/security';
 import { advanceEventCascade } from '@/lib/server/cascade-runner';
 import { AppShell } from '@/components/shell/AppShell';
 import { Card, SectionHeader } from '@/components/ui/Card';
@@ -452,7 +453,9 @@ export default async function EventPage({
     <AppShell title={event.title} back="/plans">
       <script
         type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+        // serializeJsonLd (not raw JSON.stringify) so a user-controlled event
+        // title/description containing `</script>` cannot break out of this tag.
+        dangerouslySetInnerHTML={{ __html: serializeJsonLd(jsonLd) }}
       />
       <div className="space-y-6">
         {avoidedGoing.length > 0 && (

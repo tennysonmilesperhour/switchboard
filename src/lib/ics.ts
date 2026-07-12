@@ -18,7 +18,10 @@ export function icsEscape(value: string): string {
     .replace(/\\/g, '\\\\')
     .replace(/;/g, '\\;')
     .replace(/,/g, '\\,')
-    .replace(/\n/g, '\\n');
+    // Normalize every newline form to an escaped \n. A lone CR left in place
+    // would otherwise survive into the CRLF-delimited output and let a
+    // user-controlled title/description inject extra iCalendar properties.
+    .replace(/\r\n|\r|\n/g, '\\n');
 }
 
 export function icsDate(iso: string): string {
