@@ -2,6 +2,23 @@ import { NextResponse } from 'next/server';
 import { createAdminClient, hasAdminCredentials } from '@/lib/supabase/admin';
 import { smsEnabled } from '@/lib/server/sms';
 
+/**
+ * The `<ref>` subdomain of a Supabase URL (`https://<ref>.supabase.co`) — the
+ * project identifier. Non-secret: NEXT_PUBLIC_SUPABASE_URL already ships to the
+ * browser. Surfacing it lets you confirm, per deployment, which database is
+ * actually wired up — so a "host writes to project A, guest link reads project
+ * B" split across multiple Supabase projects is visible in one request instead
+ * of masquerading as an expired invite.
+ */
+function projectRef(url: string | undefined): string | null {
+  if (!url) return null;
+  try {
+    return new URL(url).hostname.split('.')[0] || null;
+  } catch {
+    return null;
+  }
+}
+
 export async function GET() {
   const checks = {
     supabasePublic: Boolean(
@@ -43,8 +60,19 @@ export async function GET() {
 
   const required =
     checks.supabasePublic && checks.supabaseAdmin && checks.appUrl && checks.cron && database && schema;
+
+  // Which database and origin THIS deployment is wired to. Compare across
+  // deployments (and against where an invite actually lives) to catch a
+  // read/write split: if the host app and the guest RSVP link report different
+  // supabaseRef values, they're talking to different databases.
+  const config = {
+    supabaseRef: projectRef(process.env.NEXT_PUBLIC_SUPABASE_URL),
+    supabaseUrl: process.env.NEXT_PUBLIC_SUPABASE_URL ?? null,
+    appUrl: process.env.NEXT_PUBLIC_APP_URL ?? null,
+  };
+
   return NextResponse.json(
-    { ok: required, database, schema, services: checks },
+    { ok: required, database, schema, services: checks, config },
     {
       status: required ? 200 : 503,
       headers: { 'Cache-Control': 'no-store' },
