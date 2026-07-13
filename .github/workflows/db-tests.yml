@@ -27,7 +27,12 @@ jobs:
       - name: Set up Supabase CLI
         uses: supabase/setup-cli@v1
         with:
-          version: latest
+          # Pinned (not `latest`): resolving "latest" makes an unauthenticated
+          # GitHub API call that gets rate-limited on shared runners. A pinned
+          # version downloads directly and is reproducible.
+          version: 2.109.1
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
 
       - name: Write a minimal local config
         # config.toml isn't committed (it's local-dev scaffolding); a bare
