@@ -133,7 +133,11 @@ export default async function GuestRsvpPage({
   // An invite link is often a guest's first contact with Switchboard. If they
   // aren't signed in, we nudge them to join or sign in (below) so they can stay
   // connected with the host — but the RSVP itself never requires an account.
-  const user = await getUser();
+  // Resolve the viewer defensively: the anon Supabase client throws when its
+  // credentials aren't configured (CI and local e2e run the app without them),
+  // and a missing session must never break this public page — so treat an
+  // unresolved viewer as logged-out.
+  const user = await getUser().catch(() => null);
   const hostName = host?.display_name ?? 'Your host';
 
   return (
