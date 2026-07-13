@@ -681,6 +681,54 @@ export async function updateEventDetails(
   return { ok: true };
 }
 
+/**
+ * Turn the shareable invite link on or off. Enabling marks the plan an "open
+ * table" so anyone the host sends the link to can ask to join (the host still
+ * approves each request, via the existing join-requests panel); disabling stops
+ * new link requests. Host/co-host only — the same authorization gate every other
+ * management action uses. Writes through the service-role client after that
+ * check, mirroring updateEventDetails/confirmEvent; `open_table` is a plain,
+ * non-sensitive flag (no role/rank/ownership state), so there is no new
+ * self-writable trust surface here.
+ */
+export async function setEventInviteLink(
+  eventId: string,
+  enabled: boolean,
+): Promise<{ ok: boolean; error?: string }> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false, error: 'Not signed in' };
+  if (!(await canManageEvent(user.id, eventId))) {
+    return { ok: false, error: 'Only the host can change this.' };
+  }
+
+  const admin = createAdminClient();
+  const { data: event } = await admin
+    .from('events')
+    .select('status')
+    .eq('id', eventId)
+    .maybeSingle();
+  if (!event) return { ok: false, error: 'Plan not found.' };
+  if (event.status === 'cancelled' || event.status === 'past') {
+    return { ok: false, error: 'This plan is closed.' };
+  }
+
+  const { error } = await admin
+    .from('events')
+    .update({ open_table: enabled })
+    .eq('id', eventId);
+  if (error) {
+    await reportOperationalError('event-invite-link', error, { eventId });
+    return { ok: false, error: 'Could not update the invite link. Try again.' };
+  }
+
+  revalidatePath(`/events/${eventId}`);
+  revalidatePath('/discover');
+  return { ok: true };
+}
+
 export async function confirmEvent(eventId: string): Promise<void> {
   const supabase = await createClient();
   const {

@@ -27,6 +27,7 @@ import { recurrenceLabel } from '@/lib/engine/recurrence';
 import { HostControls } from './HostControls';
 import { CoHostManager } from './CoHostManager';
 import { AddInvitees } from './AddInvitees';
+import { InviteLink } from './InviteLink';
 import { getRelationship, getMutualConnections } from '@/lib/server/relationship';
 import { inviteExpiresAt } from '@/lib/engine/cascade';
 import { threadGate, THREAD_PREVIEW_COUNT } from '@/lib/engine/thread';
@@ -785,6 +786,20 @@ export default async function EventPage({
             </ul>
           </section>
         )}
+
+        {/* Post-creation invite link: one link the host can share to bring more
+            people in, on top of the ordered cascade. Anyone who opens it asks to
+            join, and the host approves via the join-requests panel above. */}
+        {canManage &&
+          (event.status === 'inviting' || event.status === 'confirmed') && (
+            <InviteLink
+              eventId={event.id}
+              shareUrl={appUrl(`/join/${event.id}`)}
+              sharePath={`/join/${event.id}`}
+              enabled={event.open_table}
+              eventTitle={event.title}
+            />
+          )}
 
         {canManage && event.status === 'inviting' && (
           <AddInvitees eventId={event.id} connections={addableConnections} />

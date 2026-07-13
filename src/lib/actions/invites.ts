@@ -147,6 +147,7 @@ export async function requestToJoin(eventId: string): Promise<RespondResult> {
   }
 
   revalidatePath('/discover');
+  revalidatePath(`/events/${eventId}`);
   return { ok: true, outcome: 'requested' };
 }
 
