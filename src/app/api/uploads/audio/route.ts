@@ -8,9 +8,10 @@ import { reportOperationalError } from '@/lib/server/observability';
 // stays cheap. ~1 min of Opus/webm is well under this.
 const MAX_UPLOAD_BYTES = 8 * 1024 * 1024;
 
-// Reuse the general-purpose public `media` bucket (per-user folder write, public
-// read). Audio lands under a `voice/` path prefix alongside image uploads.
-const BUCKET = 'media';
+// Voice notes are access-gated (event thread / cancellation), so they live in
+// the PRIVATE bucket and are served only via short-lived signed URLs. The route
+// returns the storage path; the render site signs it (src/lib/server/media.ts).
+const BUCKET = 'media-private';
 
 // MediaRecorder output varies by browser: webm/opus (Chrome/Firefox),
 // mp4/aac (Safari), ogg. Accept the common containers.
@@ -68,8 +69,8 @@ export async function POST(request: Request) {
   const path = `${user.id}/voice-${Date.now()}-${crypto.randomUUID()}.${ext}`;
   const bytes = Buffer.from(await file.arrayBuffer());
 
-  // Resilient if a Supabase project predates the media migration.
-  await admin.storage.createBucket(BUCKET, { public: true }).catch(() => null);
+  // Resilient if a Supabase project predates the private-media migration.
+  await admin.storage.createBucket(BUCKET, { public: false }).catch(() => null);
 
   const { error: uploadError } = await admin.storage.from(BUCKET).upload(path, bytes, {
     cacheControl: '3600',
@@ -86,6 +87,7 @@ export async function POST(request: Request) {
     return jsonError('Upload failed. Please try again.', 500);
   }
 
-  const { data } = admin.storage.from(BUCKET).getPublicUrl(path);
-  return NextResponse.json({ url: `${data.publicUrl}?v=${Date.now()}`, path, bucket: BUCKET });
+  // Private bucket: return the storage path (not a public URL). The render site
+  // mints a short-lived signed URL for authorized viewers.
+  return NextResponse.json({ path });
 }

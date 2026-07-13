@@ -5,7 +5,10 @@ import { checkRateLimit } from '@/lib/server/rate-limit';
 import { reportOperationalError } from '@/lib/server/observability';
 
 const MAX_UPLOAD_BYTES = 5 * 1024 * 1024;
-const ALLOWED_BUCKETS = new Set(['media', 'avatars', 'covers']);
+// `media-private` is the access-gated bucket (capsule photos); the rest are
+// public (avatars, covers, event covers). Private uploads return a path, not a
+// public URL — the render site signs it.
+const ALLOWED_BUCKETS = new Set(['media', 'avatars', 'covers', 'media-private']);
 // Extension -> the Content-Type we will persist. We serve uploads from a PUBLIC
 // bucket, so the stored Content-Type must come from this server-controlled map
 // and NEVER from the attacker-supplied `file.type`: a file labeled
@@ -77,13 +80,14 @@ export async function POST(request: Request) {
   const ext = extensionFor(file);
   // Content-Type comes from our extension map, never from the client's file.type.
   const contentType = IMAGE_MIME[ext] ?? 'image/jpeg';
+  const isPrivate = bucket === 'media-private';
   const path = `${user.id}/${pathPrefix}-${Date.now()}-${crypto.randomUUID()}.${ext}`;
   const bytes = Buffer.from(await file.arrayBuffer());
 
   // Keep uploads resilient if a Supabase project was created before the media
   // migrations ran. Existing buckets return an error here; uploads below still
-  // proceed normally.
-  await admin.storage.createBucket(bucket, { public: true }).catch(() => null);
+  // proceed normally. The private bucket must never be created as public.
+  await admin.storage.createBucket(bucket, { public: !isPrivate }).catch(() => null);
 
   const { error: uploadError } = await admin.storage.from(bucket).upload(path, bytes, {
     cacheControl: '3600',
@@ -98,6 +102,11 @@ export async function POST(request: Request) {
       bytes: file.size,
     });
     return jsonError('Upload failed. Please try again.', 500);
+  }
+
+  // Private bucket: return the path only (served later via a signed URL).
+  if (isPrivate) {
+    return NextResponse.json({ path });
   }
 
   const { data } = admin.storage.from(bucket).getPublicUrl(path);

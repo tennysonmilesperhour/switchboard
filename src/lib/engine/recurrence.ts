@@ -43,10 +43,6 @@ const FIXED_INTERVAL_DAYS: Partial<Record<RecurrenceKind, number>> = {
 export const MIN_CUSTOM_DAYS = 1;
 export const MAX_CUSTOM_DAYS = 365;
 
-export function isRecurring(kind: RecurrenceKind): boolean {
-  return kind !== 'none';
-}
-
 /** Coerce/clamp a custom day count to the permitted range, or null if unusable. */
 export function normalizeCustomInterval(
   value: number | null | undefined,

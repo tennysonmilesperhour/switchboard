@@ -3,6 +3,7 @@
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import { createClient } from '@/lib/supabase/server';
+import { isOwnPublicStorageUrl } from '@/lib/server/media';
 import { SOCIAL_BY_ID } from '@/lib/socials';
 import { USERNAME_PATTERN } from '@/lib/auth-identity';
 import { LEGAL_VERSION } from '@/lib/legal';
@@ -116,7 +117,7 @@ export async function updateProfileDetails(
   const avatarUrl = nullableText(formData.get('avatar_url'), 500);
   const coverUrl = nullableText(formData.get('cover_url'), 500);
   const mediaOk = (u: string | null) =>
-    u === null || /\/storage\/v1\/object\/public\/(avatars|covers)\//.test(u);
+    u === null || isOwnPublicStorageUrl(u, ['avatars', 'covers']);
   if (!mediaOk(avatarUrl) || !mediaOk(coverUrl)) {
     return { ok: false, error: 'Unexpected image location — please re-upload.' };
   }

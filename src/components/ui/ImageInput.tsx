@@ -5,15 +5,26 @@ import { Icon } from '@/components/ui/Icon';
 import { MAX_UPLOAD_BYTES, uploadImage } from '@/lib/client/upload-image';
 
 export interface ImageInputProps {
-  /** Current image URL (uploaded public URL or a pasted link), or '' for none. */
+  /**
+   * The stored image reference, or '' for none. For public buckets this is a
+   * loadable URL; for the private bucket it is a storage PATH that is not
+   * directly loadable — pass `previewSrc` (a signed URL) to display it.
+   */
   value: string;
   onChange: (url: string) => void;
+  /**
+   * A ready-to-load URL used only for display when `value` is not itself
+   * loadable (e.g. a private-bucket path shown via a signed URL). A freshly
+   * uploaded file is previewed from a local object URL and takes precedence.
+   */
+  previewSrc?: string;
   /** Owner uid. Kept for call-site clarity; the upload route verifies the session. */
   userId: string;
   /** Filename prefix inside the bucket, e.g. `event-cover` or `capsule`. */
   pathPrefix: string;
-  /** Storage bucket. Defaults to the shared `media` bucket. */
-  bucket?: 'media' | 'avatars' | 'covers';
+  /** Storage bucket. Defaults to the shared public `media` bucket. Use
+   * `media-private` for access-gated images (served via signed URLs). */
+  bucket?: 'media' | 'avatars' | 'covers' | 'media-private';
   /** Preview aspect ratio. */
   aspect?: 'video' | 'square';
   /** Accessible label for the picker (e.g. "cover image"). */
@@ -32,6 +43,7 @@ export interface ImageInputProps {
 export function ImageInput({
   value,
   onChange,
+  previewSrc,
   pathPrefix,
   bucket = 'media',
   aspect = 'video',
@@ -44,6 +56,23 @@ export function ImageInput({
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showUrl, setShowUrl] = useState(false);
+  // Instant preview of a just-picked file, so a private-bucket upload (which
+  // returns a path, not a loadable URL) still shows the image immediately.
+  const [localPreview, setLocalPreview] = useState<string | null>(null);
+
+  function setPreviewFromFile(file: File) {
+    setLocalPreview((prev) => {
+      if (prev) URL.revokeObjectURL(prev);
+      return URL.createObjectURL(file);
+    });
+  }
+
+  function clearLocalPreview() {
+    setLocalPreview((prev) => {
+      if (prev) URL.revokeObjectURL(prev);
+      return null;
+    });
+  }
 
   async function handleFile(file: File | undefined) {
     if (!file) return;
@@ -56,10 +85,12 @@ export function ImageInput({
       setError('Image must be under 5MB.');
       return;
     }
+    setPreviewFromFile(file);
     setUploading(true);
     try {
       onChange(await uploadImage({ file, bucket, pathPrefix }));
     } catch (uploadError) {
+      clearLocalPreview();
       setError(
         uploadError instanceof Error
           ? uploadError.message
@@ -79,11 +110,16 @@ export function ImageInput({
           className={`relative w-full ${aspectCls} overflow-hidden rounded-card border border-line bg-cream`}
         >
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={value} alt="" className="h-full w-full object-cover" />
+          <img
+            src={localPreview ?? previewSrc ?? value}
+            alt=""
+            className="h-full w-full object-cover"
+          />
           <button
             type="button"
             onClick={() => {
               onChange('');
+              clearLocalPreview();
               setError(null);
             }}
             aria-label={`Remove ${label}`}

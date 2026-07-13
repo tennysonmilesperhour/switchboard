@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient, hasAdminCredentials } from '@/lib/supabase/admin';
 import { serializeJsonLd } from '@/lib/security';
+import { signMediaRef } from '@/lib/server/media';
 import { advanceEventCascade } from '@/lib/server/cascade-runner';
 import { AppShell } from '@/components/shell/AppShell';
 import { Card, SectionHeader } from '@/components/ui/Card';
@@ -328,18 +329,22 @@ export default async function EventPage({
       .order('created_at', { ascending: true });
     if (!canAccessThread) commentsQuery = commentsQuery.limit(THREAD_PREVIEW_COUNT);
     const { data: commentRows } = await commentsQuery;
-    threadComments = (commentRows ?? []).map((row) => {
-      const author = Array.isArray(row.author) ? row.author[0] : row.author;
-      return {
-        id: row.id as string,
-        body: (row.body as string | null) ?? null,
-        voice_url: (row.voice_url as string | null) ?? null,
-        voice_duration_seconds: (row.voice_duration_seconds as number | null) ?? null,
-        created_at: row.created_at as string,
-        author_id: row.author_id as string,
-        author_name: author?.display_name ?? 'Guest',
-      };
-    });
+    threadComments = await Promise.all(
+      (commentRows ?? []).map(async (row) => {
+        const author = Array.isArray(row.author) ? row.author[0] : row.author;
+        return {
+          id: row.id as string,
+          body: (row.body as string | null) ?? null,
+          // voice_url is a private-bucket path; mint a short-lived signed URL
+          // for this authorized viewer (they already passed the thread gate).
+          voice_url: await signMediaRef((row.voice_url as string | null) ?? null),
+          voice_duration_seconds: (row.voice_duration_seconds as number | null) ?? null,
+          created_at: row.created_at as string,
+          author_id: row.author_id as string,
+          author_name: author?.display_name ?? 'Guest',
+        };
+      }),
+    );
   }
 
   // True accepted count (independent of visibility) so the host knows the reach.
@@ -449,6 +454,9 @@ export default async function EventPage({
       : {}),
   };
 
+  // cancel_voice_url is a private-bucket path; sign it for this viewer.
+  const cancelVoiceUrl = await signMediaRef(event.cancel_voice_url);
+
   return (
     <AppShell title={event.title} back="/plans">
       <script
@@ -510,9 +518,9 @@ export default async function EventPage({
                   {event.cancel_reason}
                 </p>
               )}
-              {event.cancel_voice_url && (
+              {cancelVoiceUrl && (
                 <div className="mt-2.5">
-                  <VoiceNote url={event.cancel_voice_url} tone="soft" />
+                  <VoiceNote url={cancelVoiceUrl} tone="soft" />
                 </div>
               )}
             </Card>

@@ -67,7 +67,7 @@ export function EventThread({
       if (clip) {
         try {
           const uploaded = await uploadAudio(clip.blob, clip.durationSeconds);
-          voiceUrl = uploaded.url;
+          voiceUrl = uploaded.path;
           voiceDurationSeconds = uploaded.durationSeconds;
         } catch (uploadError) {
           setError(

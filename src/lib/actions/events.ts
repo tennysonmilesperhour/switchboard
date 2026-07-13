@@ -9,6 +9,7 @@ import {
   notifyCurrentInviteWave,
 } from '@/lib/server/cascade-runner';
 import { notifyUsers } from '@/lib/server/notify';
+import { isValidMediaRef } from '@/lib/server/media';
 import type { EventTheme, InviteMode, RecurrenceKind } from '@/lib/types';
 import {
   nextOccurrenceAfter,
@@ -715,8 +716,9 @@ export async function cancelEvent(
   const admin = createAdminClient();
 
   const cleanReason = reason?.trim().slice(0, 2000) || null;
+  const trimmedVoice = voiceUrl?.trim();
   const cleanVoiceUrl =
-    voiceUrl && /^https:\/\//.test(voiceUrl.trim()) ? voiceUrl.trim() : null;
+    trimmedVoice && isValidMediaRef(trimmedVoice) ? trimmedVoice : null;
 
   const { data: event } = await admin
     .from('events')
