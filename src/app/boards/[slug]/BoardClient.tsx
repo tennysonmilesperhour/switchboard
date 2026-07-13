@@ -8,7 +8,7 @@ import { Card, SectionHeader } from '@/components/ui/Card';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { useToast } from '@/components/ui/Toast';
 import { useConfirm } from '@/components/ui/ConfirmDialog';
-import { formatRelative } from '@/lib/format';
+import { formatRelative, formatDate } from '@/lib/format';
 import {
   addBoardPost,
   deleteBoardPost,
@@ -269,6 +269,11 @@ export function BoardClient({
                         {(post.cadence || post.location) && (
                           <p className="text-xs text-terracotta-deep mt-1.5">
                             {[post.cadence, post.location].filter(Boolean).join(' · ')}
+                          </p>
+                        )}
+                        {post.starts_at && (
+                          <p className="text-xs font-bold text-ink mt-1.5">
+                            📅 First date: {formatDate(post.starts_at)}
                           </p>
                         )}
                         <p className="text-[11px] text-ink-faint mt-1.5">

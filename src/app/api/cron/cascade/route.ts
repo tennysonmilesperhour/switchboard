@@ -2,8 +2,13 @@ import { NextResponse } from 'next/server';
 import { sweepCascades } from '@/lib/server/cascade-runner';
 import { sweepDuePolls } from '@/lib/server/poll-runner';
 import { sweepReminders } from '@/lib/server/reminders';
+import { sweepExpired } from '@/lib/server/cleanup';
 import { checkRateLimit } from '@/lib/server/rate-limit';
 import { bearerMatches } from '@/lib/server/secret';
+
+// Bound the function so a slow sweep fails loudly instead of being killed mid-run
+// by the platform default. The sweeps scan all live events/polls each minute.
+export const maxDuration = 60;
 
 /**
  * Vercel cron (see vercel.json): advances every live cascade, resolves polls
@@ -26,15 +31,18 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: 'Too many requests' }, { status: 429 });
   }
 
-  const [eventsAdvanced, pollsResolved, remindersSent] = await Promise.all([
+  const [eventsAdvanced, pollsResolved, remindersSent, cleaned] = await Promise.all([
     sweepCascades(),
     sweepDuePolls(),
     sweepReminders(),
+    sweepExpired(),
   ]);
   return NextResponse.json({
     ok: true,
     eventsAdvanced,
     pollsResolved,
     remindersSent,
+    signalsDeleted: cleaned.signalsDeleted,
+    momentsClosed: cleaned.momentsClosed,
   });
 }
