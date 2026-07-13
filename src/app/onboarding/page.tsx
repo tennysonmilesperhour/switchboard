@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
+import { safeNextPath } from '@/lib/security';
 import { OnboardingForm } from './OnboardingForm';
 
 export const metadata: Metadata = { title: 'Set up your profile' };
@@ -16,9 +17,10 @@ const ERROR_MESSAGES: Record<string, string> = {
 export default async function OnboardingPage({
   searchParams,
 }: {
-  searchParams: Promise<{ error?: string }>;
+  searchParams: Promise<{ error?: string; next?: string }>;
 }) {
-  const { error } = await searchParams;
+  const { error, next } = await searchParams;
+  const nextPath = safeNextPath(next, '/');
   const supabase = await createClient();
   const {
     data: { user },
@@ -53,6 +55,7 @@ export default async function OnboardingPage({
       <OnboardingForm
         initialName={profile?.display_name ?? ''}
         initialHandle={profile?.handle ?? ''}
+        next={nextPath}
       />
     </div>
   );

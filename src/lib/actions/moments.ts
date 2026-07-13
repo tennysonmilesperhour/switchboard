@@ -3,7 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
-import { sendPushToUsers } from '@/lib/server/notify';
+import { notifyUsers } from '@/lib/server/notify';
 import { requireUser } from '@/lib/server/require-user';
 
 export interface MomentActionResult {
@@ -102,6 +102,14 @@ export async function expressCuriosity(
     .eq('other_moment_id', myMomentId)
     .maybeSingle();
 
+  // Who owns the other moment — used to nudge them so the consent loop can
+  // advance without both people having to sit and refresh /moments.
+  const { data: otherMoment } = await admin
+    .from('moments')
+    .select('user_id')
+    .eq('id', otherMomentId)
+    .maybeSingle<{ user_id: string }>();
+
   if (reverse && reverse.stage !== 'passed') {
     // Mutual curiosity → both sides may now see a gentle introduction.
     await admin
@@ -115,8 +123,27 @@ export async function expressCuriosity(
       .eq('moment_id', myMomentId)
       .eq('other_moment_id', otherMomentId)
       .neq('stage', 'accepted');
+    if (otherMoment) {
+      await notifyUsers([otherMoment.user_id], {
+        kind: 'moment',
+        title: '✨ The interest is mutual',
+        body: 'Someone near you is curious too — take a look.',
+        url: '/moments',
+      });
+    }
     revalidatePath('/moments');
     return { ok: true, stage: 'revealed' };
+  }
+
+  // First one-sided curiosity: nudge the other person (no identity revealed)
+  // so they can come reciprocate if they'd like.
+  if (otherMoment) {
+    await notifyUsers([otherMoment.user_id], {
+      kind: 'moment',
+      title: '✨ Someone’s curious',
+      body: 'A person near you would like to connect. Open Moments to see.',
+      url: '/moments',
+    });
   }
 
   revalidatePath('/moments');
@@ -178,7 +205,10 @@ export async function acceptMoment(
     .update({ status: 'matched' })
     .in('id', [myMomentId, otherMomentId]);
 
-  await sendPushToUsers([mine.user_id, other.user_id], {
+  // Durable notification (in-app row + push), so a match is discoverable later
+  // in /notifications even if the recipient never enabled push or is offline.
+  await notifyUsers([mine.user_id, other.user_id], {
+    kind: 'match',
     title: '✨ You’d both love to share this moment',
     body: 'A conversation is open - say hi and pick a spot.',
     url: `/rooms/${room.id}`,

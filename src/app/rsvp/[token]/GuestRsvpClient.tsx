@@ -5,6 +5,11 @@ import { Button } from '@/components/ui/Button';
 import { Icon } from '@/components/ui/Icon';
 import { respondToGuestInvite } from '@/lib/actions/invites';
 import {
+  googleCalendarUrl,
+  outlookCalendarUrl,
+  type CalendarEvent,
+} from '@/lib/calendar-links';
+import {
   RsvpQuestions,
   requiredAnswered,
   type RsvpQuestion,
@@ -15,6 +20,8 @@ interface GuestRsvpClientProps {
   guestName: string;
   initialStatus: string;
   questions?: RsvpQuestion[];
+  /** When present (event has a start time), the accepted state offers add-to-calendar links. */
+  calendarEvent?: CalendarEvent | null;
 }
 
 export function GuestRsvpClient({
@@ -22,6 +29,7 @@ export function GuestRsvpClient({
   guestName,
   initialStatus,
   questions = [],
+  calendarEvent = null,
 }: GuestRsvpClientProps) {
   const [status, setStatus] = useState(initialStatus);
   const [error, setError] = useState('');
@@ -57,6 +65,26 @@ export function GuestRsvpClient({
         <p className="text-sm text-ink-soft mt-1">
           The host has been told. See you there.
         </p>
+        {calendarEvent && (
+          <div className="mt-4 flex flex-wrap gap-2">
+            <a
+              href={googleCalendarUrl(calendarEvent)}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="rounded-pill border border-sage bg-card px-3 py-1.5 text-xs font-bold text-sage-deep hover:bg-sage-soft"
+            >
+              Add to Google Calendar
+            </a>
+            <a
+              href={outlookCalendarUrl(calendarEvent)}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="rounded-pill border border-sage bg-card px-3 py-1.5 text-xs font-bold text-sage-deep hover:bg-sage-soft"
+            >
+              Outlook
+            </a>
+          </div>
+        )}
       </div>
     );
   }

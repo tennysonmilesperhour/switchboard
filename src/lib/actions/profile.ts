@@ -7,6 +7,7 @@ import { requireUserOrRedirect } from '@/lib/server/require-user';
 import { isOwnPublicStorageUrl } from '@/lib/server/media';
 import { SOCIAL_BY_ID } from '@/lib/socials';
 import { USERNAME_PATTERN, isEmail } from '@/lib/auth-identity';
+import { safeNextPath } from '@/lib/security';
 import { LEGAL_VERSION } from '@/lib/legal';
 import type { ProfileLink, ProfileSocial } from '@/lib/types';
 
@@ -201,7 +202,9 @@ export async function completeOnboarding(formData: FormData): Promise<void> {
     ]);
   }
 
-  redirect('/');
+  // Return to the destination the user was originally headed for (e.g. an invite
+  // deep link that funnelled them through onboarding), validated to same-site.
+  redirect(safeNextPath(String(formData.get('next') ?? ''), '/'));
 }
 
 export async function updateInterests(formData: FormData): Promise<void> {

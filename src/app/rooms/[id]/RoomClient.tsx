@@ -143,11 +143,23 @@ export function RoomClient({
           });
         },
       )
+      .on(
+        'postgres_changes',
+        {
+          // Auto-filed items (addresses/tasks/links/notes) land in room_items;
+          // refresh so a member sees another member's filing appear live.
+          event: 'INSERT',
+          schema: 'public',
+          table: 'room_items',
+          filter: `room_id=eq.${roomId}`,
+        },
+        () => router.refresh(),
+      )
       .subscribe();
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [roomId]);
+  }, [roomId, router]);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
