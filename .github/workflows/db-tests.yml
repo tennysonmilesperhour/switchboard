@@ -1,0 +1,42 @@
+name: Database tests
+
+# Runs the pgTAP security-invariant tests (supabase/tests/*.test.sql) against a
+# real local Supabase stack, so the RLS + security-definer guarantees the app
+# depends on can't silently regress in a migration. The app-level CI (ci.yml)
+# covers lint/unit/build/e2e; this is the database's own test suite.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    paths:
+      # Only when the schema, its tests, or this workflow change — booting the
+      # Supabase stack is heavy, so skip it for pure app-code PRs.
+      - 'supabase/**'
+      - '.github/workflows/db-tests.yml'
+
+jobs:
+  pgtap:
+    name: pgTAP
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v5
+
+      - name: Set up Supabase CLI
+        uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Write a minimal local config
+        # config.toml isn't committed (it's local-dev scaffolding); a bare
+        # project_id is enough — the CLI fills every other setting with defaults.
+        run: |
+          [ -f supabase/config.toml ] || printf 'project_id = "switchboard"\n' > supabase/config.toml
+
+      - name: Start local stack (applies all migrations)
+        run: supabase start
+
+      - name: Run pgTAP security tests
+        run: supabase test db

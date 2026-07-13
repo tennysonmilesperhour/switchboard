@@ -11,6 +11,10 @@ supabase start          # boots local Postgres + applies migrations
 supabase test db        # runs every *.test.sql in this directory via pg_prove
 ```
 
+CI runs this suite automatically (`.github/workflows/db-tests.yml`) on every push
+to `main` and on any pull request that touches `supabase/`, so a migration that
+regresses an invariant fails the build rather than shipping.
+
 ## What's covered
 
 `rls_invariants.test.sql`:
