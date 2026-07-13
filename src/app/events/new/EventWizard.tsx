@@ -8,6 +8,7 @@ import { Card } from '@/components/ui/Card';
 import { Icon } from '@/components/ui/Icon';
 import { ImageInput } from '@/components/ui/ImageInput';
 import { suggestWindow, WINDOW_CHOICES } from '@/lib/engine/windows';
+import { isEmail } from '@/lib/auth-identity';
 import {
   RECURRENCE_CHOICES,
   recurrenceLabel,
@@ -348,13 +349,13 @@ export function EventWizard({
     if (!name && !contact) return;
     setGuestError(null);
 
-    const isEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(contact);
+    const emailLike = isEmail(contact);
     const isPhone = normalizePhoneNumber(contact) !== null;
 
     // A username (anything in the contact box that isn't an email or phone)
     // must map to a real account. We never silently invite a typo'd handle as
     // an off-platform guest — email and phone are the guest paths.
-    if (contact && !isEmail && !isPhone) {
+    if (contact && !emailLike && !isPhone) {
       const handle = contact.replace(/^@/, '').toLowerCase();
       if (!/^[a-z0-9_]{3,24}$/.test(handle)) {
         setGuestError('Enter a valid username, email, or phone number.');

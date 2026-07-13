@@ -1,7 +1,7 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
-import { createClient } from '@/lib/supabase/server';
+import { requireUser } from '@/lib/server/require-user';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { notifyUsers } from '@/lib/server/notify';
 import { isValidMediaRef } from '@/lib/server/media';
@@ -46,11 +46,9 @@ export async function postComment(
     return { ok: false, error: 'That voice note could not be saved.' };
   }
 
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { ok: false, error: 'Not signed in' };
+  const auth = await requireUser();
+  if (!auth.ok) return auth;
+  const { supabase, user } = auth;
 
   // RLS: only accepted invitees / host / co-hosts may insert. A locked viewer
   // fails cleanly here.
@@ -85,11 +83,9 @@ export async function deleteComment(
   eventId: string,
   commentId: string,
 ): Promise<ThreadResult> {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { ok: false, error: 'Not signed in' };
+  const auth = await requireUser();
+  if (!auth.ok) return auth;
+  const { supabase } = auth;
 
   // RLS enforces author-or-host; this is a no-op row-count for anyone else.
   const { error } = await supabase

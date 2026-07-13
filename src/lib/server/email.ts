@@ -9,6 +9,8 @@
  * dependency); set RESEND_API_KEY and EMAIL_FROM to turn it on.
  */
 
+import { isEmail } from '@/lib/auth-identity';
+
 export interface EmailMessage {
   to: string;
   subject: string;
@@ -19,9 +21,7 @@ export interface EmailMessage {
 
 /** Loose email check - enough to avoid mailing a phone number by mistake. */
 export function looksLikeEmail(value: string | null | undefined): value is string {
-  if (!value) return false;
-  const trimmed = value.trim();
-  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed);
+  return isEmail(value);
 }
 
 export function emailEnabled(): boolean {

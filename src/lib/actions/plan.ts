@@ -1,6 +1,6 @@
 'use server';
 
-import { createClient } from '@/lib/supabase/server';
+import { requireUser } from '@/lib/server/require-user';
 import { parsePlan, type ParsedPlan } from '@/lib/ai/plan-parser';
 
 export interface PlanDraft extends Omit<ParsedPlan, 'inviteeNames'> {
@@ -14,11 +14,9 @@ export async function parsePlanDescription(
   const trimmed = text.trim();
   if (!trimmed) return { ok: false, error: 'Say or type a plan first' };
 
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { ok: false, error: 'Not signed in' };
+  const auth = await requireUser();
+  if (!auth.ok) return auth;
+  const { supabase, user } = auth;
 
   const { data: connections } = await supabase
     .from('connections')

@@ -2,6 +2,8 @@
 
 import { revalidatePath } from 'next/cache';
 import { createClient } from '@/lib/supabase/server';
+import { requireUser } from '@/lib/server/require-user';
+import { isEventManager } from '@/lib/server/authz';
 import { resolvePoll } from '@/lib/server/poll-runner';
 import type { Weight } from '@/lib/engine/scoring';
 
@@ -14,11 +16,9 @@ export async function addSuggestion(
   const trimmed = label.trim();
   if (!trimmed) return { ok: false, error: 'Suggestion is empty' };
 
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { ok: false, error: 'Not signed in' };
+  const auth = await requireUser();
+  if (!auth.ok) return auth;
+  const { supabase, user } = auth;
 
   const { data: poll } = await supabase
     .from('polls')
@@ -29,10 +29,7 @@ export async function addSuggestion(
     return { ok: false, error: 'Voting has closed' };
   }
 
-  const { data: isHost } = await supabase.rpc('is_event_host', {
-    p_event: poll.event_id,
-    p_user: user.id,
-  });
+  const isHost = await isEventManager(user.id, poll.event_id);
   if (!poll.allow_suggestions && !isHost) {
     return { ok: false, error: 'Only the host can add options' };
   }
@@ -54,11 +51,9 @@ export async function castVote(
   optionId: string,
   weight: Weight,
 ): Promise<{ ok: boolean; error?: string }> {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { ok: false, error: 'Not signed in' };
+  const auth = await requireUser();
+  if (!auth.ok) return auth;
+  const { supabase, user } = auth;
 
   // Only accept a ballot for an option that actually belongs to this poll, and
   // only while voting is open — don't trust the client-supplied optionId/phase.
@@ -99,10 +94,7 @@ export async function openVoting(pollId: string, eventId: string): Promise<void>
   if (!user) return;
   // Host/co-host only (parity with closeVoting); RLS also enforces this, but
   // check here so a non-host gets a clean no-op rather than relying on it.
-  const { data: isHost } = await supabase.rpc('is_event_host', {
-    p_event: eventId,
-    p_user: user.id,
-  });
+  const isHost = await isEventManager(user.id, eventId);
   if (!isHost) return;
   await supabase.from('polls').update({ phase: 'voting' }).eq('id', pollId);
   revalidatePath(`/events/${eventId}`);
@@ -121,10 +113,7 @@ export async function closeVoting(pollId: string, eventId: string): Promise<void
   if (!user) return;
 
   // Co-hosts share host powers (is_event_host covers both).
-  const { data: isHost } = await supabase.rpc('is_event_host', {
-    p_event: eventId,
-    p_user: user.id,
-  });
+  const isHost = await isEventManager(user.id, eventId);
   if (!isHost) return;
 
   await resolvePoll(pollId);
@@ -142,10 +131,7 @@ export async function pickWinner(
   } = await supabase.auth.getUser();
   if (!user) return;
   // Host/co-host only (parity with closeVoting); RLS also enforces this.
-  const { data: isHost } = await supabase.rpc('is_event_host', {
-    p_event: eventId,
-    p_user: user.id,
-  });
+  const isHost = await isEventManager(user.id, eventId);
   if (!isHost) return;
   await supabase
     .from('polls')

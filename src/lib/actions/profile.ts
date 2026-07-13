@@ -3,9 +3,10 @@
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import { createClient } from '@/lib/supabase/server';
+import { requireUserOrRedirect } from '@/lib/server/require-user';
 import { isOwnPublicStorageUrl } from '@/lib/server/media';
 import { SOCIAL_BY_ID } from '@/lib/socials';
-import { USERNAME_PATTERN } from '@/lib/auth-identity';
+import { USERNAME_PATTERN, isEmail } from '@/lib/auth-identity';
 import { LEGAL_VERSION } from '@/lib/legal';
 import type { ProfileLink, ProfileSocial } from '@/lib/types';
 
@@ -92,11 +93,7 @@ export async function updateProfileDetails(
   _prev: ActionResult,
   formData: FormData,
 ): Promise<ActionResult> {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) redirect('/login');
+  const { supabase, user } = await requireUserOrRedirect();
 
   const displayName = String(formData.get('display_name') ?? '').trim();
   const handle = String(formData.get('handle') ?? '')
@@ -109,7 +106,7 @@ export async function updateProfileDetails(
   }
 
   const email = nullableText(formData.get('contact_email'), 120);
-  if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+  if (email && !isEmail(email)) {
     return { ok: false, error: 'That email address looks off.' };
   }
 
@@ -154,11 +151,7 @@ export async function updateProfileDetails(
 }
 
 export async function completeOnboarding(formData: FormData): Promise<void> {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) redirect('/login');
+  const { supabase, user } = await requireUserOrRedirect();
 
   const displayName = String(formData.get('display_name') ?? '').trim();
   const handle = String(formData.get('handle') ?? '')
@@ -212,11 +205,7 @@ export async function completeOnboarding(formData: FormData): Promise<void> {
 }
 
 export async function updateInterests(formData: FormData): Promise<void> {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) redirect('/login');
+  const { supabase, user } = await requireUserOrRedirect();
 
   const interests = formData.getAll('interests').map(String).filter(Boolean);
   const downTo = formData.getAll('down_to').map(String).filter(Boolean);
@@ -239,11 +228,7 @@ function compactLines(raw: FormDataEntryValue | null, maxItems = 12): string[] {
 }
 
 export async function updateDiscoverability(formData: FormData): Promise<void> {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) redirect('/login');
+  const { supabase, user } = await requireUserOrRedirect();
 
   const discoverable = formData.get('discoverable') === 'on';
   await supabase
@@ -268,11 +253,7 @@ export async function updateDiscoverability(formData: FormData): Promise<void> {
 }
 
 export async function updateSabbatical(formData: FormData): Promise<void> {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) redirect('/login');
+  const { supabase, user } = await requireUserOrRedirect();
 
   const on = formData.get('sabbatical') === 'on';
   const message = String(formData.get('sabbatical_message') ?? '').trim();
@@ -296,11 +277,7 @@ export async function updateSabbatical(formData: FormData): Promise<void> {
 }
 
 export async function updateQuietHours(formData: FormData): Promise<void> {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) redirect('/login');
+  const { supabase, user } = await requireUserOrRedirect();
 
   const rawStart = formData.get('quiet_start');
   const rawEnd = formData.get('quiet_end');
