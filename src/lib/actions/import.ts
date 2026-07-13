@@ -1,6 +1,6 @@
 'use server';
 
-import { createClient } from '@/lib/supabase/server';
+import { requireUser } from '@/lib/server/require-user';
 import { checkRateLimit } from '@/lib/server/rate-limit';
 import { parseEvent, isoToDateTimeParts } from '@/lib/import-event';
 
@@ -23,11 +23,9 @@ const MAX_BYTES = 1_500_000; // don't slurp huge pages
  * rate-limited, and only ever returns fields to prefill the wizard.
  */
 export async function importEventFromLink(rawUrl: string): Promise<ImportResult> {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { ok: false, error: 'Not signed in' };
+  const auth = await requireUser();
+  if (!auth.ok) return auth;
+  const { user } = auth;
 
   let url: URL;
   try {

@@ -3,7 +3,9 @@
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import { createClient } from '@/lib/supabase/server';
+import { requireUser, requireUserOrRedirect } from '@/lib/server/require-user';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { isEventManager } from '@/lib/server/authz';
 import {
   advanceEventCascade,
   notifyCurrentInviteWave,
@@ -21,16 +23,6 @@ import { looksLikePhoneNumber, sendSmsMessages } from '@/lib/server/sms';
 import { normalizePhoneNumber } from '@/lib/phone';
 import { suggestWindow } from '@/lib/engine/windows';
 import { parseInviteEntries, type ParsedInviteEntry } from '@/lib/invite-entry';
-
-/** Primary host or a co-host — the people allowed to manage an event. */
-async function canManageEvent(userId: string, eventId: string): Promise<boolean> {
-  const admin = createAdminClient();
-  const { data } = await admin.rpc('is_event_host', {
-    p_event: eventId,
-    p_user: userId,
-  });
-  return Boolean(data);
-}
 
 export interface WizardInvitee {
   /** Profile id for members; null for guests. */
@@ -140,11 +132,7 @@ async function resolveInvitees(
 }
 
 export async function createEvent(input: CreateEventInput): Promise<CreateEventResult> {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) redirect('/login');
+  const { supabase, user } = await requireUserOrRedirect();
 
   const title = input.title.trim();
   if (!title) return createEventError('Please give your plan a name before sending it.');
@@ -257,12 +245,10 @@ export async function addPeopleToEvent(
   eventId: string,
   input: { entries?: string[]; profileIds?: string[] } = {},
 ): Promise<AddPeopleResult> {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { ok: false, error: 'Not signed in' };
-  if (!(await canManageEvent(user.id, eventId))) {
+  const auth = await requireUser();
+  if (!auth.ok) return auth;
+  const { supabase, user } = auth;
+  if (!(await isEventManager(user.id, eventId))) {
     return { ok: false, error: 'Only the host can add people.' };
   }
 
@@ -425,12 +411,10 @@ export async function removeInvite(
   eventId: string,
   inviteId: string,
 ): Promise<{ ok: boolean; error?: string }> {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { ok: false, error: 'Not signed in' };
-  if (!(await canManageEvent(user.id, eventId))) {
+  const auth = await requireUser();
+  if (!auth.ok) return auth;
+  const { user } = auth;
+  if (!(await isEventManager(user.id, eventId))) {
     return { ok: false, error: 'Only the host can manage invites.' };
   }
 
@@ -467,12 +451,10 @@ export async function resendInvite(
   eventId: string,
   inviteId: string,
 ): Promise<{ ok: boolean; error?: string }> {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { ok: false, error: 'Not signed in' };
-  if (!(await canManageEvent(user.id, eventId))) {
+  const auth = await requireUser();
+  if (!auth.ok) return auth;
+  const { user } = auth;
+  if (!(await isEventManager(user.id, eventId))) {
     return { ok: false, error: 'Only the host can manage invites.' };
   }
 
@@ -551,12 +533,10 @@ export async function moveQueuedInvite(
   inviteId: string,
   up: boolean,
 ): Promise<{ ok: boolean; error?: string }> {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { ok: false, error: 'Not signed in' };
-  if (!(await canManageEvent(user.id, eventId))) {
+  const auth = await requireUser();
+  if (!auth.ok) return auth;
+  const { supabase, user } = auth;
+  if (!(await isEventManager(user.id, eventId))) {
     return { ok: false, error: 'Only the host can manage invites.' };
   }
   // Authorization + queued-only + the atomic position swap all live in the
@@ -576,12 +556,10 @@ export async function setInviteWindow(
   inviteId: string,
   minutes: number,
 ): Promise<{ ok: boolean; error?: string }> {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { ok: false, error: 'Not signed in' };
-  if (!(await canManageEvent(user.id, eventId))) {
+  const auth = await requireUser();
+  if (!auth.ok) return auth;
+  const { supabase, user } = auth;
+  if (!(await isEventManager(user.id, eventId))) {
     return { ok: false, error: 'Only the host can manage invites.' };
   }
   const { error } = await supabase.rpc('set_invite_window', {
@@ -597,12 +575,10 @@ export async function updateEventDetails(
   eventId: string,
   input: UpdateEventInput,
 ): Promise<{ ok: boolean; error?: string }> {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { ok: false, error: 'Not signed in' };
-  if (!(await canManageEvent(user.id, eventId))) {
+  const auth = await requireUser();
+  if (!auth.ok) return auth;
+  const { user } = auth;
+  if (!(await isEventManager(user.id, eventId))) {
     return { ok: false, error: 'Only the host can edit this plan.' };
   }
 
@@ -695,12 +671,10 @@ export async function setEventInviteLink(
   eventId: string,
   enabled: boolean,
 ): Promise<{ ok: boolean; error?: string }> {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { ok: false, error: 'Not signed in' };
-  if (!(await canManageEvent(user.id, eventId))) {
+  const auth = await requireUser();
+  if (!auth.ok) return auth;
+  const { user } = auth;
+  if (!(await isEventManager(user.id, eventId))) {
     return { ok: false, error: 'Only the host can change this.' };
   }
 
@@ -730,12 +704,8 @@ export async function setEventInviteLink(
 }
 
 export async function confirmEvent(eventId: string): Promise<void> {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) redirect('/login');
-  if (!(await canManageEvent(user.id, eventId))) return;
+  const { user } = await requireUserOrRedirect();
+  if (!(await isEventManager(user.id, eventId))) return;
   const admin = createAdminClient();
   await admin.from('events').update({ status: 'confirmed' }).eq('id', eventId);
   // The guest list is locked in — retire anything still in motion so nobody is
@@ -755,12 +725,8 @@ export async function cancelEvent(
   reason?: string,
   voiceUrl?: string,
 ): Promise<void> {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) redirect('/login');
-  if (!(await canManageEvent(user.id, eventId))) return;
+  const { user } = await requireUserOrRedirect();
+  if (!(await isEventManager(user.id, eventId))) return;
   const admin = createAdminClient();
 
   const cleanReason = reason?.trim().slice(0, 2000) || null;
@@ -956,11 +922,7 @@ async function cloneEventForReuse(
  * else keeps their place in the order. The host lands on the new draft.
  */
 export async function runItBack(eventId: string): Promise<never> {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) redirect('/login');
+  const { user } = await requireUserOrRedirect();
 
   // new date TBD - the group can settle it in the room
   const cloneId = await cloneEventForReuse(user.id, eventId, null);
@@ -973,11 +935,7 @@ export async function runItBack(eventId: string): Promise<never> {
  * repeat or has no start time to count from, the new date is left TBD.
  */
 export async function scheduleNextOccurrence(eventId: string): Promise<never> {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) redirect('/login');
+  const { supabase, user } = await requireUserOrRedirect();
 
   const { data: source } = await supabase
     .from('events')
@@ -1003,12 +961,8 @@ export async function scheduleNextOccurrence(eventId: string): Promise<never> {
 
 /** Host closes voting and moves an AWI event into the inviting phase. */
 export async function startInviting(eventId: string): Promise<void> {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) redirect('/login');
-  if (!(await canManageEvent(user.id, eventId))) return;
+  const { user } = await requireUserOrRedirect();
+  if (!(await isEventManager(user.id, eventId))) return;
   const admin = createAdminClient();
   const { error } = await admin
     .from('events')
@@ -1029,11 +983,9 @@ export async function addCoHost(
   eventId: string,
   handle: string,
 ): Promise<{ ok: boolean; error?: string }> {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { ok: false, error: 'Not signed in' };
+  const auth = await requireUser();
+  if (!auth.ok) return auth;
+  const { supabase, user } = auth;
 
   const cleanHandle = handle.trim().toLowerCase().replace(/^@/, '');
   if (!cleanHandle) return { ok: false, error: 'Enter a handle.' };
@@ -1082,11 +1034,7 @@ export async function removeCoHost(
   eventId: string,
   cohostId: string,
 ): Promise<void> {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) redirect('/login');
+  const { supabase } = await requireUserOrRedirect();
   await supabase
     .from('event_cohosts')
     .delete()

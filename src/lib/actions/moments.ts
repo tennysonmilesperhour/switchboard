@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { sendPushToUsers } from '@/lib/server/notify';
+import { requireUser } from '@/lib/server/require-user';
 
 export interface MomentActionResult {
   ok: boolean;
@@ -19,11 +20,9 @@ export async function checkIn(
   hoursAvailable: number,
   zoneId: string | null = null,
 ): Promise<MomentActionResult> {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { ok: false, error: 'Not signed in' };
+  const auth = await requireUser();
+  if (!auth.ok) return auth;
+  const { supabase, user } = auth;
   if (!placeName.trim()) return { ok: false, error: 'Where are you?' };
   if (experiences.length === 0) return { ok: false, error: 'Pick at least one experience' };
 

@@ -2,6 +2,7 @@
 
 import { revalidatePath } from 'next/cache';
 import { createClient } from '@/lib/supabase/server';
+import { requireUser } from '@/lib/server/require-user';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { advanceEventCascade } from '@/lib/server/cascade-runner';
 import { notifyUsers } from '@/lib/server/notify';
@@ -59,11 +60,9 @@ export async function respondToInvite(
   note: DeclineNote = null,
   answers: Record<string, string> = {},
 ): Promise<RespondResult> {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { ok: false, error: 'Not signed in' };
+  const auth = await requireUser();
+  if (!auth.ok) return auth;
+  const { supabase, user } = auth;
 
   // Atomic capacity-checked transition, then a cascade tick.
   const { data, error } = await supabase.rpc('respond_to_invite', {

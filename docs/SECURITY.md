@@ -238,6 +238,7 @@ surprises:
   event id without auth by design (link unfurling). Keep it to non-sensitive
   fields only.
 - **Legacy public media objects.** Rows created before the private-bucket
-  migration still point at public URLs; `signMediaRef` serves them as-is. A
-  one-time copy of existing `capsule-`/`voice-` objects into `media-private`
-  would retroactively secure them.
+  migration still point at public URLs; `signMediaRef` serves them as-is. Run
+  `npm run migrate:legacy-media` (dry-run by default; `-- --apply` to execute)
+  to copy those objects into `media-private` and rewrite the columns to paths,
+  retroactively securing them.

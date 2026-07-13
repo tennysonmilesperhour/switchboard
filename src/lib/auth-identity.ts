@@ -19,6 +19,15 @@ export function isEmailIdentifier(value: string): boolean {
   return EMAIL_PATTERN.test(normalizeIdentifier(value));
 }
 
+/**
+ * Does this string look like an email address? The one shared, client-safe
+ * email check — use this instead of re-inlining the pattern. (`looksLikeEmail`
+ * in server/email.ts is the server-only counterpart and delegates here.)
+ */
+export function isEmail(value: string | null | undefined): boolean {
+  return typeof value === 'string' && EMAIL_PATTERN.test(value.trim());
+}
+
 export function usernameToAuthEmail(value: string): string {
   const username = normalizeUsername(value);
   if (!USERNAME_PATTERN.test(username)) {

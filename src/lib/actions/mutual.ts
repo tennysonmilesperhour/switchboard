@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache';
 import { createClient } from '@/lib/supabase/server';
 import { notifyUsers } from '@/lib/server/notify';
 import { checkRateLimit } from '@/lib/server/rate-limit';
+import { requireUser } from '@/lib/server/require-user';
 import type { IntentKind } from '@/lib/types';
 
 export interface MutualResult {
@@ -23,11 +24,9 @@ export async function downToConnect(
   kind: IntentKind = 'down_to_connect',
   eventId: string | null = null,
 ): Promise<MutualResult> {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { ok: false, error: 'Not signed in' };
+  const auth = await requireUser();
+  if (!auth.ok) return auth;
+  const { supabase, user } = auth;
 
   const cleanActivity = activity.trim().slice(0, 80);
   if (!cleanActivity) return { ok: false, error: 'What are you down to do?' };
