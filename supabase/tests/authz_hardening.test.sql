@@ -33,10 +33,16 @@ insert into public.connections (requester_id, addressee_id, status) values
   ('00000000-0000-0000-0000-00000000a11c', '00000000-0000-0000-0000-00000000ba11', 'pending');
 
 -- F2 fixture: alice hosts an event; mallory is a co-host (is_event_host true).
+-- Mallory also holds an accepted invite so can_view_event lets her SELECT the
+-- event row — co-hosts alone are not covered by can_view_event, and an UPDATE
+-- can only reach rows the actor can see, so without this her update would match
+-- zero rows and never reach the freeze trigger.
 insert into public.events (id, host_id, title, status) values
   ('00000000-0000-0000-0000-0000000e0001', '00000000-0000-0000-0000-00000000a11c', 'Alice dinner', 'inviting');
 insert into public.event_cohosts (event_id, cohost_id, added_by) values
   ('00000000-0000-0000-0000-0000000e0001', '00000000-0000-0000-0000-00000000ba11', '00000000-0000-0000-0000-00000000a11c');
+insert into public.invites (event_id, invitee_id, position, status) values
+  ('00000000-0000-0000-0000-0000000e0001', '00000000-0000-0000-0000-00000000ba11', 0, 'accepted');
 
 -- F6 fixture: alice blocks mallory.
 insert into public.profile_blocks (blocker_id, blocked_id) values
