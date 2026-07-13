@@ -3,6 +3,7 @@ import { createAdminClient, hasAdminCredentials } from '@/lib/supabase/admin';
 import { getUser } from '@/lib/supabase/server';
 import { reportOperationalError } from '@/lib/server/observability';
 import { formatDateTime } from '@/lib/format';
+import { resolveEventZone } from '@/lib/server/event-zone';
 import { Icon } from '@/components/ui/Icon';
 import { GuestRsvpClient } from './GuestRsvpClient';
 import { JoinPrompt } from './JoinPrompt';
@@ -93,13 +94,14 @@ export default async function GuestRsvpPage({
   const { data: event, error: eventError } = invite && admin
     ? await admin
         .from('events')
-        .select('title, description, location_name, starts_at, host_id')
+        .select('title, description, location_name, starts_at, time_zone, host_id')
         .eq('id', invite.event_id)
         .maybeSingle<{
           title: string;
           description: string | null;
           location_name: string | null;
           starts_at: string | null;
+          time_zone: string | null;
           host_id: string;
         }>()
     : { data: null, error: null };
@@ -139,6 +141,9 @@ export default async function GuestRsvpPage({
   // unresolved viewer as logged-out.
   const user = await getUser().catch(() => null);
   const hostName = host?.display_name ?? 'Your host';
+  // Show the plan's local time, not the server's UTC. Falls back to the host's
+  // profile zone for plans created before the zone was captured on the event.
+  const zone = admin ? await resolveEventZone(admin, event) : null;
 
   return (
     <div className="mx-auto max-w-lg min-h-dvh flex flex-col px-6">
@@ -164,7 +169,7 @@ export default async function GuestRsvpPage({
             <h1 className="font-extrabold tracking-tight text-4xl text-ink mt-2 text-balance">
               {event.title}
             </h1>
-            <p className="mt-3 text-ink font-bold">{formatDateTime(event.starts_at)}</p>
+            <p className="mt-3 text-ink font-bold">{formatDateTime(event.starts_at, zone)}</p>
             {event.location_name && (
               <p className="text-ink-soft text-sm mt-1 inline-flex items-center gap-1.5">
                 <Icon name="mapPin" size={15} className="text-terracotta" />

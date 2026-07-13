@@ -22,7 +22,7 @@ export default async function CapsulePage({
 
   const { data: event } = await supabase
     .from('events')
-    .select('id, title, starts_at, location_name')
+    .select('id, title, starts_at, time_zone, location_name')
     .eq('id', id)
     .single();
   if (!event) notFound();
@@ -53,7 +53,7 @@ export default async function CapsulePage({
       <div className="space-y-6">
         <div className="rounded-card bg-ink text-paper p-6">
           <p className="text-xs font-bold uppercase tracking-widest text-gold-deep">
-            {formatDate(event.starts_at)}
+            {formatDate(event.starts_at, event.time_zone)}
           </p>
           <h2 className="font-extrabold tracking-tight text-3xl mt-1.5 text-balance">
             {event.title}

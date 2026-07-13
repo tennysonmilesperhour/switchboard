@@ -37,7 +37,7 @@ function EventCard({
       title={event.title}
       color={planColor(index)}
       imageUrl={event.cover_url}
-      when={formatDateTime(event.starts_at)}
+      when={formatDateTime(event.starts_at, event.time_zone)}
       where={event.location_name ?? undefined}
       dateLabel={note ?? STATUS_LABELS[event.status] ?? event.status}
     />

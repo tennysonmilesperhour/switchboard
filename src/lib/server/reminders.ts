@@ -77,7 +77,9 @@ async function remindOneEvent(
   const rows = invites ?? [];
 
   const accepted = rows.filter((i) => i.status === 'accepted');
-  const when = formatDateTime(event.starts_at);
+  // In the plan's own zone — a reminder email/push has no viewer zone, so
+  // without this it would announce the server's UTC time.
+  const when = formatDateTime(event.starts_at, event.time_zone);
   const url = `/events/${event.id}`;
 
   // Registered attendees → in-app notification (always) + push (quiet-hours

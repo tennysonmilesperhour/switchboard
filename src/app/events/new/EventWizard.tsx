@@ -29,6 +29,7 @@ import type { PlanDraft } from '@/lib/actions/plan';
 import type { ImportResult } from '@/lib/actions/import';
 import type { InviteMode } from '@/lib/types';
 import { canPickContacts, pickContacts } from '@/lib/client/contact-picker';
+import { resolveTimeZone } from '@/lib/client/time-zone';
 import { resolveContactMatches, type ContactMatch } from '@/lib/actions/connections';
 
 export interface WizardFriend {
@@ -593,6 +594,9 @@ export function EventWizard({
         locationAddress: null,
         startsAt,
         endsAt: null,
+        // The zone `startsAt` was computed in, so server-side renders (link
+        // unfurls, guest RSVP pages) show the host's intended local time.
+        timeZone: resolveTimeZone(),
         capacity: capacity ? Number(capacity) : null,
         inviteMode,
         openTable,

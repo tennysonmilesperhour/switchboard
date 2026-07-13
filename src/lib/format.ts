@@ -1,23 +1,57 @@
 /** Formatting helpers - Intl-based, no library dependency. */
 
-export function formatDateTime(iso: string | null): string {
+/**
+ * Render an event's start as "Tue, Jul 14, 6:00 PM CDT".
+ *
+ * `starts_at` is a UTC instant; on its own it has no wall-clock meaning until
+ * it's localized. In the browser Intl uses the viewer's zone, but on the server
+ * (OG images, SSR pages, guest invite links) there is no viewer and it falls
+ * back to the runtime zone — UTC on Vercel — which is what made a 6pm plan
+ * unfurl as "12:00 AM". Pass the event's own `time_zone` so server and client
+ * agree on the host's intended time, and the short zone label removes any doubt
+ * about whose clock it is. Falls back to the runtime zone when `timeZone` is
+ * absent (undated events, or plans created before the zone was captured).
+ */
+export function formatDateTime(
+  iso: string | null,
+  timeZone?: string | null,
+): string {
   if (!iso) return 'Time TBD';
-  return new Intl.DateTimeFormat('en-US', {
+  return format(new Date(iso), {
     weekday: 'short',
     month: 'short',
     day: 'numeric',
     hour: 'numeric',
     minute: '2-digit',
-  }).format(new Date(iso));
+    ...(timeZone ? { timeZone, timeZoneName: 'short' } : {}),
+  });
 }
 
-export function formatDate(iso: string | null): string {
+export function formatDate(iso: string | null, timeZone?: string | null): string {
   if (!iso) return 'Date TBD';
-  return new Intl.DateTimeFormat('en-US', {
+  return format(new Date(iso), {
     weekday: 'long',
     month: 'long',
     day: 'numeric',
-  }).format(new Date(iso));
+    ...(timeZone ? { timeZone } : {}),
+  });
+}
+
+/**
+ * `Intl.DateTimeFormat` throws a RangeError on an unrecognized `timeZone`, and
+ * `time_zone` ultimately comes from the client — so a malformed value must never
+ * take down a server render. On failure, retry without the zone (the value that
+ * matters, the instant, still renders; only the localization is lost).
+ */
+function format(date: Date, options: Intl.DateTimeFormatOptions): string {
+  try {
+    return new Intl.DateTimeFormat('en-US', options).format(date);
+  } catch {
+    const { timeZone, timeZoneName, ...zoneless } = options;
+    void timeZone;
+    void timeZoneName;
+    return new Intl.DateTimeFormat('en-US', zoneless).format(date);
+  }
 }
 
 export function formatWindow(minutes: number): string {
