@@ -12,10 +12,14 @@ insert into auth.users (id, email) values
   ('00000000-0000-0000-0000-0000000d0570', 'host@example.com'),
   ('00000000-0000-0000-0000-0000000d05e2', 'voter@example.com'),
   ('00000000-0000-0000-0000-0000000d0111', 'stranger@example.com');
+-- The on_auth_user_created trigger already inserted a profile row for each
+-- auth.users row above, so upsert to set the fields this test needs.
 insert into public.profiles (id, display_name, onboarded) values
   ('00000000-0000-0000-0000-0000000d0570', 'Host', true),
   ('00000000-0000-0000-0000-0000000d05e2', 'Voter', true),
-  ('00000000-0000-0000-0000-0000000d0111', 'Stranger', true);
+  ('00000000-0000-0000-0000-0000000d0111', 'Stranger', true)
+on conflict (id) do update
+  set display_name = excluded.display_name, onboarded = excluded.onboarded;
 
 -- An event still in the `deciding` phase (group votes before invites go out).
 insert into public.events (id, host_id, title, status) values
