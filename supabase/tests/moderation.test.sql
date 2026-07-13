@@ -61,6 +61,7 @@ select throws_ok(
   $$ insert into public.platform_moderators (member_id)
      values ('00000000-0000-0000-0000-0000000000c3') $$,
   '42501',
+  'new row violates row-level security policy for table "platform_moderators"',
   'a user cannot appoint themselves a moderator (RLS deny-all)'
 );
 

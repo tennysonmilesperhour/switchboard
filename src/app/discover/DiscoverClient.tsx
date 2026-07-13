@@ -3,7 +3,7 @@
 import { useState, useTransition } from 'react';
 import Link from 'next/link';
 import { Button } from '@/components/ui/Button';
-import { Card } from '@/components/ui/Card';
+import { Card, SectionHeader } from '@/components/ui/Card';
 import { Chip } from '@/components/ui/Chip';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { runDiscovery } from '@/lib/actions/discovery';
@@ -42,11 +42,11 @@ export function DiscoverClient({ defaultInterests }: { defaultInterests: string[
   }
 
   return (
-    <div className="space-y-6">
-      <p className="text-sm text-ink-soft leading-relaxed -mt-1">
-        Describe the experience you’re hoping for. Switchboard curates a few
-        great fits - not a hundred search results.
-      </p>
+    <section className="space-y-4">
+      <SectionHeader
+        title="Find something to do"
+        hint="Describe the vibe — Switchboard curates a few great fits"
+      />
 
       <form
         className="space-y-4"
@@ -156,6 +156,11 @@ export function DiscoverClient({ defaultInterests }: { defaultInterests: string[
               <p className="text-xs text-terracotta-deep mt-2">
                 ✨ {suggestion.why}
               </p>
+              {suggestion.category && (
+                <span className="mt-2 inline-block rounded-pill bg-cream px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-ink-faint">
+                  {suggestion.category}
+                </span>
+              )}
               <div className="mt-3">
                 <Link
                   href={`/events/new?title=${encodeURIComponent(suggestion.title)}&description=${encodeURIComponent(suggestion.description)}`}
@@ -167,6 +172,6 @@ export function DiscoverClient({ defaultInterests }: { defaultInterests: string[
           ))}
         </section>
       )}
-    </div>
+    </section>
   );
 }
