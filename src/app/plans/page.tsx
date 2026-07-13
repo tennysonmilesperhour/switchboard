@@ -18,6 +18,7 @@ const STATUS_LABELS: Record<string, string> = {
   inviting: 'Inviting',
   confirmed: 'Confirmed',
   cancelled: 'Cancelled',
+  past: 'Past',
 };
 
 function EventCard({
@@ -67,7 +68,9 @@ export default async function PlansPage() {
       .from('events')
       .select('*')
       .eq('host_id', user.id)
-      .not('status', 'in', '("past","cancelled")')
+      // Everything except cancelled. Plans that have already happened are kept
+      // and surfaced in their own "Past events" section below rather than hidden.
+      .neq('status', 'cancelled')
       .order('starts_at', { ascending: true, nullsFirst: false }),
     supabase
       .from('invites')
@@ -119,14 +122,43 @@ export default async function PlansPage() {
       (row): row is { status: string; event: SwitchboardEvent } =>
         row.event !== null &&
         row.event.host_id !== user.id &&
-        !['past', 'cancelled'].includes(row.event.status),
+        row.event.status !== 'cancelled',
     );
 
-  const needsResponse = invited.filter((i) => i.status === 'sent');
-  const going = invited.filter((i) => i.status !== 'sent');
+  // "Already happened" is judged by the actual start time (with the 'past'
+  // status as a fallback) so a plan drops into the archive as soon as it is
+  // over — even before the status-sweeping cron catches up. Plans with no set
+  // date (Time TBD) are treated as upcoming.
+  const nowMs = new Date().getTime();
+  const hasHappened = (event: SwitchboardEvent) =>
+    event.status === 'past' ||
+    (event.starts_at !== null && new Date(event.starts_at).getTime() < nowMs);
+
+  const hostingAll = (hosting ?? []) as SwitchboardEvent[];
+  const hostingUpcoming = hostingAll.filter((event) => !hasHappened(event));
+
+  const upcomingInvited = invited.filter((row) => !hasHappened(row.event));
+  const needsResponse = upcomingInvited.filter((i) => i.status === 'sent');
+  const going = upcomingInvited.filter((i) => i.status !== 'sent');
+
+  // Past plans you hosted or committed to, newest first. Invitations you never
+  // answered for events that have since passed are dropped rather than archived.
+  const pastEvents = [
+    ...hostingAll.filter(hasHappened),
+    ...invited
+      .filter((row) => row.status !== 'sent' && hasHappened(row.event))
+      .map((row) => row.event),
+  ].sort((a, b) => {
+    const ta = a.starts_at ? new Date(a.starts_at).getTime() : 0;
+    const tb = b.starts_at ? new Date(b.starts_at).getTime() : 0;
+    return tb - ta;
+  });
 
   const isEmpty =
-    (hosting?.length ?? 0) === 0 && invited.length === 0;
+    hostingUpcoming.length === 0 &&
+    needsResponse.length === 0 &&
+    going.length === 0 &&
+    pastEvents.length === 0;
 
   return (
     <AppShell title="Coming up">
@@ -153,11 +185,11 @@ export default async function PlansPage() {
               </div>
             </section>
           )}
-          {(hosting?.length ?? 0) > 0 && (
+          {hostingUpcoming.length > 0 && (
             <section>
               <SectionHeader title="Hosting" />
               <div className="grid grid-cols-2 gap-3">
-                {(hosting as SwitchboardEvent[]).map((event, i) => (
+                {hostingUpcoming.map((event, i) => (
                   <EventCard key={event.id} event={event} index={i} />
                 ))}
               </div>
@@ -169,6 +201,16 @@ export default async function PlansPage() {
               <div className="grid grid-cols-2 gap-3">
                 {going.map(({ event }, i) => (
                   <EventCard key={event.id} event={event} index={i} />
+                ))}
+              </div>
+            </section>
+          )}
+          {pastEvents.length > 0 && (
+            <section>
+              <SectionHeader title="Past events" hint="Plans that have wrapped" />
+              <div className="grid grid-cols-2 gap-3">
+                {pastEvents.map((event, i) => (
+                  <EventCard key={event.id} event={event} index={i} note="Past" />
                 ))}
               </div>
             </section>

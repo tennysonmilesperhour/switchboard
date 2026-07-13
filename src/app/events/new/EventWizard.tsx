@@ -235,6 +235,30 @@ export function EventWizard({
     [startsAt],
   );
 
+  // Block scheduling a plan in the past. `minDate` (today, in the visitor's
+  // local zone) is set on the client so the native date picker greys out prior
+  // days without risking an SSR/client hydration mismatch on the attribute.
+  // `startsInPast` also guards the chosen time, catching "today, but an hour
+  // that already passed."
+  const [minDate, setMinDate] = useState('');
+  useEffect(() => {
+    // Defer the setState a tick (matching the contacts-support effect below) so
+    // it isn't a synchronous set-state-in-effect, and so `min` is empty on the
+    // server render and only firms up on the client — no hydration mismatch.
+    const timeout = window.setTimeout(() => {
+      const now = new Date();
+      const yyyy = now.getFullYear();
+      const mm = String(now.getMonth() + 1).padStart(2, '0');
+      const dd = String(now.getDate()).padStart(2, '0');
+      setMinDate(`${yyyy}-${mm}-${dd}`);
+    }, 0);
+    return () => window.clearTimeout(timeout);
+  }, []);
+  const startsInPast = useMemo(
+    () => startsAt !== null && new Date(startsAt).getTime() < new Date().getTime(),
+    [startsAt],
+  );
+
   // Gentle nudge to check the forecast when the plan reads as outdoors. Purely
   // a heuristic on what the host typed — no forecast API involved.
   const looksOutdoor = useMemo(() => {
@@ -550,7 +574,7 @@ export function EventWizard({
   const selectedFriendCount = invitees.filter((i) => i.profileId).length;
 
   const canNext = [
-    title.trim().length > 0,
+    title.trim().length > 0 && !startsInPast,
     true,
     invitees.length > 0,
     true,
@@ -673,6 +697,7 @@ export function EventWizard({
               <label htmlFor="date" className={FIELD_LABEL}>Date</label>
               <input
                 id="date" type="date" value={date}
+                min={minDate || undefined}
                 onChange={(e) => setDate(e.target.value)}
                 className={`${FIELD} min-w-0 appearance-none [color-scheme:light]`}
               />
@@ -687,6 +712,11 @@ export function EventWizard({
               />
             </div>
           </div>
+          {startsInPast && (
+            <p role="alert" className="text-sm font-medium text-rose-deep">
+              That date and time have already passed. Pick a moment in the future.
+            </p>
+          )}
           <div className="space-y-1.5">
             <label htmlFor="recurrence" className={FIELD_LABEL}>
               Repeats?

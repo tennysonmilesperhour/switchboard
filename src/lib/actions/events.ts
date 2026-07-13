@@ -139,6 +139,11 @@ export async function createEvent(input: CreateEventInput): Promise<CreateEventR
   if (input.invitees.length === 0) {
     return createEventError('Add at least one person to invite before sending.');
   }
+  // A plan can be undated (Time TBD), but if a start time is given it must be in
+  // the future — the client blocks this too, but never trust the client.
+  if (input.startsAt && new Date(input.startsAt).getTime() < Date.now()) {
+    return createEventError('That date has already passed. Pick a time in the future.');
+  }
 
   const invitees = await resolveInvitees(supabase, input.invitees);
 
