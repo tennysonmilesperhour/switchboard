@@ -20,9 +20,13 @@ insert into auth.users (id, email) values
   ('00000000-0000-0000-0000-00000000a11c', 'alice@example.com'),
   ('00000000-0000-0000-0000-00000000ba11', 'mallory@example.com');
 
+-- The on_auth_user_created trigger already inserted a profile row for each
+-- auth.users row above, so upsert to set the fields this test needs.
 insert into public.profiles (id, display_name, onboarded) values
   ('00000000-0000-0000-0000-00000000a11c', 'Alice', true),
-  ('00000000-0000-0000-0000-00000000ba11', 'Mallory', true);
+  ('00000000-0000-0000-0000-00000000ba11', 'Mallory', true)
+on conflict (id) do update
+  set display_name = excluded.display_name, onboarded = excluded.onboarded;
 
 -- Alice hosts an event with a poll, and casts a private vote.
 insert into public.events (id, host_id, title, status) values
