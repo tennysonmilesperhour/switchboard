@@ -16,7 +16,9 @@
  * the client bundle and the /api/version route, so both sides always compare
  * the same value.
  */
-export function resolveBuildId(env: NodeJS.ProcessEnv = process.env): string {
+export function resolveBuildId(
+  env: Record<string, string | undefined> = process.env,
+): string {
   if (env.VERCEL_GIT_COMMIT_SHA) return env.VERCEL_GIT_COMMIT_SHA;
   if (env.VERCEL_DEPLOYMENT_ID) return env.VERCEL_DEPLOYMENT_ID;
   if (env.VERCEL) return `build-${Date.now()}`;

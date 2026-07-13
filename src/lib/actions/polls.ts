@@ -56,7 +56,11 @@ export async function castVote(
   const { supabase, user } = auth;
 
   // Only accept a ballot for an option that actually belongs to this poll, and
-  // only while voting is open — don't trust the client-supplied optionId/phase.
+  // only while the poll is open to input — don't trust the client-supplied
+  // optionId/phase. The combined suggest-and-rank screen (PollSection's
+  // `votingOpen`) lets members weigh options during `suggesting` and `runoff`
+  // as well as `voting`, so accept a ballot in any of those; only a `decided`
+  // poll is closed.
   const { data: option } = await supabase
     .from('poll_options')
     .select('poll_id')
@@ -70,7 +74,8 @@ export async function castVote(
     .select('phase')
     .eq('id', pollId)
     .maybeSingle();
-  if (pollRow?.phase !== 'voting') {
+  const OPEN_PHASES = ['suggesting', 'voting', 'runoff'];
+  if (!pollRow || !OPEN_PHASES.includes(pollRow.phase)) {
     return { ok: false, error: 'Voting is not open on this poll.' };
   }
 

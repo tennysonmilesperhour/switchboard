@@ -1,5 +1,5 @@
 import { ImageResponse } from 'next/og';
-import { createAdminClient } from '@/lib/supabase/admin';
+import { createAdminClient, hasAdminCredentials } from '@/lib/supabase/admin';
 import { resolveEventZone } from '@/lib/server/event-zone';
 
 export const runtime = 'nodejs';
@@ -10,6 +10,13 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> },
 ) {
   const { id } = await params;
+  // Guard the service-role client the way the calendar feed and RSVP page do —
+  // without credentials createAdminClient() throws. In practice the OG URL is
+  // only emitted when creds exist, so this just degrades safely rather than
+  // 500-ing if the route is hit directly on a no-creds deploy.
+  if (!hasAdminCredentials()) {
+    return new Response('Not found', { status: 404 });
+  }
   const admin = createAdminClient();
   const { data: event } = await admin
     .from('events')

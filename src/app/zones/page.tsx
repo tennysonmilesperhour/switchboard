@@ -43,6 +43,15 @@ export default async function ZonesPage({
           link can serendipitously find each other.
         </p>
 
+        {(zones?.length ?? 0) === 0 && (
+          <Card tone="cream">
+            <p className="text-sm text-ink-soft leading-relaxed">
+              No zones yet. Running a conference, trip, or gathering? Create one
+              below and share the link so everyone can find each other.
+            </p>
+          </Card>
+        )}
+
         {(zones?.length ?? 0) > 0 && (
           <section>
             <SectionHeader title="Active zones" />

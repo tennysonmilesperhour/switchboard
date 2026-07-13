@@ -11,9 +11,10 @@ import { COMMUNITY_COVENANT_SUMMARY } from '@/lib/legal';
 interface OnboardingFormProps {
   initialName: string;
   initialHandle: string;
+  next?: string;
 }
 
-export function OnboardingForm({ initialName, initialHandle }: OnboardingFormProps) {
+export function OnboardingForm({ initialName, initialHandle, next = '/' }: OnboardingFormProps) {
   const [submitting, setSubmitting] = useState(false);
   // Normalize the handle to lowercase as it's typed so the validated value
   // matches what the user sees. The `lowercase` CSS class only changes the
@@ -39,6 +40,7 @@ export function OnboardingForm({ initialName, initialHandle }: OnboardingFormPro
       onSubmit={() => setSubmitting(true)}
       className="mt-6 space-y-6"
     >
+      <input type="hidden" name="next" value={next} />
       <div className="space-y-2">
         <label htmlFor="display_name" className="text-sm font-medium text-ink">
           Your name

@@ -30,6 +30,21 @@ export default async function MomentsPage() {
 
   const myMoment: MyMoment | null = momentRow ?? null;
   let candidates: Candidate[] = [];
+  let matchedRoomId: string | null = null;
+
+  if (myMoment && myMoment.status === 'matched') {
+    // The moment matched — find the shared room so we can link to it instead of
+    // stranding the user on the "nobody checked in" empty state.
+    const admin = createAdminClient();
+    const { data: rooms } = await admin
+      .from('rooms')
+      .select('id, created_at, room_members!inner(member_id)')
+      .eq('kind', 'moment')
+      .eq('room_members.member_id', user.id)
+      .order('created_at', { ascending: false })
+      .limit(1);
+    matchedRoomId = rooms?.[0]?.id ?? null;
+  }
 
   if (myMoment && myMoment.status === 'open') {
     // Anonymized discovery via security-definer RPC (mutual exposure required).
@@ -97,7 +112,11 @@ export default async function MomentsPage() {
 
   return (
     <AppShell title="Moments">
-      <MomentsClient myMoment={myMoment} candidates={candidates} />
+      <MomentsClient
+        myMoment={myMoment}
+        candidates={candidates}
+        matchedRoomId={matchedRoomId}
+      />
     </AppShell>
   );
 }

@@ -13,6 +13,7 @@ const PUBLIC_PREFIXES = [
   '/copyright',
   '/auth',
   '/rsvp', // guest RSVP links
+  '/join', // shareable plan invite links (signed-out recipients ask to join)
   '/design', // design direction previews
   '/api/cron',
   '/api/og',
@@ -124,6 +125,34 @@ export async function proxy(request: NextRequest) {
 
   if (user && (pathname === '/welcome' || pathname === '/login')) {
     return redirectWithCsp('/');
+  }
+
+  // Funnel authenticated-but-not-onboarded users into onboarding from ANY
+  // protected route, not just the home page — otherwise an invite deep link
+  // (?next=/join/…) or any bookmarked path lets a user in without a profile,
+  // interests, or starter circles. Public routes and API routes are exempt (a
+  // signed-out guest can still view a share/RSVP link, and API calls must not
+  // be redirected to an HTML page).
+  if (
+    user &&
+    !isPublicPath(pathname) &&
+    pathname !== '/onboarding' &&
+    !pathname.startsWith('/api/')
+  ) {
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('onboarded')
+      .eq('id', user.id)
+      .maybeSingle();
+    if (profile && profile.onboarded === false) {
+      const url = request.nextUrl.clone();
+      url.pathname = '/onboarding';
+      url.search = '';
+      if (pathname !== '/') url.searchParams.set('next', pathname);
+      const res = NextResponse.redirect(url);
+      res.headers.set('content-security-policy', csp);
+      return res;
+    }
   }
 
   return response;

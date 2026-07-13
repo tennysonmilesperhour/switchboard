@@ -5,6 +5,28 @@ subsystem audit (July 2026). Every item cites concrete evidence (`file:line`),
 a fix approach, and how to verify. Work top-down: milestones are ordered by
 priority, and items inside a milestone are roughly independent.
 
+## Implementation status (2026-07-13)
+
+A large pass has landed the code-fixable work. **Done:** M0 (all three P0 bugs),
+M1 (Moments/Mutual/room realtime, guest calendar, onboarding gate), M2
+(moderation review queue), M3 (metadataBase / apple-touch-icon / global-error /
+robots / sitemap / manifest colors / OG guard / `tsc` in CI / cron maxDuration +
+cleanup sweep), M4 partial (board first-date, zones empty state, dead
+SaveButton), M5.2 (seed `discoverable` + non-local guard), and M6 partial
+(reset-password guard, login expired-link reason, moment-room label, welcome
+deleted banner + `<main>` + contrast, discover heading/category, import copy,
+More-sheet Escape/focus). Also landed from the ship-readiness audit: `/join`
+public + return path, microphone Permissions-Policy, structured observability,
+and fail-closed migration CI.
+
+**Deferred — needs owner/ops or explicitly out of scope:** applying migrations
+to production, Resend/Plivo provider config + webhooks, Google OAuth, preview-env
+isolation, enabling leaked-password protection, the pilot (all external). **Still
+open in code:** M4.2–4.5 (poll vote/suggest deadlines, event end-time, reminders
+toggle), M6.9 (copyright DMCA contact — needs a real address), and broader M5.3
+test coverage / authed-e2e-in-CI. See `docs/SHIP-READINESS-AUDIT.md` for the full
+release gate.
+
 ## How to use this doc (read first)
 
 You are picking this up cold. Before touching code:

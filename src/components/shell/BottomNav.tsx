@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Icon, type IconName } from '@/components/ui/Icon';
 
 type Tab = { href: string; label: string; icon: IconName };
@@ -103,6 +103,23 @@ function MoreSheet({
   onClose: () => void;
   pathname: string;
 }) {
+  const sheetRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    // Move focus into the sheet on open and close on Escape, so keyboard and
+    // assistive-technology users can operate and dismiss it.
+    const previouslyFocused = document.activeElement as HTMLElement | null;
+    sheetRef.current?.querySelector<HTMLElement>('a, button')?.focus();
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.key === 'Escape') onClose();
+    }
+    document.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.removeEventListener('keydown', onKeyDown);
+      previouslyFocused?.focus?.();
+    };
+  }, [onClose]);
+
   return (
     <div
       className="fixed inset-0 z-40 bg-ink/30"
@@ -112,6 +129,7 @@ function MoreSheet({
       onClick={onClose}
     >
       <div
+        ref={sheetRef}
         className="animate-rise absolute inset-x-0 bottom-0 mx-auto max-w-lg rounded-t-card bg-card p-4 pb-[calc(env(safe-area-inset-bottom)+5.5rem)] shadow-float"
         onClick={(e) => e.stopPropagation()}
       >

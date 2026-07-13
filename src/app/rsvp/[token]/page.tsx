@@ -186,6 +186,16 @@ export default async function GuestRsvpPage({
               guestName={invite.guest_name ?? 'there'}
               initialStatus={invite.status}
               questions={questions}
+              calendarEvent={
+                event.starts_at
+                  ? {
+                      title: event.title,
+                      description: event.description,
+                      location: event.location_name,
+                      startsAt: event.starts_at,
+                    }
+                  : null
+              }
             />
             {!user && <JoinPrompt hostName={hostName} next={`/rsvp/${token}`} />}
             <p className="text-xs text-ink-faint mt-10 leading-relaxed">
