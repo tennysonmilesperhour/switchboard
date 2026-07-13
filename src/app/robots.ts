@@ -28,6 +28,7 @@ export default function robots(): MetadataRoute.Robots {
         '/zones',
         '/notifications',
         '/onboarding',
+        '/moderation',
       ],
     },
     sitemap: `${appUrl}/sitemap.xml`,

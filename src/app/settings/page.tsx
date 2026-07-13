@@ -51,6 +51,11 @@ export default async function SettingsPage() {
     .maybeSingle<{ calendar_token: string; contact_email: string | null; contact_phone: string | null }>();
   const calendarToken = privateProfile?.calendar_token ?? null;
 
+  // Reveal the moderation entry point only to appointed platform moderators.
+  const { data: isModerator } = await supabase.rpc('is_platform_moderator', {
+    p_user: user.id,
+  });
+
   const interests: string[] = profile?.interests ?? [];
   const downTo: string[] = profile?.down_to ?? [];
   const sabbatical: boolean = profile?.sabbatical ?? false;
@@ -282,6 +287,21 @@ export default async function SettingsPage() {
             </AutosaveForm>
           </Card>
         </section>
+
+        {isModerator && (
+          <section>
+            <SectionHeader title="Moderation" hint="Review community reports" />
+            <Card>
+              <Link
+                href="/moderation"
+                className="flex items-center justify-between rounded-card bg-paper px-3 py-2.5 text-sm font-bold text-terracotta hover:text-terracotta-deep"
+              >
+                Open the moderation queue
+                <span aria-hidden>→</span>
+              </Link>
+            </Card>
+          </section>
+        )}
 
         <section>
           <SectionHeader title="Account" hint="Password and account controls" />
