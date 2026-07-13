@@ -130,6 +130,9 @@ export interface SwitchboardEvent {
   capacity: number | null;
   invite_mode: InviteMode;
   status: EventStatus;
+  /** Open table: anyone can ask to join (via the shared invite link or the
+   *  friends-of-friends discover feed); the host approves each request. */
+  open_table: boolean;
   /** Visibility settings */
   show_invite_list: boolean;
   show_accepted: boolean;
