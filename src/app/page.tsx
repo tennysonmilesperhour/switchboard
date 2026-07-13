@@ -57,7 +57,7 @@ export default async function HomePage() {
       .limit(12),
     supabase
       .from('invites')
-      .select('id, event:events(id, title, starts_at)')
+      .select('id, event:events(id, title, starts_at, time_zone)')
       .eq('invitee_id', user.id)
       .eq('status', 'sent'),
     supabase
@@ -201,7 +201,7 @@ export default async function HomePage() {
                 href={`/events/${event.id}`}
                 title={event.title}
                 color={planColor(i)}
-                when={formatDateTime(event.starts_at)}
+                when={formatDateTime(event.starts_at, event.time_zone)}
                 where={event.location_name ?? undefined}
                 status={event.status === 'confirmed' ? 'Confirmed' : undefined}
                 className="animate-card-in"
@@ -344,14 +344,17 @@ export default async function HomePage() {
               {(pendingInvites ?? []).map((invite) => {
                 const event = (
                   Array.isArray(invite.event) ? invite.event[0] : invite.event
-                ) as Pick<SwitchboardEvent, 'id' | 'title' | 'starts_at'> | null;
+                ) as Pick<
+                  SwitchboardEvent,
+                  'id' | 'title' | 'starts_at' | 'time_zone'
+                > | null;
                 if (!event) return null;
                 return (
                   <Link key={invite.id} href={`/events/${event.id}`} className="block group">
                     <Card tone="gold" className="group-hover:shadow-lift transition-shadow">
                       <p className="font-medium">{event.title}</p>
                       <p className="text-xs text-ink-soft mt-0.5">
-                        {formatDateTime(event.starts_at)} · respond soon
+                        {formatDateTime(event.starts_at, event.time_zone)} · respond soon
                       </p>
                     </Card>
                   </Link>

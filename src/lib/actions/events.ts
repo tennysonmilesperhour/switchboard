@@ -40,6 +40,9 @@ export interface CreateEventInput {
   locationAddress: string | null;
   startsAt: string | null;
   endsAt: string | null;
+  /** Host's IANA zone (browser-resolved), so server renders show the intended
+   *  wall-clock time. See `events.time_zone`. */
+  timeZone: string | null;
   capacity: number | null;
   inviteMode: InviteMode;
   openTable: boolean;
@@ -523,6 +526,9 @@ export interface UpdateEventInput {
   locationAddress: string | null;
   startsAt: string | null;
   endsAt: string | null;
+  /** Editor's IANA zone (browser-resolved); re-anchors `time_zone` whenever the
+   *  start time is edited, mirroring how the form recomputes `startsAt`. */
+  timeZone: string | null;
   capacity: number | null;
   wishlistUrl: string | null;
 }
@@ -624,6 +630,11 @@ export async function updateEventDetails(
       location_address: input.locationAddress?.trim() || null,
       starts_at: input.startsAt || null,
       ends_at: input.endsAt || null,
+      // The form recomputes `startsAt` from the editor's browser zone, so
+      // re-anchor `time_zone` to that same zone to keep the pair consistent.
+      // Only when the client actually resolved a zone — never overwrite a good
+      // stored zone with null just because this browser couldn't report one.
+      ...(input.timeZone ? { time_zone: input.timeZone.slice(0, 64) } : {}),
       capacity: input.capacity,
       wishlist_url: wishlistUrl,
     })
@@ -860,6 +871,9 @@ async function cloneEventForReuse(
       location_name: source.location_name,
       location_address: source.location_address,
       starts_at: startsAt,
+      // Same host, same crew — carry the zone so the reused plan renders in the
+      // host's local time even before a new date is picked.
+      time_zone: source.time_zone,
       capacity: source.capacity,
       invite_mode: source.invite_mode,
       open_table: source.open_table,

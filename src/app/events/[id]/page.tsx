@@ -32,6 +32,7 @@ import { getRelationship, getMutualConnections } from '@/lib/server/relationship
 import { inviteExpiresAt } from '@/lib/engine/cascade';
 import { threadGate, THREAD_PREVIEW_COUNT } from '@/lib/engine/thread';
 import { formatDateTime } from '@/lib/format';
+import { resolveEventZone } from '@/lib/server/event-zone';
 import { googleCalendarUrl } from '@/lib/calendar-links';
 import { appUrl, looksLikeEmail } from '@/lib/server/email';
 import { looksLikePhoneNumber } from '@/lib/phone';
@@ -55,11 +56,12 @@ export async function generateMetadata({
   const admin = createAdminClient();
   const { data: event } = await admin
     .from('events')
-    .select('title, description, starts_at, location_name')
+    .select('title, description, starts_at, location_name, time_zone, host_id')
     .eq('id', id)
     .maybeSingle();
   if (!event) return {};
-  const when = event.starts_at ? formatDateTime(event.starts_at) : null;
+  const zone = await resolveEventZone(admin, event);
+  const when = event.starts_at ? formatDateTime(event.starts_at, zone) : null;
   const description =
     event.description?.trim() ||
     [when, event.location_name].filter(Boolean).join(' · ') ||
@@ -106,6 +108,11 @@ export default async function EventPage({
 
   const isHost = event.host_id === user.id;
   const admin = createAdminClient();
+
+  // Render the plan's time in its own zone (host-profile fallback for plans
+  // created before the zone was captured), so this page agrees with the link
+  // unfurl and guest invite pages instead of drifting to the server's UTC.
+  const eventZone = await resolveEventZone(admin, event);
 
   // Co-hosts share host powers. Read the list with admin — a co-host can't
   // see the full roster through their own RLS.
@@ -497,7 +504,7 @@ export default async function EventPage({
             title={event.title}
             color={planColor(heroIndex)}
             status={statusLabel[event.status]}
-            when={formatDateTime(event.starts_at)}
+            when={formatDateTime(event.starts_at, eventZone)}
             where={event.location_name ?? undefined}
             attendees={attendees.map((attendee) => ({ name: attendee.name }))}
             attendeesLabel={

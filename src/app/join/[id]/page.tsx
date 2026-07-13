@@ -5,6 +5,7 @@ import { createClient } from '@/lib/supabase/server';
 import { createAdminClient, hasAdminCredentials } from '@/lib/supabase/admin';
 import { reportOperationalError } from '@/lib/server/observability';
 import { formatDateTime } from '@/lib/format';
+import { resolveEventZone } from '@/lib/server/event-zone';
 import { Button } from '@/components/ui/Button';
 import { Icon } from '@/components/ui/Icon';
 import { JoinViaLinkClient } from './JoinViaLinkClient';
@@ -69,7 +70,7 @@ export default async function JoinPage({
     ? await admin
         .from('events')
         .select(
-          'id, title, description, location_name, starts_at, host_id, status, open_table',
+          'id, title, description, location_name, starts_at, time_zone, host_id, status, open_table',
         )
         .eq('id', id)
         .maybeSingle<{
@@ -78,6 +79,7 @@ export default async function JoinPage({
           description: string | null;
           location_name: string | null;
           starts_at: string | null;
+          time_zone: string | null;
           host_id: string;
           status: string;
           open_table: boolean;
@@ -134,6 +136,8 @@ export default async function JoinPage({
 
   const shareable = Boolean(event?.open_table);
   const accepting = event?.status === 'inviting' || event?.status === 'confirmed';
+  // Render the plan in its own zone, not the server's UTC.
+  const zone = admin ? await resolveEventZone(admin, event) : null;
 
   return (
     <div className="mx-auto max-w-lg min-h-dvh flex flex-col px-6">
@@ -161,7 +165,7 @@ export default async function JoinPage({
             <h1 className="font-extrabold tracking-tight text-4xl text-ink mt-2 text-balance">
               {event.title}
             </h1>
-            <p className="mt-3 text-ink font-bold">{formatDateTime(event.starts_at)}</p>
+            <p className="mt-3 text-ink font-bold">{formatDateTime(event.starts_at, zone)}</p>
             {event.location_name && (
               <p className="text-ink-soft text-sm mt-1 inline-flex items-center gap-1.5">
                 <Icon name="mapPin" size={15} className="text-terracotta" />

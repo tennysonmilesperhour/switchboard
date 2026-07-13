@@ -1,5 +1,6 @@
 import { ImageResponse } from 'next/og';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { resolveEventZone } from '@/lib/server/event-zone';
 
 export const runtime = 'nodejs';
 
@@ -12,11 +13,16 @@ export async function GET(
   const admin = createAdminClient();
   const { data: event } = await admin
     .from('events')
-    .select('title, starts_at, location_name')
+    .select('title, starts_at, location_name, time_zone, host_id')
     .eq('id', id)
     .maybeSingle();
 
   const title = event?.title ?? 'You’re invited';
+  // Render in the plan's own zone so the unfurl shows the host's intended local
+  // time instead of the server's UTC (a 6pm plan was showing as "12:00 AM").
+  // Fall back to the host's profile zone for plans created before the zone was
+  // captured on the event itself.
+  const zone = await resolveEventZone(admin, event);
   const when = event?.starts_at
     ? new Intl.DateTimeFormat('en-US', {
         weekday: 'long',
@@ -24,6 +30,7 @@ export async function GET(
         day: 'numeric',
         hour: 'numeric',
         minute: '2-digit',
+        ...(zone ? { timeZone: zone, timeZoneName: 'short' } : {}),
       }).format(new Date(event.starts_at))
     : '';
 
