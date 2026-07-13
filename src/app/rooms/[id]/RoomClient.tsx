@@ -122,11 +122,25 @@ export function RoomClient({
         },
         (payload) => {
           const incoming = payload.new as RoomMessage;
-          setMessages((current) =>
-            current.some((m) => m.id === incoming.id)
-              ? current
-              : [...current, incoming],
-          );
+          setMessages((current) => {
+            // Already have the real row (e.g. duplicate delivery) — ignore.
+            if (current.some((m) => m.id === incoming.id)) return current;
+            // Reconcile our own optimistic placeholder: it was appended with a
+            // synthetic `optimistic-…` id, so it won't match the real UUID here.
+            // Swap the first matching placeholder for the real row instead of
+            // appending a second copy (which showed the sender their own
+            // message twice).
+            const placeholder = current.findIndex(
+              (m) =>
+                m.id.startsWith('optimistic-') &&
+                m.sender_id === incoming.sender_id &&
+                m.body === incoming.body,
+            );
+            if (placeholder === -1) return [...current, incoming];
+            const next = [...current];
+            next[placeholder] = incoming;
+            return next;
+          });
         },
       )
       .subscribe();
@@ -144,7 +158,9 @@ export function RoomClient({
     const body = draft.trim();
     if (!body) return;
     setDraft('');
-    // Optimistic append (Realtime will de-dupe by id).
+    // Optimistic append. The Realtime INSERT handler above reconciles this
+    // placeholder with the real row when it arrives (matching on sender+body),
+    // so the sender never sees their own message twice.
     const optimistic: RoomMessage = {
       id: `optimistic-${Date.now()}`,
       sender_id: currentUserId,

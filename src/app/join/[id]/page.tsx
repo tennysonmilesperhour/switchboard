@@ -192,7 +192,10 @@ export default async function JoinPage({
                 <JoinViaLinkClient eventId={event.id} eventTitle={event.title} />
               ) : (
                 <div className="space-y-3">
-                  <Link href="/login" className="block">
+                  <Link
+                    href={`/login?next=${encodeURIComponent(`/join/${event.id}`)}`}
+                    className="block"
+                  >
                     <Button size="lg" className="w-full">
                       Sign in to ask to join
                     </Button>

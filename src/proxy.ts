@@ -13,6 +13,7 @@ const PUBLIC_PREFIXES = [
   '/copyright',
   '/auth',
   '/rsvp', // guest RSVP links
+  '/join', // shareable plan invite links (signed-out recipients ask to join)
   '/design', // design direction previews
   '/api/cron',
   '/api/og',
