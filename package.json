@@ -9,6 +9,7 @@
     "lint": "eslint",
     "test": "vitest run",
     "seed:test-profiles": "node --env-file-if-exists=.env.local scripts/seed-test-profiles.mjs",
+    "migrate:legacy-media": "node --env-file-if-exists=.env.local scripts/migrate-legacy-media.mjs",
     "e2e": "playwright test"
   },
   "dependencies": {
