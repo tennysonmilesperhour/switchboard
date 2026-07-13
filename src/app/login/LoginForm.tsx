@@ -20,8 +20,15 @@ type Status = 'idle' | 'submitting' | 'error';
 
 const initialCreateState: AuthActionResult = { ok: false };
 
-export function LoginForm() {
-  const [mode, setMode] = useState<Mode>('signin');
+interface LoginFormProps {
+  /** Same-origin path to land on after auth. Pre-validated by the page. */
+  next?: string;
+  /** Which tab to open on first render. */
+  initialMode?: Mode;
+}
+
+export function LoginForm({ next = '/', initialMode = 'signin' }: LoginFormProps) {
+  const [mode, setMode] = useState<Mode>(initialMode);
   const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
   const [status, setStatus] = useState<Status>('idle');
@@ -62,7 +69,7 @@ export function LoginForm() {
         return;
       }
 
-      window.location.assign('/');
+      window.location.assign(next);
     } catch {
       setMessage('Sign-in could not connect. Check your connection and try again.');
       setStatus('error');
@@ -71,9 +78,10 @@ export function LoginForm() {
 
   async function signInWithGoogle() {
     const supabase = createClient();
+    const callback = `${window.location.origin}/auth/callback?next=${encodeURIComponent(next)}`;
     await supabase.auth.signInWithOAuth({
       provider: 'google',
-      options: { redirectTo: `${window.location.origin}/auth/callback` },
+      options: { redirectTo: callback },
     });
   }
 

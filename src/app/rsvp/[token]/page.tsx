@@ -1,9 +1,11 @@
 import type { Metadata } from 'next';
 import { createAdminClient, hasAdminCredentials } from '@/lib/supabase/admin';
+import { getUser } from '@/lib/supabase/server';
 import { reportOperationalError } from '@/lib/server/observability';
 import { formatDateTime } from '@/lib/format';
 import { Icon } from '@/components/ui/Icon';
 import { GuestRsvpClient } from './GuestRsvpClient';
+import { JoinPrompt } from './JoinPrompt';
 
 export async function generateMetadata({
   params,
@@ -128,6 +130,16 @@ export default async function GuestRsvpPage({
     required: q.required as boolean,
   }));
 
+  // An invite link is often a guest's first contact with Switchboard. If they
+  // aren't signed in, we nudge them to join or sign in (below) so they can stay
+  // connected with the host — but the RSVP itself never requires an account.
+  // Resolve the viewer defensively: the anon Supabase client throws when its
+  // credentials aren't configured (CI and local e2e run the app without them),
+  // and a missing session must never break this public page — so treat an
+  // unresolved viewer as logged-out.
+  const user = await getUser().catch(() => null);
+  const hostName = host?.display_name ?? 'Your host';
+
   return (
     <div className="mx-auto max-w-lg min-h-dvh flex flex-col px-6">
       <header className="py-6">
@@ -170,6 +182,7 @@ export default async function GuestRsvpPage({
               initialStatus={invite.status}
               questions={questions}
             />
+            {!user && <JoinPrompt hostName={hostName} next={`/rsvp/${token}`} />}
             <p className="text-xs text-ink-faint mt-10 leading-relaxed">
               Switchboard makes plans without pressure - invitations flow one
               person at a time, so nobody feels like a backup. If you can’t
