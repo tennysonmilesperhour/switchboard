@@ -3,7 +3,7 @@
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import { createClient } from '@/lib/supabase/server';
-import { requireUserOrRedirect } from '@/lib/server/require-user';
+import { requireUser, requireUserOrRedirect } from '@/lib/server/require-user';
 import { isOwnPublicStorageUrl } from '@/lib/server/media';
 import { SOCIAL_BY_ID } from '@/lib/socials';
 import { USERNAME_PATTERN, isEmail } from '@/lib/auth-identity';
@@ -253,6 +253,34 @@ export async function updateDiscoverability(formData: FormData): Promise<void> {
 
   revalidatePath('/settings');
   revalidatePath('/discover');
+}
+
+/**
+ * Flip discoverability from a quick toggle (e.g. the Explore banner) without
+ * opening Settings. Turning it on also lights the privacy-conservative sharing
+ * dimensions (interests + mutual friends) so you actually match on something,
+ * while leaving location, demographics, involvements, and contexts exactly as
+ * they were — those stay opt-in from Settings. Turning it off just hides you
+ * and preserves every sharing choice for next time.
+ */
+export async function setDiscoverable(enabled: boolean): Promise<ActionResult> {
+  const auth = await requireUser();
+  if (!auth.ok) return auth;
+  const { supabase, user } = auth;
+
+  const update = enabled
+    ? { discoverable: true, discovery_interests: true, discovery_mutuals: true }
+    : { discoverable: false };
+
+  const { error } = await supabase
+    .from('profiles')
+    .update(update)
+    .eq('id', user.id);
+  if (error) return { ok: false, error: error.message };
+
+  revalidatePath('/discover');
+  revalidatePath('/settings');
+  return { ok: true };
 }
 
 export async function updateSabbatical(formData: FormData): Promise<void> {
