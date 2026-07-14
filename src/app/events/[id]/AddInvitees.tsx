@@ -124,7 +124,7 @@ export function AddInvitees({
       const onApp = invitable.filter((match) => match.profile).length;
       setContactsNote(
         invitable.length === 0
-          ? 'None of those contacts can be added yet — no matching accounts or numbers.'
+          ? 'None of those contacts can be added yet - no matching accounts or numbers.'
           : onApp === 0
             ? `${invitable.length} ${invitable.length === 1 ? 'contact' : 'contacts'} can be added by text.`
             : `${onApp} on Switchboard${
@@ -173,7 +173,7 @@ export function AddInvitees({
     <section className="border-t border-line pt-5">
       <h2 className="font-display text-xl text-ink">Add people</h2>
       <p className="text-sm text-ink-faint mt-0.5 mb-3">
-        Add anyone by <strong>@handle</strong>, email, phone, or name — or tap a
+        Add anyone by <strong>@handle</strong>, email, phone, or name - or tap a
         friend below. They join the back of the line and go out when it’s their
         turn.
       </p>

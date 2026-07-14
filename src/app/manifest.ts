@@ -8,8 +8,11 @@ export default function manifest(): MetadataRoute.Manifest {
       'Plans without pressure - cascading invites, anonymous group decisions, and mutual-interest matching.',
     start_url: '/',
     display: 'standalone',
-    background_color: '#f7f3ea',
-    theme_color: '#f7f3ea',
+    // Match the app's actual paper background (--color-paper in globals.css) and
+    // the root viewport themeColor so the installed PWA chrome doesn't flash a
+    // different color than the page.
+    background_color: '#f9fbfd',
+    theme_color: '#f9fbfd',
     icons: [
       {
         src: '/icons/icon.svg',

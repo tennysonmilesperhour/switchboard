@@ -2,6 +2,7 @@
 
 import { revalidatePath } from 'next/cache';
 import { createClient } from '@/lib/supabase/server';
+import { requireUser } from '@/lib/server/require-user';
 import { notifyUsers, sendPushToUsers } from '@/lib/server/notify';
 import { normalizePhoneNumber } from '@/lib/phone';
 import { checkRateLimit } from '@/lib/server/rate-limit';
@@ -75,11 +76,9 @@ async function connectionStatusFor(
 }
 
 export async function sendConnectionRequest(identifier: string): Promise<ConnectionResult> {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { ok: false, error: 'Not signed in' };
+  const auth = await requireUser();
+  if (!auth.ok) return auth;
+  const { supabase, user } = auth;
 
   if (!(await checkRateLimit(`connect-request:${user.id}`, 30, 60 * 60))) {
     return { ok: false, error: 'You’re sending a lot of requests. Try again later.' };
@@ -117,11 +116,9 @@ export async function sendConnectionRequest(identifier: string): Promise<Connect
 export async function sendConnectionRequestToId(
   targetId: string,
 ): Promise<ConnectionResult> {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { ok: false, error: 'Not signed in' };
+  const auth = await requireUser();
+  if (!auth.ok) return auth;
+  const { supabase, user } = auth;
 
   if (!UUID_RE.test(targetId)) return { ok: false, error: 'Unknown person.' };
   if (targetId === user.id) return { ok: false, error: 'That is you.' };
@@ -220,11 +217,9 @@ export async function resolveContactMatches(
 }
 
 export async function acceptConnection(connectionId: string): Promise<ConnectionResult> {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { ok: false, error: 'Not signed in' };
+  const auth = await requireUser();
+  if (!auth.ok) return auth;
+  const { supabase, user } = auth;
 
   // RLS restricts this update to the addressee; the returned row is readable
   // because the accepter is a participant on it.
@@ -271,11 +266,9 @@ export async function blockProfile(
   profileId: string,
   connectionId?: string,
 ): Promise<ConnectionResult> {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { ok: false, error: 'Not signed in' };
+  const auth = await requireUser();
+  if (!auth.ok) return auth;
+  const { supabase, user } = auth;
   if (profileId === user.id) return { ok: false, error: 'You cannot block yourself.' };
 
   const { error } = await supabase.from('profile_blocks').insert({
@@ -290,17 +283,52 @@ export async function blockProfile(
   return { ok: true };
 }
 
+/**
+ * "Give space" — a private, one-directional avoidance. Unlike a block, you stay
+ * connected; it only powers a quiet heads-up when this person is going to be
+ * somewhere you are. Invisible to them (RLS scopes the row to the avoider), and
+ * it never removes anyone from anything: warn, never remove.
+ */
+export async function giveSpace(profileId: string): Promise<ConnectionResult> {
+  const auth = await requireUser();
+  if (!auth.ok) return auth;
+  const { supabase, user } = auth;
+  if (!UUID_RE.test(profileId)) return { ok: false, error: 'Unknown person.' };
+  if (profileId === user.id) return { ok: false, error: 'That is you.' };
+
+  const { error } = await supabase
+    .from('profile_avoids')
+    .insert({ avoider_id: user.id, avoided_id: profileId });
+  // Already on the list is a no-op success, not an error.
+  if (error && error.code !== '23505') return { ok: false, error: error.message };
+  revalidatePath('/people');
+  return { ok: true };
+}
+
+export async function stopGivingSpace(profileId: string): Promise<ConnectionResult> {
+  const auth = await requireUser();
+  if (!auth.ok) return auth;
+  const { supabase, user } = auth;
+
+  const { error } = await supabase
+    .from('profile_avoids')
+    .delete()
+    .eq('avoider_id', user.id)
+    .eq('avoided_id', profileId);
+  if (error) return { ok: false, error: error.message };
+  revalidatePath('/people');
+  return { ok: true };
+}
+
 export async function reportProfile(
   profileId: string,
   reason: string,
 ): Promise<ConnectionResult> {
   const cleanReason = reason.trim().slice(0, 500);
   if (!cleanReason) return { ok: false, error: 'Add a short reason.' };
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { ok: false, error: 'Not signed in' };
+  const auth = await requireUser();
+  if (!auth.ok) return auth;
+  const { supabase, user } = auth;
 
   // Throttle so reports can't be used to flood moderation / mass-target a user.
   if (!(await checkRateLimit(`report:${user.id}`, 10, 60 * 60))) {
@@ -335,16 +363,55 @@ export async function toggleCircleMember(
 }
 
 export async function createCircle(name: string, emoji: string): Promise<ConnectionResult> {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { ok: false, error: 'Not signed in' };
+  const auth = await requireUser();
+  if (!auth.ok) return auth;
+  const { supabase, user } = auth;
   const trimmed = name.trim();
   if (!trimmed) return { ok: false, error: 'Circle needs a name' };
   const { error } = await supabase
     .from('circles')
-    .insert({ owner_id: user.id, name: trimmed, emoji: emoji || '👥' });
+    .insert({ owner_id: user.id, name: trimmed.slice(0, 40), emoji: emoji.trim().slice(0, 8) || '👥' });
+  if (error) return { ok: false, error: error.message };
+  revalidatePath('/people');
+  return { ok: true };
+}
+
+export async function renameCircle(
+  circleId: string,
+  name: string,
+  emoji?: string,
+): Promise<ConnectionResult> {
+  const auth = await requireUser();
+  if (!auth.ok) return auth;
+  const { supabase, user } = auth;
+  const trimmed = name.trim();
+  if (!trimmed) return { ok: false, error: 'Circle needs a name' };
+  const patch: { name: string; emoji?: string } = { name: trimmed.slice(0, 40) };
+  const cleanEmoji = emoji?.trim().slice(0, 8);
+  if (cleanEmoji) patch.emoji = cleanEmoji;
+  // RLS already scopes this to the owner; the owner_id filter is defense in
+  // depth so a stray id can never touch someone else's circle (SB-20).
+  const { error } = await supabase
+    .from('circles')
+    .update(patch)
+    .eq('id', circleId)
+    .eq('owner_id', user.id);
+  if (error) return { ok: false, error: error.message };
+  revalidatePath('/people');
+  return { ok: true };
+}
+
+export async function deleteCircle(circleId: string): Promise<ConnectionResult> {
+  const auth = await requireUser();
+  if (!auth.ok) return auth;
+  const { supabase, user } = auth;
+  // circle_members rows cascade-delete with the circle (FK on delete cascade);
+  // the connections themselves are untouched — only this grouping goes away.
+  const { error } = await supabase
+    .from('circles')
+    .delete()
+    .eq('id', circleId)
+    .eq('owner_id', user.id);
   if (error) return { ok: false, error: error.message };
   revalidatePath('/people');
   return { ok: true };

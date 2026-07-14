@@ -38,7 +38,12 @@ const FEATURES = [
   },
 ] as const;
 
-export default function WelcomePage() {
+export default async function WelcomePage({
+  searchParams,
+}: {
+  searchParams: Promise<{ account?: string }>;
+}) {
+  const { account } = await searchParams;
   return (
     <div className="mx-auto max-w-lg min-h-dvh flex flex-col px-6">
       <header className="flex items-center justify-between py-6">
@@ -47,11 +52,22 @@ export default function WelcomePage() {
         </span>
         <Link
           href="/login"
-          className="text-sm font-bold text-ink hover:text-terracotta"
+          className="inline-flex min-h-11 items-center text-sm font-bold text-ink hover:text-terracotta"
         >
           Sign in
         </Link>
       </header>
+
+      <main>
+      {account === 'deleted' && (
+        <p
+          role="status"
+          className="mb-6 rounded-card bg-sage-soft p-4 text-sm text-sage-deep"
+        >
+          Your account was deleted. Thanks for spending time with Switchboard.
+          You’re always welcome back.
+        </p>
+      )}
 
       <section aria-labelledby="hero-heading" className="pt-12 pb-14">
         <h1
@@ -122,13 +138,14 @@ export default function WelcomePage() {
           Join Switchboard
         </Link>
       </section>
+      </main>
 
-      <footer className="flex flex-wrap items-center justify-center gap-3 pb-10 text-center text-xs text-ink-faint">
+      <footer className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1 pb-10 text-center text-xs text-ink-soft">
         <span>© 2026 Switchboard</span>
-        <Link href="/privacy" className="hover:text-ink">Privacy</Link>
-        <Link href="/terms" className="hover:text-ink">Terms</Link>
-        <Link href="/community" className="hover:text-ink">Community</Link>
-        <Link href="/copyright" className="hover:text-ink">Copyright</Link>
+        <Link href="/privacy" className="inline-flex min-h-11 items-center hover:text-ink">Privacy</Link>
+        <Link href="/terms" className="inline-flex min-h-11 items-center hover:text-ink">Terms</Link>
+        <Link href="/community" className="inline-flex min-h-11 items-center hover:text-ink">Community</Link>
+        <Link href="/copyright" className="inline-flex min-h-11 items-center hover:text-ink">Copyright</Link>
       </footer>
     </div>
   );

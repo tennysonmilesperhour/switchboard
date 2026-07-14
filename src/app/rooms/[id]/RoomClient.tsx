@@ -122,18 +122,44 @@ export function RoomClient({
         },
         (payload) => {
           const incoming = payload.new as RoomMessage;
-          setMessages((current) =>
-            current.some((m) => m.id === incoming.id)
-              ? current
-              : [...current, incoming],
-          );
+          setMessages((current) => {
+            // Already have the real row (e.g. duplicate delivery) — ignore.
+            if (current.some((m) => m.id === incoming.id)) return current;
+            // Reconcile our own optimistic placeholder: it was appended with a
+            // synthetic `optimistic-…` id, so it won't match the real UUID here.
+            // Swap the first matching placeholder for the real row instead of
+            // appending a second copy (which showed the sender their own
+            // message twice).
+            const placeholder = current.findIndex(
+              (m) =>
+                m.id.startsWith('optimistic-') &&
+                m.sender_id === incoming.sender_id &&
+                m.body === incoming.body,
+            );
+            if (placeholder === -1) return [...current, incoming];
+            const next = [...current];
+            next[placeholder] = incoming;
+            return next;
+          });
         },
+      )
+      .on(
+        'postgres_changes',
+        {
+          // Auto-filed items (addresses/tasks/links/notes) land in room_items;
+          // refresh so a member sees another member's filing appear live.
+          event: 'INSERT',
+          schema: 'public',
+          table: 'room_items',
+          filter: `room_id=eq.${roomId}`,
+        },
+        () => router.refresh(),
       )
       .subscribe();
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [roomId]);
+  }, [roomId, router]);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -144,7 +170,9 @@ export function RoomClient({
     const body = draft.trim();
     if (!body) return;
     setDraft('');
-    // Optimistic append (Realtime will de-dupe by id).
+    // Optimistic append. The Realtime INSERT handler above reconciles this
+    // placeholder with the real row when it arrives (matching on sender+body),
+    // so the sender never sees their own message twice.
     const optimistic: RoomMessage = {
       id: `optimistic-${Date.now()}`,
       sender_id: currentUserId,
@@ -325,7 +353,7 @@ export function RoomClient({
             <EmptyState
               emoji="💸"
               title="No expenses yet"
-              body="Log what people paid — Switchboard tallies who owes what. Settling up happens with your own Venmo or PayPal link."
+              body="Log what people paid - Switchboard tallies who owes what. Settling up happens with your own Venmo or PayPal link."
             />
           ) : (
             <ul className="space-y-2">

@@ -4,6 +4,7 @@ import { AppShell } from '@/components/shell/AppShell';
 import { Avatar } from '@/components/ui/Avatar';
 import { Icon } from '@/components/ui/Icon';
 import { formatDate } from '@/lib/format';
+import { signMediaRef } from '@/lib/server/media';
 import { CapsuleForm } from './CapsuleForm';
 
 /** Memory Capsule: one line and one photo from everyone, kept forever. */
@@ -21,7 +22,7 @@ export default async function CapsulePage({
 
   const { data: event } = await supabase
     .from('events')
-    .select('id, title, starts_at, location_name')
+    .select('id, title, starts_at, time_zone, location_name')
     .eq('id', id)
     .single();
   if (!event) notFound();
@@ -32,10 +33,19 @@ export default async function CapsulePage({
     .eq('event_id', id)
     .order('created_at');
 
-  const rows = (entries ?? []).map((entry) => {
-    const author = Array.isArray(entry.author) ? entry.author[0] : entry.author;
-    return { ...entry, name: author?.display_name ?? 'Someone' };
-  });
+  const rows = await Promise.all(
+    (entries ?? []).map(async (entry) => {
+      const author = Array.isArray(entry.author) ? entry.author[0] : entry.author;
+      return {
+        ...entry,
+        // Keep the raw stored path for re-submission, and a signed URL for
+        // display (photo_url is a private-bucket path).
+        photo_ref: entry.photo_url,
+        photo_url: await signMediaRef(entry.photo_url),
+        name: author?.display_name ?? 'Someone',
+      };
+    }),
+  );
   const mine = rows.find((row) => row.user_id === user.id);
 
   return (
@@ -43,7 +53,7 @@ export default async function CapsulePage({
       <div className="space-y-6">
         <div className="rounded-card bg-ink text-paper p-6">
           <p className="text-xs font-bold uppercase tracking-widest text-gold-deep">
-            {formatDate(event.starts_at)}
+            {formatDate(event.starts_at, event.time_zone)}
           </p>
           <h2 className="font-extrabold tracking-tight text-3xl mt-1.5 text-balance">
             {event.title}
@@ -95,7 +105,8 @@ export default async function CapsulePage({
           eventId={id}
           userId={user.id}
           initialLine={mine?.line ?? ''}
-          initialPhotoUrl={mine?.photo_url ?? ''}
+          initialPhotoRef={mine?.photo_ref ?? ''}
+          initialPhotoPreview={mine?.photo_url ?? ''}
         />
       </div>
     </AppShell>

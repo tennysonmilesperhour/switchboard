@@ -5,6 +5,7 @@ import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { notifyUsers, sendPushToUsers } from '@/lib/server/notify';
 import { checkRateLimit } from '@/lib/server/rate-limit';
+import { requireUser } from '@/lib/server/require-user';
 
 export async function proposeIntroduction(
   personA: string,
@@ -12,11 +13,9 @@ export async function proposeIntroduction(
   activity: string,
   note: string,
 ): Promise<{ ok: boolean; error?: string }> {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { ok: false, error: 'Not signed in' };
+  const auth = await requireUser();
+  if (!auth.ok) return auth;
+  const { supabase, user } = auth;
   if (personA === personB) return { ok: false, error: 'Pick two different friends' };
 
   const cleanActivity = activity.trim().slice(0, 80);

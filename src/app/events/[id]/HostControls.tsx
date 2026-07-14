@@ -42,7 +42,7 @@ export function HostControls({ event, pollDecided }: HostControlsProps) {
       if (clip) {
         try {
           const uploaded = await uploadAudio(clip.blob, clip.durationSeconds);
-          voiceUrl = uploaded.url;
+          voiceUrl = uploaded.path;
         } catch (uploadError) {
           toast.error(
             uploadError instanceof Error ? uploadError.message : 'Could not upload the voice note.',
@@ -105,7 +105,7 @@ export function HostControls({ event, pollDecided }: HostControlsProps) {
           <div>
             <p className="text-sm font-bold text-ink">Cancel this plan?</p>
             <p className="text-xs text-ink-soft mt-0.5">
-              Everyone who’s in will be notified. Add a reason so they know why — type it,
+              Everyone who’s in will be notified. Add a reason so they know why - type it,
               record a voice note, or both. All optional.
             </p>
           </div>

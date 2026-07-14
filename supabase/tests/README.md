@@ -11,6 +11,10 @@ supabase start          # boots local Postgres + applies migrations
 supabase test db        # runs every *.test.sql in this directory via pg_prove
 ```
 
+CI runs this suite automatically (`.github/workflows/db-tests.yml`) on every push
+to `main` and on any pull request that touches `supabase/`, so a migration that
+regresses an invariant fails the build rather than shipping.
+
 ## What's covered
 
 `rls_invariants.test.sql`:
@@ -33,3 +37,11 @@ are expanded.
 `launch_hardening.test.sql` verifies that atomic publication and durable rate
 limiting are installed and that internal security-definer functions cannot be
 executed by anonymous or ordinary authenticated clients.
+
+`authz_hardening.test.sql` locks in the authorization-hardening fixes
+(`20260712120000_authz_hardening.sql`): the connection-party and event-host
+freeze triggers (F1/F2), the block check on the raw `mutual_intents` write
+(F6), and a schema **tripwire** (F8) that fails the moment an authority-like
+column (`role`, `is_admin`, `credits`, …) is added to the column-open
+`profiles` table without write protection. Positive controls prove the
+legitimate accept/edit/insert paths still succeed. See `docs/SECURITY.md`.

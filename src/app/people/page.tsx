@@ -19,6 +19,7 @@ export default async function PeoplePage() {
     { data: circles },
     { data: circleMembers },
     { data: householdRows },
+    { data: avoidRows },
   ] = await Promise.all([
     supabase
       .from('connections')
@@ -34,7 +35,12 @@ export default async function PeoplePage() {
       .from('households')
       .select('id, name, emoji, household_members(member_id)')
       .eq('owner_id', user.id),
+    supabase.from('profile_avoids').select('avoided_id').eq('avoider_id', user.id),
   ]);
+
+  const avoidedIds = new Set(
+    (avoidRows ?? []).map((row) => row.avoided_id as string),
+  );
 
   const friends: FriendRow[] = [];
   const incoming: RequestRow[] = [];
@@ -57,6 +63,7 @@ export default async function PeoplePage() {
         circleIds: (circleMembers ?? [])
           .filter((cm) => cm.member_id === other.id)
           .map((cm) => cm.circle_id),
+        isAvoided: avoidedIds.has(other.id),
       });
     } else if (isRequester) {
       outgoing.push(row);

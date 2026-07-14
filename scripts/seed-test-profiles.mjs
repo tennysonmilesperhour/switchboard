@@ -12,6 +12,18 @@ if (!url || !serviceKey) {
   process.exit(1);
 }
 
+// Safety guard: these are fixture accounts with a shared, repo-visible default
+// password — never seed them into a hosted/production project by accident.
+// Only a local Supabase URL is allowed unless the operator explicitly opts in.
+const isLocal = /localhost|127\.0\.0\.1|::1/.test(url);
+if (!isLocal && process.env.SEED_ALLOW_NONLOCAL !== '1') {
+  console.error(
+    `Refusing to seed test profiles against a non-local Supabase (${url}).\n` +
+      'Set SEED_ALLOW_NONLOCAL=1 to override, and use a strong SEED_TEST_PASSWORD.',
+  );
+  process.exit(1);
+}
+
 const admin = createClient(url, serviceKey, {
   auth: { persistSession: false, autoRefreshToken: false },
 });
@@ -79,6 +91,9 @@ async function upsertUser(person) {
       down_to: person.down_to,
       timezone: 'America/Denver',
       onboarded: true,
+      // Without this the profiles default to discoverable=false, so discovery,
+      // people matching, and mutual all render empty even after seeding.
+      discoverable: true,
     })
     .eq('id', user.id);
   if (profileError) throw profileError;

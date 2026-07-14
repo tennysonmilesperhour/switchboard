@@ -57,7 +57,7 @@ export default async function HomePage() {
       .limit(12),
     supabase
       .from('invites')
-      .select('id, event:events(id, title, starts_at)')
+      .select('id, event:events(id, title, starts_at, time_zone)')
       .eq('invitee_id', user.id)
       .eq('status', 'sent'),
     supabase
@@ -169,7 +169,7 @@ export default async function HomePage() {
             {greeting}, {firstName}.
           </h1>
           <p className="text-sm text-ink-faint mt-1">
-            Feeling social? Let people know - quietly.
+            Feeling social? Let people know.
           </p>
         </div>
 
@@ -181,7 +181,7 @@ export default async function HomePage() {
             <Card tone="gold" lifted className="group-hover:shadow-lift transition-shadow">
               <p className="font-display text-lg text-ink">Find your people</p>
               <p className="text-sm text-ink-soft mt-1">
-                Add friends by handle, email, phone, or your contacts — then signals,
+                Add friends by handle, email, phone, or your contacts - then signals,
                 circles, and Mutual Mode all come alive.
               </p>
               <span className="mt-3 inline-flex items-center gap-1 text-sm font-bold text-terracotta-deep">
@@ -201,7 +201,7 @@ export default async function HomePage() {
                 href={`/events/${event.id}`}
                 title={event.title}
                 color={planColor(i)}
-                when={formatDateTime(event.starts_at)}
+                when={formatDateTime(event.starts_at, event.time_zone)}
                 where={event.location_name ?? undefined}
                 status={event.status === 'confirmed' ? 'Confirmed' : undefined}
                 className="animate-card-in"
@@ -363,14 +363,17 @@ export default async function HomePage() {
               {(pendingInvites ?? []).map((invite) => {
                 const event = (
                   Array.isArray(invite.event) ? invite.event[0] : invite.event
-                ) as Pick<SwitchboardEvent, 'id' | 'title' | 'starts_at'> | null;
+                ) as Pick<
+                  SwitchboardEvent,
+                  'id' | 'title' | 'starts_at' | 'time_zone'
+                > | null;
                 if (!event) return null;
                 return (
                   <Link key={invite.id} href={`/events/${event.id}`} className="block group">
                     <Card tone="gold" className="group-hover:shadow-lift transition-shadow">
                       <p className="font-medium">{event.title}</p>
                       <p className="text-xs text-ink-soft mt-0.5">
-                        {formatDateTime(event.starts_at)} · respond soon
+                        {formatDateTime(event.starts_at, event.time_zone)} · respond soon
                       </p>
                     </Card>
                   </Link>
@@ -428,7 +431,7 @@ export default async function HomePage() {
             </Link>
             <div className="grid grid-cols-2 gap-3">
               {[
-                { href: '/events/new', emoji: '🪜', title: 'New plan', body: 'Cascading invites' },
+                { href: '/create', emoji: '🪜', title: 'New plan', body: 'Cascading invites' },
                 { href: '/discover', emoji: '🧭', title: 'Discover', body: 'What should we do?' },
                 { href: '/mutual', emoji: '◐', title: 'Mutual', body: 'Down to connect?' },
                 { href: '/moments', emoji: '✨', title: 'Moments', body: 'Who’s nearby' },

@@ -39,7 +39,7 @@ export default async function BoardsPage({
       <div className="space-y-7">
         <p className="text-sm text-ink-soft leading-relaxed -mt-1">
           A neighborhood board is a permanent, invite-only home for a local
-          community — recurring open events like a Saturday market walk or
+          community - recurring open events like a Saturday market walk or
           pickup basketball, plus notices from your neighbors.
         </p>
 
@@ -63,7 +63,7 @@ export default async function BoardsPage({
           <EmptyState
             emoji="🏘️"
             title="No boards yet"
-            body="Start one for your street, building, or neighborhood — then invite the neighbors you want in it."
+            body="Start one for your street, building, or neighborhood - then invite the neighbors you want in it."
           />
         )}
 

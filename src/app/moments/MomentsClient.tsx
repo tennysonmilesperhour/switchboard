@@ -38,9 +38,11 @@ export interface Candidate {
 export function MomentsClient({
   myMoment,
   candidates,
+  matchedRoomId,
 }: {
   myMoment: MyMoment | null;
   candidates: Candidate[];
+  matchedRoomId?: string | null;
 }) {
   const [place, setPlace] = useState('');
   const [experiences, setExperiences] = useState<string[]>([]);
@@ -194,6 +196,29 @@ export function MomentsClient({
         </div>
       </Card>
 
+      {myMoment.status === 'matched' ? (
+        <section>
+          <SectionHeader title="It’s a match" hint="You both said yes" />
+          <Card tone="gold" lifted className="animate-rise">
+            <p className="font-display text-lg">✨ You’re sharing this moment</p>
+            <p className="text-sm text-ink-soft mt-1 leading-relaxed">
+              You both chose to connect. A private conversation is open - say hi
+              and pick a spot.
+            </p>
+            {matchedRoomId ? (
+              <Link href={`/rooms/${matchedRoomId}`} className="mt-4 block">
+                <Button className="w-full">Open the conversation</Button>
+              </Link>
+            ) : (
+              <Link href="/rooms" className="mt-4 block">
+                <Button variant="secondary" className="w-full">
+                  Go to your rooms
+                </Button>
+              </Link>
+            )}
+          </Card>
+        </section>
+      ) : (
       <section>
         <SectionHeader
           title="Sharing this moment"
@@ -355,6 +380,7 @@ export function MomentsClient({
           </div>
         )}
       </section>
+      )}
 
       <p className="text-xs text-ink-faint leading-relaxed">
         Three moments of consent: you’re open to the experience → you’d like to

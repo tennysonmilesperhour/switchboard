@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/Button';
 import { useToast } from '@/components/ui/Toast';
 import { updateEventDetails } from '@/lib/actions/events';
+import { resolveTimeZone } from '@/lib/client/time-zone';
 import type { SwitchboardEvent } from '@/lib/types';
 
 const FIELD =
@@ -60,6 +61,7 @@ export function EventEditForm({ event }: { event: SwitchboardEvent }) {
         locationAddress: locationAddress.trim() || null,
         startsAt: toIso(startsAt),
         endsAt: toIso(endsAt),
+        timeZone: resolveTimeZone(),
         capacity: capacity ? Number(capacity) : null,
         wishlistUrl: wishlistUrl.trim() || null,
       });

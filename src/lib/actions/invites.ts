@@ -2,6 +2,7 @@
 
 import { revalidatePath } from 'next/cache';
 import { createClient } from '@/lib/supabase/server';
+import { requireUser } from '@/lib/server/require-user';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { advanceEventCascade } from '@/lib/server/cascade-runner';
 import { notifyUsers } from '@/lib/server/notify';
@@ -61,11 +62,9 @@ export async function respondToInvite(
   note: DeclineNote = null,
   answers: Record<string, string> = {},
 ): Promise<RespondResult> {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { ok: false, error: 'Not signed in' };
+  const auth = await requireUser();
+  if (!auth.ok) return auth;
+  const { supabase, user } = auth;
 
   // Atomic capacity-checked transition, then a cascade tick.
   const { data, error } = await supabase.rpc('respond_to_invite', {
@@ -124,6 +123,14 @@ export async function respondToInvite(
 /** Open Table: ask to join a friends-of-friends event. */
 export async function requestToJoin(eventId: string): Promise<RespondResult> {
   const supabase = await createClient();
+  // The request_to_join RPC already keys the row on auth.uid(); this app-layer
+  // session check just fails fast (and keeps the admin notify below from firing
+  // for an unauthenticated caller) rather than relying on the RPC alone.
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false, error: 'Sign in to request to join.' };
+
   const { error } = await supabase.rpc('request_to_join', { p_event: eventId });
   if (error) return { ok: false, error: error.message };
 
@@ -145,6 +152,7 @@ export async function requestToJoin(eventId: string): Promise<RespondResult> {
   }
 
   revalidatePath('/discover');
+  revalidatePath(`/events/${eventId}`);
   return { ok: true, outcome: 'requested' };
 }
 

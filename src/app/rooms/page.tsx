@@ -59,8 +59,14 @@ export default async function RoomsPage() {
                   <div className="flex-1 min-w-0">
                     <p className="font-bold truncate">{room.title}</p>
                     <p className="text-xs text-ink-faint">
-                      {room.kind === 'match' ? 'Mutual match' : room.kind === 'event' ? 'Plan' : 'Group'} ·
-                      started {formatRelative(room.created_at)}
+                      {room.kind === 'match'
+                        ? 'Mutual match'
+                        : room.kind === 'event'
+                          ? 'Plan'
+                          : room.kind === 'moment'
+                            ? 'Shared moment'
+                            : 'Group'}{' '}
+                      · started {formatRelative(room.created_at)}
                     </p>
                   </div>
                   <Icon

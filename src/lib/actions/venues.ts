@@ -1,18 +1,16 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
-import { createClient } from '@/lib/supabase/server';
+import { requireUser } from '@/lib/server/require-user';
 
 export async function claimVenue(
   name: string,
   area: string,
   perk: string,
 ): Promise<{ ok: boolean; error?: string }> {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { ok: false, error: 'Not signed in' };
+  const auth = await requireUser();
+  if (!auth.ok) return auth;
+  const { supabase, user } = auth;
   if (!name.trim() || !perk.trim()) {
     return { ok: false, error: 'Name and perk are required' };
   }

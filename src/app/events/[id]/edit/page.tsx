@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import { notFound, redirect } from 'next/navigation';
-import { createClient } from '@/lib/supabase/server';
-import { createAdminClient } from '@/lib/supabase/admin';
+import { requireUserOrRedirect } from '@/lib/server/require-user';
+import { isEventManager } from '@/lib/server/authz';
 import { AppShell } from '@/components/shell/AppShell';
 import { EventEditForm } from './EventEditForm';
 import type { SwitchboardEvent } from '@/lib/types';
@@ -14,11 +14,7 @@ export default async function EditEventPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) redirect('/login');
+  const { supabase, user } = await requireUserOrRedirect();
 
   const { data: event } = await supabase
     .from('events')
@@ -27,13 +23,8 @@ export default async function EditEventPage({
     .single<SwitchboardEvent>();
   if (!event) notFound();
 
-  // Host or co-host only (RPC mirrors the server action's authorization).
-  const admin = createAdminClient();
-  const { data: canManage } = await admin.rpc('is_event_host', {
-    p_event: id,
-    p_user: user.id,
-  });
-  if (!canManage) redirect(`/events/${id}`);
+  // Host or co-host only — same authorization as the server actions.
+  if (!(await isEventManager(user.id, id))) redirect(`/events/${id}`);
   if (event.status === 'cancelled' || event.status === 'past') redirect(`/events/${id}`);
 
   return (

@@ -1,5 +1,6 @@
 import { ImageResponse } from 'next/og';
-import { createAdminClient } from '@/lib/supabase/admin';
+import { createAdminClient, hasAdminCredentials } from '@/lib/supabase/admin';
+import { resolveEventZone } from '@/lib/server/event-zone';
 
 export const runtime = 'nodejs';
 
@@ -9,10 +10,17 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> },
 ) {
   const { id } = await params;
+  // Guard the service-role client the way the calendar feed and RSVP page do —
+  // without credentials createAdminClient() throws. In practice the OG URL is
+  // only emitted when creds exist, so this just degrades safely rather than
+  // 500-ing if the route is hit directly on a no-creds deploy.
+  if (!hasAdminCredentials()) {
+    return new Response('Not found', { status: 404 });
+  }
   const admin = createAdminClient();
   const { data: event } = await admin
     .from('events')
-    .select('title, starts_at, location_name, status')
+    .select('title, starts_at, location_name, status, time_zone, host_id')
     .eq('id', id)
     .maybeSingle();
 
@@ -21,6 +29,11 @@ export async function GET(
   // fall back to the generic card.
   const shareable = event ? !['draft', 'cancelled'].includes(event.status) : false;
   const title = shareable && event?.title ? event.title : 'You’re invited';
+  // Render in the plan's own zone so the unfurl shows the host's intended local
+  // time instead of the server's UTC (a 6pm plan was showing as "12:00 AM").
+  // Fall back to the host's profile zone for plans created before the zone was
+  // captured on the event itself.
+  const zone = shareable ? await resolveEventZone(admin, event) : null;
   const when =
     shareable && event?.starts_at
       ? new Intl.DateTimeFormat('en-US', {
@@ -29,6 +42,7 @@ export async function GET(
           day: 'numeric',
           hour: 'numeric',
           minute: '2-digit',
+          ...(zone ? { timeZone: zone, timeZoneName: 'short' } : {}),
         }).format(new Date(event.starts_at))
       : '';
   const where = shareable && event?.location_name ? event.location_name : '';

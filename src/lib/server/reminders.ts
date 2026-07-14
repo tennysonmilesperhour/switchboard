@@ -77,7 +77,9 @@ async function remindOneEvent(
   const rows = invites ?? [];
 
   const accepted = rows.filter((i) => i.status === 'accepted');
-  const when = formatDateTime(event.starts_at);
+  // In the plan's own zone — a reminder email/push has no viewer zone, so
+  // without this it would announce the server's UTC time.
+  const when = formatDateTime(event.starts_at, event.time_zone);
   const url = `/events/${event.id}`;
 
   // Registered attendees → in-app notification (always) + push (quiet-hours
@@ -110,7 +112,7 @@ async function remindOneEvent(
         `Hi ${i.guest_name ?? 'there'},\n\n` +
         `${event.title} is ${kind === 'soon' ? 'starting soon' : 'coming up'} - ${when}.\n` +
         (event.location_name ? `Where: ${event.location_name}\n` : '') +
-        `\nDetails: ${appUrl(`/rsvp/${i.guest_token}`)}\n\n— Switchboard`,
+        `\nDetails: ${appUrl(`/rsvp/${i.guest_token}`)}\n\n- Switchboard`,
     }));
 
   // Guest attendees reachable by phone → the same reminder over SMS.
@@ -148,7 +150,7 @@ async function remindOneEvent(
         text:
           `Hi ${i.guest_name ?? 'there'},\n\n` +
           `${event.title} is coming up - ${when}. Your invitation is still ` +
-          `open, no pressure.\n\nRSVP: ${appUrl(`/rsvp/${i.guest_token}`)}\n\n— Switchboard`,
+          `open, no pressure.\n\nRSVP: ${appUrl(`/rsvp/${i.guest_token}`)}\n\n- Switchboard`,
       }));
     nudgeTexts = pending
       .filter((i) => !i.invitee_id && looksLikePhoneNumber(i.guest_contact) && i.guest_token)

@@ -4,6 +4,8 @@ import { notFound, redirect } from 'next/navigation';
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient, hasAdminCredentials } from '@/lib/supabase/admin';
+import { serializeJsonLd } from '@/lib/security';
+import { signMediaRef } from '@/lib/server/media';
 import { advanceEventCascade } from '@/lib/server/cascade-runner';
 import { AppShell } from '@/components/shell/AppShell';
 import { Card, SectionHeader } from '@/components/ui/Card';
@@ -26,12 +28,14 @@ import { recurrenceLabel } from '@/lib/engine/recurrence';
 import { HostControls } from './HostControls';
 import { CoHostManager } from './CoHostManager';
 import { AddInvitees } from './AddInvitees';
+import { InviteLink } from './InviteLink';
 import { getRelationship, getMutualConnections } from '@/lib/server/relationship';
 import { inviteExpiresAt } from '@/lib/engine/cascade';
 import { threadGate, THREAD_PREVIEW_COUNT } from '@/lib/engine/thread';
 import { formatDateTime } from '@/lib/format';
+import { resolveEventZone } from '@/lib/server/event-zone';
 import { googleCalendarUrl } from '@/lib/calendar-links';
-import { looksLikeEmail } from '@/lib/server/email';
+import { appUrl, looksLikeEmail } from '@/lib/server/email';
 import { looksLikePhoneNumber } from '@/lib/phone';
 import type {
   EventQuestion,
@@ -53,11 +57,12 @@ export async function generateMetadata({
   const admin = createAdminClient();
   const { data: event } = await admin
     .from('events')
-    .select('title, description, starts_at, location_name')
+    .select('title, description, starts_at, location_name, time_zone, host_id')
     .eq('id', id)
     .maybeSingle();
   if (!event) return {};
-  const when = event.starts_at ? formatDateTime(event.starts_at) : null;
+  const zone = await resolveEventZone(admin, event);
+  const when = event.starts_at ? formatDateTime(event.starts_at, zone) : null;
   const description =
     event.description?.trim() ||
     [when, event.location_name].filter(Boolean).join(' · ') ||
@@ -104,6 +109,11 @@ export default async function EventPage({
 
   const isHost = event.host_id === user.id;
   const admin = createAdminClient();
+
+  // Render the plan's time in its own zone (host-profile fallback for plans
+  // created before the zone was captured), so this page agrees with the link
+  // unfurl and guest invite pages instead of drifting to the server's UTC.
+  const eventZone = await resolveEventZone(admin, event);
 
   // Co-hosts share host powers. Read the list with admin — a co-host can't
   // see the full roster through their own RLS.
@@ -225,6 +235,21 @@ export default async function EventPage({
     });
   }
 
+  // Private "give space" heads-up. Only computed against attendees the viewer
+  // can already see, so it never becomes an "is X going?" oracle for hidden
+  // guest lists — and it names only people the viewer themselves flagged.
+  let avoidedGoing: string[] = [];
+  if (attendees.length > 0) {
+    const { data: avoids } = await supabase
+      .from('profile_avoids')
+      .select('avoided_id')
+      .eq('avoider_id', user.id);
+    const avoidedSet = new Set((avoids ?? []).map((row) => row.avoided_id as string));
+    avoidedGoing = attendees
+      .filter((attendee) => avoidedSet.has(attendee.id))
+      .map((attendee) => attendee.name);
+  }
+
   // Poll (Anonymous Weighted Input)
   const { data: poll } = await supabase
     .from('polls')
@@ -313,18 +338,22 @@ export default async function EventPage({
       .order('created_at', { ascending: true });
     if (!canAccessThread) commentsQuery = commentsQuery.limit(THREAD_PREVIEW_COUNT);
     const { data: commentRows } = await commentsQuery;
-    threadComments = (commentRows ?? []).map((row) => {
-      const author = Array.isArray(row.author) ? row.author[0] : row.author;
-      return {
-        id: row.id as string,
-        body: (row.body as string | null) ?? null,
-        voice_url: (row.voice_url as string | null) ?? null,
-        voice_duration_seconds: (row.voice_duration_seconds as number | null) ?? null,
-        created_at: row.created_at as string,
-        author_id: row.author_id as string,
-        author_name: author?.display_name ?? 'Guest',
-      };
-    });
+    threadComments = await Promise.all(
+      (commentRows ?? []).map(async (row) => {
+        const author = Array.isArray(row.author) ? row.author[0] : row.author;
+        return {
+          id: row.id as string,
+          body: (row.body as string | null) ?? null,
+          // voice_url is a private-bucket path; mint a short-lived signed URL
+          // for this authorized viewer (they already passed the thread gate).
+          voice_url: await signMediaRef((row.voice_url as string | null) ?? null),
+          voice_duration_seconds: (row.voice_duration_seconds as number | null) ?? null,
+          created_at: row.created_at as string,
+          author_id: row.author_id as string,
+          author_name: author?.display_name ?? 'Guest',
+        };
+      }),
+    );
   }
 
   // True accepted count (independent of visibility) so the host knows the reach.
@@ -364,7 +393,6 @@ export default async function EventPage({
     }));
   }
 
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? '';
   const calendarEvent = event.starts_at
     ? {
         title: event.title,
@@ -391,7 +419,10 @@ export default async function EventPage({
           return {
             name: nameIsContact ? 'Guest' : rawName,
             contact,
-            url: `${appUrl}/rsvp/${i.guest_token}`,
+            // Build from the one canonical origin helper (same one the email/SMS
+            // send paths use) so a copied guest link can never be stamped with
+            // an ephemeral preview deployment origin or a bare relative path.
+            url: appUrl(`/rsvp/${i.guest_token}`),
           };
         })
     : [];
@@ -432,13 +463,34 @@ export default async function EventPage({
       : {}),
   };
 
+  // cancel_voice_url is a private-bucket path; sign it for this viewer.
+  const cancelVoiceUrl = await signMediaRef(event.cancel_voice_url);
+
   return (
     <AppShell title={event.title} back="/plans">
       <script
         type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+        // serializeJsonLd (not raw JSON.stringify) so a user-controlled event
+        // title/description containing `</script>` cannot break out of this tag.
+        dangerouslySetInnerHTML={{ __html: serializeJsonLd(jsonLd) }}
       />
       <div className="space-y-6">
+        {avoidedGoing.length > 0 && (
+          <div className="rounded-card bg-gold-soft px-4 py-3">
+            <p className="text-sm text-ink">
+              <span aria-hidden className="mr-1">👀</span>
+              <span className="font-bold">Heads up:</span>{' '}
+              {avoidedGoing.length === 1
+                ? `${avoidedGoing[0]} is going, and you’ve asked for space from them.`
+                : `${avoidedGoing.slice(0, -1).join(', ')} and ${
+                    avoidedGoing[avoidedGoing.length - 1]
+                  } are going, and you’ve asked for space from them.`}
+            </p>
+            <p className="mt-1 text-xs text-ink-soft">
+              Only you can see this - totally your call whether to go.
+            </p>
+          </div>
+        )}
         <div className="space-y-4">
           {event.cover_url && (
             // eslint-disable-next-line @next/next/no-img-element
@@ -453,7 +505,7 @@ export default async function EventPage({
             title={event.title}
             color={themeColor(event.theme) ?? planColor(heroIndex)}
             status={statusLabel[event.status]}
-            when={formatDateTime(event.starts_at)}
+            when={formatDateTime(event.starts_at, eventZone)}
             where={event.location_name ?? undefined}
             attendees={attendees.map((attendee) => ({ name: attendee.name }))}
             attendeesLabel={
@@ -475,9 +527,9 @@ export default async function EventPage({
                   {event.cancel_reason}
                 </p>
               )}
-              {event.cancel_voice_url && (
+              {cancelVoiceUrl && (
                 <div className="mt-2.5">
-                  <VoiceNote url={event.cancel_voice_url} tone="soft" />
+                  <VoiceNote url={cancelVoiceUrl} tone="soft" />
                 </div>
               )}
             </Card>
@@ -726,7 +778,7 @@ export default async function EventPage({
           <section>
             <SectionHeader
               title="Invitation flow"
-              hint="Live view - only you can see this"
+              hint="Only you see this - reorder or re-time anyone still in line"
             />
             <CascadeProgress
               invites={hostInvites.filter((invite) => invite.status !== 'requested')}
@@ -742,7 +794,7 @@ export default async function EventPage({
           <section>
             <SectionHeader title="Guest links" hint="For people you invited who aren’t on Switchboard" />
             <p className="text-sm text-ink-soft mb-2.5 leading-relaxed">
-              Each link opens a private RSVP page for that person — no account
+              Each link opens a private RSVP page for that person - no account
               or app needed. Copy it and send it however you like (text, email,
               DM); they’ll see the plan and can reply right there.
             </p>
@@ -761,6 +813,20 @@ export default async function EventPage({
             </ul>
           </section>
         )}
+
+        {/* Post-creation invite link: one link the host can share to bring more
+            people in, on top of the ordered cascade. Anyone who opens it asks to
+            join, and the host approves via the join-requests panel above. */}
+        {canManage &&
+          (event.status === 'inviting' || event.status === 'confirmed') && (
+            <InviteLink
+              eventId={event.id}
+              shareUrl={appUrl(`/join/${event.id}`)}
+              sharePath={`/join/${event.id}`}
+              enabled={event.open_table}
+              eventTitle={event.title}
+            />
+          )}
 
         {canManage && event.status === 'inviting' && (
           <AddInvitees eventId={event.id} connections={addableConnections} />

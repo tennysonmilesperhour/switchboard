@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { requireUser } from '@/lib/server/require-user';
 import { extractItems } from '@/lib/ai/extract';
 
 export async function sendMessage(
@@ -12,11 +13,9 @@ export async function sendMessage(
   const trimmed = body.trim();
   if (!trimmed) return { ok: false, error: 'Empty message' };
 
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { ok: false, error: 'Not signed in' };
+  const auth = await requireUser();
+  if (!auth.ok) return auth;
+  const { supabase, user } = auth;
 
   const { data: message, error } = await supabase
     .from('messages')
@@ -59,21 +58,3 @@ export async function toggleTask(
   revalidatePath(`/rooms/${roomId}`);
 }
 
-export async function addRoomNote(
-  roomId: string,
-  title: string,
-): Promise<{ ok: boolean }> {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user || !title.trim()) return { ok: false };
-  await supabase.from('room_items').insert({
-    room_id: roomId,
-    kind: 'note',
-    title: title.trim().slice(0, 120),
-    created_by: user.id,
-  });
-  revalidatePath(`/rooms/${roomId}`);
-  return { ok: true };
-}

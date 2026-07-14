@@ -3,7 +3,9 @@
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import { createClient } from '@/lib/supabase/server';
+import { requireUser, requireUserOrRedirect } from '@/lib/server/require-user';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { isEventManager } from '@/lib/server/authz';
 import {
   advanceEventCascade,
   notifyCurrentInviteWave,
@@ -11,6 +13,7 @@ import {
 import { notifyUsers } from '@/lib/server/notify';
 import { capture } from '@/lib/analytics/server';
 import { ANALYTICS_EVENTS } from '@/lib/analytics/events';
+import { isValidMediaRef } from '@/lib/server/media';
 import type { EventTheme, InviteMode, RecurrenceKind } from '@/lib/types';
 import {
   nextOccurrenceAfter,
@@ -22,16 +25,6 @@ import { looksLikePhoneNumber, sendSmsMessages } from '@/lib/server/sms';
 import { normalizePhoneNumber } from '@/lib/phone';
 import { suggestWindow } from '@/lib/engine/windows';
 import { parseInviteEntries, type ParsedInviteEntry } from '@/lib/invite-entry';
-
-/** Primary host or a co-host — the people allowed to manage an event. */
-async function canManageEvent(userId: string, eventId: string): Promise<boolean> {
-  const admin = createAdminClient();
-  const { data } = await admin.rpc('is_event_host', {
-    p_event: eventId,
-    p_user: userId,
-  });
-  return Boolean(data);
-}
 
 export interface WizardInvitee {
   /** Profile id for members; null for guests. */
@@ -49,6 +42,9 @@ export interface CreateEventInput {
   locationAddress: string | null;
   startsAt: string | null;
   endsAt: string | null;
+  /** Host's IANA zone (browser-resolved), so server renders show the intended
+   *  wall-clock time. See `events.time_zone`. */
+  timeZone: string | null;
   capacity: number | null;
   inviteMode: InviteMode;
   openTable: boolean;
@@ -141,16 +137,17 @@ async function resolveInvitees(
 }
 
 export async function createEvent(input: CreateEventInput): Promise<CreateEventResult> {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) redirect('/login');
+  const { supabase, user } = await requireUserOrRedirect();
 
   const title = input.title.trim();
   if (!title) return createEventError('Please give your plan a name before sending it.');
   if (input.invitees.length === 0) {
     return createEventError('Add at least one person to invite before sending.');
+  }
+  // A plan can be undated (Time TBD), but if a start time is given it must be in
+  // the future — the client blocks this too, but never trust the client.
+  if (input.startsAt && new Date(input.startsAt).getTime() < Date.now()) {
+    return createEventError('That date has already passed. Pick a time in the future.');
   }
 
   const invitees = await resolveInvitees(supabase, input.invitees);
@@ -263,12 +260,10 @@ export async function addPeopleToEvent(
   eventId: string,
   input: { entries?: string[]; profileIds?: string[] } = {},
 ): Promise<AddPeopleResult> {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { ok: false, error: 'Not signed in' };
-  if (!(await canManageEvent(user.id, eventId))) {
+  const auth = await requireUser();
+  if (!auth.ok) return auth;
+  const { supabase, user } = auth;
+  if (!(await isEventManager(user.id, eventId))) {
     return { ok: false, error: 'Only the host can add people.' };
   }
 
@@ -431,12 +426,10 @@ export async function removeInvite(
   eventId: string,
   inviteId: string,
 ): Promise<{ ok: boolean; error?: string }> {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { ok: false, error: 'Not signed in' };
-  if (!(await canManageEvent(user.id, eventId))) {
+  const auth = await requireUser();
+  if (!auth.ok) return auth;
+  const { user } = auth;
+  if (!(await isEventManager(user.id, eventId))) {
     return { ok: false, error: 'Only the host can manage invites.' };
   }
 
@@ -450,7 +443,7 @@ export async function removeInvite(
     return { ok: false, error: 'Invite not found.' };
   }
   if (invite.status === 'accepted') {
-    return { ok: false, error: 'They already accepted — cancel the plan or lower capacity instead.' };
+    return { ok: false, error: 'They already accepted - cancel the plan or lower capacity instead.' };
   }
 
   const { error } = await admin.from('invites').delete().eq('id', inviteId);
@@ -473,12 +466,10 @@ export async function resendInvite(
   eventId: string,
   inviteId: string,
 ): Promise<{ ok: boolean; error?: string }> {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { ok: false, error: 'Not signed in' };
-  if (!(await canManageEvent(user.id, eventId))) {
+  const auth = await requireUser();
+  if (!auth.ok) return auth;
+  const { user } = auth;
+  if (!(await isEventManager(user.id, eventId))) {
     return { ok: false, error: 'Only the host can manage invites.' };
   }
 
@@ -542,6 +533,9 @@ export interface UpdateEventInput {
   locationAddress: string | null;
   startsAt: string | null;
   endsAt: string | null;
+  /** Editor's IANA zone (browser-resolved); re-anchors `time_zone` whenever the
+   *  start time is edited, mirroring how the form recomputes `startsAt`. */
+  timeZone: string | null;
   capacity: number | null;
   wishlistUrl: string | null;
 }
@@ -551,16 +545,58 @@ export interface UpdateEventInput {
  * quietly pings everyone who has already accepted so nobody shows up to the
  * old details.
  */
+/** Reorder a queued invite up or down the line (host/co-host, individual mode). */
+export async function moveQueuedInvite(
+  eventId: string,
+  inviteId: string,
+  up: boolean,
+): Promise<{ ok: boolean; error?: string }> {
+  const auth = await requireUser();
+  if (!auth.ok) return auth;
+  const { supabase, user } = auth;
+  if (!(await isEventManager(user.id, eventId))) {
+    return { ok: false, error: 'Only the host can manage invites.' };
+  }
+  // Authorization + queued-only + the atomic position swap all live in the
+  // security-definer function.
+  const { error } = await supabase.rpc('move_queued_invite', {
+    p_invite: inviteId,
+    p_up: up,
+  });
+  if (error) return { ok: false, error: error.message };
+  revalidatePath(`/events/${eventId}`);
+  return { ok: true };
+}
+
+/** Change the response window on a not-yet-sent invite (host/co-host). */
+export async function setInviteWindow(
+  eventId: string,
+  inviteId: string,
+  minutes: number,
+): Promise<{ ok: boolean; error?: string }> {
+  const auth = await requireUser();
+  if (!auth.ok) return auth;
+  const { supabase, user } = auth;
+  if (!(await isEventManager(user.id, eventId))) {
+    return { ok: false, error: 'Only the host can manage invites.' };
+  }
+  const { error } = await supabase.rpc('set_invite_window', {
+    p_invite: inviteId,
+    p_minutes: minutes,
+  });
+  if (error) return { ok: false, error: error.message };
+  revalidatePath(`/events/${eventId}`);
+  return { ok: true };
+}
+
 export async function updateEventDetails(
   eventId: string,
   input: UpdateEventInput,
 ): Promise<{ ok: boolean; error?: string }> {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { ok: false, error: 'Not signed in' };
-  if (!(await canManageEvent(user.id, eventId))) {
+  const auth = await requireUser();
+  if (!auth.ok) return auth;
+  const { user } = auth;
+  if (!(await isEventManager(user.id, eventId))) {
     return { ok: false, error: 'Only the host can edit this plan.' };
   }
 
@@ -601,6 +637,11 @@ export async function updateEventDetails(
       location_address: input.locationAddress?.trim() || null,
       starts_at: input.startsAt || null,
       ends_at: input.endsAt || null,
+      // The form recomputes `startsAt` from the editor's browser zone, so
+      // re-anchor `time_zone` to that same zone to keep the pair consistent.
+      // Only when the client actually resolved a zone — never overwrite a good
+      // stored zone with null just because this browser couldn't report one.
+      ...(input.timeZone ? { time_zone: input.timeZone.slice(0, 64) } : {}),
       capacity: input.capacity,
       wishlist_url: wishlistUrl,
     })
@@ -639,13 +680,55 @@ export async function updateEventDetails(
   return { ok: true };
 }
 
+/**
+ * Turn the shareable invite link on or off. Enabling marks the plan an "open
+ * table" so anyone the host sends the link to can ask to join (the host still
+ * approves each request, via the existing join-requests panel); disabling stops
+ * new link requests. Host/co-host only — the same authorization gate every other
+ * management action uses. Writes through the service-role client after that
+ * check, mirroring updateEventDetails/confirmEvent; `open_table` is a plain,
+ * non-sensitive flag (no role/rank/ownership state), so there is no new
+ * self-writable trust surface here.
+ */
+export async function setEventInviteLink(
+  eventId: string,
+  enabled: boolean,
+): Promise<{ ok: boolean; error?: string }> {
+  const auth = await requireUser();
+  if (!auth.ok) return auth;
+  const { user } = auth;
+  if (!(await isEventManager(user.id, eventId))) {
+    return { ok: false, error: 'Only the host can change this.' };
+  }
+
+  const admin = createAdminClient();
+  const { data: event } = await admin
+    .from('events')
+    .select('status')
+    .eq('id', eventId)
+    .maybeSingle();
+  if (!event) return { ok: false, error: 'Plan not found.' };
+  if (event.status === 'cancelled' || event.status === 'past') {
+    return { ok: false, error: 'This plan is closed.' };
+  }
+
+  const { error } = await admin
+    .from('events')
+    .update({ open_table: enabled })
+    .eq('id', eventId);
+  if (error) {
+    await reportOperationalError('event-invite-link', error, { eventId });
+    return { ok: false, error: 'Could not update the invite link. Try again.' };
+  }
+
+  revalidatePath(`/events/${eventId}`);
+  revalidatePath('/discover');
+  return { ok: true };
+}
+
 export async function confirmEvent(eventId: string): Promise<void> {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) redirect('/login');
-  if (!(await canManageEvent(user.id, eventId))) return;
+  const { user } = await requireUserOrRedirect();
+  if (!(await isEventManager(user.id, eventId))) return;
   const admin = createAdminClient();
   await admin.from('events').update({ status: 'confirmed' }).eq('id', eventId);
   // The guest list is locked in — retire anything still in motion so nobody is
@@ -669,7 +752,7 @@ export async function markHappened(eventId: string): Promise<void> {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) redirect('/login');
-  if (!(await canManageEvent(user.id, eventId))) return;
+  if (!(await isEventManager(user.id, eventId))) return;
   const admin = createAdminClient();
   await admin
     .from('events')
@@ -701,17 +784,14 @@ export async function cancelEvent(
   reason?: string,
   voiceUrl?: string,
 ): Promise<void> {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) redirect('/login');
-  if (!(await canManageEvent(user.id, eventId))) return;
+  const { user } = await requireUserOrRedirect();
+  if (!(await isEventManager(user.id, eventId))) return;
   const admin = createAdminClient();
 
   const cleanReason = reason?.trim().slice(0, 2000) || null;
+  const trimmedVoice = voiceUrl?.trim();
   const cleanVoiceUrl =
-    voiceUrl && /^https:\/\//.test(voiceUrl.trim()) ? voiceUrl.trim() : null;
+    trimmedVoice && isValidMediaRef(trimmedVoice) ? trimmedVoice : null;
 
   const { data: event } = await admin
     .from('events')
@@ -732,7 +812,7 @@ export async function cancelEvent(
   const reasonTail = cleanReason
     ? ` Reason: ${cleanReason}`
     : cleanVoiceUrl
-      ? ' The host left a voice note — tap to listen.'
+      ? ' The host left a voice note - tap to listen.'
       : '';
 
   // Tell everyone who had accepted — across every channel they came in on —
@@ -766,7 +846,7 @@ export async function cancelEvent(
     .map((to) => ({
       to,
       subject: `Cancelled: ${title}`,
-      text: `${title} has been cancelled. Apologies for the change of plans.${reasonLine}\n\n— Switchboard`,
+      text: `${title} has been cancelled. Apologies for the change of plans.${reasonLine}\n\n- Switchboard`,
     }));
   if (guestEmails.length > 0) await sendEmails(guestEmails);
   const guestSms = guestContacts
@@ -834,6 +914,9 @@ async function cloneEventForReuse(
       location_name: source.location_name,
       location_address: source.location_address,
       starts_at: startsAt,
+      // Same host, same crew — carry the zone so the reused plan renders in the
+      // host's local time even before a new date is picked.
+      time_zone: source.time_zone,
       capacity: source.capacity,
       invite_mode: source.invite_mode,
       open_table: source.open_table,
@@ -901,11 +984,7 @@ async function cloneEventForReuse(
  * else keeps their place in the order. The host lands on the new draft.
  */
 export async function runItBack(eventId: string): Promise<never> {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) redirect('/login');
+  const { user } = await requireUserOrRedirect();
 
   // new date TBD - the group can settle it in the room
   const cloneId = await cloneEventForReuse(user.id, eventId, null);
@@ -918,11 +997,7 @@ export async function runItBack(eventId: string): Promise<never> {
  * repeat or has no start time to count from, the new date is left TBD.
  */
 export async function scheduleNextOccurrence(eventId: string): Promise<never> {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) redirect('/login');
+  const { supabase, user } = await requireUserOrRedirect();
 
   const { data: source } = await supabase
     .from('events')
@@ -948,12 +1023,8 @@ export async function scheduleNextOccurrence(eventId: string): Promise<never> {
 
 /** Host closes voting and moves an AWI event into the inviting phase. */
 export async function startInviting(eventId: string): Promise<void> {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) redirect('/login');
-  if (!(await canManageEvent(user.id, eventId))) return;
+  const { user } = await requireUserOrRedirect();
+  if (!(await isEventManager(user.id, eventId))) return;
   const admin = createAdminClient();
   const { error } = await admin
     .from('events')
@@ -974,11 +1045,9 @@ export async function addCoHost(
   eventId: string,
   handle: string,
 ): Promise<{ ok: boolean; error?: string }> {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { ok: false, error: 'Not signed in' };
+  const auth = await requireUser();
+  if (!auth.ok) return auth;
+  const { supabase, user } = auth;
 
   const cleanHandle = handle.trim().toLowerCase().replace(/^@/, '');
   if (!cleanHandle) return { ok: false, error: 'Enter a handle.' };
@@ -1027,11 +1096,7 @@ export async function removeCoHost(
   eventId: string,
   cohostId: string,
 ): Promise<void> {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) redirect('/login');
+  const { supabase } = await requireUserOrRedirect();
   await supabase
     .from('event_cohosts')
     .delete()

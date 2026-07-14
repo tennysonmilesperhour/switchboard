@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Chip } from '@/components/ui/Chip';
 import type { InterestGroup } from '@/lib/interests';
 
@@ -33,6 +33,20 @@ export function InterestPicker({
 }: InterestPickerProps) {
   const [selected, setSelected] = useState<string[]>(initialSelected);
   const [query, setQuery] = useState('');
+  const [customDraft, setCustomDraft] = useState('');
+
+  // Toggling a chip changes hidden inputs programmatically, which fires no DOM
+  // event — so an enclosing AutosaveForm wouldn't notice. Emit a bubbling
+  // `input` after mount so autosave (and anything else listening) picks it up.
+  const rootRef = useRef<HTMLDivElement>(null);
+  const mounted = useRef(false);
+  useEffect(() => {
+    if (!mounted.current) {
+      mounted.current = true;
+      return;
+    }
+    rootRef.current?.dispatchEvent(new Event('input', { bubbles: true }));
+  }, [selected]);
 
   const atLimit = max != null && selected.length >= max;
 
@@ -43,6 +57,28 @@ export function InterestPicker({
       }
       if (max != null && current.length >= max) return current;
       return [...current, option];
+    });
+  }
+
+  // Anything the taxonomy doesn't list. Selected custom values render as their
+  // own chips so they stay visible and removable.
+  const presetOptions = useMemo(
+    () => new Set(groups.flatMap((group) => group.options)),
+    [groups],
+  );
+  const customSelected = selected.filter((value) => !presetOptions.has(value));
+
+  function addCustom() {
+    const value = customDraft.trim();
+    if (!value) return;
+    setCustomDraft('');
+    setSelected((current) => {
+      // Case-insensitive de-dupe so "Coffee" and "coffee" don't both land.
+      if (current.some((v) => v.toLowerCase() === value.toLowerCase())) {
+        return current;
+      }
+      if (max != null && current.length >= max) return current;
+      return [...current, value];
     });
   }
 
@@ -60,7 +96,7 @@ export function InterestPicker({
   }, [groups, q]);
 
   return (
-    <div className="space-y-4">
+    <div ref={rootRef} className="space-y-4">
       {searchable && (
         <input
           type="search"
@@ -105,9 +141,51 @@ export function InterestPicker({
         ))}
         {q && visibleGroups.length === 0 && (
           <p className="text-sm text-ink-faint">
-            No matches for “{query.trim()}”.
+            No matches for “{query.trim()}” - add it as your own below.
           </p>
         )}
+
+        {customSelected.length > 0 && (
+          <div className="space-y-2">
+            <p className="text-xs font-medium uppercase tracking-wide text-ink-faint">
+              <span aria-hidden className="mr-1">✨</span>
+              Your own
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {customSelected.map((value) => (
+                <Chip key={value} selected onClick={() => toggle(value)}>
+                  {value}
+                </Chip>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Add your own — the taxonomy is a starting point, not a cage. */}
+      <div className="flex gap-2">
+        <input
+          value={customDraft}
+          onChange={(event) => setCustomDraft(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter') {
+              event.preventDefault();
+              addCustom();
+            }
+          }}
+          disabled={atLimit}
+          placeholder="Add your own…"
+          aria-label="Add your own"
+          className="flex-1 min-w-0 rounded-card border border-line bg-card px-4 py-2.5 text-sm outline-none focus:border-terracotta transition-colors disabled:opacity-60"
+        />
+        <Chip
+          selected={false}
+          emoji="+"
+          disabled={atLimit || !customDraft.trim()}
+          onClick={addCustom}
+        >
+          Add
+        </Chip>
       </div>
 
       {selected.map((value) => (

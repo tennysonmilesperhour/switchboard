@@ -6,6 +6,7 @@ import {
 } from '@/lib/engine/cascade';
 import { sendPushToUsers } from '@/lib/server/notify';
 import { sendEmails, looksLikeEmail, appUrl } from '@/lib/server/email';
+import { formatDateTime } from '@/lib/format';
 import {
   guestInviteSmsText,
   looksLikePhoneNumber,
@@ -144,14 +145,10 @@ function guestInviteText(
   token: string,
 ): string {
   const hello = guestName ? `Hi ${guestName},` : 'Hi there,';
+  // In the plan's own zone with a label — an invite email/SMS has no viewer
+  // zone, so without this it would announce the server's UTC time.
   const when = event.starts_at
-    ? new Date(event.starts_at).toLocaleString('en-US', {
-        weekday: 'long',
-        month: 'long',
-        day: 'numeric',
-        hour: 'numeric',
-        minute: '2-digit',
-      })
+    ? formatDateTime(event.starts_at, event.time_zone)
     : 'Time to be decided';
   const where = event.location_name ? `\nWhere: ${event.location_name}` : '';
   return (
@@ -160,7 +157,7 @@ function guestInviteText(
     `When: ${when}${where}\n\n` +
     `RSVP here (no account needed): ${appUrl(`/rsvp/${token}`)}\n\n` +
     `No pressure either way - if you can’t make it, the invitation quietly ` +
-    `moves along.\n\n— Switchboard`
+    `moves along.\n\n- Switchboard`
   );
 }
 

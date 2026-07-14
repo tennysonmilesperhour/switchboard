@@ -3,8 +3,11 @@
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import { createClient } from '@/lib/supabase/server';
+import { requireUser, requireUserOrRedirect } from '@/lib/server/require-user';
+import { isOwnPublicStorageUrl } from '@/lib/server/media';
 import { SOCIAL_BY_ID } from '@/lib/socials';
-import { USERNAME_PATTERN } from '@/lib/auth-identity';
+import { USERNAME_PATTERN, isEmail } from '@/lib/auth-identity';
+import { safeNextPath } from '@/lib/security';
 import { LEGAL_VERSION } from '@/lib/legal';
 import { sanitizeUrl } from '@/lib/url';
 import type { ProfileLink, ProfileSocial } from '@/lib/types';
@@ -76,11 +79,7 @@ export async function updateProfileDetails(
   _prev: ActionResult,
   formData: FormData,
 ): Promise<ActionResult> {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) redirect('/login');
+  const { supabase, user } = await requireUserOrRedirect();
 
   const displayName = String(formData.get('display_name') ?? '').trim();
   const handle = String(formData.get('handle') ?? '')
@@ -93,7 +92,7 @@ export async function updateProfileDetails(
   }
 
   const email = nullableText(formData.get('contact_email'), 120);
-  if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+  if (email && !isEmail(email)) {
     return { ok: false, error: 'That email address looks off.' };
   }
 
@@ -101,9 +100,9 @@ export async function updateProfileDetails(
   const avatarUrl = nullableText(formData.get('avatar_url'), 500);
   const coverUrl = nullableText(formData.get('cover_url'), 500);
   const mediaOk = (u: string | null) =>
-    u === null || /\/storage\/v1\/object\/public\/(avatars|covers)\//.test(u);
+    u === null || isOwnPublicStorageUrl(u, ['avatars', 'covers']);
   if (!mediaOk(avatarUrl) || !mediaOk(coverUrl)) {
-    return { ok: false, error: 'Unexpected image location — please re-upload.' };
+    return { ok: false, error: 'Unexpected image location - please re-upload.' };
   }
 
   const { error } = await supabase
@@ -129,7 +128,7 @@ export async function updateProfileDetails(
     if (error.code === '23505') {
       return { ok: false, error: 'That handle is already taken.' };
     }
-    return { ok: false, error: 'Could not save — please try again.' };
+    return { ok: false, error: 'Could not save - please try again.' };
   }
 
   revalidatePath('/profile');
@@ -138,11 +137,7 @@ export async function updateProfileDetails(
 }
 
 export async function completeOnboarding(formData: FormData): Promise<void> {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) redirect('/login');
+  const { supabase, user } = await requireUserOrRedirect();
 
   const displayName = String(formData.get('display_name') ?? '').trim();
   const handle = String(formData.get('handle') ?? '')
@@ -192,15 +187,13 @@ export async function completeOnboarding(formData: FormData): Promise<void> {
     ]);
   }
 
-  redirect('/');
+  // Return to the destination the user was originally headed for (e.g. an invite
+  // deep link that funnelled them through onboarding), validated to same-site.
+  redirect(safeNextPath(String(formData.get('next') ?? ''), '/'));
 }
 
 export async function updateInterests(formData: FormData): Promise<void> {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) redirect('/login');
+  const { supabase, user } = await requireUserOrRedirect();
 
   const interests = formData.getAll('interests').map(String).filter(Boolean);
   const downTo = formData.getAll('down_to').map(String).filter(Boolean);
@@ -223,11 +216,7 @@ function compactLines(raw: FormDataEntryValue | null, maxItems = 12): string[] {
 }
 
 export async function updateDiscoverability(formData: FormData): Promise<void> {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) redirect('/login');
+  const { supabase, user } = await requireUserOrRedirect();
 
   const discoverable = formData.get('discoverable') === 'on';
   await supabase
@@ -251,12 +240,36 @@ export async function updateDiscoverability(formData: FormData): Promise<void> {
   revalidatePath('/discover');
 }
 
+/**
+ * Flip discoverability from a quick toggle (e.g. the Explore banner) without
+ * opening Settings. Turning it on also lights the privacy-conservative sharing
+ * dimensions (interests + mutual friends) so you actually match on something,
+ * while leaving location, demographics, involvements, and contexts exactly as
+ * they were — those stay opt-in from Settings. Turning it off just hides you
+ * and preserves every sharing choice for next time.
+ */
+export async function setDiscoverable(enabled: boolean): Promise<ActionResult> {
+  const auth = await requireUser();
+  if (!auth.ok) return auth;
+  const { supabase, user } = auth;
+
+  const update = enabled
+    ? { discoverable: true, discovery_interests: true, discovery_mutuals: true }
+    : { discoverable: false };
+
+  const { error } = await supabase
+    .from('profiles')
+    .update(update)
+    .eq('id', user.id);
+  if (error) return { ok: false, error: error.message };
+
+  revalidatePath('/discover');
+  revalidatePath('/settings');
+  return { ok: true };
+}
+
 export async function updateSabbatical(formData: FormData): Promise<void> {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) redirect('/login');
+  const { supabase, user } = await requireUserOrRedirect();
 
   const on = formData.get('sabbatical') === 'on';
   const message = String(formData.get('sabbatical_message') ?? '').trim();
@@ -280,11 +293,7 @@ export async function updateSabbatical(formData: FormData): Promise<void> {
 }
 
 export async function updateQuietHours(formData: FormData): Promise<void> {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) redirect('/login');
+  const { supabase, user } = await requireUserOrRedirect();
 
   const rawStart = formData.get('quiet_start');
   const rawEnd = formData.get('quiet_end');

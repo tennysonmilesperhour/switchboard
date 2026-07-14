@@ -1,7 +1,7 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
-import { createClient } from '@/lib/supabase/server';
+import { requireUser } from '@/lib/server/require-user';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { sendPushToUsers } from '@/lib/server/notify';
 import { sendEmails, looksLikeEmail, appUrl } from '@/lib/server/email';
@@ -25,11 +25,9 @@ export async function postAnnouncement(
   if (!trimmed) return { ok: false, error: 'Write something first' };
   if (trimmed.length > 2000) return { ok: false, error: 'That’s a bit long' };
 
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { ok: false, error: 'Not signed in' };
+  const auth = await requireUser();
+  if (!auth.ok) return auth;
+  const { supabase, user } = auth;
 
   // RLS enforces host-only insert; this fails cleanly for non-hosts.
   const { error } = await supabase
@@ -88,7 +86,7 @@ async function fanOutAnnouncement(
       to: i.guest_contact as string,
       subject: `Update: ${event.title}`,
       text:
-        `${body}\n\n— from your host on Switchboard\n` +
+        `${body}\n\n- from your host on Switchboard\n` +
         `Event details: ${appUrl(`/rsvp/${i.guest_token}`)}`,
     }));
   if (emails.length > 0) {

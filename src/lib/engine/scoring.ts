@@ -25,13 +25,6 @@ export interface OptionScore {
   consensus: number;
 }
 
-export const WEIGHT_LABELS: Record<Weight, string> = {
-  2: 'Absolutely love this',
-  1: 'Sounds good',
-  0: 'No opinion',
-  [-1]: "I'd rather not",
-};
-
 export function scoreOptions(
   optionIds: readonly string[],
   votes: readonly Vote[],

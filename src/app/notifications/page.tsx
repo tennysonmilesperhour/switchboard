@@ -26,7 +26,7 @@ export default async function NotificationsPage() {
   ] = await Promise.all([
     supabase
       .from('invites')
-      .select('id, event:events(id, title, starts_at)')
+      .select('id, event:events(id, title, starts_at, time_zone)')
       .eq('invitee_id', user.id)
       .eq('status', 'sent'),
     supabase
@@ -130,14 +130,17 @@ export default async function NotificationsPage() {
                 {invites.map((invite) => {
                   const event = (
                     Array.isArray(invite.event) ? invite.event[0] : invite.event
-                  ) as Pick<SwitchboardEvent, 'id' | 'title' | 'starts_at'> | null;
+                  ) as Pick<
+                    SwitchboardEvent,
+                    'id' | 'title' | 'starts_at' | 'time_zone'
+                  > | null;
                   if (!event) return null;
                   return (
                     <Link key={invite.id} href={`/events/${event.id}`} className="block group">
                       <Card tone="gold" className="group-hover:shadow-lift transition-shadow">
                         <p className="font-medium">{event.title}</p>
                         <p className="text-xs text-ink-soft mt-0.5">
-                          {formatDateTime(event.starts_at)} · respond soon
+                          {formatDateTime(event.starts_at, event.time_zone)} · respond soon
                         </p>
                       </Card>
                     </Link>
@@ -191,7 +194,7 @@ export default async function NotificationsPage() {
                   >
                     <Card tone="sage" className="group-hover:shadow-lift transition-shadow">
                       <p className="text-sm">
-                        <strong>{match.activity}</strong> — it’s mutual!{' '}
+                        <strong>{match.activity}</strong> - it’s mutual!{' '}
                         <span className="text-ink-faint">
                           {formatRelative(match.created_at)}
                         </span>

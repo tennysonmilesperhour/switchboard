@@ -5,16 +5,25 @@ import { checkRateLimit } from '@/lib/server/rate-limit';
 import { reportOperationalError } from '@/lib/server/observability';
 
 const MAX_UPLOAD_BYTES = 5 * 1024 * 1024;
-const ALLOWED_BUCKETS = new Set(['media', 'avatars', 'covers']);
-const IMAGE_EXTENSIONS = new Set([
-  'avif',
-  'gif',
-  'heic',
-  'jpeg',
-  'jpg',
-  'png',
-  'webp',
-]);
+// `media-private` is the access-gated bucket (capsule photos); the rest are
+// public (avatars, covers, event covers). Private uploads return a path, not a
+// public URL — the render site signs it.
+const ALLOWED_BUCKETS = new Set(['media', 'avatars', 'covers', 'media-private']);
+// Extension -> the Content-Type we will persist. We serve uploads from a PUBLIC
+// bucket, so the stored Content-Type must come from this server-controlled map
+// and NEVER from the attacker-supplied `file.type`: a file labeled
+// `image/svg+xml` would otherwise be served as an executable SVG (stored XSS on
+// the storage origin). SVG is intentionally absent — it is rejected outright.
+const IMAGE_MIME: Record<string, string> = {
+  avif: 'image/avif',
+  gif: 'image/gif',
+  heic: 'image/heic',
+  jpeg: 'image/jpeg',
+  jpg: 'image/jpeg',
+  png: 'image/png',
+  webp: 'image/webp',
+};
+const IMAGE_EXTENSIONS = new Set(Object.keys(IMAGE_MIME));
 
 function jsonError(message: string, status = 400) {
   return NextResponse.json({ error: message }, { status });
@@ -63,21 +72,26 @@ export async function POST(request: Request) {
   if (!(file instanceof File)) return jsonError('Choose an image file.');
   if (!ALLOWED_BUCKETS.has(bucket)) return jsonError('Unsupported image bucket.');
   if (!file.type.startsWith('image/')) return jsonError('Please choose an image file.');
+  // SVG can carry script; it is not a safe format to host from a public bucket.
+  if (file.type === 'image/svg+xml') return jsonError('SVG images are not supported.');
   if (file.size > MAX_UPLOAD_BYTES) return jsonError('Image must be under 5MB.');
 
   const admin = createAdminClient();
   const ext = extensionFor(file);
+  // Content-Type comes from our extension map, never from the client's file.type.
+  const contentType = IMAGE_MIME[ext] ?? 'image/jpeg';
+  const isPrivate = bucket === 'media-private';
   const path = `${user.id}/${pathPrefix}-${Date.now()}-${crypto.randomUUID()}.${ext}`;
   const bytes = Buffer.from(await file.arrayBuffer());
 
   // Keep uploads resilient if a Supabase project was created before the media
   // migrations ran. Existing buckets return an error here; uploads below still
-  // proceed normally.
-  await admin.storage.createBucket(bucket, { public: true }).catch(() => null);
+  // proceed normally. The private bucket must never be created as public.
+  await admin.storage.createBucket(bucket, { public: !isPrivate }).catch(() => null);
 
   const { error: uploadError } = await admin.storage.from(bucket).upload(path, bytes, {
     cacheControl: '3600',
-    contentType: file.type || `image/${ext}`,
+    contentType,
     upsert: false,
   });
 
@@ -88,6 +102,11 @@ export async function POST(request: Request) {
       bytes: file.size,
     });
     return jsonError('Upload failed. Please try again.', 500);
+  }
+
+  // Private bucket: return the path only (served later via a signed URL).
+  if (isPrivate) {
+    return NextResponse.json({ path });
   }
 
   const { data } = admin.storage.from(bucket).getPublicUrl(path);

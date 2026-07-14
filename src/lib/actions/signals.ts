@@ -87,9 +87,14 @@ export async function setSignalsAudience(
 }
 
 /** Turn every signal off at once. */
-export async function clearSignal(): Promise<void> {
+export async function clearSignal(): Promise<{ ok: boolean; error?: string }> {
   const { supabase, user } = await requireUser();
-  if (!user) return;
-  await supabase.from('availability_signals').delete().eq('user_id', user.id);
+  if (!user) return { ok: false, error: 'Not signed in' };
+  const { error } = await supabase
+    .from('availability_signals')
+    .delete()
+    .eq('user_id', user.id);
+  if (error) return { ok: false, error: error.message };
   revalidatePath('/');
+  return { ok: true };
 }

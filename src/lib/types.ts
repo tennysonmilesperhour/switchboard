@@ -127,9 +127,16 @@ export interface SwitchboardEvent {
   location_address: string | null;
   starts_at: string | null;
   ends_at: string | null;
+  /** IANA zone the host created/edited the plan in; anchors how `starts_at` is
+   *  rendered on the server, where there is no viewer zone. Null for undated
+   *  plans and any created before the zone was captured. */
+  time_zone: string | null;
   capacity: number | null;
   invite_mode: InviteMode;
   status: EventStatus;
+  /** Open table: anyone can ask to join (via the shared invite link or the
+   *  friends-of-friends discover feed); the host approves each request. */
+  open_table: boolean;
   /** Visibility settings */
   show_invite_list: boolean;
   show_accepted: boolean;

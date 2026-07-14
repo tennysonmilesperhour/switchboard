@@ -45,7 +45,7 @@ interface PlanCardProps {
   status?: string;
   href?: string;
   actions?: React.ReactNode;
-  variant?: 'full' | 'compact';
+  variant?: 'full' | 'compact' | 'tile';
   className?: string;
 }
 
@@ -74,24 +74,36 @@ export function PlanCard({
   const surface = (
     <div
       className={`group relative overflow-hidden rounded-card text-white shadow-card ${
-        variant === 'full' ? 'min-h-[26rem] p-6' : 'p-4'
+        variant === 'full'
+          ? 'min-h-[26rem] p-6'
+          : variant === 'tile'
+            ? 'aspect-[4/5] p-3.5'
+            : 'p-4'
       } ${className}`}
     >
       {/* Color base */}
       <div className={`absolute inset-0 ${grad}`} aria-hidden />
-      {/* Faint photo texture */}
+      {/* Cover photo — a full, front-and-center image on tiles; a faint texture
+          on the signature full/compact cards. */}
       {imageUrl ? (
         // eslint-disable-next-line @next/next/no-img-element
         <img
           src={imageUrl}
           alt=""
           aria-hidden
-          className="absolute inset-0 h-full w-full object-cover opacity-30 mix-blend-luminosity transition-transform duration-500 group-hover:scale-105"
+          className={`absolute inset-0 h-full w-full object-cover transition-transform duration-500 group-hover:scale-105 ${
+            variant === 'tile' ? 'opacity-90' : 'opacity-30 mix-blend-luminosity'
+          }`}
         />
       ) : null}
-      {/* Legibility scrim */}
+      {/* Legibility scrim — heavier at the bottom on tiles so text reads over
+          a full photo. */}
       <div
-        className="absolute inset-0 bg-gradient-to-t from-black/25 via-transparent to-black/10"
+        className={`absolute inset-0 ${
+          variant === 'tile'
+            ? 'bg-gradient-to-t from-black/70 via-black/20 to-black/5'
+            : 'bg-gradient-to-t from-black/25 via-transparent to-black/10'
+        }`}
         aria-hidden
       />
 
@@ -125,6 +137,32 @@ export function PlanCard({
           </div>
 
           {actions ? <div className="mt-5 flex gap-3">{actions}</div> : null}
+        </div>
+      ) : variant === 'tile' ? (
+        <div className="relative flex h-full flex-col justify-end">
+          {status ? (
+            <span className="absolute top-0 left-0 rounded-pill bg-white/25 px-2.5 py-0.5 text-[11px] font-bold uppercase tracking-wide backdrop-blur-sm">
+              {status}
+            </span>
+          ) : null}
+          <div className="space-y-1">
+            <h3 className="text-lg font-extrabold leading-tight tracking-tight line-clamp-2 drop-shadow-sm">
+              {title}
+            </h3>
+            {(when || dateLabel) && (
+              <p className="text-xs font-semibold text-white/85">
+                {[when, dateLabel].filter(Boolean).join(' · ')}
+              </p>
+            )}
+            {where ? (
+              <p className="truncate text-xs font-medium text-white/70">{where}</p>
+            ) : null}
+            {attendees.length > 0 ? (
+              <div className="pt-1">
+                <AvatarCluster people={attendees} size="xs" max={4} onColor />
+              </div>
+            ) : null}
+          </div>
         </div>
       ) : (
         <div className="relative flex items-center gap-3">

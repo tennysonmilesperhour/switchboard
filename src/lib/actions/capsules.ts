@@ -1,7 +1,8 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
-import { createClient } from '@/lib/supabase/server';
+import { requireUser } from '@/lib/server/require-user';
+import { isStoredMediaPath, isOwnPublicStorageUrl } from '@/lib/server/media';
 
 export async function addCapsuleEntry(
   eventId: string,
@@ -11,17 +12,16 @@ export async function addCapsuleEntry(
   const trimmed = line.trim();
   if (!trimmed) return { ok: false, error: 'Write one line first' };
 
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { ok: false, error: 'Not signed in' };
+  const auth = await requireUser();
+  if (!auth.ok) return auth;
+  const { supabase, user } = auth;
 
-  // Only accept a photo that lives in our own public media bucket — don't store
-  // an arbitrary attacker-supplied URL (SB-28).
+  // Only accept a photo that lives in our own storage — a private-bucket path
+  // (new uploads) or a legacy public media URL — never an arbitrary
+  // attacker-supplied URL (SB-28).
   const photo = photoUrl.trim() || null;
-  if (photo && !/\/storage\/v1\/object\/public\/media\//.test(photo)) {
-    return { ok: false, error: 'Unexpected image location — please re-upload.' };
+  if (photo && !isStoredMediaPath(photo) && !isOwnPublicStorageUrl(photo, ['media'])) {
+    return { ok: false, error: 'Unexpected image location - please re-upload.' };
   }
 
   const { error } = await supabase.from('capsule_entries').upsert(

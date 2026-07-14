@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/Button';
 import Link from 'next/link';
 import { PushManager } from '@/components/push/PushManager';
 import { InterestPicker } from '@/components/profile/InterestPicker';
-import { SaveButton } from './SaveButton';
+import { AutosaveForm, AutosaveStatus } from './AutosaveForm';
 import { AccountControls } from './AccountControls';
 import { CalendarSubscribe } from './CalendarSubscribe';
 import { INTEREST_CATEGORIES, DOWN_TO_GROUP } from '@/lib/interests';
@@ -51,6 +51,11 @@ export default async function SettingsPage() {
     .maybeSingle<{ calendar_token: string; contact_email: string | null; contact_phone: string | null }>();
   const calendarToken = privateProfile?.calendar_token ?? null;
 
+  // Reveal the moderation entry point only to appointed platform moderators.
+  const { data: isModerator } = await supabase.rpc('is_platform_moderator', {
+    p_user: user.id,
+  });
+
   const interests: string[] = profile?.interests ?? [];
   const downTo: string[] = profile?.down_to ?? [];
   const sabbatical: boolean = profile?.sabbatical ?? false;
@@ -90,7 +95,7 @@ export default async function SettingsPage() {
             hint="Help Switchboard suggest the right people and plans"
           />
           <Card>
-            <form action={updateInterests} className="space-y-6">
+            <AutosaveForm action={updateInterests} className="space-y-6">
               <div className="space-y-3">
                 <p className="text-sm font-medium text-ink">Interests</p>
                 <InterestPicker
@@ -110,8 +115,8 @@ export default async function SettingsPage() {
                   searchable={false}
                 />
               </div>
-              <SaveButton />
-            </form>
+              <AutosaveStatus />
+            </AutosaveForm>
           </Card>
         </section>
 
@@ -133,7 +138,7 @@ export default async function SettingsPage() {
             hint="Choose how new people can find you. Interest stays private unless it is mutual."
           />
           <Card>
-            <form action={updateDiscoverability} className="space-y-4">
+            <AutosaveForm action={updateDiscoverability} className="space-y-4">
               <label className="flex items-start gap-3 cursor-pointer">
                 <input
                   type="checkbox"
@@ -192,8 +197,8 @@ export default async function SettingsPage() {
                   One per line. These become the specific contexts people can mutually match around.
                 </p>
               </div>
-              <SaveButton />
-            </form>
+              <AutosaveStatus />
+            </AutosaveForm>
           </Card>
         </section>
 
@@ -213,7 +218,7 @@ export default async function SettingsPage() {
             hint="No pushes during these hours - they simply wait"
           />
           <Card>
-            <form action={updateQuietHours} className="flex items-end gap-3">
+            <AutosaveForm action={updateQuietHours} className="flex flex-wrap items-end gap-3">
               <div className="space-y-1.5 flex-1">
                 <label htmlFor="quiet_start" className="text-sm font-medium">From</label>
                 <select
@@ -242,8 +247,8 @@ export default async function SettingsPage() {
                   ))}
                 </select>
               </div>
-              <SaveButton />
-            </form>
+              <AutosaveStatus />
+            </AutosaveForm>
           </Card>
         </section>
 
@@ -253,7 +258,7 @@ export default async function SettingsPage() {
             hint="Pause signals, radar, and matchmaking for a while"
           />
           <Card>
-            <form action={updateSabbatical} className="space-y-3">
+            <AutosaveForm action={updateSabbatical} className="space-y-3">
               <label className="flex items-start gap-3 cursor-pointer">
                 <input
                   type="checkbox"
@@ -278,10 +283,25 @@ export default async function SettingsPage() {
                 aria-label="Sabbatical note"
                 className="w-full rounded-card border border-line bg-paper px-3.5 py-2.5 text-sm outline-none focus:border-terracotta"
               />
-              <SaveButton />
-            </form>
+              <AutosaveStatus />
+            </AutosaveForm>
           </Card>
         </section>
+
+        {isModerator && (
+          <section>
+            <SectionHeader title="Moderation" hint="Review community reports" />
+            <Card>
+              <Link
+                href="/moderation"
+                className="flex items-center justify-between rounded-card bg-paper px-3 py-2.5 text-sm font-bold text-terracotta hover:text-terracotta-deep"
+              >
+                Open the moderation queue
+                <span aria-hidden>→</span>
+              </Link>
+            </Card>
+          </section>
+        )}
 
         <section>
           <SectionHeader title="Account" hint="Password and account controls" />

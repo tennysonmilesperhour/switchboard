@@ -11,15 +11,19 @@ export function CapsuleForm({
   eventId,
   userId,
   initialLine,
-  initialPhotoUrl,
+  initialPhotoRef,
+  initialPhotoPreview,
 }: {
   eventId: string;
   userId: string;
   initialLine: string;
-  initialPhotoUrl: string;
+  /** Stored photo reference (private-bucket path) that gets re-submitted. */
+  initialPhotoRef: string;
+  /** Signed URL for displaying an existing photo. */
+  initialPhotoPreview: string;
 }) {
   const [line, setLine] = useState(initialLine);
-  const [photoUrl, setPhotoUrl] = useState(initialPhotoUrl);
+  const [photoRef, setPhotoRef] = useState(initialPhotoRef);
   const [error, setError] = useState('');
   const [pending, startTransition] = useTransition();
   const router = useRouter();
@@ -41,8 +45,10 @@ export function CapsuleForm({
         />
         <ImageInput
           userId={userId}
-          value={photoUrl}
-          onChange={setPhotoUrl}
+          value={photoRef}
+          onChange={setPhotoRef}
+          previewSrc={initialPhotoPreview}
+          bucket="media-private"
           pathPrefix="capsule"
           label="photo"
           aspect="video"
@@ -54,7 +60,7 @@ export function CapsuleForm({
           disabled={pending || !line.trim()}
           onClick={() =>
             startTransition(async () => {
-              const result = await addCapsuleEntry(eventId, line, photoUrl);
+              const result = await addCapsuleEntry(eventId, line, photoRef);
               if (!result.ok) setError(result.error ?? 'Could not save');
               else router.refresh();
             })

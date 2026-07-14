@@ -5,9 +5,15 @@ import { useRouter } from 'next/navigation';
 import { Avatar } from '@/components/ui/Avatar';
 import { useToast } from '@/components/ui/Toast';
 import { useConfirm } from '@/components/ui/ConfirmDialog';
-import { removeInvite, resendInvite } from '@/lib/actions/events';
+import {
+  moveQueuedInvite,
+  removeInvite,
+  resendInvite,
+  setInviteWindow,
+} from '@/lib/actions/events';
 import { formatRelative, formatWindow } from '@/lib/format';
 import { inviteExpiresAt } from '@/lib/engine/cascade';
+import { WINDOW_CHOICES } from '@/lib/engine/windows';
 import type { Invite } from '@/lib/types';
 
 interface CascadeProgressProps {
@@ -80,7 +86,33 @@ export function CascadeProgress({ invites, mode, eventId, editable }: CascadePro
     });
   }
 
+  function doMove(invite: Invite & { invitee_name: string }, up: boolean) {
+    if (!eventId) return;
+    startTransition(async () => {
+      const result = await moveQueuedInvite(eventId, invite.id, up);
+      if (!result.ok) {
+        toast.error(result.error ?? 'Could not reorder the line.');
+        return;
+      }
+      router.refresh();
+    });
+  }
+
+  function doWindow(invite: Invite & { invitee_name: string }, minutes: number) {
+    if (!eventId) return;
+    startTransition(async () => {
+      const result = await setInviteWindow(eventId, invite.id, minutes);
+      if (!result.ok) {
+        toast.error(result.error ?? 'Could not change the window.');
+        return;
+      }
+      router.refresh();
+    });
+  }
+
   const ordered = [...invites].sort((a, b) => a.position - b.position);
+  // Queued invites, in line order — used to know who can move up/down.
+  const queuedIds = ordered.filter((i) => i.status === 'queued').map((i) => i.id);
   const stages = mode === 'group'
     ? [...new Set(ordered.map((i) => i.group_stage))].sort((a, b) => a - b)
     : [null];
@@ -113,6 +145,12 @@ export function CascadeProgress({ invites, mode, eventId, editable }: CascadePro
                     : null;
                 const canResend = editable && REOPENABLE.has(invite.status);
                 const canRemove = editable && invite.status !== 'accepted';
+                const isQueued = invite.status === 'queued';
+                const queuedIndex = queuedIds.indexOf(invite.id);
+                // Order only matters when we ask one at a time.
+                const canMove =
+                  editable && isQueued && mode === 'individual' && queuedIds.length > 1;
+                const canReWindow = editable && isQueued;
                 return (
                   <li
                     key={invite.id}
@@ -146,6 +184,50 @@ export function CascadeProgress({ invites, mode, eventId, editable }: CascadePro
                           : ''}
                       </span>
                     </span>
+                    {canReWindow && (
+                      <select
+                        value={invite.window_minutes}
+                        disabled={pending}
+                        onChange={(e) => doWindow(invite, Number(e.target.value))}
+                        aria-label={`Response window for ${invite.invitee_name}`}
+                        className="rounded-pill border border-line bg-paper px-2 py-1 text-xs font-medium text-ink outline-none focus:border-terracotta"
+                      >
+                        {!WINDOW_CHOICES.some(
+                          (c) => c.windowMinutes === invite.window_minutes,
+                        ) && (
+                          <option value={invite.window_minutes}>
+                            {formatWindow(invite.window_minutes)}
+                          </option>
+                        )}
+                        {WINDOW_CHOICES.map((c) => (
+                          <option key={c.windowMinutes} value={c.windowMinutes}>
+                            {c.label}
+                          </option>
+                        ))}
+                      </select>
+                    )}
+                    {canMove && (
+                      <span className="flex flex-col leading-none">
+                        <button
+                          type="button"
+                          disabled={pending || queuedIndex === 0}
+                          onClick={() => doMove(invite, true)}
+                          aria-label={`Move ${invite.invitee_name} earlier`}
+                          className="px-1 text-ink-faint hover:text-ink disabled:opacity-25"
+                        >
+                          ▲
+                        </button>
+                        <button
+                          type="button"
+                          disabled={pending || queuedIndex === queuedIds.length - 1}
+                          onClick={() => doMove(invite, false)}
+                          aria-label={`Move ${invite.invitee_name} later`}
+                          className="px-1 text-ink-faint hover:text-ink disabled:opacity-25"
+                        >
+                          ▼
+                        </button>
+                      </span>
+                    )}
                     {canResend && (
                       <button
                         type="button"

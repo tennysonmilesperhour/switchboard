@@ -48,7 +48,7 @@ export function buildVCard(input: VCardInput): string {
 
   const noteBits: string[] = [];
   if (input.bio) noteBits.push(input.bio);
-  if (noteBits.length) lines.push(`NOTE:${esc(noteBits.join(' — '))}`);
+  if (noteBits.length) lines.push(`NOTE:${esc(noteBits.join(' - '))}`);
 
   for (const link of input.links ?? []) {
     if (link.url) lines.push(`URL:${esc(link.url)}`);

@@ -3,6 +3,8 @@
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import { createClient } from '@/lib/supabase/server';
+import { requireUser, requireUserOrRedirect } from '@/lib/server/require-user';
+import { normalizeUsername } from '@/lib/auth-identity';
 
 function slugify(name: string): string {
   return name
@@ -14,11 +16,7 @@ function slugify(name: string): string {
 }
 
 export async function createBoard(formData: FormData): Promise<void> {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) redirect('/login');
+  const { supabase } = await requireUserOrRedirect();
 
   const name = String(formData.get('name') ?? '').trim();
   const description = String(formData.get('description') ?? '').trim();
@@ -43,13 +41,11 @@ export async function inviteToBoard(
   boardId: string,
   handle: string,
 ): Promise<{ ok: boolean; error?: string }> {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { ok: false, error: 'Not signed in' };
+  const auth = await requireUser();
+  if (!auth.ok) return auth;
+  const { supabase, user } = auth;
 
-  const cleanHandle = handle.trim().toLowerCase().replace(/^@/, '');
+  const cleanHandle = normalizeUsername(handle);
   if (!cleanHandle) return { ok: false, error: 'Enter a handle.' };
 
   // Only a board moderator may add people — don't rely solely on RLS (SB-20).
@@ -89,11 +85,7 @@ export async function removeFromBoard(
   boardId: string,
   memberId: string,
 ): Promise<void> {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) redirect('/login');
+  const { supabase } = await requireUserOrRedirect();
   await supabase
     .from('board_members')
     .delete()
@@ -113,11 +105,9 @@ export async function addBoardPost(
     startsAt: string | null;
   },
 ): Promise<{ ok: boolean; error?: string }> {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { ok: false, error: 'Not signed in' };
+  const auth = await requireUser();
+  if (!auth.ok) return auth;
+  const { supabase, user } = auth;
 
   const title = input.title.trim();
   if (!title) return { ok: false, error: 'Give it a title.' };
