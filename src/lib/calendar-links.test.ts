@@ -1,5 +1,10 @@
 import { describe, expect, test } from 'vitest';
-import { googleCalendarUrl, outlookCalendarUrl } from './calendar-links';
+import {
+  calendarFeedUrl,
+  googleCalendarUrl,
+  outlookCalendarUrl,
+  webcalSubscribeUrl,
+} from './calendar-links';
 
 const event = {
   title: 'Game night',
@@ -30,5 +35,35 @@ describe('outlookCalendarUrl', () => {
     expect(url).toContain('outlook.live.com');
     expect(url).toContain('subject=Game+night');
     expect(url).toContain(encodeURIComponent('2026-07-10T23:00:00.000Z'));
+  });
+});
+
+const TOKEN = 'd9793867-2963-4c92-bad0-6a2ea04f895f';
+
+describe('calendarFeedUrl', () => {
+  test('roots the feed at the given origin', () => {
+    expect(calendarFeedUrl('https://switchboard.app', TOKEN)).toBe(
+      `https://switchboard.app/api/calendar/${TOKEN}`,
+    );
+  });
+
+  test('tolerates a trailing slash on the origin', () => {
+    expect(calendarFeedUrl('https://switchboard.app/', TOKEN)).toBe(
+      `https://switchboard.app/api/calendar/${TOKEN}`,
+    );
+  });
+});
+
+describe('webcalSubscribeUrl', () => {
+  test('swaps only the scheme, preserving host and path', () => {
+    expect(webcalSubscribeUrl('https://switchboard.app', TOKEN)).toBe(
+      `webcal://switchboard.app/api/calendar/${TOKEN}`,
+    );
+  });
+
+  test('also rewrites a plain-http origin (e.g. local dev)', () => {
+    expect(webcalSubscribeUrl('http://localhost:3000', TOKEN)).toBe(
+      `webcal://localhost:3000/api/calendar/${TOKEN}`,
+    );
   });
 });

@@ -5,6 +5,14 @@ import { Icon } from '@/components/ui/Icon';
 import { useToast } from '@/components/ui/Toast';
 import { useConfirm } from '@/components/ui/ConfirmDialog';
 import { regenerateCalendarToken } from '@/lib/actions/profile';
+import { calendarFeedUrl, webcalSubscribeUrl } from '@/lib/calendar-links';
+
+// The stable public origin, inlined at build time. A calendar subscription must
+// point here, not at the request host: a Vercel preview host is ephemeral (the
+// feed 404s once the deploy is superseded) and sits behind deployment
+// protection that calendar apps can't clear — the source of "The request for
+// webcal://…failed". Falls back to the live origin only when it isn't set (dev).
+const CONFIGURED_ORIGIN = (process.env.NEXT_PUBLIC_APP_URL ?? '').replace(/\/+$/, '');
 
 /** Subscribe-to-your-plans control: a personal, revocable calendar feed URL.
  *  URLs are built at click time so nothing origin-dependent renders on the
@@ -14,13 +22,15 @@ export function CalendarSubscribe({ token }: { token: string }) {
   const toast = useToast();
   const confirm = useConfirm();
 
+  const origin = () => CONFIGURED_ORIGIN || window.location.origin;
+
   function subscribe() {
     // webcal:// prompts most calendar apps to subscribe directly.
-    window.location.href = `webcal://${window.location.host}/api/calendar/${token}`;
+    window.location.href = webcalSubscribeUrl(origin(), token);
   }
 
   async function copyLink() {
-    const url = `${window.location.origin}/api/calendar/${token}`;
+    const url = calendarFeedUrl(origin(), token);
     try {
       await navigator.clipboard.writeText(url);
       toast.success('Calendar link copied.');
@@ -70,6 +80,12 @@ export function CalendarSubscribe({ token }: { token: string }) {
           Copy link
         </button>
       </div>
+      <p className="text-xs text-ink-faint leading-relaxed">
+        If “Subscribe” doesn’t open your calendar, tap <strong>Copy link</strong>{' '}
+        and add it as a new calendar subscription — Google Calendar → Other
+        calendars → From URL, or Apple Calendar → File → New Calendar
+        Subscription. It’s a private, read-only https link.
+      </p>
       <button
         type="button"
         onClick={revoke}
