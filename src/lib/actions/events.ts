@@ -766,6 +766,11 @@ export async function markHappened(eventId: string): Promise<void> {
     .update({ status: 'past', happened_at: now })
     .eq('id', eventId)
     .neq('status', 'cancelled')
+    // Transition only once. Excluding rows already 'past' keeps this
+    // idempotent under retries / double-submits / direct calls, so a replay
+    // can't overwrite happened_at or re-fire the plan_happened North Star
+    // metric (the row no longer matches, and maybeSingle() returns null).
+    .neq('status', 'past')
     .not('starts_at', 'is', null)
     .lte('starts_at', now)
     .select('id')
