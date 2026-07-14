@@ -263,6 +263,13 @@ export function MutualClient({
       <p className="text-xs text-ink-faint text-center -mt-4">
         Completely private until it’s mutual.
       </p>
+      {(activities.length === 0 || people.length === 0) && (
+        <p className="text-xs text-ink-faint text-center">
+          {activities.length === 0
+            ? "Select an activity"
+            : "Select someone to connect with"}
+        </p>
+      )}
 
       {/* Standing rituals */}
       <section>
