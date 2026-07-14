@@ -10,6 +10,7 @@ import { Chip } from '@/components/ui/Chip';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { useToast } from '@/components/ui/Toast';
 import { downToConnect } from '@/lib/actions/mutual';
+import { setDiscoverable } from '@/lib/actions/profile';
 import { formatRelative } from '@/lib/format';
 
 export interface DiscoveryPerson {
@@ -58,6 +59,7 @@ export function PeopleDiscoveryClient({
   const [justMatched, setJustMatched] = useState(false);
   const [pendingId, setPendingId] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
+  const [discoverPending, startDiscoverTransition] = useTransition();
   const router = useRouter();
   const toast = useToast();
 
@@ -90,6 +92,18 @@ export function PeopleDiscoveryClient({
       } else {
         toast.success('Saved privately.');
       }
+      router.refresh();
+    });
+  }
+
+  function enableDiscoverability() {
+    startDiscoverTransition(async () => {
+      const result = await setDiscoverable(true);
+      if (!result.ok) {
+        toast.error(result.error ?? 'Could not turn on discoverability.');
+        return;
+      }
+      toast.success('You are discoverable now.');
       router.refresh();
     });
   }
@@ -136,8 +150,31 @@ export function PeopleDiscoveryClient({
         <Card tone="terracotta">
           <p className="text-sm font-bold text-terracotta-deep">You are not discoverable.</p>
           <p className="mt-1 text-sm text-ink-soft">
-            You can still browse, but turn on discoverability in Settings when you want
-            others to find you through shared contexts.
+            You can still browse. Turn on discoverability so others can find you
+            through shared contexts - your interest stays private unless it is mutual.
+          </p>
+          <div className="mt-3 flex items-center justify-between gap-3 border-t border-terracotta/20 pt-3">
+            <span className="text-sm font-bold text-terracotta-deep">
+              Show me in discovery
+            </span>
+            <button
+              type="button"
+              role="switch"
+              aria-checked={false}
+              aria-label="Show me in people discovery"
+              disabled={discoverPending}
+              onClick={enableDiscoverability}
+              className="relative inline-flex h-6 w-11 shrink-0 items-center rounded-full bg-white/70 transition-colors disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-terracotta focus-visible:ring-offset-2"
+            >
+              <span className="inline-block size-5 translate-x-0.5 rounded-full bg-terracotta shadow transition-transform" />
+            </button>
+          </div>
+          <p className="mt-2 text-xs text-ink-faint">
+            Fine-tune what people see - location, interests, mutual friends - anytime in{' '}
+            <Link href="/settings" className="font-bold text-terracotta">
+              Settings
+            </Link>
+            .
           </p>
         </Card>
       )}
