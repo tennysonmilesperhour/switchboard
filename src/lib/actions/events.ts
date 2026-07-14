@@ -653,6 +653,31 @@ export async function confirmEvent(eventId: string): Promise<void> {
   revalidatePath('/plans');
 }
 
+/** Host affirms the plan actually happened. Records happened_at, moves the
+ *  event to 'past', and retires any invites still in motion. This is what
+ *  powers the real-world recap and the one-tap Run It Back. */
+export async function markHappened(eventId: string): Promise<void> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) redirect('/login');
+  if (!(await canManageEvent(user.id, eventId))) return;
+  const admin = createAdminClient();
+  await admin
+    .from('events')
+    .update({ status: 'past', happened_at: new Date().toISOString() })
+    .eq('id', eventId)
+    .neq('status', 'cancelled');
+  await admin
+    .from('invites')
+    .update({ status: 'cancelled' })
+    .eq('event_id', eventId)
+    .in('status', ['queued', 'sent', 'requested']);
+  revalidatePath(`/events/${eventId}`);
+  revalidatePath('/plans');
+}
+
 export async function cancelEvent(
   eventId: string,
   reason?: string,

@@ -149,6 +149,8 @@ export interface SwitchboardEvent {
   /** Cancellation context (set when the host calls a plan off) */
   cancel_reason: string | null;
   cancel_voice_url: string | null;
+  /** Set when a host marks the plan as having actually happened. */
+  happened_at: string | null;
   created_at: string;
 }
 

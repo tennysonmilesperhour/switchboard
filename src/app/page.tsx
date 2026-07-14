@@ -209,18 +209,37 @@ export default async function HomePage() {
             ))}
           </section>
         ) : (
-          <Link href="/events/new" className="block">
-            <PlanCard
-              title="Start something"
-              color="pink"
-              attendeesLabel="Make a plan and Switchboard sorts out the details"
-              actions={
-                <span className="rounded-btn bg-white/25 px-5 py-2.5 text-sm font-bold backdrop-blur-sm">
-                  Create a plan
-                </span>
-              }
-            />
-          </Link>
+          <div className="space-y-3">
+            <Link href="/events/new" className="block">
+              <PlanCard
+                title="Float an idea to your people"
+                color="pink"
+                attendeesLabel="Pick something below, or start from scratch. Switchboard sorts out the details."
+                actions={
+                  <span className="rounded-btn bg-white/25 px-5 py-2.5 text-sm font-bold backdrop-blur-sm">
+                    Create a plan
+                  </span>
+                }
+              />
+            </Link>
+            <div className="flex flex-wrap gap-2" aria-label="Quick plan ideas">
+              {['Coffee', 'Dinner', 'Game night', 'A walk', 'Drinks', 'Movie night'].map(
+                (idea) => (
+                  <Link
+                    key={idea}
+                    href={`/events/new?title=${encodeURIComponent(idea)}`}
+                    className="inline-flex items-center gap-1.5 rounded-pill border border-line bg-card px-3.5 py-2 text-sm font-bold text-ink-soft shadow-lift hover:border-terracotta hover:text-terracotta-deep active:scale-[0.98] transition-all"
+                  >
+                    {idea}
+                  </Link>
+                ),
+              )}
+            </div>
+            <p className="text-xs text-ink-faint leading-relaxed">
+              Nothing is revealed unless both sides choose it, and nothing nags.
+              Invitations flow one person at a time.
+            </p>
+          </div>
         )}
 
         {/* Matchmaker introductions */}

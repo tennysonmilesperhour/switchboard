@@ -9,6 +9,7 @@ import { AppShell } from '@/components/shell/AppShell';
 import { Card, SectionHeader } from '@/components/ui/Card';
 import { Avatar } from '@/components/ui/Avatar';
 import { PlanCard, planColor } from '@/components/ui/PlanCard';
+import { themeColor } from '@/lib/themes';
 import { CopyButton } from '@/components/ui/CopyButton';
 import { ShareButton } from '@/components/ui/ShareButton';
 import { CascadeProgress } from '@/components/events/CascadeProgress';
@@ -450,7 +451,7 @@ export default async function EventPage({
           <PlanCard
             variant="full"
             title={event.title}
-            color={planColor(heroIndex)}
+            color={themeColor(event.theme) ?? planColor(heroIndex)}
             status={statusLabel[event.status]}
             when={formatDateTime(event.starts_at)}
             where={event.location_name ?? undefined}
@@ -479,6 +480,25 @@ export default async function EventPage({
                   <VoiceNote url={event.cancel_voice_url} tone="soft" />
                 </div>
               )}
+            </Card>
+          )}
+          {event.status === 'past' && event.happened_at && (
+            <Card tone="sage" lifted>
+              <p className="font-extrabold text-lg text-sage-deep">It happened 🎉</p>
+              <p className="text-sm text-ink-soft mt-0.5">
+                {attendees.length > 0
+                  ? `You got ${attendees.length} ${attendees.length === 1 ? 'person' : 'people'} together. That’s the whole point.`
+                  : 'That’s the whole point. Want to do it again?'}
+              </p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <RunItBackButton eventId={event.id} />
+                <Link
+                  href={`/events/${event.id}/capsule`}
+                  className="inline-flex items-center gap-1.5 rounded-pill border border-line bg-card px-3.5 py-2 text-xs font-bold text-ink-soft shadow-lift hover:border-terracotta hover:text-terracotta-deep active:scale-[0.98] transition-all"
+                >
+                  📦 Add to the Memory Capsule
+                </Link>
+              </div>
             </Card>
           )}
           <div className="flex gap-2 flex-wrap">
