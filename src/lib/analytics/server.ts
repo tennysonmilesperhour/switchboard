@@ -11,6 +11,12 @@ import 'server-only';
  */
 const KEY = process.env.POSTHOG_KEY;
 const HOST = (process.env.POSTHOG_HOST ?? 'https://us.i.posthog.com').replace(/\/$/, '');
+// Cap how long a capture can hold up its caller. Callers `await capture(...)`
+// inside user actions (create plan, RSVP, vote, mark happened); without a bound,
+// a slow or stalled PostHog request would make those actions inherit the latency,
+// contradicting the "bonus, never a blocker" contract. On timeout the request is
+// aborted and swallowed like any other analytics failure.
+const CAPTURE_TIMEOUT_MS = 2000;
 
 export function analyticsEnabled(): boolean {
   return !!KEY;
@@ -34,8 +40,9 @@ export async function capture(
         timestamp: new Date().toISOString(),
       }),
       keepalive: true,
+      signal: AbortSignal.timeout(CAPTURE_TIMEOUT_MS),
     });
   } catch {
-    // Analytics is a bonus, never a blocker.
+    // Analytics is a bonus, never a blocker — swallow errors and timeouts.
   }
 }

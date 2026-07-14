@@ -754,11 +754,23 @@ export async function markHappened(eventId: string): Promise<void> {
   if (!user) redirect('/login');
   if (!(await isEventManager(user.id, eventId))) return;
   const admin = createAdminClient();
-  await admin
+  // Only close a plan whose start time has actually passed. The UI "elapsed"
+  // gate is client-controlled — a fast browser clock or a direct call to this
+  // action could otherwise flip a future or undated plan to 'past' and cancel
+  // its in-flight invites — so require starts_at present and <= now in the DB,
+  // where it can't be spoofed. maybeSingle() returns null when the row doesn't
+  // meet the filter, letting us bail before touching invites or analytics.
+  const now = new Date().toISOString();
+  const { data: happened } = await admin
     .from('events')
-    .update({ status: 'past', happened_at: new Date().toISOString() })
+    .update({ status: 'past', happened_at: now })
     .eq('id', eventId)
-    .neq('status', 'cancelled');
+    .neq('status', 'cancelled')
+    .not('starts_at', 'is', null)
+    .lte('starts_at', now)
+    .select('id')
+    .maybeSingle();
+  if (!happened) return;
   await admin
     .from('invites')
     .update({ status: 'cancelled' })
