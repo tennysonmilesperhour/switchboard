@@ -12,20 +12,26 @@ export async function GET(
   const admin = createAdminClient();
   const { data: event } = await admin
     .from('events')
-    .select('title, starts_at, location_name')
+    .select('title, starts_at, location_name, status')
     .eq('id', id)
     .maybeSingle();
 
-  const title = event?.title ?? 'You’re invited';
-  const when = event?.starts_at
-    ? new Intl.DateTimeFormat('en-US', {
-        weekday: 'long',
-        month: 'long',
-        day: 'numeric',
-        hour: 'numeric',
-        minute: '2-digit',
-      }).format(new Date(event.starts_at))
-    : '';
+  // Only unfurl details for a shareable plan. Drafts and cancelled events must
+  // never leak their title/time/location to anyone holding the UUID, so they
+  // fall back to the generic card.
+  const shareable = event ? !['draft', 'cancelled'].includes(event.status) : false;
+  const title = shareable && event?.title ? event.title : 'You’re invited';
+  const when =
+    shareable && event?.starts_at
+      ? new Intl.DateTimeFormat('en-US', {
+          weekday: 'long',
+          month: 'long',
+          day: 'numeric',
+          hour: 'numeric',
+          minute: '2-digit',
+        }).format(new Date(event.starts_at))
+      : '';
+  const where = shareable && event?.location_name ? event.location_name : '';
 
   return new ImageResponse(
     (
@@ -52,7 +58,7 @@ export async function GET(
           {when ? (
             <div style={{ display: 'flex', fontSize: 34, color: '#6d5f52' }}>
               {when}
-              {event?.location_name ? ` · ${event.location_name}` : ''}
+              {where ? ` · ${where}` : ''}
             </div>
           ) : null}
         </div>
