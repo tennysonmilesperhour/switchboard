@@ -1,0 +1,90 @@
+'use client';
+
+import { useEffect, useState } from 'react';
+import { Icon } from '@/components/ui/Icon';
+
+interface BeforeInstallPromptEvent extends Event {
+  prompt: () => Promise<void>;
+  userChoice: Promise<{ outcome: 'accepted' | 'dismissed' }>;
+}
+
+const DISMISSED_KEY = 'sb-install-dismissed';
+
+/**
+ * A calm, one-time "add to home screen" nudge. Captures the browser's
+ * beforeinstallprompt so we can offer install on our terms (a single
+ * dismissible pill, never a repeated nag), matching the no-pressure brand.
+ * Silent where the browser gives us nothing to work with (already installed,
+ * or iOS Safari, which has no beforeinstallprompt).
+ */
+export function InstallPrompt() {
+  const [deferred, setDeferred] = useState<BeforeInstallPromptEvent | null>(null);
+
+  useEffect(() => {
+    if (localStorage.getItem(DISMISSED_KEY)) return;
+    // Already running as an installed app — nothing to prompt.
+    if (window.matchMedia('(display-mode: standalone)').matches) return;
+
+    const onPrompt = (event: Event) => {
+      event.preventDefault();
+      setDeferred(event as BeforeInstallPromptEvent);
+    };
+    window.addEventListener('beforeinstallprompt', onPrompt);
+    const onInstalled = () => {
+      setDeferred(null);
+      localStorage.setItem(DISMISSED_KEY, '1');
+    };
+    window.addEventListener('appinstalled', onInstalled);
+
+    return () => {
+      window.removeEventListener('beforeinstallprompt', onPrompt);
+      window.removeEventListener('appinstalled', onInstalled);
+    };
+  }, []);
+
+  if (!deferred) return null;
+
+  function dismiss() {
+    localStorage.setItem(DISMISSED_KEY, '1');
+    setDeferred(null);
+  }
+
+  async function install() {
+    const event = deferred;
+    if (!event) return;
+    await event.prompt();
+    await event.userChoice;
+    localStorage.setItem(DISMISSED_KEY, '1');
+    setDeferred(null);
+  }
+
+  return (
+    <div
+      role="status"
+      aria-live="polite"
+      className="fixed inset-x-0 bottom-24 z-50 flex justify-center px-4 pointer-events-none"
+    >
+      <div className="pointer-events-auto flex items-center gap-3 rounded-pill bg-ink text-paper px-4 py-2.5 shadow-lift animate-rise">
+        <span className="flex items-center gap-2 text-sm font-medium">
+          <Icon name="sparkle" size={16} className="text-terracotta" />
+          Add Switchboard to your home screen
+        </span>
+        <button
+          type="button"
+          onClick={install}
+          className="rounded-pill bg-paper text-ink text-xs font-semibold px-3 py-1.5 active:scale-[0.98] transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-terracotta"
+        >
+          Add
+        </button>
+        <button
+          type="button"
+          onClick={dismiss}
+          aria-label="Not now"
+          className="text-paper/70 hover:text-paper active:scale-[0.98] transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-terracotta rounded-full"
+        >
+          <Icon name="close" size={16} />
+        </button>
+      </div>
+    </div>
+  );
+}
