@@ -3,6 +3,8 @@
 import { revalidatePath } from 'next/cache';
 import { createClient } from '@/lib/supabase/server';
 import { resolvePoll } from '@/lib/server/poll-runner';
+import { capture } from '@/lib/analytics/server';
+import { ANALYTICS_EVENTS } from '@/lib/analytics/events';
 import type { Weight } from '@/lib/engine/scoring';
 
 export async function addSuggestion(
@@ -87,6 +89,8 @@ export async function castVote(
     updated_at: new Date().toISOString(),
   });
   if (error) return { ok: false, error: error.message };
+  // The event only, never the weight or option — individual votes stay private.
+  await capture(user.id, ANALYTICS_EVENTS.pollVoted, { event_id: eventId });
   revalidatePath(`/events/${eventId}`);
   return { ok: true };
 }

@@ -9,6 +9,8 @@ import {
   notifyCurrentInviteWave,
 } from '@/lib/server/cascade-runner';
 import { notifyUsers } from '@/lib/server/notify';
+import { capture } from '@/lib/analytics/server';
+import { ANALYTICS_EVENTS } from '@/lib/analytics/events';
 import type { EventTheme, InviteMode, RecurrenceKind } from '@/lib/types';
 import {
   nextOccurrenceAfter,
@@ -170,6 +172,11 @@ export async function createEvent(input: CreateEventInput): Promise<CreateEventR
       await reportOperationalError('event-initial-delivery', cascadeError, { eventId });
     }
   }
+
+  await capture(user.id, ANALYTICS_EVENTS.planCreated, {
+    invite_mode: input.inviteMode,
+    has_poll: !!input.enablePoll,
+  });
 
   return { ok: true, eventId };
 }
@@ -674,6 +681,17 @@ export async function markHappened(eventId: string): Promise<void> {
     .update({ status: 'cancelled' })
     .eq('event_id', eventId)
     .in('status', ['queued', 'sent', 'requested']);
+
+  const { count } = await admin
+    .from('invites')
+    .select('id', { count: 'exact', head: true })
+    .eq('event_id', eventId)
+    .eq('status', 'accepted');
+  await capture(user.id, ANALYTICS_EVENTS.planHappened, {
+    event_id: eventId,
+    attendee_count: count ?? 0,
+  });
+
   revalidatePath(`/events/${eventId}`);
   revalidatePath('/plans');
 }
