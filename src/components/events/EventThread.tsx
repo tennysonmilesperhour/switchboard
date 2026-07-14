@@ -146,7 +146,7 @@ export function EventThread({
 
       {!hasPreview && unlocked && (
         <p className="text-sm text-ink-faint">
-          No comments yet — start the conversation.
+          No comments yet - start the conversation.
         </p>
       )}
 

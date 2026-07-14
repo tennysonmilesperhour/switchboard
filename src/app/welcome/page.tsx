@@ -64,8 +64,8 @@ export default async function WelcomePage({
           role="status"
           className="mb-6 rounded-card bg-sage-soft p-4 text-sm text-sage-deep"
         >
-          Your account was deleted. Thanks for spending time with Switchboard —
-          you’re always welcome back.
+          Your account was deleted. Thanks for spending time with Switchboard.
+          You’re always welcome back.
         </p>
       )}
 

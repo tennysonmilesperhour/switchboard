@@ -141,7 +141,7 @@ export function InterestPicker({
         ))}
         {q && visibleGroups.length === 0 && (
           <p className="text-sm text-ink-faint">
-            No matches for “{query.trim()}” — add it as your own below.
+            No matches for “{query.trim()}” - add it as your own below.
           </p>
         )}
 

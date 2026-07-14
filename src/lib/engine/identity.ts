@@ -172,11 +172,11 @@ export function computeEnergyMap(samples: EnergySample[]): Facet | null {
 
   let summary: string;
   if (fills && drains) {
-    summary = `${cap(fills)} gatherings tend to leave you filled — ${drains} ones are the ones that drain you.`;
+    summary = `${cap(fills)} gatherings tend to leave you filled - ${drains} ones are the ones that drain you.`;
   } else if (fills) {
     summary = `${cap(fills)} gatherings are where you come away filled.`;
   } else if (counts.filled >= counts.drained) {
-    summary = `You mostly come away from plans filled — ${counts.filled} of your last ${samples.length} left you better than you arrived.`;
+    summary = `You mostly come away from plans filled - ${counts.filled} of your last ${samples.length} left you better than you arrived.`;
   } else {
     // Not every drain is a mistake — some of it is the good, stretching kind.
     // Name the pattern without prescribing that you avoid it.
@@ -244,7 +244,7 @@ export function computeCadence(samples: TempoSample[]): Facet | null {
     summary = `You give a ${responseStyle} yes or no.`;
   }
   if (responseStyle === 'quick' && planningStyle === 'spontaneous') {
-    summary = `You're a spontaneous yes — quick to answer and happy with short notice.`;
+    summary = `You're a spontaneous yes - quick to answer and happy with short notice.`;
   }
 
   return {
@@ -370,7 +370,7 @@ export function computeInterestAlignment(input: InterestInputs): Facet | null {
 
   let summary: string;
   if (aspirational.length === 0) {
-    summary = `You live out everything you say you're into — no gap between talk and turnout.`;
+    summary = `You live out everything you say you're into - no gap between talk and turnout.`;
   } else if (living.length === 0) {
     summary = `You've named ${professed.length} interest${professed.length > 1 ? 's' : ''}, but none have made it onto the calendar yet.`;
   } else {
@@ -410,7 +410,7 @@ export function computeDivergence(input: DivergenceInputs): Facet | null {
   const summary =
     gaps.length === 1
       ? `You describe yourself as ${first.declared.toLowerCase()}, but your ${first.label} lean ${first.revealed!.toLowerCase()}.`
-      : `A couple of places where the you on paper and the you in practice don't line up — starting with ${first.label}.`;
+      : `A couple of places where the you on paper and the you in practice don't line up - starting with ${first.label}.`;
 
   return {
     key: 'divergence',
@@ -450,9 +450,9 @@ export function computeSeasons(input: SeasonInputs): Facet | null {
 
   let summary: string;
   if (dir === 'out more') {
-    summary = `This ${input.windowLabel} you've been saying yes more than the one before — a more outward season.`;
+    summary = `This ${input.windowLabel} you've been saying yes more than the one before - a more outward season.`;
   } else if (dir === 'pulling inward') {
-    summary = `You've been pulling inward this ${input.windowLabel} — fewer yeses than the ${input.windowLabel} before. Could be a quieter season by design.`;
+    summary = `You've been pulling inward this ${input.windowLabel} - fewer yeses than the ${input.windowLabel} before. Could be a quieter season by design.`;
   } else {
     summary = `Your rhythm's been steady across the last couple of ${input.windowLabel}s.`;
   }
@@ -495,8 +495,8 @@ export function computeContexts(input: ContextInputs): Facet | null {
 
   const intimate = input.soloAvg > input.groupAvg;
   const summary = intimate
-    ? `Small rooms leave you fuller than big ones — you come away better from a handful of people than a crowd.`
-    : `A full room lifts you more than a small one does — bigger gatherings tend to leave you better than intimate ones.`;
+    ? `Small rooms leave you fuller than big ones - you come away better from a handful of people than a crowd.`
+    : `A full room lifts you more than a small one does - bigger gatherings tend to leave you better than intimate ones.`;
 
   return {
     key: 'contexts',

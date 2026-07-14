@@ -52,7 +52,7 @@ export function Reflections({
       </h3>
       <p className="mb-3 text-xs leading-relaxed text-ink-faint">
         {ready
-          ? 'Ask for a deeper, written reflection over your reads — how you relate to people, and how to move toward what you say you want.'
+          ? 'Ask for a deeper, written reflection over your reads - how you relate to people, and how to move toward what you say you want.'
           : 'Once you’ve gathered a bit more history, you can ask for a deeper written reflection here.'}
       </p>
 

@@ -304,7 +304,7 @@ export function BoardClient({
       <section>
         <SectionHeader
           title="Neighbors"
-          hint={isModerator ? 'Invite-only — you moderate this board' : undefined}
+          hint={isModerator ? 'Invite-only - you moderate this board' : undefined}
         />
         <ul className="space-y-2">
           {members.map((member) => (

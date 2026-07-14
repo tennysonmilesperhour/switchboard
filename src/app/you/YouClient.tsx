@@ -45,7 +45,7 @@ export function YouClient({
   return (
     <div className="space-y-6">
       <p className="text-sm leading-relaxed text-ink-soft">
-        This is the you that Switchboard can see from what you actually do — the
+        This is the you that Switchboard can see from what you actually do - the
         plans you say yes and no to, the circles you show up for, and how you
         feel afterward. It&apos;s a mirror only you hold. Every read is a
         hunch you can confirm or wave off, and nothing is shared unless you say so.
@@ -130,7 +130,7 @@ function FacetCard({ facet }: { facet: DisplayFacet }) {
         setVerdict(verdict);
         toast.error('Could not save that');
       } else if (value === 'confirmed') {
-        toast.success('Noted — that’s you');
+        toast.success('Noted - that’s you');
       }
     });
   }
@@ -229,7 +229,7 @@ function FacetCard({ facet }: { facet: DisplayFacet }) {
       </div>
       {shared ? (
         <p className="text-[11px] text-sage-deep">
-          Shared — accepted connections can see this line.
+          Shared - accepted connections can see this line.
         </p>
       ) : null}
     </Card>

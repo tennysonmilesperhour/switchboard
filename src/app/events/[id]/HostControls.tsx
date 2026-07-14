@@ -89,7 +89,7 @@ export function HostControls({ event, pollDecided }: HostControlsProps) {
           <div>
             <p className="text-sm font-bold text-ink">Cancel this plan?</p>
             <p className="text-xs text-ink-soft mt-0.5">
-              Everyone who’s in will be notified. Add a reason so they know why — type it,
+              Everyone who’s in will be notified. Add a reason so they know why - type it,
               record a voice note, or both. All optional.
             </p>
           </div>

@@ -63,7 +63,7 @@ export async function importEventFromLink(rawUrl: string): Promise<ImportResult>
     const buffer = await response.arrayBuffer();
     content = new TextDecoder().decode(buffer.slice(0, MAX_BYTES));
   } catch {
-    return { ok: false, error: 'We couldn’t read that link — just fill the plan in below.' };
+    return { ok: false, error: 'We couldn’t read that link - just fill the plan in below.' };
   }
 
   const parsed = parseEvent(content, contentType);

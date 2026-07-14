@@ -353,7 +353,7 @@ export function RoomClient({
             <EmptyState
               emoji="💸"
               title="No expenses yet"
-              body="Log what people paid — Switchboard tallies who owes what. Settling up happens with your own Venmo or PayPal link."
+              body="Log what people paid - Switchboard tallies who owes what. Settling up happens with your own Venmo or PayPal link."
             />
           ) : (
             <ul className="space-y-2">

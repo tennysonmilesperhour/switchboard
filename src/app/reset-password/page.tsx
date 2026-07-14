@@ -22,7 +22,7 @@ export default async function ResetPasswordPage() {
       ) : (
         <div className="mt-4 rounded-card bg-cream p-4 text-sm text-ink-soft">
           <p>
-            Open the reset link from your email first — it signs you in so you can
+            Open the reset link from your email first - it signs you in so you can
             set a new password.
           </p>
           <Link

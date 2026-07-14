@@ -22,7 +22,7 @@ const DOORS: Array<{
     href: '/events/new',
     emoji: '🪜',
     title: 'I’ve got a plan',
-    body: 'You know the gist — the what, when, or who. Set it up and send the invites.',
+    body: 'You know the gist - the what, when, or who. Set it up and send the invites.',
   },
   {
     href: '/events/new?decide=1',
@@ -49,7 +49,7 @@ export default async function CreatePage() {
     <AppShell title="Start something" back="/">
       <div className="space-y-4">
         <p className="text-sm leading-relaxed text-ink-soft">
-          What are you in the mood to do? No wrong answer — you can change your
+          What are you in the mood to do? No wrong answer - you can change your
           mind at any step.
         </p>
         <div className="space-y-3">

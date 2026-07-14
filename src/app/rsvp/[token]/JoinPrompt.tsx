@@ -24,7 +24,7 @@ export function JoinPrompt({
         Stay in the loop with {hostName}
       </h2>
       <p className="mt-2 text-sm leading-relaxed text-ink-soft">
-        {hostName} plans on Switchboard — invitations that flow one person at a
+        {hostName} plans on Switchboard - invitations that flow one person at a
         time, no group-text chaos. Create an account to keep up with {hostName}
         {' '}and get your own invitations.
       </p>

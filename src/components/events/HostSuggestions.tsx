@@ -117,7 +117,7 @@ export function HostSuggestions({
         ))}
       </ul>
       <p className="text-xs text-ink-faint">
-        Just suggestions — send it however you like.
+        Just suggestions - send it however you like.
       </p>
     </section>
   );

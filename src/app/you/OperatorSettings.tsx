@@ -25,7 +25,7 @@ const TOGGLES: OperatorToggle[] = [
   {
     key: 'facet_compatibility',
     label: 'Compatibility with connections',
-    desc: 'Let a connection and you see a shared read of how you fit — only when you both turn it on.',
+    desc: 'Let a connection and you see a shared read of how you fit - only when you both turn it on.',
     kind: 'read',
   },
   {
@@ -122,7 +122,7 @@ function ToggleRow({
         </span>
         <span className="mt-0.5 block text-[11px] leading-snug text-ink-faint">
           {toggle.desc}
-          {toggle.soon ? ' Not wired up yet — you can turn it on once it is.' : ''}
+          {toggle.soon ? ' Not wired up yet - you can turn it on once it is.' : ''}
         </span>
       </span>
       <button

@@ -194,7 +194,7 @@ export default async function NotificationsPage() {
                   >
                     <Card tone="sage" className="group-hover:shadow-lift transition-shadow">
                       <p className="text-sm">
-                        <strong>{match.activity}</strong> — it’s mutual!{' '}
+                        <strong>{match.activity}</strong> - it’s mutual!{' '}
                         <span className="text-ink-faint">
                           {formatRelative(match.created_at)}
                         </span>

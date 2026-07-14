@@ -202,7 +202,7 @@ export function MomentsClient({
           <Card tone="gold" lifted className="animate-rise">
             <p className="font-display text-lg">✨ You’re sharing this moment</p>
             <p className="text-sm text-ink-soft mt-1 leading-relaxed">
-              You both chose to connect. A private conversation is open — say hi
+              You both chose to connect. A private conversation is open - say hi
               and pick a spot.
             </p>
             {matchedRoomId ? (

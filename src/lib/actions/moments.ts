@@ -127,7 +127,7 @@ export async function expressCuriosity(
       await notifyUsers([otherMoment.user_id], {
         kind: 'moment',
         title: '✨ The interest is mutual',
-        body: 'Someone near you is curious too — take a look.',
+        body: 'Someone near you is curious too - take a look.',
         url: '/moments',
       });
     }

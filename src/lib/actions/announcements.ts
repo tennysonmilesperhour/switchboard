@@ -86,7 +86,7 @@ async function fanOutAnnouncement(
       to: i.guest_contact as string,
       subject: `Update: ${event.title}`,
       text:
-        `${body}\n\n— from your host on Switchboard\n` +
+        `${body}\n\n- from your host on Switchboard\n` +
         `Event details: ${appUrl(`/rsvp/${i.guest_token}`)}`,
     }));
   if (emails.length > 0) {
