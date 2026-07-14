@@ -20,6 +20,7 @@ const MORE: Array<Tab & { desc: string }> = [
   { href: '/people', label: 'People', icon: 'users', desc: 'Add friends, circles, and matchmaking' },
   { href: '/mutual', label: 'Mutual', icon: 'sparkle', desc: 'Down to connect, only if it’s mutual' },
   { href: '/moments', label: 'Moments', icon: 'mapPin', desc: 'Who’s around, revealed by consent' },
+  { href: '/map', label: 'Map', icon: 'globe', desc: 'Plans, zones & places on one map' },
   { href: '/rooms', label: 'Rooms', icon: 'chat', desc: 'Your living-room chats' },
   { href: '/boards', label: 'Boards', icon: 'grid', desc: 'Neighborhood boards' },
   { href: '/zones', label: 'Zones', icon: 'globe', desc: 'Serendipity at shared places' },
