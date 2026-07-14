@@ -45,7 +45,7 @@ export function DiscoverClient({ defaultInterests }: { defaultInterests: string[
     <section className="space-y-4">
       <SectionHeader
         title="Find something to do"
-        hint="Describe the vibe — Switchboard curates a few great fits"
+        hint="Describe the vibe - Switchboard curates a few great fits"
       />
 
       <form

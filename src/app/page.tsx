@@ -169,7 +169,7 @@ export default async function HomePage() {
             {greeting}, {firstName}.
           </h1>
           <p className="text-sm text-ink-faint mt-1">
-            Feeling social? Let people know - quietly.
+            Feeling social? Let people know.
           </p>
         </div>
 
@@ -181,7 +181,7 @@ export default async function HomePage() {
             <Card tone="gold" lifted className="group-hover:shadow-lift transition-shadow">
               <p className="font-display text-lg text-ink">Find your people</p>
               <p className="text-sm text-ink-soft mt-1">
-                Add friends by handle, email, phone, or your contacts — then signals,
+                Add friends by handle, email, phone, or your contacts - then signals,
                 circles, and Mutual Mode all come alive.
               </p>
               <span className="mt-3 inline-flex items-center gap-1 text-sm font-bold text-terracotta-deep">

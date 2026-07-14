@@ -258,7 +258,7 @@ export default async function PublicProfilePage({
               </h3>
               <p className="text-sm leading-relaxed text-ink">{compatibility.summary}</p>
               <p className="mt-1.5 text-[11px] text-ink-faint">
-                Computed from what you both do — visible because you each turned
+                Computed from what you both do - visible because you each turned
                 compatibility on.
               </p>
             </div>
@@ -304,7 +304,7 @@ export default async function PublicProfilePage({
               ))}
             </div>
             <p className="mt-1.5 text-[11px] text-ink-faint">
-              Drawn from what they actually do — shared with connections by choice.
+              Drawn from what they actually do - shared with connections by choice.
             </p>
           </section>
         ) : null}

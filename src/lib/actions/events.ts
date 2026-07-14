@@ -436,7 +436,7 @@ export async function removeInvite(
     return { ok: false, error: 'Invite not found.' };
   }
   if (invite.status === 'accepted') {
-    return { ok: false, error: 'They already accepted — cancel the plan or lower capacity instead.' };
+    return { ok: false, error: 'They already accepted - cancel the plan or lower capacity instead.' };
   }
 
   const { error } = await admin.from('invites').delete().eq('id', inviteId);
@@ -769,7 +769,7 @@ export async function cancelEvent(
   const reasonTail = cleanReason
     ? ` Reason: ${cleanReason}`
     : cleanVoiceUrl
-      ? ' The host left a voice note — tap to listen.'
+      ? ' The host left a voice note - tap to listen.'
       : '';
 
   // Tell everyone who had accepted — across every channel they came in on —
@@ -803,7 +803,7 @@ export async function cancelEvent(
     .map((to) => ({
       to,
       subject: `Cancelled: ${title}`,
-      text: `${title} has been cancelled. Apologies for the change of plans.${reasonLine}\n\n— Switchboard`,
+      text: `${title} has been cancelled. Apologies for the change of plans.${reasonLine}\n\n- Switchboard`,
     }));
   if (guestEmails.length > 0) await sendEmails(guestEmails);
   const guestSms = guestContacts

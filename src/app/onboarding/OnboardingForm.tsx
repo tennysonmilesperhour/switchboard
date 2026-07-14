@@ -96,7 +96,7 @@ export function OnboardingForm({ initialName, initialHandle, next = '/' }: Onboa
           <span className="text-ink-faint font-normal">(optional)</span>
         </legend>
         <p className="text-sm text-ink-soft leading-relaxed">
-          These are the plans you’d happily say yes to — friends see them when
+          These are the plans you’d happily say yes to - friends see them when
           they’re looking for someone to join.
         </p>
         <InterestPicker
@@ -109,9 +109,19 @@ export function OnboardingForm({ initialName, initialHandle, next = '/' }: Onboa
       <input type="hidden" name="timezone" value={timezone} />
 
       <div className="rounded-card bg-cream p-4 text-sm text-ink-soft leading-relaxed">
-        We’ll also set up three starter circles - <strong>Close Friends</strong>,{' '}
-        <strong>Family</strong>, and <strong>Neighbors</strong> - so you can
-        control who sees what. You can edit them anytime.
+        <p className="font-bold text-ink">Your starter circles</p>
+        <p className="mt-2">
+          Circles are private groupings of the people you connect with, and
+          only you can see them. Sort friends into a circle, then pick that circle as
+          the audience whenever you share something: broadcast that you’re free
+          tonight to just your <strong>Close Friends</strong>, or invite your
+          whole <strong>Neighbors</strong> circle to a plan.
+        </p>
+        <p className="mt-2">
+          We’ll set up three to get you started: <strong>Close Friends</strong>,{' '}
+          <strong>Family</strong>, and <strong>Neighbors</strong>. Rename them,
+          add your own, or move people between them anytime from the People tab.
+        </p>
       </div>
 
       <div className="rounded-card border border-line bg-card p-4 text-sm text-ink-soft">

@@ -21,7 +21,7 @@ export async function addCapsuleEntry(
   // attacker-supplied URL (SB-28).
   const photo = photoUrl.trim() || null;
   if (photo && !isStoredMediaPath(photo) && !isOwnPublicStorageUrl(photo, ['media'])) {
-    return { ok: false, error: 'Unexpected image location — please re-upload.' };
+    return { ok: false, error: 'Unexpected image location - please re-upload.' };
   }
 
   const { error } = await supabase.from('capsule_entries').upsert(

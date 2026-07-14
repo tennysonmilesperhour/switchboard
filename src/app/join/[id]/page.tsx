@@ -181,7 +181,7 @@ export default async function JoinPage({
             <div className="mt-8">
               {alreadyInvolved ? (
                 <p className="rounded-card bg-cream px-4 py-3 text-sm text-ink-soft">
-                  You’re already on the list for this plan — hang tight, the host
+                  You’re already on the list for this plan - hang tight, the host
                   will keep you posted.
                 </p>
               ) : !accepting ? (
@@ -209,7 +209,7 @@ export default async function JoinPage({
 
             <p className="text-xs text-ink-faint mt-10 leading-relaxed">
               Switchboard makes plans without pressure. Asking to join is never
-              presumptuous — the host approves every request, and you’ll hear back
+              presumptuous - the host approves every request, and you’ll hear back
               either way.
             </p>
           </>

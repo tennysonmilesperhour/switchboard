@@ -16,7 +16,7 @@ const RIGHT: Tab[] = [{ href: '/plans', label: 'Calendar', icon: 'calendar' }];
 
 /** Everything not on the primary bar, reachable from the More sheet in one tap. */
 const MORE: Array<Tab & { desc: string }> = [
-  { href: '/you', label: 'Your Read', icon: 'sparkle', desc: 'The you your behavior reveals — private' },
+  { href: '/you', label: 'Your Read', icon: 'sparkle', desc: 'The you your behavior reveals - private' },
   { href: '/people', label: 'People', icon: 'users', desc: 'Add friends, circles, and matchmaking' },
   { href: '/mutual', label: 'Mutual', icon: 'sparkle', desc: 'Down to connect, only if it’s mutual' },
   { href: '/moments', label: 'Moments', icon: 'mapPin', desc: 'Who’s around, revealed by consent' },

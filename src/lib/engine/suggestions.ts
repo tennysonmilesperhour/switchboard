@@ -133,7 +133,7 @@ export function hostSuggestions(draft: SuggestionDraft): HostSuggestion[] {
         id: 'window-too-short',
         emoji: '⏱️',
         title: 'That’s a tight window to reply',
-        body: `The plan is about ${humanDuration(leadMinutes)} away, but someone gets only ${humanDuration(minWindow)} to respond. A roomier window means fewer missed invites — Switchboard suggests ${suggestWindow(startsAt, now).label} here.`,
+        body: `The plan is about ${humanDuration(leadMinutes)} away, but someone gets only ${humanDuration(minWindow)} to respond. A roomier window means fewer missed invites - Switchboard suggests ${suggestWindow(startsAt, now).label} here.`,
       });
     }
 
@@ -160,7 +160,7 @@ export function hostSuggestions(draft: SuggestionDraft): HostSuggestion[] {
       id: 'no-location',
       emoji: '📍',
       title: 'No place set',
-      body: 'Even a rough spot — “my place,” “downtown,” a neighborhood — helps people picture it and say yes faster. You can always firm it up later.',
+      body: 'Even a rough spot - “my place,” “downtown,” a neighborhood - helps people picture it and say yes faster. You can always firm it up later.',
     });
   }
 

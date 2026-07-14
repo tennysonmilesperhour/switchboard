@@ -76,7 +76,7 @@ export function ProfileShare({
             <p className="mt-1 text-xs text-ink-faint">
               {contactIncluded
                 ? 'Includes your email & phone.'
-                : 'Email & phone hidden — toggle in edit.'}
+                : 'Email & phone hidden - toggle in edit.'}
             </p>
           </div>
         </div>

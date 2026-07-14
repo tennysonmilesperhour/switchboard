@@ -60,7 +60,7 @@ export function CoHostManager({ eventId, cohosts }: CoHostManagerProps) {
     <section className="border-t border-line pt-5">
       <h2 className="font-display text-xl text-ink">Co-hosts</h2>
       <p className="text-sm text-ink-faint mt-0.5 mb-3">
-        Co-hosts share your powers — editing the plan, approving join requests,
+        Co-hosts share your powers - editing the plan, approving join requests,
         and confirming or cancelling. Only you can manage this list.
       </p>
 

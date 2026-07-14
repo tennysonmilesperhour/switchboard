@@ -219,7 +219,7 @@ export function PeopleClient({
   async function removeCircle(circle: CircleRow) {
     const ok = await confirm({
       title: `Delete “${circle.name}”?`,
-      body: 'The circle is removed. Everyone in it stays your friend — only this grouping goes away.',
+      body: 'The circle is removed. Everyone in it stays your friend - only this grouping goes away.',
       confirmLabel: 'Delete circle',
       danger: true,
     });
@@ -545,7 +545,7 @@ export function PeopleClient({
                         <p className="mt-1 text-[11px] leading-snug text-ink-faint">
                           {friend.isAvoided
                             ? `We’ll quietly warn you if ${friend.name.split(' ')[0]} is somewhere you’re headed. They’re never told.`
-                            : 'A private heads-up before events where they’ll be — no block, and they’re never notified.'}
+                            : 'A private heads-up before events where they’ll be - no block, and they’re never notified.'}
                         </p>
                       </div>
                       <button
@@ -819,7 +819,7 @@ export function PeopleClient({
         {circles.length === 0 ? (
           <Card tone="cream">
             <p className="text-sm text-ink-soft leading-relaxed">
-              Circles are your own private groupings — Close Friends, Book Club,
+              Circles are your own private groupings - Close Friends, Book Club,
               Neighbors. Nobody sees them but you. Make your first one below, then
               tap it to add people.
             </p>
@@ -863,7 +863,7 @@ export function PeopleClient({
                         </p>
                         {members.length === 0 ? (
                           <p className="text-sm text-ink-faint">
-                            No one yet — add people below.
+                            No one yet - add people below.
                           </p>
                         ) : (
                           <ul className="space-y-1.5">
@@ -898,7 +898,7 @@ export function PeopleClient({
                         </p>
                         {friends.length === 0 ? (
                           <p className="text-sm text-ink-faint">
-                            Connect with people first — then you can sort them in here.
+                            Connect with people first - then you can sort them in here.
                           </p>
                         ) : available.length === 0 ? (
                           <p className="text-sm text-ink-faint">

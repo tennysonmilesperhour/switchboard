@@ -58,7 +58,7 @@ export function InviteLink({
       {enabled ? (
         <Card tone="cream" className="space-y-3">
           <p className="text-sm text-ink-soft leading-relaxed">
-            Send this to anyone — text, email, a group chat. They open it, ask to
+            Send this to anyone - text, email, a group chat. They open it, ask to
             join, and you get the final say on who’s in.
           </p>
           <div className="flex items-center gap-2 rounded-card border border-line bg-paper px-3 py-2.5">

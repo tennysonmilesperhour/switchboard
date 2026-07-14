@@ -478,7 +478,7 @@ export default async function EventPage({
           <div className="rounded-card bg-gold-soft px-4 py-3">
             <p className="text-sm text-ink">
               <span aria-hidden className="mr-1">👀</span>
-              <span className="font-bold">Heads up —</span>{' '}
+              <span className="font-bold">Heads up:</span>{' '}
               {avoidedGoing.length === 1
                 ? `${avoidedGoing[0]} is going, and you’ve asked for space from them.`
                 : `${avoidedGoing.slice(0, -1).join(', ')} and ${
@@ -486,7 +486,7 @@ export default async function EventPage({
                   } are going, and you’ve asked for space from them.`}
             </p>
             <p className="mt-1 text-xs text-ink-soft">
-              Only you can see this — totally your call whether to go.
+              Only you can see this - totally your call whether to go.
             </p>
           </div>
         )}
@@ -758,7 +758,7 @@ export default async function EventPage({
           <section>
             <SectionHeader
               title="Invitation flow"
-              hint="Only you see this — reorder or re-time anyone still in line"
+              hint="Only you see this - reorder or re-time anyone still in line"
             />
             <CascadeProgress
               invites={hostInvites.filter((invite) => invite.status !== 'requested')}
@@ -774,7 +774,7 @@ export default async function EventPage({
           <section>
             <SectionHeader title="Guest links" hint="For people you invited who aren’t on Switchboard" />
             <p className="text-sm text-ink-soft mb-2.5 leading-relaxed">
-              Each link opens a private RSVP page for that person — no account
+              Each link opens a private RSVP page for that person - no account
               or app needed. Copy it and send it however you like (text, email,
               DM); they’ll see the plan and can reply right there.
             </p>

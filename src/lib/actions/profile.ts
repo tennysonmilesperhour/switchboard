@@ -117,7 +117,7 @@ export async function updateProfileDetails(
   const mediaOk = (u: string | null) =>
     u === null || isOwnPublicStorageUrl(u, ['avatars', 'covers']);
   if (!mediaOk(avatarUrl) || !mediaOk(coverUrl)) {
-    return { ok: false, error: 'Unexpected image location — please re-upload.' };
+    return { ok: false, error: 'Unexpected image location - please re-upload.' };
   }
 
   const { error } = await supabase
@@ -143,7 +143,7 @@ export async function updateProfileDetails(
     if (error.code === '23505') {
       return { ok: false, error: 'That handle is already taken.' };
     }
-    return { ok: false, error: 'Could not save — please try again.' };
+    return { ok: false, error: 'Could not save - please try again.' };
   }
 
   revalidatePath('/profile');

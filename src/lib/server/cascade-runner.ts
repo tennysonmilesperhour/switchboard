@@ -157,7 +157,7 @@ function guestInviteText(
     `When: ${when}${where}\n\n` +
     `RSVP here (no account needed): ${appUrl(`/rsvp/${token}`)}\n\n` +
     `No pressure either way - if you can’t make it, the invitation quietly ` +
-    `moves along.\n\n— Switchboard`
+    `moves along.\n\n- Switchboard`
   );
 }
 

@@ -394,7 +394,7 @@ export function EventWizard({
           return;
         }
         if (found.id === userId) {
-          setGuestError('That’s you — you’re already the host.');
+          setGuestError('That’s you - you’re already the host.');
           return;
         }
         setInvitees((current) =>
@@ -500,7 +500,7 @@ export function EventWizard({
       const onApp = invitable.filter((match) => match.profile).length;
       setContactsNote(
         invitable.length === 0
-          ? 'None of those contacts can be invited yet — no matching accounts or numbers.'
+          ? 'None of those contacts can be invited yet - no matching accounts or numbers.'
           : onApp === 0
             ? `${invitable.length} ${invitable.length === 1 ? 'contact' : 'contacts'} can be invited by text.`
             : `${onApp} on Switchboard${
@@ -999,7 +999,7 @@ export function EventWizard({
                 })}
               </div>
               <p className="mt-1.5 text-xs text-ink-faint">
-                Adds the whole group — then tap anyone below to drop them.
+                Adds the whole group - then tap anyone below to drop them.
               </p>
             </div>
           )}
@@ -1447,7 +1447,7 @@ export function EventWizard({
           {looksOutdoor && (
             <Card tone="gold">
               <p className="text-sm leading-relaxed">
-                🌤️ This looks like an outdoor plan — worth a quick peek at the
+                🌤️ This looks like an outdoor plan - worth a quick peek at the
                 forecast before you send it, so you have a plan B if the weather
                 turns.
               </p>

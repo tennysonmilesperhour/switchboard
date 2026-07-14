@@ -1,7 +1,6 @@
 'use client';
 
 import { useOptimistic, useTransition } from 'react';
-import { useRouter } from 'next/navigation';
 import { Chip } from '@/components/ui/Chip';
 import { Card } from '@/components/ui/Card';
 import { useToast } from '@/components/ui/Toast';
@@ -34,14 +33,13 @@ interface SignalView {
 }
 
 type ViewAction =
-  | { type: 'toggle'; label: string }
+  | { type: 'set'; label: string; on: boolean }
   | { type: 'audience'; audience: string | null }
   | { type: 'clear' };
 
 /** One-tap availability from the home screen. Toggle as many signals on as you like. */
 export function SignalBar({ active, circles }: SignalBarProps) {
   const [pending, startTransition] = useTransition();
-  const router = useRouter();
   const toast = useToast();
 
   // Every live signal shares one audience; fall back to "everyone" when nothing is on.
@@ -50,19 +48,26 @@ export function SignalBar({ active, circles }: SignalBarProps) {
     audience: active.length > 0 ? active[0].circle_id : null,
   };
 
-  // Reflect taps immediately, then reconcile with the server on refresh. This keeps
-  // the bar responsive without waiting on a full home-page re-render, so no tap ever
-  // leaves the controls stuck disabled.
+  // Reflect taps immediately, then reconcile when each server action's
+  // revalidatePath('/') re-renders this component with fresh props. We intentionally
+  // do NOT call router.refresh() in the handlers: it fires a second full home-page
+  // refetch and, worse, updates `active` mid-transition so the optimistic overlay
+  // briefly re-applies against an already-updated base — the tap lights up, flips
+  // back for the length of the refetch, then settles, which reads as a ~1s lag.
+  // The optimistic actions are absolute (set on/off, pick an audience) rather than
+  // relative toggles, so they stay correct even if the base changes underneath them.
   const [view, applyView] = useOptimistic<SignalView, ViewAction>(
     serverView,
     (state, action) => {
       switch (action.type) {
-        case 'toggle':
+        case 'set':
           return {
             ...state,
-            labels: state.labels.includes(action.label)
-              ? state.labels.filter((label) => label !== action.label)
-              : [...state.labels, action.label],
+            labels: action.on
+              ? state.labels.includes(action.label)
+                ? state.labels
+                : [...state.labels, action.label]
+              : state.labels.filter((label) => label !== action.label),
           };
         case 'audience':
           return { ...state, audience: action.audience };
@@ -86,17 +91,15 @@ export function SignalBar({ active, circles }: SignalBarProps) {
       : null;
 
   function toggle(preset: { emoji: string; label: string }) {
-    const wasActive = activeLabels.has(preset.label);
+    const turnOn = !activeLabels.has(preset.label);
     startTransition(async () => {
-      applyView({ type: 'toggle', label: preset.label });
-      const result = wasActive
-        ? await removeSignal(preset.label)
-        : await addSignal(preset.emoji, preset.label, audience);
+      applyView({ type: 'set', label: preset.label, on: turnOn });
+      const result = turnOn
+        ? await addSignal(preset.emoji, preset.label, audience)
+        : await removeSignal(preset.label);
       if (!result.ok) {
         toast.error(result.error ?? 'Could not update your signal.');
-        return;
       }
-      router.refresh();
     });
   }
 
@@ -106,9 +109,7 @@ export function SignalBar({ active, circles }: SignalBarProps) {
       const result = await setSignalsAudience(circleId);
       if (!result.ok) {
         toast.error(result.error ?? 'Could not change who can see this.');
-        return;
       }
-      router.refresh();
     });
   }
 
@@ -120,7 +121,6 @@ export function SignalBar({ active, circles }: SignalBarProps) {
         toast.error(result.error ?? 'Could not turn your signals off.');
         return;
       }
-      router.refresh();
       toast.success('Signals turned off.');
     });
   }
