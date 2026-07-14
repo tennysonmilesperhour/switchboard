@@ -11,6 +11,8 @@ import {
   notifyCurrentInviteWave,
 } from '@/lib/server/cascade-runner';
 import { notifyUsers } from '@/lib/server/notify';
+import { capture } from '@/lib/analytics/server';
+import { ANALYTICS_EVENTS } from '@/lib/analytics/events';
 import { isValidMediaRef } from '@/lib/server/media';
 import type { EventTheme, InviteMode, RecurrenceKind } from '@/lib/types';
 import {
@@ -167,6 +169,11 @@ export async function createEvent(input: CreateEventInput): Promise<CreateEventR
       await reportOperationalError('event-initial-delivery', cascadeError, { eventId });
     }
   }
+
+  await capture(user.id, ANALYTICS_EVENTS.planCreated, {
+    invite_mode: input.inviteMode,
+    has_poll: !!input.enablePoll,
+  });
 
   return { ok: true, eventId };
 }
@@ -732,6 +739,59 @@ export async function confirmEvent(eventId: string): Promise<void> {
     .update({ status: 'cancelled' })
     .eq('event_id', eventId)
     .in('status', ['queued', 'sent', 'requested']);
+  revalidatePath(`/events/${eventId}`);
+  revalidatePath('/plans');
+}
+
+/** Host affirms the plan actually happened. Records happened_at, moves the
+ *  event to 'past', and retires any invites still in motion. This is what
+ *  powers the real-world recap and the one-tap Run It Back. */
+export async function markHappened(eventId: string): Promise<void> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) redirect('/login');
+  if (!(await isEventManager(user.id, eventId))) return;
+  const admin = createAdminClient();
+  // Only close a plan whose start time has actually passed. The UI "elapsed"
+  // gate is client-controlled — a fast browser clock or a direct call to this
+  // action could otherwise flip a future or undated plan to 'past' and cancel
+  // its in-flight invites — so require starts_at present and <= now in the DB,
+  // where it can't be spoofed. maybeSingle() returns null when the row doesn't
+  // meet the filter, letting us bail before touching invites or analytics.
+  const now = new Date().toISOString();
+  const { data: happened } = await admin
+    .from('events')
+    .update({ status: 'past', happened_at: now })
+    .eq('id', eventId)
+    .neq('status', 'cancelled')
+    // Transition only once. Excluding rows already 'past' keeps this
+    // idempotent under retries / double-submits / direct calls, so a replay
+    // can't overwrite happened_at or re-fire the plan_happened North Star
+    // metric (the row no longer matches, and maybeSingle() returns null).
+    .neq('status', 'past')
+    .not('starts_at', 'is', null)
+    .lte('starts_at', now)
+    .select('id')
+    .maybeSingle();
+  if (!happened) return;
+  await admin
+    .from('invites')
+    .update({ status: 'cancelled' })
+    .eq('event_id', eventId)
+    .in('status', ['queued', 'sent', 'requested']);
+
+  const { count } = await admin
+    .from('invites')
+    .select('id', { count: 'exact', head: true })
+    .eq('event_id', eventId)
+    .eq('status', 'accepted');
+  await capture(user.id, ANALYTICS_EVENTS.planHappened, {
+    event_id: eventId,
+    attendee_count: count ?? 0,
+  });
+
   revalidatePath(`/events/${eventId}`);
   revalidatePath('/plans');
 }

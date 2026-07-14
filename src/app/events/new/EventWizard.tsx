@@ -27,7 +27,8 @@ import { HostSuggestions } from '@/components/events/HostSuggestions';
 import { ImportFromLink } from '@/components/events/ImportFromLink';
 import type { PlanDraft } from '@/lib/actions/plan';
 import type { ImportResult } from '@/lib/actions/import';
-import type { InviteMode } from '@/lib/types';
+import type { InviteMode, EventTheme } from '@/lib/types';
+import { EVENT_THEMES } from '@/lib/themes';
 import { canPickContacts, pickContacts } from '@/lib/client/contact-picker';
 import { resolveTimeZone } from '@/lib/client/time-zone';
 import { resolveContactMatches, type ContactMatch } from '@/lib/actions/connections';
@@ -182,6 +183,7 @@ export function EventWizard({
   const [capacity, setCapacity] = useState('');
   const [coverUrl, setCoverUrl] = useState('');
   const [wishlistUrl, setWishlistUrl] = useState('');
+  const [theme, setTheme] = useState<EventTheme>('default');
   const [questions, setQuestions] = useState<
     Array<{ prompt: string; required: boolean }>
   >([]);
@@ -608,6 +610,7 @@ export function EventWizard({
         voteDeadline: null,
         coverUrl: coverUrl.trim() || null,
         wishlistUrl: wishlistUrl.trim() || null,
+        theme,
         recurrence,
         recurrenceIntervalDays:
           recurrence === 'custom' ? Number(customDays) || null : null,
@@ -963,6 +966,37 @@ export function EventWizard({
                 ))}
               </div>
             )}
+          </Card>
+
+          <Card tone="cream" className="mt-2">
+            <p className="font-bold">Theme</p>
+            <p className="text-sm text-ink-soft mt-0.5 mb-2.5 leading-relaxed">
+              A color for the plan card. Optional.
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {EVENT_THEMES.map((option) => {
+                const active = theme === option.id;
+                return (
+                  <button
+                    key={option.id}
+                    type="button"
+                    onClick={() => setTheme(option.id)}
+                    aria-pressed={active}
+                    className={`flex items-center gap-2 rounded-pill border-2 py-1.5 pl-1.5 pr-3.5 transition-all active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-terracotta ${
+                      active
+                        ? 'border-terracotta bg-terracotta-soft'
+                        : 'border-line bg-card hover:border-terracotta/50'
+                    }`}
+                  >
+                    <span
+                      aria-hidden
+                      className={`size-6 rounded-full shadow-lift plan-${option.color}`}
+                    />
+                    <span className="text-sm font-bold">{option.label}</span>
+                  </button>
+                );
+              })}
+            </div>
           </Card>
         </div>
       )}

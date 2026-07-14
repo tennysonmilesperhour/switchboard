@@ -2,6 +2,8 @@ import type { Metadata, Viewport } from 'next';
 import { Work_Sans } from 'next/font/google';
 import './globals.css';
 import { VersionWatcher } from '@/components/system/VersionWatcher';
+import { InstallPrompt } from '@/components/system/InstallPrompt';
+import { PmfSurvey } from '@/components/system/PmfSurvey';
 import { ServiceWorkerRegistrar } from '@/components/system/ServiceWorkerRegistrar';
 import { ToastProvider } from '@/components/ui/Toast';
 import { ConfirmProvider } from '@/components/ui/ConfirmDialog';
@@ -56,6 +58,8 @@ export default function RootLayout({
           <ConfirmProvider>
             {children}
             <VersionWatcher />
+            <InstallPrompt />
+            <PmfSurvey />
             <ServiceWorkerRegistrar />
           </ConfirmProvider>
         </ToastProvider>

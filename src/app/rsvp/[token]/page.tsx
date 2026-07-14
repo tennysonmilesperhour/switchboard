@@ -3,6 +3,8 @@ import { createAdminClient, hasAdminCredentials } from '@/lib/supabase/admin';
 import { getUser } from '@/lib/supabase/server';
 import { reportOperationalError } from '@/lib/server/observability';
 import { formatDateTime } from '@/lib/format';
+import { serializeJsonLd } from '@/lib/security';
+import { googleCalendarUrl, outlookCalendarUrl } from '@/lib/calendar-links';
 import { resolveEventZone } from '@/lib/server/event-zone';
 import { Icon } from '@/components/ui/Icon';
 import { GuestRsvpClient } from './GuestRsvpClient';
@@ -94,13 +96,17 @@ export default async function GuestRsvpPage({
   const { data: event, error: eventError } = invite && admin
     ? await admin
         .from('events')
-        .select('title, description, location_name, starts_at, time_zone, host_id')
+        .select(
+          'title, description, location_name, location_address, starts_at, ends_at, time_zone, host_id',
+        )
         .eq('id', invite.event_id)
         .maybeSingle<{
           title: string;
           description: string | null;
           location_name: string | null;
+          location_address: string | null;
           starts_at: string | null;
+          ends_at: string | null;
           time_zone: string | null;
           host_id: string;
         }>()
@@ -145,6 +151,43 @@ export default async function GuestRsvpPage({
   // profile zone for plans created before the zone was captured on the event.
   const zone = admin ? await resolveEventZone(admin, event) : null;
 
+  // A guest can never reach the RLS-gated .ics route, so give them the pure
+  // web-calendar deep links instead. Same "add to calendar" affordance as the
+  // host event page.
+  const calendarEvent =
+    event?.starts_at
+      ? {
+          title: event.title,
+          description: event.description,
+          location: event.location_name ?? event.location_address,
+          startsAt: event.starts_at,
+          endsAt: event.ends_at,
+        }
+      : null;
+
+  // schema.org/Event JSON-LD so the guest link unfurls richly and is machine
+  // readable, matching the host event page.
+  const jsonLd = event
+    ? {
+        '@context': 'https://schema.org',
+        '@type': 'Event',
+        name: event.title,
+        ...(event.description ? { description: event.description } : {}),
+        ...(event.starts_at ? { startDate: event.starts_at } : {}),
+        ...(event.ends_at ? { endDate: event.ends_at } : {}),
+        eventAttendanceMode: 'https://schema.org/OfflineEventAttendanceMode',
+        ...(event.location_name || event.location_address
+          ? {
+              location: {
+                '@type': 'Place',
+                ...(event.location_name ? { name: event.location_name } : {}),
+                ...(event.location_address ? { address: event.location_address } : {}),
+              },
+            }
+          : {}),
+      }
+    : null;
+
   return (
     <div className="mx-auto max-w-lg min-h-dvh flex flex-col px-6">
       <header className="py-6">
@@ -180,6 +223,35 @@ export default async function GuestRsvpPage({
               <p className="text-ink-soft text-sm mt-3 leading-relaxed">
                 {event.description}
               </p>
+            )}
+            {calendarEvent && (
+              <div className="mt-4 flex flex-wrap gap-2">
+                <a
+                  href={googleCalendarUrl(calendarEvent)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1.5 rounded-pill border border-line bg-card px-3.5 py-2 text-xs font-bold text-ink-soft shadow-lift hover:border-terracotta hover:text-terracotta-deep active:scale-[0.98] transition-all"
+                >
+                  📅 Google Calendar
+                </a>
+                <a
+                  href={outlookCalendarUrl(calendarEvent)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1.5 rounded-pill border border-line bg-card px-3.5 py-2 text-xs font-bold text-ink-soft shadow-lift hover:border-terracotta hover:text-terracotta-deep active:scale-[0.98] transition-all"
+                >
+                  📅 Outlook
+                </a>
+              </div>
+            )}
+            {jsonLd && (
+              <script
+                type="application/ld+json"
+                // serializeJsonLd (not raw JSON.stringify) so a user-controlled
+                // event title/description/location containing `</script>` can't
+                // break out of the tag and inject markup on this public page.
+                dangerouslySetInnerHTML={{ __html: serializeJsonLd(jsonLd) }}
+              />
             )}
             <GuestRsvpClient
               token={token}

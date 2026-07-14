@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { VoiceRecorder, type RecordedClip } from '@/components/ui/VoiceRecorder';
 import { useToast } from '@/components/ui/Toast';
-import { cancelEvent, confirmEvent, startInviting } from '@/lib/actions/events';
+import { cancelEvent, confirmEvent, markHappened, startInviting } from '@/lib/actions/events';
 import { uploadAudio } from '@/lib/client/upload-audio';
 import type { SwitchboardEvent } from '@/lib/types';
 
@@ -58,30 +58,46 @@ export function HostControls({ event, pollDecided }: HostControlsProps) {
 
   if (event.status === 'cancelled' || event.status === 'past') return null;
 
+  const elapsed = !!event.starts_at && new Date(event.starts_at) < new Date();
+
   return (
     <section className="border-t border-line pt-6 space-y-2.5">
-      {event.status === 'deciding' && (
-        <Button
-          size="lg"
-          className="w-full"
-          disabled={pending || !pollDecided}
-          onClick={() => run(() => startInviting(event.id))}
-        >
-          {pollDecided
-            ? 'Send the invitations 🪜'
-            : 'Waiting for the group to decide…'}
-        </Button>
-      )}
-      {event.status === 'inviting' && (
+      {elapsed ? (
         <Button
           variant="accept"
           size="lg"
           className="w-full"
           disabled={pending}
-          onClick={() => run(() => confirmEvent(event.id))}
+          onClick={() => run(() => markHappened(event.id))}
         >
-          Lock it in - confirm the plan ✓
+          Mark it happened 🎉
         </Button>
+      ) : (
+        <>
+          {event.status === 'deciding' && (
+            <Button
+              size="lg"
+              className="w-full"
+              disabled={pending || !pollDecided}
+              onClick={() => run(() => startInviting(event.id))}
+            >
+              {pollDecided
+                ? 'Send the invitations 🪜'
+                : 'Waiting for the group to decide…'}
+            </Button>
+          )}
+          {event.status === 'inviting' && (
+            <Button
+              variant="accept"
+              size="lg"
+              className="w-full"
+              disabled={pending}
+              onClick={() => run(() => confirmEvent(event.id))}
+            >
+              Lock it in - confirm the plan ✓
+            </Button>
+          )}
+        </>
       )}
 
       {cancelling ? (

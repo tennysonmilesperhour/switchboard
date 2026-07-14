@@ -1,4 +1,5 @@
 import { aiEnabled, getClaude, MODELS } from './claude';
+import { sanitizeUrl } from '@/lib/url';
 import type { RoomItemKind } from '@/lib/types';
 
 export interface ExtractedItem {
@@ -102,7 +103,7 @@ export async function extractItems(body: string): Promise<ExtractedItem[]> {
         kind: item.kind ?? 'note',
         title: item.title.slice(0, 120),
         detail: item.detail?.slice(0, 500) ?? null,
-        url: item.url ?? null,
+        url: item.url ? sanitizeUrl(item.url) : null,
       }));
   } catch {
     return extractWithRules(body);

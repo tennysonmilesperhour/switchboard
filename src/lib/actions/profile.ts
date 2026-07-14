@@ -9,6 +9,7 @@ import { SOCIAL_BY_ID } from '@/lib/socials';
 import { USERNAME_PATTERN, isEmail } from '@/lib/auth-identity';
 import { safeNextPath } from '@/lib/security';
 import { LEGAL_VERSION } from '@/lib/legal';
+import { sanitizeUrl } from '@/lib/url';
 import type { ProfileLink, ProfileSocial } from '@/lib/types';
 
 const HANDLE_PATTERN = USERNAME_PATTERN;
@@ -18,22 +19,6 @@ const MAX_SOCIALS = 15;
 export interface ActionResult {
   ok: boolean;
   error?: string;
-}
-
-/** Accept only http(s) URLs; prepend https:// to a bare domain. Returns null
- *  for anything unsafe (javascript:, data:, malformed). */
-function sanitizeUrl(raw: string): string | null {
-  const value = raw.trim();
-  if (!value) return null;
-  const candidate = /^https?:\/\//i.test(value) ? value : `https://${value}`;
-  try {
-    const url = new URL(candidate);
-    if (url.protocol !== 'http:' && url.protocol !== 'https:') return null;
-    if (!url.hostname.includes('.')) return null;
-    return url.toString();
-  } catch {
-    return null;
-  }
 }
 
 function parseLinks(raw: string): ProfileLink[] {

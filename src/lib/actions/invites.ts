@@ -6,6 +6,8 @@ import { requireUser } from '@/lib/server/require-user';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { advanceEventCascade } from '@/lib/server/cascade-runner';
 import { notifyUsers } from '@/lib/server/notify';
+import { capture } from '@/lib/analytics/server';
+import { ANALYTICS_EVENTS } from '@/lib/analytics/events';
 import type { DeclineNote } from '@/lib/types';
 import { checkRateLimit } from '@/lib/server/rate-limit';
 
@@ -107,6 +109,10 @@ export async function respondToInvite(
         });
       }
     }
+    await capture(user.id, ANALYTICS_EVENTS.inviteResponded, {
+      accepted: data === 'accepted',
+      outcome: typeof data === 'string' ? data : null,
+    });
     revalidatePath(`/events/${invite.event_id}`);
   }
   revalidatePath('/');
