@@ -3,6 +3,7 @@ import { createAdminClient, hasAdminCredentials } from '@/lib/supabase/admin';
 import { getUser } from '@/lib/supabase/server';
 import { reportOperationalError } from '@/lib/server/observability';
 import { formatDateTime } from '@/lib/format';
+import { serializeJsonLd } from '@/lib/security';
 import { googleCalendarUrl, outlookCalendarUrl } from '@/lib/calendar-links';
 import { resolveEventZone } from '@/lib/server/event-zone';
 import { Icon } from '@/components/ui/Icon';
@@ -246,7 +247,10 @@ export default async function GuestRsvpPage({
             {jsonLd && (
               <script
                 type="application/ld+json"
-                dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+                // serializeJsonLd (not raw JSON.stringify) so a user-controlled
+                // event title/description/location containing `</script>` can't
+                // break out of the tag and inject markup on this public page.
+                dangerouslySetInnerHTML={{ __html: serializeJsonLd(jsonLd) }}
               />
             )}
             <GuestRsvpClient
