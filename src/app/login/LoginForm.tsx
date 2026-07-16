@@ -34,6 +34,10 @@ export function LoginForm({ next = '/', initialMode = 'signin' }: LoginFormProps
   const [status, setStatus] = useState<Status>('idle');
   const [message, setMessage] = useState('');
   const [ready, setReady] = useState(false);
+  // OAuth kicks off a full-page redirect, so it needs its own feedback that
+  // lives outside the sign-in/create forms (the button sits below both).
+  const [oauthPending, setOauthPending] = useState(false);
+  const [oauthError, setOauthError] = useState('');
   const [createState, createAction, creating] = useActionState(
     createPasswordAccount,
     initialCreateState,
@@ -77,12 +81,23 @@ export function LoginForm({ next = '/', initialMode = 'signin' }: LoginFormProps
   }
 
   async function signInWithGoogle() {
+    setOauthError('');
+    setOauthPending(true);
     const supabase = createClient();
     const callback = `${window.location.origin}/auth/callback?next=${encodeURIComponent(next)}`;
-    await supabase.auth.signInWithOAuth({
+    const { error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: { redirectTo: callback },
     });
+    // On success the browser is already navigating to Google, so this only runs
+    // when kickoff failed (e.g. the Google provider isn't enabled on the
+    // project). Surface it instead of leaving the click looking dead.
+    if (error) {
+      setOauthError(
+        'Google sign-in isn’t available right now. Use your email or username instead.',
+      );
+      setOauthPending(false);
+    }
   }
 
   function switchMode(nextMode: Mode) {
@@ -306,10 +321,17 @@ export function LoginForm({ next = '/', initialMode = 'signin' }: LoginFormProps
         variant="secondary"
         size="lg"
         className="w-full"
+        disabled={oauthPending}
+        aria-busy={oauthPending}
         onClick={signInWithGoogle}
       >
-        Continue with Google
+        {oauthPending ? 'Connecting to Google…' : 'Continue with Google'}
       </Button>
+      {oauthError ? (
+        <p role="alert" className="text-sm text-rose-deep">
+          {oauthError}
+        </p>
+      ) : null}
     </div>
   );
 }
