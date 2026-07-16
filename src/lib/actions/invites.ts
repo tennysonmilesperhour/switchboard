@@ -6,6 +6,7 @@ import { requireUser } from '@/lib/server/require-user';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { advanceEventCascade } from '@/lib/server/cascade-runner';
 import { notifyUsers } from '@/lib/server/notify';
+import { reportOperationalError } from '@/lib/server/observability';
 import { capture } from '@/lib/analytics/server';
 import { ANALYTICS_EVENTS } from '@/lib/analytics/events';
 import type { DeclineNote } from '@/lib/types';
@@ -218,7 +219,16 @@ export async function claimGuestInvite(token: string): Promise<{ ok: boolean }> 
   const { data: eventId, error } = await supabase.rpc('claim_guest_invite', {
     p_token: token,
   });
-  if (error || !eventId) return { ok: false };
+  // A null eventId is a normal no-op (already claimed); an error is not — it
+  // means the claim machinery itself is broken (e.g. the claim_guest_invites
+  // migration was never applied to this database), which otherwise hides as
+  // "invites silently never appear in the app". Never log the token: it's the
+  // RSVP capability secret.
+  if (error) {
+    await reportOperationalError('invite-claim.token', error, {});
+    return { ok: false };
+  }
+  if (!eventId) return { ok: false };
 
   revalidatePath('/');
   revalidatePath('/plans');
