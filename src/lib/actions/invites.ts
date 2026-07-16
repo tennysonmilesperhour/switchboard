@@ -199,6 +199,33 @@ export async function declineJoinRequest(
   return { ok: true };
 }
 
+/**
+ * Link the guest invite behind `token` to the signed-in account. Called after
+ * an invited guest creates an account (or signs in) and lands back on their
+ * invite link — without this the invite stays a guest row (invitee_id null) and
+ * never shows up on their home / plans / notifications. The token is the
+ * authorization; the DB function no-ops for a logged-out caller or an
+ * already-claimed invite. Best-effort: a failure here must never break the
+ * public RSVP page, so callers ignore the result.
+ */
+export async function claimGuestInvite(token: string): Promise<{ ok: boolean }> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false };
+
+  const { data: eventId, error } = await supabase.rpc('claim_guest_invite', {
+    p_token: token,
+  });
+  if (error || !eventId) return { ok: false };
+
+  revalidatePath('/');
+  revalidatePath('/plans');
+  revalidatePath('/notifications');
+  return { ok: true };
+}
+
 /** Guest RSVP via token - no account required. */
 export async function respondToGuestInvite(
   token: string,

@@ -1,9 +1,9 @@
 'use client';
 
-import { useState, useTransition } from 'react';
+import { useEffect, useState, useTransition } from 'react';
 import { Button } from '@/components/ui/Button';
 import { Icon } from '@/components/ui/Icon';
-import { respondToGuestInvite } from '@/lib/actions/invites';
+import { claimGuestInvite, respondToGuestInvite } from '@/lib/actions/invites';
 import {
   googleCalendarUrl,
   outlookCalendarUrl,
@@ -22,6 +22,11 @@ interface GuestRsvpClientProps {
   questions?: RsvpQuestion[];
   /** When present (event has a start time), the accepted state offers add-to-calendar links. */
   calendarEvent?: CalendarEvent | null;
+  /** Whether the viewer is signed in. When true, this still-unclaimed guest
+   *  invite is linked to their account so it appears in-app, not just here. */
+  authed?: boolean;
+  /** True when this guest invite has no account attached yet. */
+  unclaimed?: boolean;
 }
 
 export function GuestRsvpClient({
@@ -30,11 +35,22 @@ export function GuestRsvpClient({
   initialStatus,
   questions = [],
   calendarEvent = null,
+  authed = false,
+  unclaimed = false,
 }: GuestRsvpClientProps) {
   const [status, setStatus] = useState(initialStatus);
   const [error, setError] = useState('');
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [pending, startTransition] = useTransition();
+
+  // If an invited guest has since created an account (or signed in) and reopened
+  // their link, adopt the guest invite onto their account so it stops being
+  // invisible everywhere else in the app. Runs once, best-effort.
+  useEffect(() => {
+    if (authed && unclaimed) {
+      void claimGuestInvite(token);
+    }
+  }, [authed, unclaimed, token]);
 
   function respond(accept: boolean) {
     if (accept && !requiredAnswered(questions, answers)) {
