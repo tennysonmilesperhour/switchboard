@@ -8,6 +8,7 @@ import { isOwnPublicStorageUrl } from '@/lib/server/media';
 import { SOCIAL_BY_ID } from '@/lib/socials';
 import { USERNAME_PATTERN, isEmail } from '@/lib/auth-identity';
 import { safeNextPath } from '@/lib/security';
+import { reportOperationalError } from '@/lib/server/observability';
 import { LEGAL_VERSION } from '@/lib/legal';
 import { sanitizeUrl } from '@/lib/url';
 import type { ProfileLink, ProfileSocial } from '@/lib/types';
@@ -133,8 +134,14 @@ export async function updateProfileDetails(
 
   // Contact info may have just been added — adopt any guest invites sent to this
   // email/phone so they surface in the app rather than staying stuck as
-  // account-less guest rows. Best-effort.
-  await supabase.rpc('claim_guest_invites_by_contact');
+  // account-less guest rows. Best-effort, but a failure is reported: it means
+  // the claim machinery is broken (e.g. migration not applied), not a no-op.
+  const { error: claimError } = await supabase.rpc('claim_guest_invites_by_contact');
+  if (claimError) {
+    await reportOperationalError('invite-claim.contact', claimError, {
+      area: 'profile-save',
+    });
+  }
 
   revalidatePath('/profile');
   revalidatePath('/settings');
@@ -193,8 +200,15 @@ export async function completeOnboarding(formData: FormData): Promise<void> {
   }
 
   // A new account created from an invite: adopt any guest invites addressed to
-  // this person's sign-in email/phone so they're waiting in the app. Best-effort.
-  await supabase.rpc('claim_guest_invites_by_contact');
+  // this person's sign-in email/phone so they're waiting in the app.
+  // Best-effort, but a failure is reported: it means the claim machinery is
+  // broken (e.g. migration not applied), not a no-op.
+  const { error: claimError } = await supabase.rpc('claim_guest_invites_by_contact');
+  if (claimError) {
+    await reportOperationalError('invite-claim.contact', claimError, {
+      area: 'onboarding',
+    });
+  }
 
   // Return to the destination the user was originally headed for (e.g. an invite
   // deep link that funnelled them through onboarding), validated to same-site.
