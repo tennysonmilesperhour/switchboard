@@ -3,6 +3,7 @@
 import { useActionState, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { Button } from '@/components/ui/Button';
+import { PasswordInput } from '@/components/ui/PasswordInput';
 import {
   createPasswordAccount,
   signInWithPasswordIdentifier,
@@ -149,15 +150,13 @@ export function LoginForm({ next = '/', initialMode = 'signin' }: LoginFormProps
           <label htmlFor="password" className="sr-only">
             Password
           </label>
-          <input
+          <PasswordInput
             id="password"
-            type="password"
             required
             autoComplete="current-password"
             placeholder="Password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            className="w-full rounded-card border border-line bg-card px-4 py-3.5 text-ink placeholder:text-ink-faint outline-none focus:border-terracotta transition-colors"
           />
 
           {message ? (
@@ -243,15 +242,13 @@ export function LoginForm({ next = '/', initialMode = 'signin' }: LoginFormProps
           <label htmlFor="create_password" className="sr-only">
             Password
           </label>
-          <input
+          <PasswordInput
             id="create_password"
             name="password"
-            type="password"
             required
             minLength={PASSWORD_MIN_LENGTH}
             autoComplete="new-password"
             placeholder="Password"
-            className="w-full rounded-card border border-line bg-card px-4 py-3.5 text-ink placeholder:text-ink-faint outline-none focus:border-terracotta transition-colors"
           />
 
           <div className="rounded-card border border-line bg-cream p-4 text-sm text-ink-soft">
