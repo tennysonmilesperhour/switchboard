@@ -79,13 +79,14 @@ export default async function GuestRsvpPage({
   const { data: invite, error: inviteError } = admin
     ? await admin
         .from('invites')
-        .select('id, event_id, status, guest_name')
+        .select('id, event_id, status, guest_name, invitee_id')
         .eq('guest_token', token)
         .maybeSingle<{
           id: string;
           event_id: string;
           status: string;
           guest_name: string | null;
+          invitee_id: string | null;
         }>()
     : { data: null, error: null };
   if (inviteError) {
@@ -258,6 +259,8 @@ export default async function GuestRsvpPage({
               guestName={invite.guest_name ?? 'there'}
               initialStatus={invite.status}
               questions={questions}
+              authed={Boolean(user)}
+              unclaimed={invite.invitee_id === null}
               calendarEvent={
                 event.starts_at
                   ? {

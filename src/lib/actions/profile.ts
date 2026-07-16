@@ -131,6 +131,11 @@ export async function updateProfileDetails(
     return { ok: false, error: 'Could not save - please try again.' };
   }
 
+  // Contact info may have just been added — adopt any guest invites sent to this
+  // email/phone so they surface in the app rather than staying stuck as
+  // account-less guest rows. Best-effort.
+  await supabase.rpc('claim_guest_invites_by_contact');
+
   revalidatePath('/profile');
   revalidatePath('/settings');
   redirect('/profile');
@@ -186,6 +191,10 @@ export async function completeOnboarding(formData: FormData): Promise<void> {
       { owner_id: user.id, name: 'Neighbors', emoji: '🌳' },
     ]);
   }
+
+  // A new account created from an invite: adopt any guest invites addressed to
+  // this person's sign-in email/phone so they're waiting in the app. Best-effort.
+  await supabase.rpc('claim_guest_invites_by_contact');
 
   // Return to the destination the user was originally headed for (e.g. an invite
   // deep link that funnelled them through onboarding), validated to same-site.
