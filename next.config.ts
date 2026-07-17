@@ -38,6 +38,26 @@ const nextConfig: NextConfig = {
   async headers() {
     return [{ source: '/(.*)', headers: securityHeaders }];
   },
+  // Same-origin reverse proxy for PostHog (client analytics + error tracking).
+  // Routing ingestion and PostHog's lazily-loaded assets through our own origin
+  // keeps them 'self' under the strict CSP (src/proxy.ts) and evades ad-blockers.
+  // `/ingest` is excluded from the auth proxy's matcher (src/proxy.ts) so these
+  // beacons never trigger a Supabase round-trip. The US assets host serves the
+  // recorder/exception scripts; the API host serves the capture endpoints.
+  async rewrites() {
+    return [
+      {
+        source: '/ingest/static/:path*',
+        destination: 'https://us-assets.i.posthog.com/static/:path*',
+      },
+      {
+        source: '/ingest/:path*',
+        destination: 'https://us.i.posthog.com/:path*',
+      },
+    ];
+  },
+  // PostHog relies on trailing-slash-sensitive paths; don't auto-redirect them.
+  skipTrailingSlashRedirect: true,
 };
 
 export default nextConfig;

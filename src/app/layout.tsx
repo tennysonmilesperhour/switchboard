@@ -5,6 +5,7 @@ import { VersionWatcher } from '@/components/system/VersionWatcher';
 import { InstallPrompt } from '@/components/system/InstallPrompt';
 import { PmfSurvey } from '@/components/system/PmfSurvey';
 import { ServiceWorkerRegistrar } from '@/components/system/ServiceWorkerRegistrar';
+import { PostHogProvider } from '@/components/system/PostHogProvider';
 import { ToastProvider } from '@/components/ui/Toast';
 import { ConfirmProvider } from '@/components/ui/ConfirmDialog';
 
@@ -54,15 +55,17 @@ export default function RootLayout({
   return (
     <html lang="en" className={`${workSans.variable} antialiased`}>
       <body className="min-h-dvh">
-        <ToastProvider>
-          <ConfirmProvider>
-            {children}
-            <VersionWatcher />
-            <InstallPrompt />
-            <PmfSurvey />
-            <ServiceWorkerRegistrar />
-          </ConfirmProvider>
-        </ToastProvider>
+        <PostHogProvider>
+          <ToastProvider>
+            <ConfirmProvider>
+              {children}
+              <VersionWatcher />
+              <InstallPrompt />
+              <PmfSurvey />
+              <ServiceWorkerRegistrar />
+            </ConfirmProvider>
+          </ToastProvider>
+        </PostHogProvider>
       </body>
     </html>
   );
