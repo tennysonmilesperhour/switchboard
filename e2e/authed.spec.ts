@@ -57,7 +57,10 @@ test.describe('authenticated surface', () => {
         await page.getByRole('button', { name: 'Add', exact: true }).click();
       }
       const next = page.getByRole('button', { name: 'Next' });
-      if (await next.isEnabled().catch(() => false)) await next.click();
+      if (await next.isVisible().catch(() => false)) {
+        await expect(next).toBeEnabled({ timeout: 5_000 });
+        await next.click();
+      }
       else break;
     }
 
@@ -82,7 +85,10 @@ test.describe('authenticated surface', () => {
       const friend = host.getByRole('button', { name: /E2E Guest/ });
       if (await friend.isVisible().catch(() => false)) await friend.click();
       const next = host.getByRole('button', { name: 'Next' });
-      if (await next.isEnabled().catch(() => false)) await next.click();
+      if (await next.isVisible().catch(() => false)) {
+        await expect(next).toBeEnabled({ timeout: 5_000 });
+        await next.click();
+      }
       else break;
     }
     await submit.click();
@@ -116,7 +122,10 @@ test.describe('authenticated surface', () => {
       const pollToggle = page.getByText('Let the group decide what to do 🗳️');
       if (await pollToggle.isVisible().catch(() => false)) await pollToggle.click();
       const next = page.getByRole('button', { name: 'Next' });
-      if (await next.isEnabled().catch(() => false)) await next.click();
+      if (await next.isVisible().catch(() => false)) {
+        await expect(next).toBeEnabled({ timeout: 5_000 });
+        await next.click();
+      }
       else break;
     }
     await submit.click();
