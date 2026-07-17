@@ -1,5 +1,8 @@
 import { describe, expect, test } from 'vitest';
 import {
+  coarsenCoordinate,
+  distanceMeters,
+  formatDistance,
   isValidCoordinate,
   nominatimSearchUrl,
   nominatimUrl,
@@ -108,5 +111,66 @@ describe('parseNominatimResults', () => {
   test('returns an empty array for malformed payloads', () => {
     expect(parseNominatimResults(null)).toEqual([]);
     expect(parseNominatimResults('nope')).toEqual([]);
+  });
+});
+
+describe('distanceMeters', () => {
+  test('is ~0 for the same point', () => {
+    expect(distanceMeters({ lat: 40, lng: -105 }, { lat: 40, lng: -105 })).toBeCloseTo(0, 5);
+  });
+
+  test('matches ~111 km per degree of latitude', () => {
+    const d = distanceMeters({ lat: 0, lng: 0 }, { lat: 1, lng: 0 });
+    expect(d).toBeGreaterThan(110_000);
+    expect(d).toBeLessThan(112_000);
+  });
+
+  test('is symmetric', () => {
+    const a = { lat: 51.5074, lng: -0.1278 };
+    const b = { lat: 48.8566, lng: 2.3522 };
+    expect(distanceMeters(a, b)).toBeCloseTo(distanceMeters(b, a), 3);
+  });
+
+  test('accepts the (0,0) equator point (not treated as null island here)', () => {
+    expect(distanceMeters({ lat: 0, lng: 0 }, { lat: 0, lng: 0 })).toBeCloseTo(0, 5);
+  });
+
+  test('returns NaN for an out-of-range point', () => {
+    expect(distanceMeters({ lat: 91, lng: 0 }, { lat: 40, lng: -105 })).toBeNaN();
+  });
+});
+
+describe('coarsenCoordinate', () => {
+  test('rounds to ~110 m (3 dp) by default', () => {
+    expect(coarsenCoordinate(39.739215)).toBe(39.739);
+    expect(coarsenCoordinate(-104.990251)).toBe(-104.99);
+  });
+
+  test('honours a custom precision', () => {
+    expect(coarsenCoordinate(39.739215, 1)).toBe(39.7);
+  });
+
+  test('stays within ~160 m of the original point', () => {
+    const original = { lat: 39.739215, lng: -104.990251 };
+    const coarse = {
+      lat: coarsenCoordinate(original.lat),
+      lng: coarsenCoordinate(original.lng),
+    };
+    expect(distanceMeters(original, coarse)).toBeLessThan(160);
+  });
+});
+
+describe('formatDistance', () => {
+  test('renders metres under a kilometre, rounded to 10 m', () => {
+    expect(formatDistance(0)).toBe('0 m');
+    expect(formatDistance(124)).toBe('120 m');
+  });
+  test('renders kilometres above a kilometre', () => {
+    expect(formatDistance(1300)).toBe('1.3 km');
+    expect(formatDistance(12_400)).toBe('12 km');
+  });
+  test('is empty for NaN / negative', () => {
+    expect(formatDistance(Number.NaN)).toBe('');
+    expect(formatDistance(-5)).toBe('');
   });
 });

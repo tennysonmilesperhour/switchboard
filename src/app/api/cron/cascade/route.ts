@@ -44,5 +44,6 @@ export async function GET(request: Request) {
     remindersSent,
     signalsDeleted: cleaned.signalsDeleted,
     momentsClosed: cleaned.momentsClosed,
+    liveLocationsDeleted: cleaned.liveLocationsDeleted,
   });
 }

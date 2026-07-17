@@ -3,8 +3,9 @@
  * the server-side geocoder can share (and unit-test) the same coordinate rules.
  */
 
-/** The overlay layers the map can toggle. */
-export type MapLayerKey = 'plans' | 'zones' | 'places';
+/** The overlay layers the map can toggle. `you` is the caller's own live pin
+ *  and `live` is other people currently sharing their location nearby. */
+export type MapLayerKey = 'plans' | 'zones' | 'places' | 'live' | 'you';
 
 export interface MapPoint {
   lat: number;
@@ -49,6 +50,65 @@ export function toMapPoint(
   return isValidCoordinate(latitude, longitude)
     ? { lat: latitude as number, lng: longitude as number }
     : null;
+}
+
+const EARTH_RADIUS_M = 6_371_000;
+
+function toRadians(degrees: number): number {
+  return (degrees * Math.PI) / 180;
+}
+
+/** In-range, finite lat/lng — unlike isValidCoordinate this does NOT reject the
+ *  (0,0) point, which is a real place for distance maths (just a suspicious
+ *  geocode result). */
+function inRange(lat: unknown, lng: unknown): boolean {
+  return (
+    typeof lat === 'number' &&
+    typeof lng === 'number' &&
+    Number.isFinite(lat) &&
+    Number.isFinite(lng) &&
+    lat >= -90 &&
+    lat <= 90 &&
+    lng >= -180 &&
+    lng <= 180
+  );
+}
+
+/**
+ * Great-circle distance in metres between two points (haversine). Mirrors the
+ * SQL used by `find_nearby_people` so the client can label "how far" without a
+ * round trip. Returns NaN if either point is out of range or non-finite.
+ */
+export function distanceMeters(a: MapPoint, b: MapPoint): number {
+  if (!inRange(a?.lat, a?.lng) || !inRange(b?.lat, b?.lng)) {
+    return Number.NaN;
+  }
+  const dLat = toRadians(b.lat - a.lat);
+  const dLng = toRadians(b.lng - a.lng);
+  const h =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(toRadians(a.lat)) * Math.cos(toRadians(b.lat)) * Math.sin(dLng / 2) ** 2;
+  return 2 * EARTH_RADIUS_M * Math.asin(Math.min(1, Math.sqrt(h)));
+}
+
+/**
+ * Round a coordinate to `decimals` places (default 3 ≈ 110 m). Used to coarsen a
+ * live location before it leaves the owner's device, so a rough neighbourhood is
+ * shared rather than an exact address. The server RPC coarsens too — this is the
+ * belt to its braces, and keeps the number we send small.
+ */
+export function coarsenCoordinate(value: number, decimals = 3): number {
+  if (!Number.isFinite(value)) return value;
+  const factor = 10 ** decimals;
+  return Math.round(value * factor) / factor;
+}
+
+/** Human-friendly distance: "120 m", "1.3 km", "12 km". Empty for NaN. */
+export function formatDistance(meters: number): string {
+  if (!Number.isFinite(meters) || meters < 0) return '';
+  if (meters < 1000) return `${Math.round(meters / 10) * 10} m`;
+  const km = meters / 1000;
+  return km < 10 ? `${km.toFixed(1)} km` : `${Math.round(km)} km`;
 }
 
 const NOMINATIM_ENDPOINT = 'https://nominatim.openstreetmap.org/search';

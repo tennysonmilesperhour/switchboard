@@ -17,6 +17,7 @@ import {
 } from '@/lib/actions/moments';
 import { formatRelative } from '@/lib/format';
 import { EXPERIENCE_PRESETS } from '@/lib/types';
+import { useCurrentLocation } from '@/lib/client/use-current-location';
 
 export interface MyMoment {
   id: string;
@@ -50,6 +51,7 @@ export function MomentsClient({
   const [hours, setHours] = useState(2);
   const [error, setError] = useState('');
   const [pending, startTransition] = useTransition();
+  const location = useCurrentLocation();
   const router = useRouter();
   const toast = useToast();
 
@@ -71,6 +73,13 @@ export function MomentsClient({
           🎪 At a conference, cruise, or festival? Check in through its{' '}
           <strong>Serendipity Zone</strong> instead.
         </Link>
+        <Link
+          href="/map"
+          className="block rounded-card border border-dashed border-line bg-cream px-4 py-3 text-sm text-ink-soft hover:border-terracotta hover:text-terracotta-deep transition-colors"
+        >
+          🧭 Want to be seen live? Turn on location on the <strong>Map</strong> to
+          appear to others sharing nearby, right now.
+        </Link>
         <p className="text-sm text-ink-soft leading-relaxed -mt-1">
           Waiting somewhere - an airport, a coffee shop, soccer practice?
           Check in and Switchboard will quietly look for someone nearby who’d
@@ -91,6 +100,41 @@ export function MomentsClient({
             <p className="text-xs text-ink-faint">
               People at the same place see the same name - be specific enough to match.
             </p>
+            <div className="flex flex-wrap items-center gap-2 pt-0.5">
+              <button
+                type="button"
+                onClick={() => void location.request()}
+                disabled={location.status === 'locating'}
+                aria-pressed={location.status === 'ready'}
+                className={`inline-flex items-center gap-1.5 rounded-pill border px-3 py-1.5 text-xs font-bold transition-colors disabled:opacity-60 ${
+                  location.status === 'ready'
+                    ? 'border-sage bg-sage-soft text-sage-deep'
+                    : 'border-line bg-card text-ink-soft hover:border-terracotta hover:text-terracotta-deep'
+                }`}
+              >
+                📍 {location.status === 'locating'
+                  ? 'Locating…'
+                  : location.status === 'ready'
+                    ? 'Pinned to the map'
+                    : 'Use my current location'}
+              </button>
+              {location.status === 'ready' && (
+                <button
+                  type="button"
+                  onClick={location.clear}
+                  className="text-xs font-semibold text-ink-faint hover:text-ink-soft"
+                >
+                  Clear
+                </button>
+              )}
+            </div>
+            {location.status === 'ready' && (
+              <p className="text-xs text-sage-deep">
+                Your check-in will show up on the Map. Others still only see you
+                after mutual curiosity.
+              </p>
+            )}
+            {location.error && <p className="text-xs text-ink-faint">{location.error}</p>}
           </div>
 
           <div className="space-y-1.5">
@@ -145,7 +189,14 @@ export function MomentsClient({
             disabled={pending}
             onClick={() =>
               startTransition(async () => {
-                const result = await checkIn(place, experiences, headline, hours);
+                const result = await checkIn(
+                  place,
+                  experiences,
+                  headline,
+                  hours,
+                  null,
+                  location.point,
+                );
                 if (!result.ok) setError(result.error ?? 'Something went wrong');
                 else router.refresh();
               })

@@ -342,6 +342,38 @@ export interface MomentInterest {
   created_at: string;
 }
 
+/** Who a live location is visible to (besides the owner, who always sees it). */
+export type LocationVisibility = 'sharers' | 'connections';
+
+/** The owner's own live-location row (`live_locations`). Owner-only under RLS. */
+export interface LiveLocation {
+  user_id: string;
+  latitude: number;
+  longitude: number;
+  accuracy_m: number | null;
+  headline: string | null;
+  emoji: string | null;
+  visibility: LocationVisibility;
+  updated_at: string;
+  expires_at: string;
+}
+
+/** One nearby sharer as returned by the `find_nearby_people` RPC. Coordinates
+ *  are already coarsened server-side; identity is only ever returned to a caller
+ *  who is themselves sharing (mutual) and whom the target permits. */
+export interface NearbyPerson {
+  user_id: string;
+  distance_m: number;
+  latitude: number;
+  longitude: number;
+  headline: string | null;
+  emoji: string | null;
+  display_name: string;
+  handle: string;
+  avatar_url: string | null;
+  interests: string[];
+}
+
 export const ACTIVITY_PRESETS = [
   { emoji: '☕', label: 'Coffee' },
   { emoji: '🥪', label: 'Lunch' },
