@@ -69,3 +69,58 @@ export function parseNominatimResult(json: unknown): MapPoint | null {
   const first = json[0] as { lat?: unknown; lon?: unknown };
   return toMapPoint(Number(first.lat), Number(first.lon));
 }
+
+/** How many autocomplete candidates we ever ask Nominatim for. */
+export const PLACE_SEARCH_LIMIT = 5;
+
+/**
+ * A single map-recognized place the host can pick from search: a short label
+ * (the venue/place name), the full formatted address, and a validated point.
+ */
+export interface PlaceResult {
+  /** Short, human-facing name — the venue or first address component. */
+  label: string;
+  /** Full formatted address, for disambiguating similarly-named places. */
+  address: string;
+  lat: number;
+  lng: number;
+}
+
+/** Build a Nominatim URL that returns up to `limit` candidate places. */
+export function nominatimSearchUrl(query: string, limit = PLACE_SEARCH_LIMIT): string {
+  const params = new URLSearchParams({
+    q: query,
+    format: 'jsonv2',
+    // Clamp so a caller can't ask Nominatim for an unbounded page.
+    limit: String(Math.min(Math.max(Math.trunc(limit) || 1, 1), 10)),
+  });
+  return `${NOMINATIM_ENDPOINT}?${params.toString()}`;
+}
+
+/**
+ * Parse a Nominatim search payload into up to `limit` plottable places, keeping
+ * only entries with a usable coordinate. `name` is Nominatim's short label for a
+ * named POI; when it's absent (e.g. a plain address) we fall back to the first
+ * component of `display_name`.
+ */
+export function parseNominatimResults(json: unknown, limit = PLACE_SEARCH_LIMIT): PlaceResult[] {
+  if (!Array.isArray(json)) return [];
+  const results: PlaceResult[] = [];
+  for (const raw of json) {
+    const item = raw as {
+      lat?: unknown;
+      lon?: unknown;
+      name?: unknown;
+      display_name?: unknown;
+    };
+    const point = toMapPoint(Number(item.lat), Number(item.lon));
+    if (!point) continue;
+    const display = typeof item.display_name === 'string' ? item.display_name.trim() : '';
+    const name = typeof item.name === 'string' ? item.name.trim() : '';
+    const label = name || display.split(',')[0]?.trim() || display;
+    if (!label) continue;
+    results.push({ label, address: display || label, lat: point.lat, lng: point.lng });
+    if (results.length >= limit) break;
+  }
+  return results;
+}
