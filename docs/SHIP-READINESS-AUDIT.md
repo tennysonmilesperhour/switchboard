@@ -106,6 +106,34 @@ accounts are removed or rotated, leaked-password protection is enabled, the
 remaining UPDATE policy checks are triaged or fixed, and the owner verifies
 Vercel/health/alerting/preview settings plus legal copy sign-off.
 
+### Production hardening update: 2026-07-17
+
+With owner confirmation, production writes were performed on project
+`cuzgighqdzypntmhxrqc`:
+
+- Applied migration `20260717140000_explicit_update_policy_checks.sql`.
+- Confirmed migration parity through `20260717140000`.
+- Deleted the five repo-seeded production fixture users
+  (`mara_host`, `leo_coffee`, `nina_music`, `omar_games`, `ivy_outdoors` at
+  `users.switchboard.local`) and verified fixture count is now `0`.
+- Verified `app_schema_version()` returns `20260717140000`.
+- Verified public UPDATE policies without explicit `WITH CHECK` are now `[]`.
+
+Additional owner-confirmed hardening moved the authenticated-callable
+`SECURITY DEFINER` function bodies out of the exposed `public` API schema and
+recreated stable public RPC names as `SECURITY INVOKER` wrappers. Applied
+`20260717192758_move_definer_bodies_private.sql`; production schema version
+reports `20260717192758`, public authenticated definer-function count is `0`,
+and the authenticated definer-function advisor bucket is empty.
+
+Leaked-password protection is still not complete. The Supabase CLI can read the
+project, but the available keychain token is rejected by the Management API, and
+this CLI version has no direct auth-config command or safe partial
+`config.toml` push for `password_hibp_enabled`. Enable it in Supabase Dashboard
+or rerun with a valid Management API token for
+`PATCH /v1/projects/cuzgighqdzypntmhxrqc/config/auth` with
+`{"password_hibp_enabled":true}`.
+
 ## What was audited
 
 - Repository structure, documentation, Git state, and current GitHub Actions runs
@@ -395,11 +423,12 @@ After critical flows have end-to-end protection:
 
 A candidate is ready for a controlled user pilot only when all of these are true:
 
-- [ ] Production and repository migration histories match exactly. As of July 17,
-      2026 production is current through `20260717081000`; this branch adds
-      pending migration `20260717120000`.
+- [x] Production and repository migration histories match exactly.
 - [x] Migration workflow fails when it cannot deploy and has a required green run.
 - [ ] Supabase security advisors have no unresolved release-critical warnings.
+      Authenticated SECURITY DEFINER warnings are addressed by
+      `20260717192758`; leaked-password protection remains the only active
+      Supabase security advisor.
 - [ ] Signed-out invite link, account creation/sign-in, join request, host approval, and RSVP pass end to end.
 - [ ] Plan creation with username, email, phone, and connected-friend recipients passes end to end.
 - [ ] Email and SMS delivery status is truthful and provider webhooks are verified.
@@ -412,7 +441,7 @@ A candidate is ready for a controlled user pilot only when all of these are true
 - [ ] Preview uses an isolated, complete backend configuration.
 - [ ] Health checks verify required schema, storage, and release-critical providers.
 - [ ] Alerts are configured and a rollback procedure has been rehearsed.
-- [ ] Production fixture accounts are absent or use operator-controlled generated credentials.
+- [x] Production fixture accounts are absent or use operator-controlled generated credentials.
 - [ ] Privacy, Terms, Community Commitment, and Copyright copy receive final owner/counsel approval.
 - [ ] Accessibility findings above are resolved and axe/Lighthouse are rerun.
 - [ ] A small invited pilot completes a monitored create-invite-respond cycle before broader release.
