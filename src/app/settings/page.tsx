@@ -339,7 +339,7 @@ export default async function SettingsPage({
 
         {isModerator && (
           <section>
-            <SectionHeader title="Moderation" hint="Review community reports" />
+            <SectionHeader title="Moderation" hint="Review reports and venue claims" />
             <Card>
               <Link
                 href="/moderation"

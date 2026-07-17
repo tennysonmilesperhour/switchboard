@@ -339,6 +339,7 @@ export default async function EventPage({
     const { data: venue } = await supabase
       .from('venues')
       .select('name, perk')
+      .eq('status', 'verified')
       .ilike('name', event.location_name.trim())
       .limit(1)
       .maybeSingle();

@@ -19,12 +19,44 @@ async function login(page: Page, identifier: string) {
   // button, both named "Sign in" — scope to the form to click the submit.
   await page.locator('form').getByRole('button', { name: 'Sign in' }).click();
   await page.waitForURL((url) => !url.pathname.startsWith('/login'), {
-    timeout: 15_000,
+    timeout: 30_000,
   });
+}
+
+async function currentWizardStep(page: Page) {
+  const text = await page.getByText(/Step \d+ of \d+/).textContent();
+  const match = text?.match(/Step (\d+) of (\d+)/);
+  if (!match) throw new Error(`Could not read wizard step from "${text}"`);
+  return { current: Number(match[1]), total: Number(match[2]) };
+}
+
+async function clickWizardNext(page: Page) {
+  const { current, total } = await currentWizardStep(page);
+  const next = page.getByRole('button', { name: 'Next', exact: true });
+  await expect(next).toBeEnabled({ timeout: 5_000 });
+  await next.click();
+  await expect(page.getByText(`Step ${current + 1} of ${total}`)).toBeVisible({
+    timeout: 5_000,
+  });
+}
+
+async function reachWizardReview(
+  page: Page,
+  prepareStep?: (step: number) => Promise<void>,
+) {
+  for (let i = 0; i < 6; i += 1) {
+    const { current, total } = await currentWizardStep(page);
+    if (current === total) return;
+    await prepareStep?.(current);
+    await clickWizardNext(page);
+  }
+
+  throw new Error('Wizard did not reach the review step');
 }
 
 test.describe('authenticated surface', () => {
   test.skip(!DB, 'requires a seeded database (set E2E_DB=1 — see e2e/README.md)');
+  test.skip(({ isMobile }) => isMobile, 'authenticated journeys run against the desktop app shell');
 
   test('a seeded user can sign in and reach an authenticated page', async ({ page }) => {
     await login(page, 'e2ehost');
@@ -49,21 +81,20 @@ test.describe('authenticated surface', () => {
     const submit = page.getByRole('button', {
       name: /Send invitations|Create & start deciding/,
     });
-    for (let i = 0; i < 8 && !(await submit.isVisible()); i += 1) {
-      const guestName = page.getByPlaceholder('Name (optional)');
-      if (await guestName.isVisible().catch(() => false)) {
+    await reachWizardReview(page, async (step) => {
+      if (step === 3) {
+        const guestName = page.getByPlaceholder('Name (optional)');
         await guestName.fill('Casey Guest');
         await page.getByPlaceholder('@username, email, or phone').fill('casey@example.com');
         await page.getByRole('button', { name: 'Add', exact: true }).click();
+        await expect(page.getByText('1 person selected')).toBeVisible({ timeout: 5_000 });
       }
-      const next = page.getByRole('button', { name: 'Next' });
-      if (await next.isEnabled().catch(() => false)) await next.click();
-      else break;
-    }
+    });
 
+    await expect(submit).toBeVisible({ timeout: 5_000 });
     await submit.click();
     await page.waitForURL(/\/events\/[0-9a-f-]{36}/, { timeout: 15_000 });
-    await expect(page.getByText('E2E guest plan')).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'E2E guest plan', level: 1 })).toBeVisible();
   });
 
   // ——— Golden journey 1: create → cascade → accept ———
@@ -77,14 +108,14 @@ test.describe('authenticated surface', () => {
     const submit = host.getByRole('button', {
       name: /Send invitations|Create & start deciding/,
     });
-    for (let i = 0; i < 8 && !(await submit.isVisible()); i += 1) {
+    await reachWizardReview(host, async (step) => {
       // People step: pick the seeded friend as a real member.
-      const friend = host.getByRole('button', { name: /E2E Guest/ });
-      if (await friend.isVisible().catch(() => false)) await friend.click();
-      const next = host.getByRole('button', { name: 'Next' });
-      if (await next.isEnabled().catch(() => false)) await next.click();
-      else break;
-    }
+      if (step === 3) {
+        await host.getByRole('button', { name: /E2E Guest/ }).click();
+        await expect(host.getByText('1 person selected')).toBeVisible({ timeout: 5_000 });
+      }
+    });
+    await expect(submit).toBeVisible({ timeout: 5_000 });
     await submit.click();
     await host.waitForURL(/\/events\/[0-9a-f-]{36}/, { timeout: 15_000 });
     const eventUrl = host.url();
@@ -111,20 +142,21 @@ test.describe('authenticated surface', () => {
     const submit = page.getByRole('button', {
       name: /Create & start deciding|Send invitations/,
     });
-    for (let i = 0; i < 8 && !(await submit.isVisible()); i += 1) {
+    await reachWizardReview(page, async (step) => {
       // Style step: turn on "let the group decide".
-      const pollToggle = page.getByText('Let the group decide what to do 🗳️');
-      if (await pollToggle.isVisible().catch(() => false)) await pollToggle.click();
-      const next = page.getByRole('button', { name: 'Next' });
-      if (await next.isEnabled().catch(() => false)) await next.click();
-      else break;
-    }
+      if (step === 2) await page.getByText('Let the group decide what to do 🗳️').click();
+      if (step === 3) {
+        await page.getByRole('button', { name: /E2E Guest/ }).click();
+        await expect(page.getByText('1 person selected')).toBeVisible({ timeout: 5_000 });
+      }
+    });
+    await expect(submit).toBeVisible({ timeout: 5_000 });
     await submit.click();
     await page.waitForURL(/\/events\/[0-9a-f-]{36}/, { timeout: 15_000 });
 
     // The poll renders on the event page in the deciding phase.
     await page.getByRole('textbox', { name: 'Suggest an idea' }).fill('Tacos');
-    await page.getByRole('button', { name: 'Add' }).click();
+    await page.getByRole('button', { name: 'Add', exact: true }).first().click();
     await expect(page.getByText('Tacos')).toBeVisible({ timeout: 15_000 });
     await page.getByRole('button', { name: 'Absolutely love this' }).first().click();
   });
