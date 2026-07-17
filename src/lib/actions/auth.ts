@@ -28,6 +28,10 @@ export interface AuthActionResult {
   username?: string;
   identifier?: string;
   requiresEmailVerification?: boolean;
+  /** True when account creation also established a session (username signups). */
+  signedIn?: boolean;
+  /** Where the client should navigate once auto-signed-in. */
+  redirectTo?: string;
 }
 
 function authError(message: string): AuthActionResult {
@@ -289,6 +293,32 @@ export async function createPasswordAccount(
         await admin.auth.admin.deleteUser(userId);
         return authError('The confirmation email could not be sent. No account was created.');
       }
+    }
+
+    // Username accounts are confirmed on creation (`email_confirm: true`), so
+    // sign them in right here — creating the account *is* the first sign-in, no
+    // separate step. Email accounts can't have a session until they click the
+    // verification link, so those still fall through to the "check your inbox"
+    // card. `createClient()` is cookie-bound in a Server Action, so this writes
+    // the session cookies for the very next request.
+    if (!usesRealEmail) {
+      const supabase = await createClient();
+      const { error: sessionError } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
+      if (!sessionError) {
+        return {
+          ok: true,
+          username,
+          identifier: username,
+          requiresEmailVerification: false,
+          signedIn: true,
+          redirectTo: afterOnboarding,
+        };
+      }
+      // If auto-sign-in somehow fails, don't lose the finished account — fall
+      // through to the manual sign-in card so they can still get in.
     }
 
     return {

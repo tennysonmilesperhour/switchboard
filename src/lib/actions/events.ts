@@ -26,6 +26,8 @@ import { looksLikePhoneNumber, sendSmsMessages } from '@/lib/server/sms';
 import { normalizePhoneNumber } from '@/lib/phone';
 import { suggestWindow } from '@/lib/engine/windows';
 import { parseInviteEntries, type ParsedInviteEntry } from '@/lib/invite-entry';
+import { isValidCoordinate } from '@/lib/geo';
+import { geocode } from '@/lib/server/geocode';
 
 export interface WizardInvitee {
   /** Profile id for members; null for guests. */
@@ -41,6 +43,10 @@ export interface CreateEventInput {
   description: string | null;
   locationName: string | null;
   locationAddress: string | null;
+  /** Coordinate for the location, when the host picked a map-recognized place.
+   *  Null falls back to a best-effort server-side geocode of the free text. */
+  latitude: number | null;
+  longitude: number | null;
   startsAt: string | null;
   endsAt: string | null;
   /** Host's IANA zone (browser-resolved), so server renders show the intended
@@ -65,8 +71,14 @@ export interface CreateEventInput {
   /** How often the plan repeats; day-count only when recurrence is 'custom'. */
   recurrence?: RecurrenceKind;
   recurrenceIntervalDays?: number | null;
-  /** Host-defined RSVP questions, in order. */
-  questions?: Array<{ prompt: string; required: boolean }>;
+  /** Host-defined RSVP questions, in order. A 'choice' question carries the
+   *  selectable `options`; 'text' (the default) is free response. */
+  questions?: Array<{
+    prompt: string;
+    required: boolean;
+    kind?: 'text' | 'choice';
+    options?: string[];
+  }>;
   /** Standing ritual this plan fulfills, if any. */
   ritualId?: string | null;
   /** Already in host-preferred order. */
@@ -151,6 +163,39 @@ async function resolveInvitees(
   );
 }
 
+/**
+ * Give a freshly-created plan a map coordinate so it appears on /map right away.
+ * Prefers the point the host picked from place search; otherwise best-effort
+ * geocodes the free-text location. Runs on the host's own event through the user
+ * client — the events UPDATE policy already lets a host set latitude/longitude
+ * (this is exactly what the map's "Locate my plans" control does), so no
+ * service-role write. Purely additive: any miss just leaves the plan un-located,
+ * and "Locate my plans" can still fill it in later.
+ */
+async function persistEventCoordinates(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  eventId: string,
+  input: CreateEventInput,
+): Promise<void> {
+  let point: { lat: number; lng: number } | null = null;
+  if (isValidCoordinate(input.latitude, input.longitude)) {
+    point = { lat: input.latitude as number, lng: input.longitude as number };
+  } else if (input.locationName?.trim()) {
+    const query = [input.locationName, input.locationAddress]
+      .map((part) => part?.trim())
+      .filter(Boolean)
+      .join(', ');
+    point = await geocode(query);
+  }
+  if (!point) return;
+
+  const { error } = await supabase
+    .from('events')
+    .update({ latitude: point.lat, longitude: point.lng })
+    .eq('id', eventId);
+  if (error) await reportOperationalError('event-locate', error, { eventId });
+}
+
 export async function createEvent(input: CreateEventInput): Promise<CreateEventResult> {
   const { supabase, user } = await requireUserOrRedirect();
 
@@ -204,6 +249,9 @@ export async function createEvent(input: CreateEventInput): Promise<CreateEventR
       await reportOperationalError('event-initial-delivery', cascadeError, { eventId });
     }
   }
+
+  // Put the plan on the map. After invite delivery so a geocode can't delay it.
+  await persistEventCoordinates(supabase, eventId, input);
 
   await capture(user.id, ANALYTICS_EVENTS.planCreated, {
     invite_mode: input.inviteMode,
@@ -1041,7 +1089,7 @@ async function cloneEventForReuse(
 
   const { data: questions } = await supabase
     .from('event_questions')
-    .select('prompt, required, position')
+    .select('prompt, required, position, kind, options')
     .eq('event_id', sourceId);
   if (questions && questions.length > 0) {
     await admin.from('event_questions').insert(

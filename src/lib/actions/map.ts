@@ -3,13 +3,42 @@
 import { revalidatePath } from 'next/cache';
 import { requireUser } from '@/lib/server/require-user';
 import { checkRateLimit } from '@/lib/server/rate-limit';
-import { geocode } from '@/lib/server/geocode';
+import { geocode, searchPlaces as nominatimSearch } from '@/lib/server/geocode';
+import type { PlaceResult } from '@/lib/geo';
 
 export interface LocateResult {
   ok: boolean;
   located?: number; // rows given a coordinate this run
   remaining?: number; // rows still lacking one afterward
   error?: string;
+}
+
+export interface PlaceSearchResult {
+  ok: boolean;
+  results?: PlaceResult[];
+  error?: string;
+}
+
+/**
+ * Autocomplete for the "Where?" field: return a few map-recognized places for
+ * what the host has typed so far, each carrying the coordinate we'll store so
+ * the plan lands on the map. Signed-in + rate-limited, since it fires as the
+ * host types (the client debounces and only queries 3+ characters). An empty
+ * result list — no matches, or the query was too short — is a normal `ok`.
+ */
+export async function searchPlaces(query: string): Promise<PlaceSearchResult> {
+  const auth = await requireUser();
+  if (!auth.ok) return { ok: false, error: auth.error };
+  const { user } = auth;
+
+  const trimmed = query.trim();
+  if (trimmed.length < 3) return { ok: true, results: [] };
+
+  if (!(await checkRateLimit(`place-search:${user.id}`, 60, 60))) {
+    return { ok: false, error: 'Too many searches. Try again in a moment.' };
+  }
+
+  return { ok: true, results: await nominatimSearch(trimmed) };
 }
 
 // Bound latency and respect Nominatim's ~1 req/sec policy: geocode at most this

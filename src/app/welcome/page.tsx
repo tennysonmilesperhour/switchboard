@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import type { Metadata } from 'next';
+import { safeNextPath } from '@/lib/security';
 
 export const metadata: Metadata = {
   title: 'Switchboard - plans without pressure',
@@ -41,9 +42,14 @@ const FEATURES = [
 export default async function WelcomePage({
   searchParams,
 }: {
-  searchParams: Promise<{ account?: string }>;
+  searchParams: Promise<{ account?: string; next?: string }>;
 }) {
-  const { account } = await searchParams;
+  const { account, next } = await searchParams;
+  // A deep link (e.g. a shared /events/… link) arrives here as ?next when a
+  // signed-out visitor is bounced off a protected route. Carry it onto the auth
+  // links so they land back on it once signed in. Validated to a same-site path.
+  const nextPath = safeNextPath(next, '');
+  const loginHref = nextPath ? `/login?next=${encodeURIComponent(nextPath)}` : '/login';
   return (
     <div className="mx-auto max-w-lg min-h-dvh flex flex-col px-6">
       <header className="flex items-center justify-between py-6">
@@ -51,7 +57,7 @@ export default async function WelcomePage({
           switchboard
         </span>
         <Link
-          href="/login"
+          href={loginHref}
           className="inline-flex min-h-11 items-center text-sm font-bold text-ink hover:text-terracotta"
         >
           Sign in
@@ -87,13 +93,13 @@ export default async function WelcomePage({
         </p>
         <div className="mt-8 flex flex-col gap-3">
           <Link
-            href="/login"
+            href={loginHref}
             className="inline-flex items-center justify-center rounded-btn bg-brand-gradient px-7 py-4 text-white font-bold shadow-lift hover:brightness-105 transition"
           >
             Create account
           </Link>
           <Link
-            href="/login"
+            href={loginHref}
             className="inline-flex items-center justify-center rounded-btn border border-line bg-card px-7 py-4 font-bold text-ink hover:border-terracotta hover:text-terracotta transition"
           >
             Sign in
@@ -132,7 +138,7 @@ export default async function WelcomePage({
           to find one another.
         </p>
         <Link
-          href="/login"
+          href={loginHref}
           className="mt-8 inline-flex items-center rounded-btn bg-ink px-7 py-4 text-paper font-bold hover:opacity-90 transition-opacity"
         >
           Join Switchboard
