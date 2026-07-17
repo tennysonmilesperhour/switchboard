@@ -48,6 +48,64 @@ secrets are configured, the new CI jobs pass, provider staging delivery and
 webhook/retry behavior are completed, and the external release-gate items are
 verified. This update records local implementation, not production activation.
 
+### Closeout update: 2026-07-17
+
+This pass worked from `origin/main` and added the remaining source-side ship
+readiness wiring:
+
+- Authenticated Playwright now has a dedicated GitHub Actions job that boots a
+  local Supabase stack, exports non-production fixture env, seeds deterministic
+  users, sets `E2E_DB=1`, and runs `e2e/authed.spec.ts`.
+- `e2e/seed.mjs` now refuses production, sets seeded profiles
+  `discoverable: true`, supports generated `E2E_TEST_PASSWORD`, and avoids
+  printing fixture passwords in CI.
+- Event creation now exposes and persists optional end time, poll suggestion
+  deadline, poll voting deadline, and reminder toggles. Migration
+  `20260717120000_event_wizard_completion.sql` updates `create_event_atomic`
+  and bumps `app_schema_version()` to `20260717120000`; `/api/health` now
+  expects that version.
+- The copyright page now lists a real DMCA/report contact address:
+  `hello@tennysonmiles.com`.
+
+Production read-only checks on July 17, 2026:
+
+- `supabase migration list --linked` shows production in parity with the repo
+  through `20260717081000`. The only pending migration is the new
+  `20260717120000_event_wizard_completion.sql` from this branch.
+- Supabase advisors currently report 34 security warnings and 106 performance
+  warnings. Security is 33 authenticated SECURITY DEFINER warnings plus leaked
+  password protection still disabled.
+- Targeted database probes show no SECURITY DEFINER functions executable by
+  `anon`, `normalize_phone_number` has `search_path=""`, `media-private` exists
+  and is non-public, and storage object UPDATE policies include `WITH CHECK`.
+- Targeted database probes also show nine public UPDATE policies still lacking
+  explicit `WITH CHECK`: `capsule_entries.capsule_update`,
+  `event_questions.event_questions_update`, `invite_answers.invite_answers_update`,
+  `poll_votes.poll_votes_own_update`, `polls.polls_update`,
+  `profiles.profiles_update`, `room_items.room_items_update`,
+  `venues.venues_update`, and `zones.zones_update`.
+- Five repo-seeded production fixture users still exist. They must be removed
+  or rotated to operator-controlled generated credentials before pilot.
+
+Checks blocked by missing operator/dashboard access in this session:
+
+- Vercel CLI access to the linked project failed, so production and preview env
+  isolation, `OBSERVABILITY_WEBHOOK_URL`, and provider/dashboard settings could
+  not be verified from Vercel.
+- The local `CRON_SECRET` did not authorize the full production `/api/health`
+  matrix, so the gated `database/schema/storage/services/config` health payload
+  still needs an operator bearer from the active production deployment.
+- Docker was not running locally, so `supabase test db` and the new authed E2E
+  job could not be exercised on this workstation.
+
+Current recommendation remains **NO-GO for public launch** and **NO-GO for an
+unmonitored pilot**. A tightly monitored owner-run pilot can proceed only after:
+the new migration is applied via the normal migration workflow, the new
+authenticated E2E job passes in GitHub and is required, production fixture
+accounts are removed or rotated, leaked-password protection is enabled, the
+remaining UPDATE policy checks are triaged or fixed, and the owner verifies
+Vercel/health/alerting/preview settings plus legal copy sign-off.
+
 ## What was audited
 
 - Repository structure, documentation, Git state, and current GitHub Actions runs
@@ -337,8 +395,10 @@ After critical flows have end-to-end protection:
 
 A candidate is ready for a controlled user pilot only when all of these are true:
 
-- [ ] Production and repository migration histories match exactly.
-- [ ] Migration workflow fails when it cannot deploy and has a required green run.
+- [ ] Production and repository migration histories match exactly. As of July 17,
+      2026 production is current through `20260717081000`; this branch adds
+      pending migration `20260717120000`.
+- [x] Migration workflow fails when it cannot deploy and has a required green run.
 - [ ] Supabase security advisors have no unresolved release-critical warnings.
 - [ ] Signed-out invite link, account creation/sign-in, join request, host approval, and RSVP pass end to end.
 - [ ] Plan creation with username, email, phone, and connected-friend recipients passes end to end.
@@ -346,7 +406,9 @@ A candidate is ready for a controlled user pilot only when all of these are true
 - [ ] Contact-based matching uses only verified identifiers.
 - [ ] Image upload and voice-note upload/playback pass on mobile Safari and Chrome.
 - [ ] Bad password, disabled OAuth, provider outage, and upload failure all give actionable UI feedback.
-- [ ] Authenticated Playwright tests run in CI and are required.
+- [ ] Authenticated Playwright tests run in CI and are required. Source wiring is
+      in place on this branch; GitHub run and required-check protection still
+      need confirmation after PR.
 - [ ] Preview uses an isolated, complete backend configuration.
 - [ ] Health checks verify required schema, storage, and release-critical providers.
 - [ ] Alerts are configured and a rollback procedure has been rehearsed.

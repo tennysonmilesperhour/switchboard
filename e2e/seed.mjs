@@ -17,11 +17,30 @@ if (!url || !serviceKey) {
   process.exit(1);
 }
 
+const projectRef = (() => {
+  try {
+    return new URL(url).hostname.split('.')[0] || null;
+  } catch {
+    return null;
+  }
+})();
+const isLocal = /localhost|127\.0\.0\.1|::1/.test(url);
+if (!isLocal && process.env.E2E_ALLOW_NONLOCAL !== '1') {
+  console.error(
+    `Refusing to seed authenticated E2E fixtures against a non-local Supabase (${url}).`,
+  );
+  process.exit(1);
+}
+if (projectRef === 'cuzgighqdzypntmhxrqc') {
+  console.error('Refusing to seed authenticated E2E fixtures into production.');
+  process.exit(1);
+}
+
 const admin = createClient(url, serviceKey, {
   auth: { autoRefreshToken: false, persistSession: false },
 });
 
-const PASSWORD = 'testpassword123';
+const PASSWORD = process.env.E2E_TEST_PASSWORD ?? 'testpassword123';
 const USERS = [
   { username: 'e2ehost', name: 'E2E Host' },
   { username: 'e2eguest', name: 'E2E Guest' },
@@ -51,7 +70,13 @@ async function upsertUser({ username, name }) {
   const id = data.user.id;
 
   const { error: profileError } = await admin.from('profiles').upsert(
-    { id, display_name: name, handle: username, onboarded: true },
+    {
+      id,
+      display_name: name,
+      handle: username,
+      onboarded: true,
+      discoverable: true,
+    },
     { onConflict: 'id' },
   );
   if (profileError) throw profileError;
@@ -77,8 +102,10 @@ async function main() {
       { onConflict: 'requester_id,addressee_id' },
     );
 
-  console.log('\nLogin with these (identifier / password):');
-  for (const u of USERS) console.log(`  ${u.username} / ${PASSWORD}`);
+  if (!process.env.CI) {
+    console.log('\nLogin with these (identifier / password):');
+    for (const u of USERS) console.log(`  ${u.username} / ${PASSWORD}`);
+  }
 }
 
 main().catch((error) => {

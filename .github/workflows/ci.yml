@@ -39,5 +39,62 @@ jobs:
       - name: Install Playwright browsers
         run: npx playwright install --with-deps
 
+      - name: Clean build output before smoke test
+        run: rm -rf .next
+
       - name: Smoke test
         run: npx playwright test
+
+  authenticated-e2e:
+    name: Authenticated E2E
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v5
+
+      - name: Set up Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Set up Supabase CLI
+        uses: supabase/setup-cli@v1
+        with:
+          version: 2.109.1
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+
+      - name: Write a minimal local Supabase config
+        run: |
+          [ -f supabase/config.toml ] || printf 'project_id = "switchboard"\n' > supabase/config.toml
+
+      - name: Start local Supabase
+        run: supabase start
+
+      - name: Export local Supabase env
+        run: |
+          supabase status -o env \
+            --override-name api.url=NEXT_PUBLIC_SUPABASE_URL \
+            --override-name auth.anon_key=NEXT_PUBLIC_SUPABASE_ANON_KEY \
+            --override-name auth.service_role_key=SUPABASE_SERVICE_ROLE_KEY \
+            >> "$GITHUB_ENV"
+          password="$(openssl rand -base64 24)"
+          echo "::add-mask::$password"
+          echo "E2E_TEST_PASSWORD=$password" >> "$GITHUB_ENV"
+          echo "E2E_DB=1" >> "$GITHUB_ENV"
+          echo "NEXT_PUBLIC_APP_URL=http://localhost:3000" >> "$GITHUB_ENV"
+
+      - name: Seed authenticated E2E fixtures
+        run: node e2e/seed.mjs
+
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps
+
+      - name: Run authenticated journey tests
+        run: npx playwright test e2e/authed.spec.ts

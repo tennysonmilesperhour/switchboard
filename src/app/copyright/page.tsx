@@ -27,7 +27,11 @@ export default function CopyrightPage() {
           <h2 className="text-xl font-extrabold text-ink">Reports</h2>
           <p className="mt-3">
             If you believe content on Switchboard infringes your rights, contact
-            the operator with the content location, your contact information, and
+            the operator at{' '}
+            <a className="font-bold text-terracotta" href="mailto:hello@tennysonmiles.com">
+              hello@tennysonmiles.com
+            </a>{' '}
+            with the content location, your contact information, and
             a short explanation of the rights involved. We may remove or restrict
             content while reviewing a report.
           </p>
