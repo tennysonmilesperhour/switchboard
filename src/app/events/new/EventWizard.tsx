@@ -25,6 +25,7 @@ import { normalizePhoneNumber } from '@/lib/phone';
 import { DescribePlan } from '@/components/events/DescribePlan';
 import { HostSuggestions } from '@/components/events/HostSuggestions';
 import { ImportFromLink } from '@/components/events/ImportFromLink';
+import { PlaceSearchInput } from '@/components/events/PlaceSearchInput';
 import type { PlanDraft } from '@/lib/actions/plan';
 import type { ImportResult } from '@/lib/actions/import';
 import type { InviteMode, EventTheme } from '@/lib/types';
@@ -191,6 +192,10 @@ export function EventWizard({
   const [title, setTitle] = useState(initialTitle);
   const [description, setDescription] = useState(initialDescription);
   const [locationName, setLocationName] = useState('');
+  // Coordinate captured when the host picks a map-recognized place, so the plan
+  // lands on the map without a separate "locate" step. Null for free text (the
+  // server still best-effort geocodes it on create).
+  const [locationPoint, setLocationPoint] = useState<{ lat: number; lng: number } | null>(null);
   const [date, setDate] = useState('');
   const [time, setTime] = useState('');
   const [endTime, setEndTime] = useState('');
@@ -333,7 +338,10 @@ export function EventWizard({
     setTitle(draft.title);
     if (draft.date) setDate(draft.date);
     if (draft.time) setTime(draft.time);
-    if (draft.locationName) setLocationName(draft.locationName);
+    if (draft.locationName) {
+      setLocationName(draft.locationName);
+      setLocationPoint(null);
+    }
     if (draft.capacity) setCapacity(String(draft.capacity));
     setInviteMode(draft.mode);
     if (draft.invitees.length > 0) {
@@ -354,7 +362,10 @@ export function EventWizard({
     if (result.description) setDescription(result.description);
     if (result.date) setDate(result.date);
     if (result.time) setTime(result.time);
-    if (result.locationName) setLocationName(result.locationName);
+    if (result.locationName) {
+      setLocationName(result.locationName);
+      setLocationPoint(null);
+    }
   }
 
   function toggleGroup(memberIds: string[]) {
@@ -643,6 +654,8 @@ export function EventWizard({
         description: description.trim() || null,
         locationName: locationName.trim() || null,
         locationAddress: null,
+        latitude: locationPoint?.lat ?? null,
+        longitude: locationPoint?.lng ?? null,
         startsAt,
         endsAt,
         // The zone `startsAt` was computed in, so server-side renders (link
@@ -850,9 +863,12 @@ export function EventWizard({
             <label htmlFor="location" className={FIELD_LABEL}>
               Where? <span className="font-normal text-ink-faint">(optional)</span>
             </label>
-            <input
-              id="location" value={locationName}
-              onChange={(e) => setLocationName(e.target.value)}
+            <PlaceSearchInput
+              id="location"
+              value={locationName}
+              onChange={setLocationName}
+              onPointChange={setLocationPoint}
+              pinned={locationPoint !== null}
               placeholder="Café Luna, my place, Miller Park…"
               className={FIELD}
             />
