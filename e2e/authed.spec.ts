@@ -32,7 +32,7 @@ async function currentWizardStep(page: Page) {
 
 async function clickWizardNext(page: Page) {
   const { current, total } = await currentWizardStep(page);
-  const next = page.getByRole('button', { name: 'Next' });
+  const next = page.getByRole('button', { name: 'Next', exact: true });
   await expect(next).toBeEnabled({ timeout: 5_000 });
   await next.click();
   await expect(page.getByText(`Step ${current + 1} of ${total}`)).toBeVisible({
@@ -56,6 +56,7 @@ async function reachWizardReview(
 
 test.describe('authenticated surface', () => {
   test.skip(!DB, 'requires a seeded database (set E2E_DB=1 — see e2e/README.md)');
+  test.skip(({ isMobile }) => isMobile, 'authenticated journeys run against the desktop app shell');
 
   test('a seeded user can sign in and reach an authenticated page', async ({ page }) => {
     await login(page, 'e2ehost');
