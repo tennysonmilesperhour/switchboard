@@ -119,6 +119,13 @@ With owner confirmation, production writes were performed on project
 - Verified `app_schema_version()` returns `20260717140000`.
 - Verified public UPDATE policies without explicit `WITH CHECK` are now `[]`.
 
+Additional owner-confirmed hardening moved the authenticated-callable
+`SECURITY DEFINER` function bodies out of the exposed `public` API schema and
+recreated stable public RPC names as `SECURITY INVOKER` wrappers. Applied
+`20260717192758_move_definer_bodies_private.sql`; production schema version
+reports `20260717192758`, public authenticated definer-function count is `0`,
+and the authenticated definer-function advisor bucket is empty.
+
 Leaked-password protection is still not complete. The Supabase CLI can read the
 project, but the available keychain token is rejected by the Management API, and
 this CLI version has no direct auth-config command or safe partial
@@ -419,9 +426,9 @@ A candidate is ready for a controlled user pilot only when all of these are true
 - [x] Production and repository migration histories match exactly.
 - [x] Migration workflow fails when it cannot deploy and has a required green run.
 - [ ] Supabase security advisors have no unresolved release-critical warnings.
-      Leaked-password protection remains disabled; authenticated
-      SECURITY DEFINER advisor warnings remain to be reviewed/accepted or
-      narrowed.
+      Authenticated SECURITY DEFINER warnings are addressed by
+      `20260717192758`; leaked-password protection remains the only active
+      Supabase security advisor.
 - [ ] Signed-out invite link, account creation/sign-in, join request, host approval, and RSVP pass end to end.
 - [ ] Plan creation with username, email, phone, and connected-friend recipients passes end to end.
 - [ ] Email and SMS delivery status is truthful and provider webhooks are verified.
