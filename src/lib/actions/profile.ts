@@ -3,10 +3,12 @@
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import { createClient } from '@/lib/supabase/server';
+import { createAdminClient, hasAdminCredentials } from '@/lib/supabase/admin';
 import { requireUser, requireUserOrRedirect } from '@/lib/server/require-user';
 import { isOwnPublicStorageUrl } from '@/lib/server/media';
 import { SOCIAL_BY_ID } from '@/lib/socials';
 import { USERNAME_PATTERN, isEmail } from '@/lib/auth-identity';
+import { normalizePhoneNumber } from '@/lib/phone';
 import { safeNextPath } from '@/lib/security';
 import { reportOperationalError } from '@/lib/server/observability';
 import { LEGAL_VERSION } from '@/lib/legal';
@@ -96,6 +98,10 @@ export async function updateProfileDetails(
   if (email && !isEmail(email)) {
     return { ok: false, error: 'That email address looks off.' };
   }
+  const phone = nullableText(formData.get('contact_phone'), 40);
+  if (phone && !normalizePhoneNumber(phone)) {
+    return { ok: false, error: 'Use a phone number with a country code.' };
+  }
 
   // Media URLs must live in our own Supabase storage buckets.
   const avatarUrl = nullableText(formData.get('avatar_url'), 500);
@@ -120,7 +126,7 @@ export async function updateProfileDetails(
       links: parseLinks(String(formData.get('links') ?? '[]')),
       socials: parseSocials(String(formData.get('socials') ?? '[]')),
       contact_email: email,
-      contact_phone: nullableText(formData.get('contact_phone'), 40),
+      contact_phone: phone,
       contact_public: formData.get('contact_public') === 'on',
     })
     .eq('id', user.id);
@@ -150,6 +156,13 @@ export async function updateProfileDetails(
 
 export async function completeOnboarding(formData: FormData): Promise<void> {
   const { supabase, user } = await requireUserOrRedirect();
+  const nextPath = safeNextPath(String(formData.get('next') ?? ''), '/');
+  const afterOnboarding = nextPath.startsWith('/onboarding') ? '/' : nextPath;
+  const onboardingError = (reason: string): never => {
+    const params = new URLSearchParams({ error: reason });
+    if (afterOnboarding !== '/') params.set('next', afterOnboarding);
+    redirect(`/onboarding?${params.toString()}`);
+  };
 
   const displayName = String(formData.get('display_name') ?? '').trim();
   const handle = String(formData.get('handle') ?? '')
@@ -160,28 +173,35 @@ export async function completeOnboarding(formData: FormData): Promise<void> {
   const acceptedTerms = formData.get('terms_agreement') === 'on';
   const acceptedCovenant = formData.get('community_agreement') === 'on';
 
-  if (!displayName) redirect('/onboarding?error=name');
-  if (!HANDLE_PATTERN.test(handle)) redirect('/onboarding?error=handle');
-  if (!acceptedTerms || !acceptedCovenant) redirect('/onboarding?error=agreement');
+  if (!displayName) onboardingError('name');
+  if (!HANDLE_PATTERN.test(handle)) onboardingError('handle');
+  if (!acceptedTerms || !acceptedCovenant) onboardingError('agreement');
 
-  const { error: profileError } = await supabase
+  const profileUpdate = {
+    display_name: displayName,
+    handle,
+    interests,
+    down_to: downTo,
+    timezone: String(formData.get('timezone') || 'UTC'),
+    onboarded: true,
+    legal_terms_version: LEGAL_VERSION,
+    legal_terms_accepted_at: new Date().toISOString(),
+    community_covenant_accepted_at: new Date().toISOString(),
+  };
+
+  // The authenticated user has already been verified by requireUserOrRedirect.
+  // Scope the service-role write to that exact id so grant drift cannot strand
+  // a new account halfway through onboarding.
+  const profileWriter = hasAdminCredentials() ? createAdminClient() : supabase;
+  const { data: savedProfile, error: profileError } = await profileWriter
     .from('profiles')
-    .update({
-      display_name: displayName,
-      handle,
-      interests,
-      down_to: downTo,
-      timezone: String(formData.get('timezone') || 'UTC'),
-      onboarded: true,
-      legal_terms_version: LEGAL_VERSION,
-      legal_terms_accepted_at: new Date().toISOString(),
-      community_covenant_accepted_at: new Date().toISOString(),
-    })
-    .eq('id', user.id);
+    .update(profileUpdate)
+    .eq('id', user.id)
+    .select('onboarded')
+    .single<{ onboarded: boolean }>();
 
-  if (profileError) {
-    const reason = profileError.code === '23505' ? 'handle_taken' : 'save';
-    redirect(`/onboarding?error=${reason}`);
+  if (profileError || !savedProfile?.onboarded) {
+    onboardingError(profileError?.code === '23505' ? 'handle_taken' : 'save');
   }
 
   // Starter circles - reused across signals, visibility, and invite lists.
@@ -212,7 +232,7 @@ export async function completeOnboarding(formData: FormData): Promise<void> {
 
   // Return to the destination the user was originally headed for (e.g. an invite
   // deep link that funnelled them through onboarding), validated to same-site.
-  redirect(safeNextPath(String(formData.get('next') ?? ''), '/'));
+  redirect(afterOnboarding);
 }
 
 export async function updateInterests(formData: FormData): Promise<void> {

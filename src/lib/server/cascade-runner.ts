@@ -4,13 +4,18 @@ import {
   type CascadeConfig,
   type CascadeInvite,
 } from '@/lib/engine/cascade';
-import { sendPushToUsers } from '@/lib/server/notify';
-import { sendEmails, looksLikeEmail, appUrl } from '@/lib/server/email';
+import { notifyUsers } from '@/lib/server/notify';
+import {
+  looksLikeEmail,
+  appUrl,
+  sendEmailWithResult,
+  type DeliveryStatus,
+} from '@/lib/server/email';
 import { formatDateTime } from '@/lib/format';
 import {
   guestInviteSmsText,
   looksLikePhoneNumber,
-  sendSmsMessages,
+  sendSmsWithResult,
 } from '@/lib/server/sms';
 import type { Invite, SwitchboardEvent } from '@/lib/types';
 
@@ -33,55 +38,121 @@ function toEngineConfig(event: SwitchboardEvent): CascadeConfig {
   };
 }
 
+export interface InvitationDeliverySummary {
+  sent: number;
+  notConfigured: number;
+  failed: number;
+  invalidRecipient: number;
+  manual: number;
+}
+
+interface DeliveryAttemptRow {
+  invite_id: string;
+  channel: 'in_app' | 'email' | 'sms';
+  status: DeliveryStatus;
+  provider: string;
+  provider_message_id: string | null;
+  error_code: string | null;
+}
+
+function emptyDeliverySummary(): InvitationDeliverySummary {
+  return { sent: 0, notConfigured: 0, failed: 0, invalidRecipient: 0, manual: 0 };
+}
+
+function countDelivery(summary: InvitationDeliverySummary, status: DeliveryStatus): void {
+  if (status === 'sent') summary.sent += 1;
+  else if (status === 'not_configured') summary.notConfigured += 1;
+  else if (status === 'invalid_recipient') summary.invalidRecipient += 1;
+  else summary.failed += 1;
+}
+
 async function deliverInvitations(
   event: SwitchboardEvent,
   invites: Invite[],
   sentIds: Set<string>,
-): Promise<void> {
-  const notifyUsers = invites
-    .filter((invite) => sentIds.has(invite.id) && invite.invitee_id)
-    .map((invite) => invite.invitee_id as string);
-  if (notifyUsers.length > 0) {
-    await sendPushToUsers(notifyUsers, {
-      title: 'You’re invited ✉️',
-      body: `${event.title} - you have a little while to respond.`,
-      url: `/events/${event.id}`,
-    });
+): Promise<InvitationDeliverySummary> {
+  const summary = emptyDeliverySummary();
+  const attempts: DeliveryAttemptRow[] = [];
+  const current = invites.filter((invite) => sentIds.has(invite.id));
+
+  await Promise.all(current.map(async (invite) => {
+    let hasChannel = false;
+
+    if (invite.invitee_id) {
+      hasChannel = true;
+      const result = await notifyUsers([invite.invitee_id], {
+        kind: 'event_invite',
+        title: 'You are invited',
+        body: `${event.title} - you have a little while to respond.`,
+        url: `/events/${event.id}`,
+      });
+      const status: DeliveryStatus = result.recorded ? 'sent' : 'failed';
+      countDelivery(summary, status);
+      attempts.push({
+        invite_id: invite.id,
+        channel: 'in_app',
+        status,
+        provider: 'switchboard',
+        provider_message_id: null,
+        error_code: result.recorded ? null : 'notification_insert_failed',
+      });
+    }
+
+    if (invite.guest_token && looksLikeEmail(invite.guest_contact)) {
+      hasChannel = true;
+      const result = await sendEmailWithResult({
+        to: invite.guest_contact,
+        subject: `You are invited: ${event.title}`,
+        text: invite.invitee_id
+          ? memberInviteText(event)
+          : guestInviteText(event, invite.guest_name, invite.guest_token),
+      });
+      countDelivery(summary, result.status);
+      attempts.push({
+        invite_id: invite.id,
+        channel: 'email',
+        status: result.status,
+        provider: result.provider,
+        provider_message_id: result.providerMessageId ?? null,
+        error_code: result.errorCode ?? null,
+      });
+    }
+
+    if (invite.guest_token && looksLikePhoneNumber(invite.guest_contact)) {
+      hasChannel = true;
+      const result = await sendSmsWithResult({
+        to: invite.guest_contact,
+        body: invite.invitee_id
+          ? `You are invited to ${event.title} on Switchboard: ${appUrl(`/events/${event.id}`)}`
+          : guestInviteSmsText(event.title, invite.guest_token),
+      });
+      countDelivery(summary, result.status);
+      attempts.push({
+        invite_id: invite.id,
+        channel: 'sms',
+        status: result.status,
+        provider: result.provider,
+        provider_message_id: result.providerMessageId ?? null,
+        error_code: result.errorCode ?? null,
+      });
+    }
+
+    if (!hasChannel) summary.manual += 1;
+  }));
+
+  if (attempts.length > 0) {
+    const admin = createAdminClient();
+    const { error } = await admin.from('invite_delivery_attempts').insert(attempts);
+    if (error) console.error('[invite-delivery:record]', error.message);
   }
 
-  const guestEmails = invites
-    .filter(
-      (invite) =>
-        sentIds.has(invite.id) &&
-        !invite.invitee_id &&
-        invite.guest_token &&
-        looksLikeEmail(invite.guest_contact),
-    )
-    .map((invite) => ({
-      to: invite.guest_contact as string,
-      subject: `You’re invited: ${event.title}`,
-      text: guestInviteText(event, invite.guest_name, invite.guest_token as string),
-    }));
-  if (guestEmails.length > 0) await sendEmails(guestEmails);
-
-  const smsInvites = invites
-    .filter(
-      (invite) =>
-        sentIds.has(invite.id) &&
-        invite.guest_token &&
-        looksLikePhoneNumber(invite.guest_contact),
-    )
-    .map((invite) => ({
-      to: invite.guest_contact as string,
-      body: invite.invitee_id
-        ? `You are invited to ${event.title} on Switchboard: ${appUrl(`/events/${event.id}`)}`
-        : guestInviteSmsText(event.title, invite.guest_token as string),
-    }));
-  if (smsInvites.length > 0) await sendSmsMessages(smsInvites);
+  return summary;
 }
 
 /** Deliver the already-live first wave created by the atomic publish RPC. */
-export async function notifyCurrentInviteWave(eventId: string): Promise<void> {
+export async function notifyCurrentInviteWave(
+  eventId: string,
+): Promise<InvitationDeliverySummary> {
   const admin = createAdminClient();
   const [{ data: event }, { data: invites }] = await Promise.all([
     admin.from('events').select('*').eq('id', eventId).single<SwitchboardEvent>(),
@@ -92,15 +163,17 @@ export async function notifyCurrentInviteWave(eventId: string): Promise<void> {
       .eq('status', 'sent')
       .returns<Invite[]>(),
   ]);
-  if (!event || !invites?.length) return;
-  await deliverInvitations(event, invites, new Set(invites.map((invite) => invite.id)));
+  if (!event || !invites?.length) return emptyDeliverySummary();
+  return deliverInvitations(event, invites, new Set(invites.map((invite) => invite.id)));
 }
 
 /**
  * Server-authoritative cascade tick for one event. Called after any invite
  * response, on event page load (lazy), and from the cron sweep.
  */
-export async function advanceEventCascade(eventId: string): Promise<void> {
+export async function advanceEventCascade(
+  eventId: string,
+): Promise<InvitationDeliverySummary> {
   const admin = createAdminClient();
 
   const { data: event } = await admin
@@ -108,21 +181,21 @@ export async function advanceEventCascade(eventId: string): Promise<void> {
     .select('*')
     .eq('id', eventId)
     .single<SwitchboardEvent>();
-  if (!event || event.status !== 'inviting') return;
+  if (!event || event.status !== 'inviting') return emptyDeliverySummary();
 
   const { data: invites } = await admin
     .from('invites')
     .select('*')
     .eq('event_id', eventId)
     .returns<Invite[]>();
-  if (!invites || invites.length === 0) return;
+  if (!invites || invites.length === 0) return emptyDeliverySummary();
 
   const updates = advanceCascade(
     invites.map(toEngineInvite),
     toEngineConfig(event),
     new Date(),
   );
-  if (updates.length === 0) return;
+  if (updates.length === 0) return emptyDeliverySummary();
 
   // Apply every transition atomically under the event-row lock, guarded by each
   // invite's expected predecessor status and a capacity re-check. Returns the
@@ -136,7 +209,19 @@ export async function advanceEventCascade(eventId: string): Promise<void> {
   const sentIds = new Set(
     ((sentRows as { sent_id: string }[] | null) ?? []).map((row) => row.sent_id),
   );
-  await deliverInvitations(event, invites, sentIds);
+  return deliverInvitations(event, invites, sentIds);
+}
+
+function memberInviteText(event: SwitchboardEvent): string {
+  const when = event.starts_at
+    ? formatDateTime(event.starts_at, event.time_zone)
+    : 'Time to be decided';
+  return (
+    `You are invited to ${event.title}.\n` +
+    `When: ${when}\n\n` +
+    `Open the plan: ${appUrl(`/events/${event.id}`)}\n\n` +
+    `No pressure either way.\n\n- Switchboard`
+  );
 }
 
 function guestInviteText(
@@ -157,7 +242,7 @@ function guestInviteText(
     `When: ${when}${where}\n\n` +
     `RSVP here (no account needed): ${appUrl(`/rsvp/${token}`)}\n\n` +
     `No pressure either way - if you can’t make it, the invitation quietly ` +
-    `moves along.\n\n- Switchboard`
+    `moves along.\n\n— Switchboard`
   );
 }
 

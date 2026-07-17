@@ -17,7 +17,15 @@ import { WINDOW_CHOICES } from '@/lib/engine/windows';
 import type { Invite } from '@/lib/types';
 
 interface CascadeProgressProps {
-  invites: Array<Invite & { invitee_name: string }>;
+  invites: Array<
+    Invite & {
+      invitee_name: string;
+      deliveries?: Array<{
+        channel: 'in_app' | 'email' | 'sms';
+        status: 'sent' | 'not_configured' | 'invalid_recipient' | 'failed';
+      }>;
+    }
+  >;
   mode: 'individual' | 'group' | 'all_at_once';
   /** Host/co-host view: show per-invite manage controls. */
   eventId?: string;
@@ -79,6 +87,11 @@ export function CascadeProgress({ invites, mode, eventId, editable }: CascadePro
       const result = await resendInvite(eventId, invite.id);
       if (!result.ok) {
         toast.error(result.error ?? 'Could not resend that invite.');
+        return;
+      }
+      if (result.warning) {
+        toast.error(`${result.warning} Check the delivery status.`);
+        router.refresh();
         return;
       }
       toast.success(`${invite.invitee_name} is back in the flow.`);
@@ -151,6 +164,17 @@ export function CascadeProgress({ invites, mode, eventId, editable }: CascadePro
                 const canMove =
                   editable && isQueued && mode === 'individual' && queuedIds.length > 1;
                 const canReWindow = editable && isQueued;
+                const deliveryText = invite.deliveries
+                  ?.map((delivery) => {
+                    const channel = delivery.channel === 'in_app'
+                      ? 'in-app'
+                      : delivery.channel;
+                    if (delivery.status === 'sent') return `${channel} sent`;
+                    if (delivery.status === 'not_configured') return `${channel} not configured`;
+                    if (delivery.status === 'invalid_recipient') return `${channel} address invalid`;
+                    return `${channel} failed`;
+                  })
+                  .join(' · ');
                 return (
                   <li
                     key={invite.id}
@@ -183,6 +207,17 @@ export function CascadeProgress({ invites, mode, eventId, editable }: CascadePro
                           ? ' · “ask me again!”'
                           : ''}
                       </span>
+                      {deliveryText && (
+                        <span
+                          className={`mt-0.5 block text-[11px] ${
+                            invite.deliveries?.some((delivery) => delivery.status !== 'sent')
+                              ? 'text-rose-deep'
+                              : 'text-ink-faint'
+                          }`}
+                        >
+                          {deliveryText}
+                        </span>
+                      )}
                     </span>
                     {canReWindow && (
                       <select
