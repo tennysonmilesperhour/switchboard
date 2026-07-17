@@ -25,6 +25,7 @@ alter table public.event_questions
 -- the SECURITY DEFINER implementation (moved to `private` in
 -- 20260717192758) changes; the public SECURITY INVOKER wrapper still delegates
 -- here, so its name, signature, and grants are untouched.
+-- (Timestamped 20260717220000 to sort after 20260717210000_fix_poll_vote_option_binding.)
 create or replace function private.create_event_atomic(p_input jsonb)
 returns uuid
 language plpgsql
@@ -192,7 +193,7 @@ stable
 security definer
 set search_path = ''
 as $$
-  select '20260717210000'::text;
+  select '20260717220000'::text;
 $$;
 
 revoke all on function public.app_schema_version() from public, anon, authenticated;
