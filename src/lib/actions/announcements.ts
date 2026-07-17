@@ -73,11 +73,15 @@ async function fanOutAnnouncement(
     .map((i) => i.invitee_id)
     .filter((id): id is string => Boolean(id) && id !== hostId);
   if (users.length > 0) {
-    await sendPushToUsers(users, {
-      title: `Update: ${event.title}`,
-      body,
-      url: `/events/${event.id}`,
-    });
+    await sendPushToUsers(
+      users,
+      {
+        title: `Update: ${event.title}`,
+        body,
+        url: `/events/${event.id}`,
+      },
+      'plans',
+    );
   }
 
   const emails = accepted

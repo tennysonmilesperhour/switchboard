@@ -99,11 +99,15 @@ export async function sendConnectionRequest(identifier: string): Promise<Connect
     return { ok: false, error: error.message };
   }
 
-  await sendPushToUsers([target.id], {
-    title: 'New connection request',
-    body: 'Someone wants to connect on Switchboard.',
-    url: '/people',
-  });
+  await sendPushToUsers(
+    [target.id],
+    {
+      title: 'New connection request',
+      body: 'Someone wants to connect on Switchboard.',
+      url: '/people',
+    },
+    'social',
+  );
   revalidatePath('/people');
   return { ok: true };
 }
@@ -145,11 +149,15 @@ export async function sendConnectionRequestToId(
     return { ok: false, error: error.message };
   }
 
-  await sendPushToUsers([targetId], {
-    title: 'New connection request',
-    body: 'Someone wants to connect on Switchboard.',
-    url: '/people',
-  });
+  await sendPushToUsers(
+    [targetId],
+    {
+      title: 'New connection request',
+      body: 'Someone wants to connect on Switchboard.',
+      url: '/people',
+    },
+    'social',
+  );
   revalidatePath('/people');
   return { ok: true };
 }
