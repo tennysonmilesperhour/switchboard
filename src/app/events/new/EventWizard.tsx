@@ -201,7 +201,12 @@ export function EventWizard({
   const [wishlistUrl, setWishlistUrl] = useState('');
   const [theme, setTheme] = useState<EventTheme>('default');
   const [questions, setQuestions] = useState<
-    Array<{ prompt: string; required: boolean }>
+    Array<{
+      prompt: string;
+      required: boolean;
+      kind: 'text' | 'choice';
+      options: string[];
+    }>
   >([]);
 
   // Step 2 - style
@@ -661,7 +666,21 @@ export function EventWizard({
         recurrenceIntervalDays:
           recurrence === 'custom' ? Number(customDays) || null : null,
         questions: questions
-          .map((q) => ({ prompt: q.prompt.trim(), required: q.required }))
+          .map((q) => {
+            const options = q.options
+              .map((o) => o.trim())
+              .filter((o) => o.length > 0);
+            // Only keep it a choice question if it has at least two real
+            // options; otherwise it falls back to free text (the server
+            // enforces the same rule).
+            const isChoice = q.kind === 'choice' && options.length >= 2;
+            return {
+              prompt: q.prompt.trim(),
+              required: q.required,
+              kind: (isChoice ? 'choice' : 'text') as 'text' | 'choice',
+              options: isChoice ? options : [],
+            };
+          })
           .filter((q) => q.prompt.length > 0),
         ritualId,
         invitees: invitees.map((invitee) => ({
@@ -890,55 +909,148 @@ export function EventWizard({
             <p className="text-xs text-ink-faint -mt-0.5">
               Asked when someone accepts. Only you see the answers.
             </p>
-            {questions.map((question, index) => (
-              <div key={index} className="flex items-center gap-2">
-                <input
-                  value={question.prompt}
-                  onChange={(e) =>
-                    setQuestions((current) =>
-                      current.map((q, i) =>
-                        i === index ? { ...q, prompt: e.target.value } : q,
-                      ),
-                    )
-                  }
-                  placeholder="Dietary needs? What are you bringing?"
-                  aria-label={`Question ${index + 1}`}
-                  className="flex-1 rounded-card border border-line bg-paper px-3.5 py-2.5 text-sm outline-none transition-colors focus:border-terracotta focus:ring-2 focus:ring-terracotta-soft"
-                />
-                <label className="flex items-center gap-1 text-xs font-semibold text-ink-soft whitespace-nowrap">
-                  <input
-                    type="checkbox"
-                    checked={question.required}
-                    onChange={(e) =>
-                      setQuestions((current) =>
-                        current.map((q, i) =>
-                          i === index ? { ...q, required: e.target.checked } : q,
-                        ),
-                      )
-                    }
-                    className="size-3.5 accent-terracotta"
-                  />
-                  Required
-                </label>
-                <button
-                  type="button"
-                  aria-label={`Remove question ${index + 1}`}
-                  onClick={() =>
-                    setQuestions((current) => current.filter((_, i) => i !== index))
-                  }
-                  className="text-ink-faint hover:text-rose-deep px-1"
+            {questions.map((question, index) => {
+              const updateQuestion = (
+                patch: Partial<(typeof questions)[number]>,
+              ) =>
+                setQuestions((current) =>
+                  current.map((q, i) => (i === index ? { ...q, ...patch } : q)),
+                );
+              return (
+                <div
+                  key={index}
+                  className="space-y-2 rounded-card border border-line bg-paper p-3"
                 >
-                  ✕
-                </button>
-              </div>
-            ))}
+                  <div className="flex items-center gap-2">
+                    <input
+                      value={question.prompt}
+                      onChange={(e) => updateQuestion({ prompt: e.target.value })}
+                      placeholder="Dietary needs? What are you bringing?"
+                      aria-label={`Question ${index + 1}`}
+                      className="flex-1 rounded-card border border-line bg-card px-3.5 py-2.5 text-sm outline-none transition-colors focus:border-terracotta focus:ring-2 focus:ring-terracotta-soft"
+                    />
+                    <button
+                      type="button"
+                      aria-label={`Remove question ${index + 1}`}
+                      onClick={() =>
+                        setQuestions((current) =>
+                          current.filter((_, i) => i !== index),
+                        )
+                      }
+                      className="text-ink-faint hover:text-rose-deep px-1"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+                    <div className="inline-flex rounded-pill border border-line p-0.5 text-xs font-semibold">
+                      {(['text', 'choice'] as const).map((kind) => (
+                        <button
+                          key={kind}
+                          type="button"
+                          aria-pressed={question.kind === kind}
+                          onClick={() =>
+                            updateQuestion({
+                              kind,
+                              // Seed two blank options the first time a question
+                              // becomes multiple choice.
+                              options:
+                                kind === 'choice' && question.options.length === 0
+                                  ? ['', '']
+                                  : question.options,
+                            })
+                          }
+                          className={`rounded-pill px-2.5 py-1 transition-colors ${
+                            question.kind === kind
+                              ? 'bg-terracotta text-white'
+                              : 'text-ink-soft'
+                          }`}
+                        >
+                          {kind === 'text' ? 'Text' : 'Multiple choice'}
+                        </button>
+                      ))}
+                    </div>
+                    <label className="flex items-center gap-1 text-xs font-semibold text-ink-soft whitespace-nowrap">
+                      <input
+                        type="checkbox"
+                        checked={question.required}
+                        onChange={(e) =>
+                          updateQuestion({ required: e.target.checked })
+                        }
+                        className="size-3.5 accent-terracotta"
+                      />
+                      Required
+                    </label>
+                  </div>
+                  {question.kind === 'choice' && (
+                    <div className="space-y-1.5">
+                      {question.options.map((option, optionIndex) => (
+                        <div
+                          key={optionIndex}
+                          className="flex items-center gap-2"
+                        >
+                          <span aria-hidden className="text-ink-faint text-sm">
+                            ○
+                          </span>
+                          <input
+                            value={option}
+                            onChange={(e) =>
+                              updateQuestion({
+                                options: question.options.map((o, oi) =>
+                                  oi === optionIndex ? e.target.value : o,
+                                ),
+                              })
+                            }
+                            placeholder={`Option ${optionIndex + 1}`}
+                            aria-label={`Question ${index + 1} option ${optionIndex + 1}`}
+                            className="flex-1 rounded-card border border-line bg-card px-3 py-2 text-sm outline-none transition-colors focus:border-terracotta focus:ring-2 focus:ring-terracotta-soft"
+                          />
+                          {question.options.length > 2 && (
+                            <button
+                              type="button"
+                              aria-label={`Remove option ${optionIndex + 1}`}
+                              onClick={() =>
+                                updateQuestion({
+                                  options: question.options.filter(
+                                    (_, oi) => oi !== optionIndex,
+                                  ),
+                                })
+                              }
+                              className="text-ink-faint hover:text-rose-deep px-1"
+                            >
+                              ✕
+                            </button>
+                          )}
+                        </div>
+                      ))}
+                      {question.options.length < 10 && (
+                        <button
+                          type="button"
+                          onClick={() =>
+                            updateQuestion({
+                              options: [...question.options, ''],
+                            })
+                          }
+                          className="pl-6 text-xs font-semibold text-terracotta hover:text-terracotta-deep"
+                        >
+                          + Add option
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
             {questions.length < 5 && (
               <Button
                 type="button"
                 variant="secondary"
                 size="sm"
                 onClick={() =>
-                  setQuestions((current) => [...current, { prompt: '', required: false }])
+                  setQuestions((current) => [
+                    ...current,
+                    { prompt: '', required: false, kind: 'text', options: [] },
+                  ])
                 }
               >
                 + Add a question

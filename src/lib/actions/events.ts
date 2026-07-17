@@ -65,8 +65,14 @@ export interface CreateEventInput {
   /** How often the plan repeats; day-count only when recurrence is 'custom'. */
   recurrence?: RecurrenceKind;
   recurrenceIntervalDays?: number | null;
-  /** Host-defined RSVP questions, in order. */
-  questions?: Array<{ prompt: string; required: boolean }>;
+  /** Host-defined RSVP questions, in order. A 'choice' question carries the
+   *  selectable `options`; 'text' (the default) is free response. */
+  questions?: Array<{
+    prompt: string;
+    required: boolean;
+    kind?: 'text' | 'choice';
+    options?: string[];
+  }>;
   /** Standing ritual this plan fulfills, if any. */
   ritualId?: string | null;
   /** Already in host-preferred order. */
@@ -1041,7 +1047,7 @@ async function cloneEventForReuse(
 
   const { data: questions } = await supabase
     .from('event_questions')
-    .select('prompt, required, position')
+    .select('prompt, required, position, kind, options')
     .eq('event_id', sourceId);
   if (questions && questions.length > 0) {
     await admin.from('event_questions').insert(

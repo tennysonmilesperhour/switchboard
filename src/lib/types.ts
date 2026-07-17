@@ -185,6 +185,10 @@ export interface EventQuestion {
   prompt: string;
   required: boolean;
   position: number;
+  /** 'text' (free response) or 'choice' (pick one of `options`). */
+  kind: 'text' | 'choice';
+  /** Selectable answers for a 'choice' question; empty for 'text'. */
+  options: string[];
   created_at: string;
 }
 
