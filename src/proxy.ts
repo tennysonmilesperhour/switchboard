@@ -126,7 +126,17 @@ export async function proxy(request: NextRequest) {
   } = await supabase.auth.getUser();
 
   if (!user && !isPublicPath(pathname)) {
-    return redirectWithCsp('/welcome');
+    // Preserve the intended deep link so signing in returns the visitor right
+    // back here — a shared /events/… link, a bookmarked route — instead of
+    // stranding them on the landing page. /welcome forwards this to its auth
+    // links and /login validates it (safeNextPath) before redirecting.
+    const url = request.nextUrl.clone();
+    url.pathname = '/welcome';
+    url.search = '';
+    if (pathname !== '/') url.searchParams.set('next', pathname);
+    const res = NextResponse.redirect(url);
+    res.headers.set('content-security-policy', csp);
+    return res;
   }
 
   if (user && (pathname === '/welcome' || pathname === '/login')) {

@@ -1,6 +1,6 @@
 import type { Metadata } from 'next';
 import { after } from 'next/server';
-import { notFound, redirect } from 'next/navigation';
+import { redirect } from 'next/navigation';
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient, hasAdminCredentials } from '@/lib/supabase/admin';
@@ -90,7 +90,10 @@ export default async function EventPage({
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  if (!user) redirect('/login');
+  // Preserve where they were headed so signing in returns them to this plan
+  // instead of dropping them on the home page. A visitor who turns out not to
+  // be on the plan is routed onward to the public join page below.
+  if (!user) redirect(`/login?next=${encodeURIComponent(`/events/${id}`)}`);
 
   // Lazy cascade tick — the cron sweep is the backstop. Run it *after* the
   // response so a plain page view never blocks on write-side work or outbound
@@ -108,7 +111,14 @@ export default async function EventPage({
     .select('*')
     .eq('id', id)
     .single<SwitchboardEvent>();
-  if (!event) notFound();
+  // A signed-in visitor who isn't the host or an invitee can't read this event
+  // row through RLS, so `event` is null here both for a plan that doesn't exist
+  // and for a real plan they just haven't been let into (e.g. someone who
+  // opened a shared link). Send them to the public join page rather than a dead
+  // "Nothing here": it shows the shareable plan with an ask-to-join button when
+  // the host has turned the invite link on, redirects them straight back here if
+  // they actually can see it, and shows a clear "isn't active" note otherwise.
+  if (!event) redirect(`/join/${id}`);
 
   const isHost = event.host_id === user.id;
   const admin = createAdminClient();
