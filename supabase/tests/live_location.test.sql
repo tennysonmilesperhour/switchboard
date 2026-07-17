@@ -169,5 +169,5 @@ select throws_ok(
   'a user cannot insert a live_locations row owned by someone else'
 );
 
-select finish;
+select * from finish();
 rollback;
