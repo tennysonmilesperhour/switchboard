@@ -4,6 +4,7 @@ import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
 import { AppShell } from '@/components/shell/AppShell';
 import { Card, SectionHeader } from '@/components/ui/Card';
+import { NotificationsFeed } from './NotificationsFeed';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { formatDateTime, formatRelative } from '@/lib/format';
 import type { SwitchboardEvent } from '@/lib/types';
@@ -23,12 +24,17 @@ export default async function NotificationsPage() {
     { data: announcements },
     { data: connectionRequests },
     { data: recentNotifications },
+    { count: unreadCount },
   ] = await Promise.all([
+    // Only invites the user can still act on: an unanswered invite to an event
+    // that already started would otherwise sit in "Waiting on you" (and light
+    // the bell badge) forever with no way to clear it.
     supabase
       .from('invites')
-      .select('id, event:events(id, title, starts_at, time_zone)')
+      .select('id, event:events!inner(id, title, starts_at, time_zone)')
       .eq('invitee_id', user.id)
-      .eq('status', 'sent'),
+      .eq('status', 'sent')
+      .gte('event.starts_at', new Date().toISOString()),
     supabase
       .from('matches')
       .select('id, activity, room_id, created_at, user_a, user_b')
@@ -58,6 +64,14 @@ export default async function NotificationsPage() {
       .eq('user_id', user.id)
       .order('created_at', { ascending: false })
       .limit(20),
+    // True unread total (not just within the 20 shown): the badge and the
+    // "Mark all as read" control must agree even when older unread rows have
+    // scrolled out of the visible feed.
+    supabase
+      .from('notifications')
+      .select('id', { count: 'exact', head: true })
+      .eq('user_id', user.id)
+      .is('read_at', null),
   ]);
 
   const invites = pendingInvites ?? [];
@@ -65,15 +79,7 @@ export default async function NotificationsPage() {
   const announcementList = announcements ?? [];
   const requestList = connectionRequests ?? [];
   const notificationList = recentNotifications ?? [];
-
-  // Viewing the page clears the unread badge.
-  if (notificationList.some((n) => !n.read_at)) {
-    await supabase
-      .from('notifications')
-      .update({ read_at: new Date().toISOString() })
-      .eq('user_id', user.id)
-      .is('read_at', null);
-  }
+  const totalUnread = unreadCount ?? 0;
 
   const isEmpty =
     invites.length === 0 &&
@@ -93,39 +99,18 @@ export default async function NotificationsPage() {
       ) : (
         <div className="space-y-8">
           {notificationList.length > 0 && (
-            <section>
-              <SectionHeader title="Recent 🔔" />
-              <div className="space-y-2">
-                {notificationList.map((n) => {
-                  const card = (
-                    <Card
-                      tone={n.read_at ? undefined : 'gold'}
-                      className="group-hover:shadow-lift transition-shadow"
-                    >
-                      <p className="text-sm font-medium">{n.title}</p>
-                      {n.body ? (
-                        <p className="text-xs text-ink-soft mt-0.5">{n.body}</p>
-                      ) : null}
-                      <p className="text-xs text-ink-faint mt-1">
-                        {formatRelative(n.created_at)}
-                      </p>
-                    </Card>
-                  );
-                  return n.url ? (
-                    <Link key={n.id} href={n.url} className="block group">
-                      {card}
-                    </Link>
-                  ) : (
-                    <div key={n.id}>{card}</div>
-                  );
-                })}
-              </div>
-            </section>
+            <NotificationsFeed
+              notifications={notificationList}
+              totalUnread={totalUnread}
+            />
           )}
 
           {invites.length > 0 && (
             <section>
-              <SectionHeader title="Waiting on you 💌" />
+              <SectionHeader
+                title="Waiting on you 💌"
+                hint="These keep the bell badge on until you respond"
+              />
               <div className="space-y-2">
                 {invites.map((invite) => {
                   const event = (
@@ -152,7 +137,10 @@ export default async function NotificationsPage() {
 
           {requestList.length > 0 && (
             <section>
-              <SectionHeader title="Wants to connect 👋" hint="Accept or ignore in People" />
+              <SectionHeader
+                title="Wants to connect 👋"
+                hint="Accept or ignore in People — these also keep the bell badge on"
+              />
               <div className="space-y-2">
                 {requestList.map((request) => {
                   const requester = (
