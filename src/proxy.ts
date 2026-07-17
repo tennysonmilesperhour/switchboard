@@ -22,6 +22,7 @@ const PUBLIC_PREFIXES = [
   '/api/version',
   '/api/calendar', // token-authed personal calendar feed
   '/robots.txt',
+  '/sitemap.xml',
 ];
 
 function isPublicPath(pathname: string): boolean {
