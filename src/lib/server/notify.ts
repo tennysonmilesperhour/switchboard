@@ -1,5 +1,10 @@
 import webPush from 'web-push';
 import { createAdminClient } from '@/lib/supabase/admin';
+import {
+  categoryForKind,
+  columnForCategory,
+  type NotificationCategory,
+} from '@/lib/notifications';
 
 export interface PushPayload {
   title: string;
@@ -44,11 +49,18 @@ export async function notifyUsers(
   // In-app recording is best-effort — never block the domain action on it.
   if (error) console.error('[notify:record]', error.message);
 
-  await sendPushToUsers(ids, {
-    title: payload.title,
-    body: payload.body,
-    url: payload.url,
-  });
+  // The push honors the recipient's per-category preference; the in-app row
+  // above is always written regardless, so muting a category loses the buzz,
+  // never the history.
+  await sendPushToUsers(
+    ids,
+    {
+      title: payload.title,
+      body: payload.body,
+      url: payload.url,
+    },
+    categoryForKind(payload.kind) ?? undefined,
+  );
   return { recorded: !error };
 }
 
@@ -92,25 +104,37 @@ export function isQuietTime(
 }
 
 /**
- * Push to a set of users, silently skipping anyone in quiet hours and
- * pruning dead subscriptions. Never throws - notifications are best-effort.
+ * Push to a set of users, silently skipping anyone in quiet hours or who has
+ * muted this category, and pruning dead subscriptions. Never throws -
+ * notifications are best-effort.
+ *
+ * `category` gates the push against the recipient's per-category preference
+ * (a `notify_*` column on their profile). Omit it — or pass a payload whose
+ * `kind` isn't mapped to a category — and the push is always allowed.
  */
 export async function sendPushToUsers(
   userIds: string[],
   payload: PushPayload,
+  category?: NotificationCategory,
 ): Promise<void> {
   if (userIds.length === 0 || !configureVapid()) return;
 
+  const prefColumn = category ? columnForCategory(category) : null;
   const admin = createAdminClient();
   const { data: profiles } = await admin
     .from('profiles')
-    .select('id, quiet_hours_start, quiet_hours_end, timezone')
+    .select(
+      'id, quiet_hours_start, quiet_hours_end, timezone, notify_plans, notify_reminders, notify_messages, notify_social',
+    )
     .in('id', userIds);
 
   const awake = (profiles ?? [])
     .filter(
       (p) => !isQuietTime(p.quiet_hours_start, p.quiet_hours_end, p.timezone),
     )
+    // A muted category opts out of the push. Default-on: only an explicit
+    // `false` suppresses, so a null (pre-migration row) still notifies.
+    .filter((p) => !prefColumn || p[prefColumn] !== false)
     .map((p) => p.id);
   if (awake.length === 0) return;
 

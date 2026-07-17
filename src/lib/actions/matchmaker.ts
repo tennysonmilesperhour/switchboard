@@ -55,11 +55,15 @@ export async function proposeIntroduction(
   });
   if (error) return { ok: false, error: error.message };
 
-  await sendPushToUsers([personA, personB], {
-    title: 'A friend thinks you two would hit it off',
-    body: `Someone you both know suggested ${cleanActivity.toLowerCase()}. Only revealed if you both say yes.`,
-    url: '/',
-  });
+  await sendPushToUsers(
+    [personA, personB],
+    {
+      title: 'A friend thinks you two would hit it off',
+      body: `Someone you both know suggested ${cleanActivity.toLowerCase()}. Only revealed if you both say yes.`,
+      url: '/',
+    },
+    'social',
+  );
   revalidatePath('/people');
   return { ok: true };
 }

@@ -48,3 +48,29 @@ export async function enablePush(): Promise<PushState> {
   });
   return response.ok ? 'subscribed' : (Notification.permission as PushState);
 }
+
+/**
+ * Turn push off on this device: unsubscribe locally and drop the row
+ * server-side so we stop trying to reach a subscription the user retired.
+ * Returns the resulting state — 'default' when it cleanly unsubscribed (the
+ * browser permission itself can only be revoked from browser settings, so a
+ * previously-granted permission reports back as 'default' here, i.e. re-enable
+ * is a single tap). Best-effort and never throws.
+ */
+export async function disablePush(): Promise<PushState> {
+  if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
+    return 'unsupported';
+  }
+  const registration = await navigator.serviceWorker.ready;
+  const subscription = await registration.pushManager.getSubscription();
+  if (subscription) {
+    const endpoint = subscription.endpoint;
+    await subscription.unsubscribe().catch(() => {});
+    await fetch('/api/push/subscribe', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ endpoint }),
+    }).catch(() => {});
+  }
+  return 'default';
+}
