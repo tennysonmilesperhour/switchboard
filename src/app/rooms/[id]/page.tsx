@@ -35,7 +35,7 @@ export default async function RoomPage({
         .eq('room_id', id),
       supabase
         .from('messages')
-        .select('id, sender_id, body, created_at')
+        .select('id, sender_id, body, image_url, created_at')
         .eq('room_id', id)
         .order('created_at', { ascending: true })
         .limit(200),
