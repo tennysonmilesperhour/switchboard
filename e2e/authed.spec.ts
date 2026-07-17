@@ -94,7 +94,7 @@ test.describe('authenticated surface', () => {
     await expect(submit).toBeVisible({ timeout: 5_000 });
     await submit.click();
     await page.waitForURL(/\/events\/[0-9a-f-]{36}/, { timeout: 15_000 });
-    await expect(page.getByText('E2E guest plan')).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'E2E guest plan', level: 1 })).toBeVisible();
   });
 
   // ——— Golden journey 1: create → cascade → accept ———
@@ -156,7 +156,7 @@ test.describe('authenticated surface', () => {
 
     // The poll renders on the event page in the deciding phase.
     await page.getByRole('textbox', { name: 'Suggest an idea' }).fill('Tacos');
-    await page.getByRole('button', { name: 'Add' }).click();
+    await page.getByRole('button', { name: 'Add', exact: true }).first().click();
     await expect(page.getByText('Tacos')).toBeVisible({ timeout: 15_000 });
     await page.getByRole('button', { name: 'Absolutely love this' }).first().click();
   });
