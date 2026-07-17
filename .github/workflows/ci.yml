@@ -79,10 +79,16 @@ jobs:
 
       - name: Export local Supabase env
         run: |
+          # `supabase status -o env` emits shell-quoted values
+          # (KEY="value"). $GITHUB_ENV does not interpret shell quoting, so the
+          # quotes would be captured literally and later break consumers like
+          # @supabase/supabase-js (Invalid supabaseUrl). Strip a matched pair of
+          # surrounding double quotes before appending.
           supabase status -o env \
             --override-name api.url=NEXT_PUBLIC_SUPABASE_URL \
             --override-name auth.anon_key=NEXT_PUBLIC_SUPABASE_ANON_KEY \
             --override-name auth.service_role_key=SUPABASE_SERVICE_ROLE_KEY \
+            | sed -E 's/^([A-Za-z_][A-Za-z0-9_]*)="(.*)"$/\1=\2/' \
             >> "$GITHUB_ENV"
           password="$(openssl rand -base64 24)"
           echo "::add-mask::$password"
