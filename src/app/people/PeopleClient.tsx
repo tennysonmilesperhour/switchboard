@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect, useState, useTransition } from 'react';
+import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/Button';
 import { Card, SectionHeader } from '@/components/ui/Card';
@@ -24,12 +24,13 @@ import {
   sendConnectionRequest,
   stopGivingSpace,
   toggleCircleMember,
+  type ContactCandidate,
   type ContactMatch,
 } from '@/lib/actions/connections';
 import { proposeIntroduction } from '@/lib/actions/matchmaker';
 import { createHousehold, deleteHousehold } from '@/lib/actions/households';
 import { ACTIVITY_PRESETS } from '@/lib/types';
-import { canPickContacts, pickContacts } from '@/lib/client/contact-picker';
+import { ContactImportControls } from '@/components/ContactImportControls';
 
 export interface FriendRow {
   connectionId: string;
@@ -76,7 +77,6 @@ export function PeopleClient({
 }) {
   const [identifier, setIdentifier] = useState('');
   const [message, setMessage] = useState<{ tone: 'ok' | 'error'; text: string } | null>(null);
-  const [contactsSupported, setContactsSupported] = useState(false);
   const [contactMatches, setContactMatches] = useState<ContactMatch[]>([]);
   const [contactsBusy, setContactsBusy] = useState(false);
   const [expandedFriend, setExpandedFriend] = useState<string | null>(null);
@@ -96,11 +96,6 @@ export function PeopleClient({
   const router = useRouter();
   const toast = useToast();
   const confirm = useConfirm();
-
-  useEffect(() => {
-    const timeout = window.setTimeout(() => setContactsSupported(canPickContacts()), 0);
-    return () => window.clearTimeout(timeout);
-  }, []);
 
   async function removeFriend(friend: FriendRow) {
     const ok = await confirm({
@@ -250,12 +245,10 @@ export function PeopleClient({
     });
   }
 
-  async function importContacts() {
+  async function importContacts(contacts: ContactCandidate[]) {
     setContactsBusy(true);
     setMessage(null);
     try {
-      const contacts = await pickContacts();
-      if (contacts.length === 0) return;
       const matches = await resolveContactMatches(contacts);
       setContactMatches(matches);
       const matchCount = matches.filter((match) => match.profile).length;
@@ -316,27 +309,14 @@ export function PeopleClient({
             Connect
           </Button>
         </form>
-        <div className="mt-2 flex flex-wrap items-center gap-2">
-          <Button
-            type="button"
-            variant="secondary"
-            size="sm"
-            disabled={!contactsSupported || contactsBusy || pending}
-            onClick={importContacts}
-            title={
-              contactsSupported
-                ? 'Choose contacts to match on Switchboard'
-                : 'Contact access is not available in this browser'
-            }
-          >
-            <Icon name="users" size={16} />
-            {contactsBusy ? 'Checking contacts' : 'Choose contacts'}
-          </Button>
-          {!contactsSupported && (
-            <span className="text-xs text-ink-faint">
-              Contact access works only in supported mobile browsers.
-            </span>
-          )}
+        <div className="mt-2">
+          <ContactImportControls
+            onContacts={importContacts}
+            busy={contactsBusy}
+            disabled={pending}
+            pickLabel="Choose contacts"
+            fileLabel="Upload contacts (.vcf)"
+          />
         </div>
         {message && (
           <p

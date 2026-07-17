@@ -1,4 +1,5 @@
 import type { ContactCandidate } from '@/lib/actions/connections';
+import { parseVCards } from '@/lib/vcard-parse';
 
 interface ContactPickerContact {
   name?: string[];
@@ -33,4 +34,14 @@ export async function pickContacts(): Promise<ContactCandidate[]> {
     emails: contact.email ?? [],
     phones: contact.tel ?? [],
   }));
+}
+
+/**
+ * Desktop fallback for browsers without the Contact Picker API: read a
+ * user-selected vCard (.vcf) file and parse it into the same
+ * `ContactCandidate` shape `pickContacts` returns. Works in every browser.
+ */
+export async function readVCardFile(file: File): Promise<ContactCandidate[]> {
+  const text = await file.text();
+  return parseVCards(text);
 }
