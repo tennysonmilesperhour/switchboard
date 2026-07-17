@@ -3,7 +3,7 @@ import { createAdminClient, hasAdminCredentials } from '@/lib/supabase/admin';
 import { smsEnabled } from '@/lib/server/sms';
 import { bearerMatches } from '@/lib/server/secret';
 
-const EXPECTED_SCHEMA_VERSION = '20260717074717';
+const EXPECTED_SCHEMA_VERSION = '20260717081000';
 const REQUIRED_PRIVATE_BUCKET = 'media-private';
 
 /**
