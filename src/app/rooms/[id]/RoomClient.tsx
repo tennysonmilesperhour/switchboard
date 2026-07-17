@@ -8,8 +8,9 @@ import { Button } from '@/components/ui/Button';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { useToast } from '@/components/ui/Toast';
 import { useConfirm } from '@/components/ui/ConfirmDialog';
-import { sendMessage, toggleTask } from '@/lib/actions/rooms';
+import { sendMessage, sendPhotoMessage, toggleTask } from '@/lib/actions/rooms';
 import { addExpense, deleteExpense } from '@/lib/actions/expenses';
+import { uploadImage } from '@/lib/client/upload-image';
 import { formatRelative } from '@/lib/format';
 import type { RoomItemKind } from '@/lib/types';
 
@@ -17,6 +18,7 @@ export interface RoomMessage {
   id: string;
   sender_id: string;
   body: string;
+  image_url: string | null;
   created_at: string;
 }
 
@@ -47,6 +49,7 @@ const TABS: Array<{ key: TabKey; label: string; emoji: string }> = [
   { key: 'address', label: 'Places', emoji: '📍' },
   { key: 'task', label: 'Tasks', emoji: '✓' },
   { key: 'link', label: 'Links', emoji: '🔗' },
+  { key: 'photo', label: 'Photos', emoji: '📷' },
   { key: 'note', label: 'Notes', emoji: '📝' },
   { key: 'split', label: 'Split', emoji: '💸' },
 ];
@@ -84,10 +87,47 @@ export function RoomClient({
   const [expenseAmount, setExpenseAmount] = useState('');
   const [expenseUrl, setExpenseUrl] = useState('');
   const [expenseError, setExpenseError] = useState<string | null>(null);
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
+  const photoInputRef = useRef<HTMLInputElement>(null);
   const router = useRouter();
   const toast = useToast();
   const confirm = useConfirm();
+
+  async function onPickPhoto(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = ''; // allow re-picking the same file
+    if (!file) return;
+    if (!file.type.startsWith('image/')) {
+      toast.error('Choose an image file.');
+      return;
+    }
+    setUploadingPhoto(true);
+    try {
+      const url = await uploadImage({ file, bucket: 'media', pathPrefix: 'room' });
+      // Optimistic: show it immediately; the realtime echo reconciles by
+      // sender+body, same as text messages.
+      const optimistic: RoomMessage = {
+        id: `optimistic-${Date.now()}`,
+        sender_id: currentUserId,
+        body: '📷 Photo',
+        image_url: url,
+        created_at: new Date().toISOString(),
+      };
+      setMessages((current) => [...current, optimistic]);
+      const result = await sendPhotoMessage(roomId, url);
+      if (!result.ok) {
+        setMessages((current) => current.filter((m) => m.id !== optimistic.id));
+        toast.error(result.error ?? 'Could not send the photo.');
+      } else {
+        router.refresh(); // pick up the filed Photos-tab item
+      }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Could not send the photo.');
+    } finally {
+      setUploadingPhoto(false);
+    }
+  }
 
   async function removeExpense(expenseId: string) {
     const ok = await confirm({
@@ -177,6 +217,7 @@ export function RoomClient({
       id: `optimistic-${Date.now()}`,
       sender_id: currentUserId,
       body,
+      image_url: null,
       created_at: new Date().toISOString(),
     };
     setMessages((current) => [...current, optimistic]);
@@ -296,15 +337,40 @@ export function RoomClient({
                         {memberNames[message.sender_id] ?? 'Member'}
                       </p>
                     )}
-                    <div
-                      className={`rounded-card px-3.5 py-2.5 text-[15px] leading-relaxed whitespace-pre-wrap break-words ${
-                        mine
-                          ? 'bg-terracotta text-white rounded-br-md'
-                          : 'bg-cream text-ink rounded-bl-md'
-                      }`}
-                    >
-                      {message.body}
-                    </div>
+                    {message.image_url ? (
+                      <div
+                        className={`overflow-hidden rounded-card ${
+                          mine ? 'rounded-br-md' : 'rounded-bl-md'
+                        }`}
+                      >
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                          src={message.image_url}
+                          alt={message.body === '📷 Photo' ? 'Shared photo' : message.body}
+                          className="max-h-72 w-full object-cover"
+                          loading="lazy"
+                        />
+                        {message.body !== '📷 Photo' && (
+                          <p
+                            className={`px-3.5 py-2 text-[15px] leading-relaxed break-words ${
+                              mine ? 'bg-terracotta text-white' : 'bg-cream text-ink'
+                            }`}
+                          >
+                            {message.body}
+                          </p>
+                        )}
+                      </div>
+                    ) : (
+                      <div
+                        className={`rounded-card px-3.5 py-2.5 text-[15px] leading-relaxed whitespace-pre-wrap break-words ${
+                          mine
+                            ? 'bg-terracotta text-white rounded-br-md'
+                            : 'bg-cream text-ink rounded-bl-md'
+                        }`}
+                      >
+                        {message.body}
+                      </div>
+                    )}
                   </div>
                 </div>
               );
@@ -313,6 +379,24 @@ export function RoomClient({
           </div>
 
           <form onSubmit={submit} className="flex gap-2 pt-2 border-t border-line">
+            <input
+              ref={photoInputRef}
+              type="file"
+              accept="image/*"
+              onChange={onPickPhoto}
+              className="hidden"
+              aria-hidden
+              tabIndex={-1}
+            />
+            <button
+              type="button"
+              onClick={() => photoInputRef.current?.click()}
+              disabled={uploadingPhoto}
+              aria-label="Send a photo"
+              className="shrink-0 rounded-pill border border-line bg-card px-3 py-2.5 text-lg leading-none outline-none hover:border-terracotta focus-visible:ring-2 focus-visible:ring-terracotta disabled:opacity-50"
+            >
+              {uploadingPhoto ? '…' : '📷'}
+            </button>
             <input
               value={draft}
               onChange={(e) => setDraft(e.target.value)}
@@ -451,9 +535,35 @@ export function RoomClient({
           {visibleItems.length === 0 ? (
             <EmptyState
               emoji={TABS.find((t) => t.key === tab)?.emoji ?? '📋'}
-              title="Nothing filed yet"
-              body="When someone shares something useful in chat, it lands here automatically."
+              title={tab === 'photo' ? 'No photos yet' : 'Nothing filed yet'}
+              body={
+                tab === 'photo'
+                  ? 'Tap 📷 in the chat to share a photo. Everything shared shows up here.'
+                  : 'When someone shares something useful in chat, it lands here automatically.'
+              }
             />
+          ) : tab === 'photo' ? (
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+              {visibleItems.map((item) =>
+                item.url ? (
+                  <a
+                    key={item.id}
+                    href={item.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="block overflow-hidden rounded-card border border-line focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-terracotta"
+                  >
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={item.url}
+                      alt={item.title}
+                      className="aspect-square w-full object-cover"
+                      loading="lazy"
+                    />
+                  </a>
+                ) : null,
+              )}
+            </div>
           ) : (
             visibleItems.map((item) => (
               <div

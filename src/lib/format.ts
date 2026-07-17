@@ -27,6 +27,39 @@ export function formatDateTime(
   });
 }
 
+/**
+ * Render just the wall-clock time — "8:00 PM CDT" — for an event's end. Used to
+ * append an end to the start line ("… 6:00 PM – 8:00 PM CDT") without repeating
+ * the date. Same zone-safety fallback as `formatDateTime`.
+ */
+export function formatTimeOnly(
+  iso: string | null,
+  timeZone?: string | null,
+): string | null {
+  if (!iso) return null;
+  return format(new Date(iso), {
+    hour: 'numeric',
+    minute: '2-digit',
+    ...(timeZone ? { timeZone, timeZoneName: 'short' } : {}),
+  });
+}
+
+/**
+ * Render a start→end span. When there's no end, this is just the start line.
+ * When both exist, the end is appended as a bare time ("Tue, Jul 14, 6:00 PM –
+ * 8:00 PM CDT"). The date is only shown once.
+ */
+export function formatDateTimeRange(
+  startIso: string | null,
+  endIso: string | null,
+  timeZone?: string | null,
+): string {
+  const start = formatDateTime(startIso, timeZone);
+  const end = formatTimeOnly(endIso, timeZone);
+  if (!startIso || !end) return start;
+  return `${start} – ${end}`;
+}
+
 export function formatDate(iso: string | null, timeZone?: string | null): string {
   if (!iso) return 'Date TBD';
   return format(new Date(iso), {

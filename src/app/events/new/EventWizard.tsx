@@ -7,7 +7,7 @@ import { Avatar } from '@/components/ui/Avatar';
 import { Card } from '@/components/ui/Card';
 import { Icon } from '@/components/ui/Icon';
 import { ImageInput } from '@/components/ui/ImageInput';
-import { suggestWindow, WINDOW_CHOICES } from '@/lib/engine/windows';
+import { suggestWindow, WINDOW_CHOICES, type WindowPace } from '@/lib/engine/windows';
 import { isEmail } from '@/lib/auth-identity';
 import {
   RECURRENCE_CHOICES,
@@ -162,6 +162,9 @@ export function EventWizard({
   initialInviteeId = null,
   initialDecide = false,
   initialError = null,
+  defaultPace = 'standard',
+  upcomingPlanCount = 0,
+  capacityGuard = false,
 }: {
   userId: string;
   friends: WizardFriend[];
@@ -173,6 +176,12 @@ export function EventWizard({
   initialInviteeId?: string | null;
   initialDecide?: boolean;
   initialError?: string | null;
+  /** Host's tempo, from the opt-in "Tune my defaults" operator setting. */
+  defaultPace?: WindowPace;
+  /** Plans the host already has in the next week (for the capacity nudge). */
+  upcomingPlanCount?: number;
+  /** Whether the opt-in "Capacity nudge" operator setting is on. */
+  capacityGuard?: boolean;
 }) {
   const [step, setStep] = useState(0);
   const [submitting, setSubmitting] = useState(false);
@@ -249,8 +258,13 @@ export function EventWizard({
   }, [date, endTime]);
 
   const suggested = useMemo(
-    () => suggestWindow(startsAt ? new Date(startsAt) : new Date(), new Date()),
-    [startsAt],
+    () =>
+      suggestWindow(
+        startsAt ? new Date(startsAt) : new Date(),
+        new Date(),
+        defaultPace,
+      ),
+    [startsAt, defaultPace],
   );
 
   // Block scheduling a plan in the past. `minDate` (today, in the visitor's
@@ -589,8 +603,19 @@ export function EventWizard({
         capacity: capacity ? Number(capacity) : null,
         hasLocation: locationName.trim().length > 0,
         enablePoll,
+        upcomingPlanCount,
+        capacityGuard,
       }),
-    [startsAt, inviteMode, invitees, capacity, locationName, enablePoll],
+    [
+      startsAt,
+      inviteMode,
+      invitees,
+      capacity,
+      locationName,
+      enablePoll,
+      upcomingPlanCount,
+      capacityGuard,
+    ],
   );
 
   const selectedFriendCount = invitees.filter((i) => i.profileId).length;
@@ -732,7 +757,7 @@ export function EventWizard({
               />
             </div>
             <div className="space-y-1.5 min-w-0">
-              <label htmlFor="time" className={FIELD_LABEL}>Time</label>
+              <label htmlFor="time" className={FIELD_LABEL}>Start</label>
               <input
                 id="time" type="time" value={time}
                 step={300}
@@ -1032,6 +1057,43 @@ export function EventWizard({
                 </div>
               </div>
             )}
+            {enablePoll && (
+              <div className="mt-3 pl-7 space-y-1.5">
+                <label htmlFor="voteDeadline" className="text-sm font-semibold text-ink">
+                  Decide by <span className="font-normal text-ink-faint">(optional)</span>
+                </label>
+                <input
+                  id="voteDeadline"
+                  type="datetime-local"
+                  value={voteDeadline}
+                  min={minDate ? `${minDate}T00:00` : undefined}
+                  onChange={(e) => setVoteDeadline(e.target.value)}
+                  className={`${FIELD} appearance-none [color-scheme:light]`}
+                />
+                <p className="text-xs text-ink-faint">
+                  Voting closes and the winner is picked automatically at this
+                  time. Leave blank to decide whenever you’re ready.
+                </p>
+              </div>
+            )}
+          </Card>
+
+          <Card tone="cream" className="mt-2">
+            <label className="flex items-start gap-3 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={remindersEnabled}
+                onChange={(e) => setRemindersEnabled(e.target.checked)}
+                className="mt-1 size-4 accent-terracotta"
+              />
+              <span>
+                <span className="font-bold">Send a reminder before it starts ⏰</span>
+                <span className="block text-sm text-ink-soft mt-0.5 leading-relaxed">
+                  A gentle nudge goes to people who said yes a few hours ahead.
+                  Turn this off for a low-key plan that doesn’t need one.
+                </span>
+              </span>
+            </label>
           </Card>
 
           <Card tone="cream" className="mt-2">

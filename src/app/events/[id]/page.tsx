@@ -32,7 +32,7 @@ import { InviteLink } from './InviteLink';
 import { getRelationship, getMutualConnections } from '@/lib/server/relationship';
 import { inviteExpiresAt } from '@/lib/engine/cascade';
 import { threadGate, THREAD_PREVIEW_COUNT } from '@/lib/engine/thread';
-import { formatDateTime } from '@/lib/format';
+import { formatDateTime, formatDateTimeRange } from '@/lib/format';
 import { resolveEventZone } from '@/lib/server/event-zone';
 import { googleCalendarUrl } from '@/lib/calendar-links';
 import { appUrl, looksLikeEmail } from '@/lib/server/email';
@@ -559,7 +559,7 @@ export default async function EventPage({
             title={event.title}
             color={themeColor(event.theme) ?? planColor(heroIndex)}
             status={statusLabel[event.status]}
-            when={formatDateTime(event.starts_at, eventZone)}
+            when={formatDateTimeRange(event.starts_at, event.ends_at, eventZone)}
             where={event.location_name ?? undefined}
             attendees={attendees.map((attendee) => ({ name: attendee.name }))}
             attendeesLabel={

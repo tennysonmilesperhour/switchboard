@@ -5,6 +5,7 @@ import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { requireUser } from '@/lib/server/require-user';
 import { extractItems } from '@/lib/ai/extract';
+import { isOwnPublicStorageUrl } from '@/lib/server/media';
 
 export async function sendMessage(
   roomId: string,
@@ -43,6 +44,55 @@ export async function sendMessage(
     }
   } catch {
     // Organization is a bonus, never a blocker.
+  }
+
+  return { ok: true };
+}
+
+export async function sendPhotoMessage(
+  roomId: string,
+  imageUrl: string,
+  caption?: string,
+): Promise<{ ok: boolean; error?: string }> {
+  const auth = await requireUser();
+  if (!auth.ok) return auth;
+  const { supabase, user } = auth;
+
+  // Only accept a URL we minted into our own public media bucket — never an
+  // arbitrary attacker-chosen origin pasted into the field.
+  if (!isOwnPublicStorageUrl(imageUrl, ['media'])) {
+    return { ok: false, error: 'Unsupported image.' };
+  }
+  const title = caption?.trim().slice(0, 120) || 'Photo';
+
+  // Insert through the member's own client so message RLS proves room
+  // membership before anything is written.
+  const { data: message, error } = await supabase
+    .from('messages')
+    .insert({
+      room_id: roomId,
+      sender_id: user.id,
+      body: caption?.trim().slice(0, 4000) || '📷 Photo',
+      image_url: imageUrl,
+    })
+    .select('id')
+    .single();
+  if (error) return { ok: false, error: error.message };
+
+  // File it into the Photos tab. Best-effort, mirrors the auto-filing path —
+  // membership was already proven by the message insert above.
+  try {
+    const admin = createAdminClient();
+    await admin.from('room_items').insert({
+      room_id: roomId,
+      message_id: message.id,
+      kind: 'photo',
+      title,
+      url: imageUrl,
+      created_by: user.id,
+    });
+  } catch {
+    // The gallery is a bonus, never a blocker.
   }
 
   return { ok: true };

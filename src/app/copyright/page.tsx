@@ -1,6 +1,8 @@
 import Link from 'next/link';
+import { supportEmail } from '@/lib/contact';
 
 export default function CopyrightPage() {
+  const email = supportEmail();
   return (
     <main className="mx-auto max-w-2xl px-6 py-16 text-ink">
       <p className="text-sm font-bold text-terracotta">Effective July 9, 2026</p>
@@ -26,14 +28,13 @@ export default function CopyrightPage() {
         <section>
           <h2 className="text-xl font-extrabold text-ink">Reports</h2>
           <p className="mt-3">
-            If you believe content on Switchboard infringes your rights, contact
-            the operator at{' '}
-            <a className="font-bold text-terracotta" href="mailto:hello@tennysonmiles.com">
-              hello@tennysonmiles.com
+            If you believe content on Switchboard infringes your rights, email{' '}
+            <a href={`mailto:${email}`} className="font-bold text-terracotta underline">
+              {email}
             </a>{' '}
-            with the content location, your contact information, and
-            a short explanation of the rights involved. We may remove or restrict
-            content while reviewing a report.
+            with the content location, your contact information, and a short
+            explanation of the rights involved. We may remove or restrict content
+            while reviewing a report.
           </p>
         </section>
       </div>
