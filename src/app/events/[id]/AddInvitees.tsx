@@ -1,14 +1,17 @@
 'use client';
 
-import { useEffect, useMemo, useState, useTransition } from 'react';
+import { useMemo, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/Button';
 import { Chip } from '@/components/ui/Chip';
-import { Icon } from '@/components/ui/Icon';
 import { useToast } from '@/components/ui/Toast';
 import { addPeopleToEvent } from '@/lib/actions/events';
-import { canPickContacts, pickContacts } from '@/lib/client/contact-picker';
-import { resolveContactMatches, type ContactMatch } from '@/lib/actions/connections';
+import { ContactImportControls } from '@/components/ContactImportControls';
+import {
+  resolveContactMatches,
+  type ContactCandidate,
+  type ContactMatch,
+} from '@/lib/actions/connections';
 
 export interface ConnectionOption {
   id: string;
@@ -32,7 +35,6 @@ export function AddInvitees({
   const [entries, setEntries] = useState<string[]>([]);
   const [selected, setSelected] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
-  const [contactsSupported, setContactsSupported] = useState(false);
   const [contactsBusy, setContactsBusy] = useState(false);
   const [contactMatches, setContactMatches] = useState<ContactMatch[]>([]);
   const [contactsNote, setContactsNote] = useState<string | null>(null);
@@ -41,11 +43,6 @@ export function AddInvitees({
   const toast = useToast();
 
   const totalToAdd = entries.length + selected.length + (text.trim() ? 1 : 0);
-
-  useEffect(() => {
-    const timeout = window.setTimeout(() => setContactsSupported(canPickContacts()), 0);
-    return () => window.clearTimeout(timeout);
-  }, []);
 
   const availableConnections = useMemo(
     () => connections.slice().sort((a, b) => a.name.localeCompare(b.name)),
@@ -108,13 +105,11 @@ export function AddInvitees({
     }
   }
 
-  async function matchContactsFromDevice() {
+  async function matchContactsFromDevice(contacts: ContactCandidate[]) {
     setContactsBusy(true);
     setError(null);
     setContactsNote(null);
     try {
-      const contacts = await pickContacts();
-      if (contacts.length === 0) return;
       const matches = await resolveContactMatches(contacts);
       const invitable = matches
         .filter((match) => match.connectionStatus !== 'self')
@@ -236,28 +231,12 @@ export function AddInvitees({
       )}
 
       <div className="mt-4">
-        <div className="flex flex-wrap items-center gap-2">
-          <Button
-            type="button"
-            size="sm"
-            variant="secondary"
-            disabled={!contactsSupported || contactsBusy || pending}
-            onClick={matchContactsFromDevice}
-            title={
-              contactsSupported
-                ? 'Match your contacts against Switchboard'
-                : 'Contact access is not available in this browser'
-            }
-          >
-            <Icon name="users" size={16} />
-            {contactsBusy ? 'Checking contacts' : 'From my contacts'}
-          </Button>
-          {!contactsSupported && (
-            <span className="text-xs text-ink-faint">
-              Contact access works only in supported mobile browsers.
-            </span>
-          )}
-        </div>
+        <ContactImportControls
+          onContacts={matchContactsFromDevice}
+          busy={contactsBusy}
+          disabled={pending}
+          pickLabel="From my contacts"
+        />
         {contactsNote && (
           <p role="status" className="text-xs text-ink-soft mt-2">
             {contactsNote}

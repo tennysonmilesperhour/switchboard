@@ -30,9 +30,13 @@ import type { PlanDraft } from '@/lib/actions/plan';
 import type { ImportResult } from '@/lib/actions/import';
 import type { InviteMode, EventTheme } from '@/lib/types';
 import { EVENT_THEMES } from '@/lib/themes';
-import { canPickContacts, pickContacts } from '@/lib/client/contact-picker';
+import { ContactImportControls } from '@/components/ContactImportControls';
 import { resolveTimeZone } from '@/lib/client/time-zone';
-import { resolveContactMatches, type ContactMatch } from '@/lib/actions/connections';
+import {
+  resolveContactMatches,
+  type ContactCandidate,
+  type ContactMatch,
+} from '@/lib/actions/connections';
 
 export interface WizardFriend {
   id: string;
@@ -242,7 +246,6 @@ export function EventWizard({
   const [guestContact, setGuestContact] = useState('');
   const [guestError, setGuestError] = useState<string | null>(null);
   const [resolvingGuest, setResolvingGuest] = useState(false);
-  const [contactsSupported, setContactsSupported] = useState(false);
   const [contactsBusy, setContactsBusy] = useState(false);
   const [contactMatches, setContactMatches] = useState<ContactMatch[]>([]);
   const [contactsNote, setContactsNote] = useState<string | null>(null);
@@ -311,11 +314,6 @@ export function EventWizard({
     const haystack = `${title} ${locationName} ${description}`.toLowerCase();
     return OUTDOOR_HINTS.some((word) => haystack.includes(word));
   }, [title, locationName, description]);
-
-  useEffect(() => {
-    const timeout = window.setTimeout(() => setContactsSupported(canPickContacts()), 0);
-    return () => window.clearTimeout(timeout);
-  }, []);
 
   function toggleFriend(friend: WizardFriend) {
     setInvitees((current) => {
@@ -533,13 +531,11 @@ export function EventWizard({
     });
   }
 
-  async function matchContactsFromDevice() {
+  async function matchContactsFromDevice(contacts: ContactCandidate[]) {
     setContactsBusy(true);
     setSubmitError(null);
     setContactsNote(null);
     try {
-      const contacts = await pickContacts();
-      if (contacts.length === 0) return;
       const matches = await resolveContactMatches(contacts);
       // Drop yourself and anyone with no way to be invited (no account and no
       // textable number); on-Switchboard matches float to the top.
@@ -1397,28 +1393,11 @@ export function EventWizard({
                   {guestError}
                 </p>
               )}
-              <div className="flex flex-wrap items-center gap-2">
-                <Button
-                  type="button"
-                  variant="secondary"
-                  size="sm"
-                  disabled={!contactsSupported || contactsBusy}
-                  onClick={matchContactsFromDevice}
-                  title={
-                    contactsSupported
-                      ? 'Match your contacts against Switchboard'
-                      : 'Contact access is not available in this browser'
-                  }
-                >
-                  <Icon name="users" size={16} />
-                  {contactsBusy ? 'Checking contacts' : 'From my contacts'}
-                </Button>
-                {!contactsSupported && (
-                  <span className="text-xs text-ink-faint">
-                    Contact access works only in supported mobile browsers.
-                  </span>
-                )}
-              </div>
+              <ContactImportControls
+                onContacts={matchContactsFromDevice}
+                busy={contactsBusy}
+                pickLabel="From my contacts"
+              />
               {contactsNote && (
                 <p role="status" className="text-xs text-ink-soft">
                   {contactsNote}
