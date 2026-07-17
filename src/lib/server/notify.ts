@@ -12,6 +12,10 @@ export interface NotificationPayload extends PushPayload {
   kind: string;
 }
 
+export interface NotificationDeliveryResult {
+  recorded: boolean;
+}
+
 /**
  * The unified notification path: record a durable in-app notification for each
  * user AND push it. The in-app row is the reliable surface — always written,
@@ -23,9 +27,9 @@ export interface NotificationPayload extends PushPayload {
 export async function notifyUsers(
   userIds: string[],
   payload: NotificationPayload,
-): Promise<void> {
+): Promise<NotificationDeliveryResult> {
   const ids = [...new Set(userIds)].filter((id): id is string => Boolean(id));
-  if (ids.length === 0) return;
+  if (ids.length === 0) return { recorded: false };
 
   const admin = createAdminClient();
   const { error } = await admin.from('notifications').insert(
@@ -45,6 +49,7 @@ export async function notifyUsers(
     body: payload.body,
     url: payload.url,
   });
+  return { recorded: !error };
 }
 
 let vapidConfigured = false;

@@ -145,6 +145,12 @@ function splitWindow(minutes: number): { amount: number; unit: WindowUnit } {
   return { amount: minutes, unit: 'minutes' };
 }
 
+function localDateTimeToIso(value: string): string | null {
+  if (!value) return null;
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString();
+}
+
 export function EventWizard({
   userId,
   friends,
@@ -205,11 +211,8 @@ export function EventWizard({
   const [enablePoll, setEnablePoll] = useState(initialDecide);
   const [pollResolution, setPollResolution] =
     useState<CreateEventInput['pollResolution']>('host_pick');
-  // Optional deadline for the group vote (a local datetime-local string). When
-  // set, the poll runner resolves the poll automatically once it passes.
+  const [suggestDeadline, setSuggestDeadline] = useState('');
   const [voteDeadline, setVoteDeadline] = useState('');
-  // Reminder pings (~3h before the plan) are on by default; a host can opt out.
-  const [remindersEnabled, setRemindersEnabled] = useState(true);
 
   // Step 3/4 - people & order
   const [invitees, setInvitees] = useState<DraftInvitee[]>(() => {
@@ -242,28 +245,17 @@ export function EventWizard({
   const [showAccepted, setShowAccepted] = useState(true);
   const [showExpired, setShowExpired] = useState(false);
   const [openTable, setOpenTable] = useState(false);
+  const [remindersEnabled, setRemindersEnabled] = useState(true);
 
   const startsAt = useMemo(() => {
     if (!date) return null;
     return new Date(`${date}T${time || '18:00'}`).toISOString();
   }, [date, time]);
 
-  // Optional end time, on the same day as the start. Only produces an ISO
-  // timestamp when it lands strictly after the start; an earlier end is treated
-  // as unset (and flagged below) rather than silently persisting a bad range.
   const endsAt = useMemo(() => {
     if (!date || !endTime) return null;
-    const end = new Date(`${date}T${endTime}`);
-    if (Number.isNaN(end.getTime())) return null;
-    if (startsAt && end.getTime() <= new Date(startsAt).getTime()) return null;
-    return end.toISOString();
-  }, [date, endTime, startsAt]);
-  const endBeforeStart = useMemo(
-    () =>
-      Boolean(date && endTime && startsAt) &&
-      new Date(`${date}T${endTime}`).getTime() <= new Date(startsAt!).getTime(),
-    [date, endTime, startsAt],
-  );
+    return new Date(`${date}T${endTime}`).toISOString();
+  }, [date, endTime]);
 
   const suggested = useMemo(
     () =>
@@ -297,6 +289,10 @@ export function EventWizard({
   const startsInPast = useMemo(
     () => startsAt !== null && new Date(startsAt).getTime() < new Date().getTime(),
     [startsAt],
+  );
+  const endsBeforeStart = useMemo(
+    () => Boolean(startsAt && endsAt && new Date(endsAt) <= new Date(startsAt)),
+    [startsAt, endsAt],
   );
 
   // Gentle nudge to check the forecast when the plan reads as outdoors. Purely
@@ -625,7 +621,7 @@ export function EventWizard({
   const selectedFriendCount = invitees.filter((i) => i.profileId).length;
 
   const canNext = [
-    title.trim().length > 0 && !startsInPast,
+    title.trim().length > 0 && !startsInPast && !endsBeforeStart,
     true,
     invitees.length > 0,
     true,
@@ -655,10 +651,8 @@ export function EventWizard({
         showExpired,
         enablePoll,
         pollResolution,
-        voteDeadline:
-          enablePoll && voteDeadline
-            ? new Date(voteDeadline).toISOString()
-            : null,
+        suggestDeadline: enablePoll ? localDateTimeToIso(suggestDeadline) : null,
+        voteDeadline: enablePoll ? localDateTimeToIso(voteDeadline) : null,
         remindersEnabled,
         coverUrl: coverUrl.trim() || null,
         wishlistUrl: wishlistUrl.trim() || null,
@@ -679,7 +673,8 @@ export function EventWizard({
         })),
       });
       if (result.ok && result.eventId) {
-        window.location.assign(`/events/${result.eventId}`);
+        const suffix = result.warning ? '?delivery=attention' : '';
+        window.location.assign(`/events/${result.eventId}${suffix}`);
         return;
       }
       setSubmitting(false);
@@ -770,7 +765,7 @@ export function EventWizard({
                 className={`${FIELD} min-w-0 appearance-none [color-scheme:light]`}
               />
             </div>
-            <div className="space-y-1.5 min-w-0">
+            <div className="space-y-1.5 min-w-0 sm:col-span-2">
               <label htmlFor="endTime" className={FIELD_LABEL}>
                 Ends <span className="font-normal text-ink-faint">(optional)</span>
               </label>
@@ -787,9 +782,9 @@ export function EventWizard({
               That date and time have already passed. Pick a moment in the future.
             </p>
           )}
-          {endBeforeStart && (
+          {endsBeforeStart && (
             <p role="alert" className="text-sm font-medium text-rose-deep">
-              The end time is before the start. Pick a later time, or leave it blank.
+              End time should be after the start time.
             </p>
           )}
           <div className="space-y-1.5">
@@ -1016,22 +1011,50 @@ export function EventWizard({
               </span>
             </label>
             {enablePoll && (
-              <div className="mt-3 pl-7 flex flex-wrap gap-2">
-                {(
-                  [
-                    ['host_pick', 'I pick from top ideas'],
-                    ['auto', 'Auto-pick the winner'],
-                    ['runoff', 'Final runoff vote'],
-                  ] as const
-                ).map(([value, label]) => (
-                  <Chip
-                    key={value}
-                    selected={pollResolution === value}
-                    onClick={() => setPollResolution(value)}
-                  >
-                    {label}
-                  </Chip>
-                ))}
+              <div className="mt-3 space-y-3 pl-7">
+                <div className="flex flex-wrap gap-2">
+                  {(
+                    [
+                      ['host_pick', 'I pick from top ideas'],
+                      ['auto', 'Auto-pick the winner'],
+                      ['runoff', 'Final runoff vote'],
+                    ] as const
+                  ).map(([value, label]) => (
+                    <Chip
+                      key={value}
+                      selected={pollResolution === value}
+                      onClick={() => setPollResolution(value)}
+                    >
+                      {label}
+                    </Chip>
+                  ))}
+                </div>
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <div className="space-y-1.5">
+                    <label htmlFor="suggestDeadline" className="text-xs font-bold text-ink-soft">
+                      Suggestions close
+                    </label>
+                    <input
+                      id="suggestDeadline"
+                      type="datetime-local"
+                      value={suggestDeadline}
+                      onChange={(e) => setSuggestDeadline(e.target.value)}
+                      className={`${FIELD} py-2.5 text-sm`}
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <label htmlFor="voteDeadline" className="text-xs font-bold text-ink-soft">
+                      Voting closes
+                    </label>
+                    <input
+                      id="voteDeadline"
+                      type="datetime-local"
+                      value={voteDeadline}
+                      onChange={(e) => setVoteDeadline(e.target.value)}
+                      className={`${FIELD} py-2.5 text-sm`}
+                    />
+                  </div>
+                </div>
               </div>
             )}
             {enablePoll && (
@@ -1512,6 +1535,12 @@ export function EventWizard({
                 value: showExpired,
                 set: setShowExpired,
               },
+              {
+                label: 'Send reminder nudges',
+                hint: 'Switchboard can nudge invited people before the plan starts.',
+                value: remindersEnabled,
+                set: setRemindersEnabled,
+              },
             ] as const
           ).map((option) => (
             <Card key={option.label}>
@@ -1566,6 +1595,11 @@ export function EventWizard({
                     hour: 'numeric', minute: '2-digit',
                   }).format(new Date(startsAt))
                 : 'Time TBD'}
+              {endsAt
+                ? ` - ${new Intl.DateTimeFormat('en-US', {
+                    hour: 'numeric', minute: '2-digit',
+                  }).format(new Date(endsAt))}`
+                : ''}
               {locationName ? ` · ${locationName}` : ''}
             </p>
             <p className="text-sm text-ink-faint mt-1">

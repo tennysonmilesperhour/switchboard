@@ -24,6 +24,13 @@ test.describe('public surface', () => {
     await expect(page.getByText('isn’t here anymore')).toBeVisible();
   });
 
+  test('crawler metadata stays public', async ({ page }) => {
+    const response = await page.goto('/sitemap.xml');
+    expect(response?.status()).toBe(200);
+    expect(response?.headers()['content-type']).toContain('application/xml');
+    expect(page.url()).toMatch(/\/sitemap\.xml$/);
+  });
+
   test('no horizontal overflow at 320px', async ({ page }) => {
     await page.setViewportSize({ width: 320, height: 700 });
     await page.goto('/welcome');

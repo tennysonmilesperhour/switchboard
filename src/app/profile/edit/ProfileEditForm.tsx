@@ -399,6 +399,11 @@ export function ProfileEditForm(props: ProfileEditInitial) {
       {/* ————— Contact ————— */}
       <section className="space-y-4">
         <SectionHeader title="Contact info" />
+        <p className="text-sm text-ink-soft">
+          After saving, verify each contact in{' '}
+          <Link href="/settings" className="font-bold text-terracotta-deep">Settings</Link>
+          {' '}before it can match contacts or route invitations to your account.
+        </p>
         <div className="space-y-1.5">
           <label htmlFor="contact_email" className={labelCls}>Email</label>
           <input

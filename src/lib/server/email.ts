@@ -19,6 +19,15 @@ export interface EmailMessage {
   html?: string;
 }
 
+export type DeliveryStatus = 'sent' | 'not_configured' | 'invalid_recipient' | 'failed';
+
+export interface ProviderDeliveryResult {
+  status: DeliveryStatus;
+  provider: 'resend' | 'plivo';
+  providerMessageId?: string;
+  errorCode?: string;
+}
+
 /** Loose email check - enough to avoid mailing a phone number by mistake. */
 export function looksLikeEmail(value: string | null | undefined): value is string {
   return isEmail(value);
@@ -34,11 +43,19 @@ export function emailEnabled(): boolean {
  * provider isn't configured.
  */
 export async function sendEmail(message: EmailMessage): Promise<boolean> {
-  if (!looksLikeEmail(message.to)) return false;
+  return (await sendEmailWithResult(message)).status === 'sent';
+}
+
+/** Send one email and return an operator-safe outcome for delivery tracking. */
+export async function sendEmailWithResult(
+  message: EmailMessage,
+): Promise<ProviderDeliveryResult> {
+  if (!looksLikeEmail(message.to)) {
+    return { status: 'invalid_recipient', provider: 'resend' };
+  }
   if (!emailEnabled()) {
-    // Degraded mode: make it observable in logs without failing the caller.
-    console.info(`[email:skipped] would send "${message.subject}" to ${message.to}`);
-    return false;
+    console.info('[email:skipped] provider is not configured');
+    return { status: 'not_configured', provider: 'resend' };
   }
 
   try {
@@ -57,13 +74,22 @@ export async function sendEmail(message: EmailMessage): Promise<boolean> {
       }),
     });
     if (!response.ok) {
-      console.error(`[email:failed] ${response.status} sending to ${message.to}`);
-      return false;
+      console.error(`[email:failed] provider returned ${response.status}`);
+      return {
+        status: 'failed',
+        provider: 'resend',
+        errorCode: `http_${response.status}`,
+      };
     }
-    return true;
+    const body = await response.json().catch(() => null) as { id?: unknown } | null;
+    return {
+      status: 'sent',
+      provider: 'resend',
+      providerMessageId: typeof body?.id === 'string' ? body.id : undefined,
+    };
   } catch (error) {
     console.error('[email:error]', error);
-    return false;
+    return { status: 'failed', provider: 'resend', errorCode: 'network_error' };
   }
 }
 

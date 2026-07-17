@@ -164,6 +164,8 @@ export function AddInvitees({
         setError(
           `Skipped ${result.skipped.map((s) => `${s.entry} (${s.reason})`).join(', ')}.`,
         );
+      } else if (result.warning) {
+        setError(`${result.warning} Check the invitation flow for delivery details.`);
       }
       router.refresh();
     });

@@ -13,12 +13,16 @@ const PUBLIC_PREFIXES = [
   '/copyright',
   '/auth',
   '/rsvp', // guest RSVP links
-  '/join', // shareable plan invite links (signed-out recipients ask to join)
+  '/join', // shareable plan links; auth returns here via a validated next path
+  '/verify-contact',
   '/design', // design direction previews
   '/api/cron',
   '/api/og',
   '/api/health',
+  '/api/version',
   '/api/calendar', // token-authed personal calendar feed
+  '/robots.txt',
+  '/sitemap.xml',
 ];
 
 function isPublicPath(pathname: string): boolean {
@@ -28,11 +32,13 @@ function isPublicPath(pathname: string): boolean {
 }
 
 /**
- * Per-request Content-Security-Policy. `script-src` is locked to a fresh nonce
- * plus `strict-dynamic`, with NO `'unsafe-inline'`/`'unsafe-eval'` in
- * production — so an injected inline script cannot execute even if an output
- * encoder is ever missed (defense in depth for the XSS class). `'unsafe-eval'`
- * is allowed only in dev, where React uses eval for error overlays.
+ * Per-request Content-Security-Policy. `script-src` uses a fresh nonce for
+ * inline framework scripts and same-origin bundles, with NO `'unsafe-inline'`
+ * in production. We intentionally avoid `strict-dynamic`: Next/Turbopack can
+ * request follow-up chunks without a nonce, and strict-dynamic causes browsers
+ * to ignore the `'self'` allow-list for those scripts.
+ *
+ * `'unsafe-eval'` is allowed only in dev, where React uses eval for overlays.
  *
  * `style-src` intentionally keeps `'unsafe-inline'`: inline `style={{…}}`
  * attributes are pervasive in the UI and a CSP nonce does not cover inline
@@ -43,7 +49,7 @@ function buildCsp(nonce: string): string {
   const isDev = process.env.NODE_ENV === 'development';
   return [
     "default-src 'self'",
-    `script-src 'self' 'nonce-${nonce}' 'strict-dynamic'${isDev ? " 'unsafe-eval'" : ''}`,
+    `script-src 'self' 'nonce-${nonce}'${isDev ? " 'unsafe-eval'" : ''}`,
     "style-src 'self' 'unsafe-inline'",
     "img-src 'self' data: blob: https:",
     "font-src 'self' data:",

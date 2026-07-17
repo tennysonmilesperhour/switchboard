@@ -44,7 +44,7 @@ export default async function HomePage() {
   ] = await Promise.all([
     supabase
       .from('availability_signals')
-      .select('emoji, label, expires_at, circle_id')
+      .select('emoji, label, expires_at, circle_ids')
       .eq('user_id', user.id)
       .gt('expires_at', nowIso)
       .order('created_at'),

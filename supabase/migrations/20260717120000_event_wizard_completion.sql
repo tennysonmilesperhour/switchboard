@@ -1,11 +1,10 @@
--- Persist the host's "send reminders" choice at creation time.
+-- Finish wired-but-hidden event creation fields.
 --
--- `events.reminders_enabled` (added in 20260706130000_partiful_gaps) is honored
--- by the reminder sweep (`dueReminders`), but `create_event_atomic` never wrote
--- it, so every plan silently used the column default (true) with no way for a
--- host to opt out up front. Redefine the function — otherwise byte-identical to
--- 20260713120000_event_timezone — to read `remindersEnabled` from the payload,
--- defaulting to true so existing callers are unaffected.
+-- The columns already exist: events.ends_at, events.reminders_enabled,
+-- polls.suggest_deadline, and polls.vote_deadline. This migration makes the
+-- atomic create RPC persist the wizard values and bumps the schema sentinel used
+-- by /api/health.
+
 create or replace function public.create_event_atomic(p_input jsonb)
 returns uuid
 language plpgsql
@@ -32,8 +31,6 @@ begin
   if v_recurrence not in ('none', 'daily', 'weekly', 'biweekly', 'monthly', 'custom') then
     v_recurrence := 'none';
   end if;
-  -- Keep the (recurrence, interval) pair consistent with the table check so a
-  -- bad client payload can't abort the whole transaction on the constraint.
   if v_recurrence = 'custom' then
     v_recurrence_days := least(greatest(coalesce(v_recurrence_days, 0), 1), 365);
   else
@@ -47,8 +44,8 @@ begin
   insert into public.events (
     id, host_id, title, description, location_name, location_address,
     starts_at, ends_at, time_zone, capacity, invite_mode, open_table, status,
-    show_invite_list, show_accepted, show_expired, cover_url, theme,
-    wishlist_url, recurrence, recurrence_interval_days, reminders_enabled, room_id
+    show_invite_list, show_accepted, show_expired, reminders_enabled, cover_url,
+    theme, wishlist_url, recurrence, recurrence_interval_days, room_id
   ) values (
     v_event,
     v_user,
@@ -67,12 +64,12 @@ begin
     coalesce((p_input->>'showInviteList')::boolean, false),
     coalesce((p_input->>'showAccepted')::boolean, false),
     coalesce((p_input->>'showExpired')::boolean, false),
+    coalesce((p_input->>'remindersEnabled')::boolean, true),
     nullif(p_input->>'coverUrl', ''),
     coalesce(nullif(p_input->>'theme', ''), 'default'),
     nullif(p_input->>'wishlistUrl', ''),
     v_recurrence,
     v_recurrence_days,
-    coalesce((p_input->>'remindersEnabled')::boolean, true),
     v_room
   );
 
@@ -119,10 +116,13 @@ begin
     with ordinality as i(value, ordinality);
 
   if v_enable_poll then
-    insert into public.polls (event_id, resolution, vote_deadline, phase)
+    insert into public.polls (
+      event_id, resolution, suggest_deadline, vote_deadline, phase
+    )
     values (
       v_event,
       coalesce(nullif(p_input->>'pollResolution', ''), 'host_pick'),
+      nullif(p_input->>'suggestDeadline', '')::timestamptz,
       nullif(p_input->>'voteDeadline', '')::timestamptz,
       'suggesting'
     );
@@ -137,3 +137,19 @@ begin
 
   return v_event;
 end $$;
+
+revoke all on function public.create_event_atomic(jsonb) from public, anon;
+grant execute on function public.create_event_atomic(jsonb) to authenticated;
+
+create or replace function public.app_schema_version()
+returns text
+language sql
+stable
+security definer
+set search_path = ''
+as $$
+  select '20260717120000'::text;
+$$;
+
+revoke all on function public.app_schema_version() from public, anon, authenticated;
+grant execute on function public.app_schema_version() to service_role;

@@ -79,10 +79,13 @@ export async function generateMetadata({
 
 export default async function EventPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>;
+  searchParams: Promise<{ delivery?: string }>;
 }) {
   const { id } = await params;
+  const { delivery: deliveryNotice } = await searchParams;
   const supabase = await createClient();
   const {
     data: { user },
@@ -162,7 +165,15 @@ export default async function EventPage({
   }
 
   // Host/co-host: full cascade view. Invitee: their own invite.
-  let hostInvites: Array<Invite & { invitee_name: string }> = [];
+  let hostInvites: Array<
+    Invite & {
+      invitee_name: string;
+      deliveries?: Array<{
+        channel: 'in_app' | 'email' | 'sms';
+        status: 'sent' | 'not_configured' | 'invalid_recipient' | 'failed';
+      }>;
+    }
+  > = [];
   let myInvite: Invite | null = null;
 
   if (canManage) {
@@ -178,6 +189,40 @@ export default async function EventPage({
         invitee_name: profile?.display_name ?? row.guest_name ?? 'Guest',
       };
     });
+
+    const inviteIds = hostInvites.map((invite) => invite.id);
+    if (inviteIds.length > 0) {
+      const { data: attempts } = await admin
+        .from('invite_delivery_attempts')
+        .select('invite_id, channel, status, attempted_at')
+        .in('invite_id', inviteIds)
+        .order('attempted_at', { ascending: false });
+      const latestByChannel = new Map<
+        string,
+        {
+          channel: 'in_app' | 'email' | 'sms';
+          status: 'sent' | 'not_configured' | 'invalid_recipient' | 'failed';
+        }
+      >();
+      for (const attempt of attempts ?? []) {
+        const key = `${attempt.invite_id}:${attempt.channel}`;
+        if (latestByChannel.has(key)) continue;
+        latestByChannel.set(key, {
+          channel: attempt.channel as 'in_app' | 'email' | 'sms',
+          status: attempt.status as
+            | 'sent'
+            | 'not_configured'
+            | 'invalid_recipient'
+            | 'failed',
+        });
+      }
+      hostInvites = hostInvites.map((invite) => ({
+        ...invite,
+        deliveries: [...latestByChannel.entries()]
+          .filter(([key]) => key.startsWith(`${invite.id}:`))
+          .map(([, attempt]) => attempt),
+      }));
+    }
   } else {
     const { data } = await supabase
       .from('invites')
@@ -475,6 +520,15 @@ export default async function EventPage({
         dangerouslySetInnerHTML={{ __html: serializeJsonLd(jsonLd) }}
       />
       <div className="space-y-6">
+        {canManage && deliveryNotice === 'attention' && (
+          <div role="status" className="rounded-card border border-gold bg-gold-soft px-4 py-3">
+            <p className="text-sm font-bold text-ink">Your plan was created.</p>
+            <p className="mt-1 text-sm text-ink-soft">
+              At least one invitation could not be sent automatically. The delivery status below
+              shows what needs attention, and guest links remain available to share manually.
+            </p>
+          </div>
+        )}
         {avoidedGoing.length > 0 && (
           <div className="rounded-card bg-gold-soft px-4 py-3">
             <p className="text-sm text-ink">

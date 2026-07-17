@@ -189,26 +189,38 @@ export function LoginForm({ next = '/', initialMode = 'signin' }: LoginFormProps
         <div className="rounded-card bg-sage-soft p-5 animate-rise">
           <p className="font-medium text-sage-deep">Account created.</p>
           <p className="mt-1 text-sm text-ink-soft">
-            Sign in as <strong>{createState.identifier ?? `@${createState.username}`}</strong> with the password
-            you just chose.
+            {createState.requiresEmailVerification ? (
+              <>
+                Check <strong>{createState.identifier}</strong> for a confirmation link. The account
+                cannot sign in until that email is verified.
+              </>
+            ) : (
+              <>
+                Sign in as <strong>{createState.identifier ?? `@${createState.username}`}</strong> with
+                the password you just chose.
+              </>
+            )}
           </p>
-          <Button
-            type="button"
-            size="lg"
-            className="mt-4 w-full"
-            onClick={() => {
-              setIdentifier(createState.identifier ?? createState.username ?? '');
-              setPassword('');
-              setMessage('');
-              setStatus('idle');
-              setMode('signin');
-            }}
-          >
-            Sign in
-          </Button>
+          {!createState.requiresEmailVerification && (
+            <Button
+              type="button"
+              size="lg"
+              className="mt-4 w-full"
+              onClick={() => {
+                setIdentifier(createState.identifier ?? createState.username ?? '');
+                setPassword('');
+                setMessage('');
+                setStatus('idle');
+                setMode('signin');
+              }}
+            >
+              Sign in
+            </Button>
+          )}
         </div>
       ) : (
         <form action={createAction} className="space-y-3">
+          <input type="hidden" name="next" value={next} />
           <label htmlFor="display_name" className="sr-only">
             Your name
           </label>

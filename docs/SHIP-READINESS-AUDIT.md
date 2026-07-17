@@ -48,6 +48,92 @@ secrets are configured, the new CI jobs pass, provider staging delivery and
 webhook/retry behavior are completed, and the external release-gate items are
 verified. This update records local implementation, not production activation.
 
+### Closeout update: 2026-07-17
+
+This pass worked from `origin/main` and added the remaining source-side ship
+readiness wiring:
+
+- Authenticated Playwright now has a dedicated GitHub Actions job that boots a
+  local Supabase stack, exports non-production fixture env, seeds deterministic
+  users, sets `E2E_DB=1`, and runs `e2e/authed.spec.ts`.
+- `e2e/seed.mjs` now refuses production, sets seeded profiles
+  `discoverable: true`, supports generated `E2E_TEST_PASSWORD`, and avoids
+  printing fixture passwords in CI.
+- Event creation now exposes and persists optional end time, poll suggestion
+  deadline, poll voting deadline, and reminder toggles. Migration
+  `20260717120000_event_wizard_completion.sql` updates `create_event_atomic`
+  and bumps `app_schema_version()` to `20260717120000`; `/api/health` now
+  expects that version.
+- The copyright page now lists a real DMCA/report contact address:
+  `hello@tennysonmiles.com`.
+
+Production read-only checks on July 17, 2026:
+
+- `supabase migration list --linked` shows production in parity with the repo
+  through `20260717081000`. The only pending migration is the new
+  `20260717120000_event_wizard_completion.sql` from this branch.
+- Supabase advisors currently report 34 security warnings and 106 performance
+  warnings. Security is 33 authenticated SECURITY DEFINER warnings plus leaked
+  password protection still disabled.
+- Targeted database probes show no SECURITY DEFINER functions executable by
+  `anon`, `normalize_phone_number` has `search_path=""`, `media-private` exists
+  and is non-public, and storage object UPDATE policies include `WITH CHECK`.
+- Targeted database probes also show nine public UPDATE policies still lacking
+  explicit `WITH CHECK`: `capsule_entries.capsule_update`,
+  `event_questions.event_questions_update`, `invite_answers.invite_answers_update`,
+  `poll_votes.poll_votes_own_update`, `polls.polls_update`,
+  `profiles.profiles_update`, `room_items.room_items_update`,
+  `venues.venues_update`, and `zones.zones_update`.
+- Five repo-seeded production fixture users still exist. They must be removed
+  or rotated to operator-controlled generated credentials before pilot.
+
+Checks blocked by missing operator/dashboard access in this session:
+
+- Vercel CLI access to the linked project failed, so production and preview env
+  isolation, `OBSERVABILITY_WEBHOOK_URL`, and provider/dashboard settings could
+  not be verified from Vercel.
+- The local `CRON_SECRET` did not authorize the full production `/api/health`
+  matrix, so the gated `database/schema/storage/services/config` health payload
+  still needs an operator bearer from the active production deployment.
+- Docker was not running locally, so `supabase test db` and the new authed E2E
+  job could not be exercised on this workstation.
+
+Current recommendation remains **NO-GO for public launch** and **NO-GO for an
+unmonitored pilot**. A tightly monitored owner-run pilot can proceed only after:
+the new migration is applied via the normal migration workflow, the new
+authenticated E2E job passes in GitHub and is required, production fixture
+accounts are removed or rotated, leaked-password protection is enabled, the
+remaining UPDATE policy checks are triaged or fixed, and the owner verifies
+Vercel/health/alerting/preview settings plus legal copy sign-off.
+
+### Production hardening update: 2026-07-17
+
+With owner confirmation, production writes were performed on project
+`cuzgighqdzypntmhxrqc`:
+
+- Applied migration `20260717140000_explicit_update_policy_checks.sql`.
+- Confirmed migration parity through `20260717140000`.
+- Deleted the five repo-seeded production fixture users
+  (`mara_host`, `leo_coffee`, `nina_music`, `omar_games`, `ivy_outdoors` at
+  `users.switchboard.local`) and verified fixture count is now `0`.
+- Verified `app_schema_version()` returns `20260717140000`.
+- Verified public UPDATE policies without explicit `WITH CHECK` are now `[]`.
+
+Additional owner-confirmed hardening moved the authenticated-callable
+`SECURITY DEFINER` function bodies out of the exposed `public` API schema and
+recreated stable public RPC names as `SECURITY INVOKER` wrappers. Applied
+`20260717192758_move_definer_bodies_private.sql`; production schema version
+reports `20260717192758`, public authenticated definer-function count is `0`,
+and the authenticated definer-function advisor bucket is empty.
+
+Leaked-password protection is still not complete. The Supabase CLI can read the
+project, but the available keychain token is rejected by the Management API, and
+this CLI version has no direct auth-config command or safe partial
+`config.toml` push for `password_hibp_enabled`. Enable it in Supabase Dashboard
+or rerun with a valid Management API token for
+`PATCH /v1/projects/cuzgighqdzypntmhxrqc/config/auth` with
+`{"password_hibp_enabled":true}`.
+
 ## What was audited
 
 - Repository structure, documentation, Git state, and current GitHub Actions runs
@@ -337,20 +423,25 @@ After critical flows have end-to-end protection:
 
 A candidate is ready for a controlled user pilot only when all of these are true:
 
-- [ ] Production and repository migration histories match exactly.
-- [ ] Migration workflow fails when it cannot deploy and has a required green run.
+- [x] Production and repository migration histories match exactly.
+- [x] Migration workflow fails when it cannot deploy and has a required green run.
 - [ ] Supabase security advisors have no unresolved release-critical warnings.
+      Authenticated SECURITY DEFINER warnings are addressed by
+      `20260717192758`; leaked-password protection remains the only active
+      Supabase security advisor.
 - [ ] Signed-out invite link, account creation/sign-in, join request, host approval, and RSVP pass end to end.
 - [ ] Plan creation with username, email, phone, and connected-friend recipients passes end to end.
 - [ ] Email and SMS delivery status is truthful and provider webhooks are verified.
 - [ ] Contact-based matching uses only verified identifiers.
 - [ ] Image upload and voice-note upload/playback pass on mobile Safari and Chrome.
 - [ ] Bad password, disabled OAuth, provider outage, and upload failure all give actionable UI feedback.
-- [ ] Authenticated Playwright tests run in CI and are required.
+- [ ] Authenticated Playwright tests run in CI and are required. Source wiring is
+      in place on this branch; GitHub run and required-check protection still
+      need confirmation after PR.
 - [ ] Preview uses an isolated, complete backend configuration.
 - [ ] Health checks verify required schema, storage, and release-critical providers.
 - [ ] Alerts are configured and a rollback procedure has been rehearsed.
-- [ ] Production fixture accounts are absent or use operator-controlled generated credentials.
+- [x] Production fixture accounts are absent or use operator-controlled generated credentials.
 - [ ] Privacy, Terms, Community Commitment, and Copyright copy receive final owner/counsel approval.
 - [ ] Accessibility findings above are resolved and axe/Lighthouse are rerun.
 - [ ] A small invited pilot completes a monitored create-invite-respond cycle before broader release.

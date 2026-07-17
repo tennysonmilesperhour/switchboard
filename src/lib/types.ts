@@ -277,7 +277,7 @@ export interface AvailabilitySignal {
   user_id: string;
   emoji: string;
   label: string;
-  circle_id: string | null; // null = all connections
+  circle_ids: string[]; // empty = all connections; otherwise the union of these circles
   expires_at: string;
   created_at: string;
 }

@@ -20,11 +20,15 @@ export async function NotificationBell() {
     } = await supabase.auth.getUser();
     if (user) {
       const [{ count: invites }, { count: requests }, { count: unread }] = await Promise.all([
+        // Only invites to events that haven't started: a never-answered invite
+        // to a past event used to keep the badge lit forever with nothing
+        // actionable shown on /notifications to clear it.
         supabase
           .from('invites')
-          .select('id', { count: 'exact', head: true })
+          .select('id, event:events!inner(id)', { count: 'exact', head: true })
           .eq('invitee_id', user.id)
-          .eq('status', 'sent'),
+          .eq('status', 'sent')
+          .gte('event.starts_at', new Date().toISOString()),
         supabase
           .from('connections')
           .select('id', { count: 'exact', head: true })

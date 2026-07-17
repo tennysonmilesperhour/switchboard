@@ -6,7 +6,8 @@ export interface DiscoveryInput {
   when: string;
   budget: string;
   groupSize: string;
-  vibe: string;
+  /** Zero or more vibes; empty means "open to any vibe". */
+  vibes: string[];
   interests: string[];
 }
 
@@ -118,7 +119,7 @@ export async function discoverActivities(
             `When: ${input.when || 'flexible'}`,
             `Budget: ${input.budget}`,
             `Group size: ${input.groupSize}`,
-            `Vibe: ${input.vibe}`,
+            `Vibe: ${input.vibes.join(', ') || 'open to any vibe'}`,
             `Interests: ${input.interests.join(', ') || 'open to anything'}`,
           ].join('\n'),
         },

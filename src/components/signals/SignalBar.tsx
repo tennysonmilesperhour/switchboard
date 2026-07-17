@@ -3,6 +3,7 @@
 import { useOptimistic, useTransition } from 'react';
 import { Chip } from '@/components/ui/Chip';
 import { Card } from '@/components/ui/Card';
+import { MultiSelectChips } from '@/components/ui/MultiSelectChips';
 import { useToast } from '@/components/ui/Toast';
 import { addSignal, clearSignal, removeSignal, setSignalsAudience } from '@/lib/actions/signals';
 import { formatRelative } from '@/lib/format';
@@ -18,7 +19,7 @@ interface ActiveSignal {
   emoji: string;
   label: string;
   expires_at: string;
-  circle_id: string | null;
+  circle_ids: string[];
 }
 
 interface SignalBarProps {
@@ -29,12 +30,12 @@ interface SignalBarProps {
 /** What the bar shows: which signals are lit and the audience they share. */
 interface SignalView {
   labels: string[];
-  audience: string | null;
+  audiences: string[];
 }
 
 type ViewAction =
   | { type: 'set'; label: string; on: boolean }
-  | { type: 'audience'; audience: string | null }
+  | { type: 'audience'; audiences: string[] }
   | { type: 'clear' };
 
 /** One-tap availability from the home screen. Toggle as many signals on as you like. */
@@ -45,7 +46,7 @@ export function SignalBar({ active, circles }: SignalBarProps) {
   // Every live signal shares one audience; fall back to "everyone" when nothing is on.
   const serverView: SignalView = {
     labels: active.map((s) => s.label),
-    audience: active.length > 0 ? active[0].circle_id : null,
+    audiences: active.length > 0 ? active[0].circle_ids : [],
   };
 
   // Reflect taps immediately, then reconcile when each server action's
@@ -70,16 +71,16 @@ export function SignalBar({ active, circles }: SignalBarProps) {
               : state.labels.filter((label) => label !== action.label),
           };
         case 'audience':
-          return { ...state, audience: action.audience };
+          return { ...state, audiences: action.audiences };
         case 'clear':
-          return { labels: [], audience: null };
+          return { labels: [], audiences: [] };
       }
     },
   );
 
   const activeLabels = new Set(view.labels);
   const anyActive = view.labels.length > 0;
-  const audience = view.audience;
+  const audiences = view.audiences;
 
   // Soonest expiry drives the shared "ends" hint.
   const nextExpiry =
@@ -95,7 +96,7 @@ export function SignalBar({ active, circles }: SignalBarProps) {
     startTransition(async () => {
       applyView({ type: 'set', label: preset.label, on: turnOn });
       const result = turnOn
-        ? await addSignal(preset.emoji, preset.label, audience)
+        ? await addSignal(preset.emoji, preset.label, audiences)
         : await removeSignal(preset.label);
       if (!result.ok) {
         toast.error(result.error ?? 'Could not update your signal.');
@@ -103,10 +104,10 @@ export function SignalBar({ active, circles }: SignalBarProps) {
     });
   }
 
-  function chooseAudience(circleId: string | null) {
+  function chooseAudiences(circleIds: string[]) {
     startTransition(async () => {
-      applyView({ type: 'audience', audience: circleId });
-      const result = await setSignalsAudience(circleId);
+      applyView({ type: 'audience', audiences: circleIds });
+      const result = await setSignalsAudience(circleIds);
       if (!result.ok) {
         toast.error(result.error ?? 'Could not change who can see this.');
       }
@@ -144,27 +145,22 @@ export function SignalBar({ active, circles }: SignalBarProps) {
       {anyActive ? (
         <Card tone="sage" className="animate-rise">
           <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-            <p className="text-sm font-medium text-sage-deep">Who can see these?</p>
-            <div className="flex flex-wrap gap-1.5">
-              <Chip
-                selected={audience === null}
-                onClick={() => chooseAudience(null)}
-                className="!px-3 !py-1 text-xs"
-              >
-                Everyone I know
-              </Chip>
-              {circles.map((circle) => (
-                <Chip
-                  key={circle.id}
-                  emoji={circle.emoji}
-                  selected={audience === circle.id}
-                  onClick={() => chooseAudience(circle.id)}
-                  className="!px-3 !py-1 text-xs"
-                >
-                  {circle.name}
-                </Chip>
-              ))}
-            </div>
+            <p className="text-sm font-medium text-sage-deep">
+              Who can see these?{' '}
+              <span className="font-normal text-ink-faint">Pick as many as you like.</span>
+            </p>
+            <MultiSelectChips
+              ariaLabel="Who can see your signals"
+              options={circles.map((circle) => ({
+                value: circle.id,
+                label: circle.name,
+                emoji: circle.emoji,
+              }))}
+              selected={audiences}
+              onChange={chooseAudiences}
+              allOption={{ label: 'Everyone I know' }}
+              chipClassName="!px-3 !py-1 text-xs"
+            />
           </div>
           <div className="mt-2.5 flex items-center justify-between gap-3">
             <p className="text-xs text-ink-faint">

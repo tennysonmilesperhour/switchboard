@@ -3,7 +3,12 @@
 import { createAdminClient, hasAdminCredentials } from '@/lib/supabase/admin';
 import { createClient } from '@/lib/supabase/server';
 import { checkRateLimit } from '@/lib/server/rate-limit';
-import { appUrl, sendEmail } from '@/lib/server/email';
+import {
+  appUrl,
+  emailEnabled,
+  sendEmail,
+  sendEmailWithResult,
+} from '@/lib/server/email';
 import { redirect } from 'next/navigation';
 import {
   PASSWORD_MIN_LENGTH,
@@ -15,12 +20,14 @@ import {
   usernameToAuthEmail,
 } from '@/lib/auth-identity';
 import { LEGAL_VERSION } from '@/lib/legal';
+import { safeNextPath } from '@/lib/security';
 
 export interface AuthActionResult {
   ok: boolean;
   error?: string;
   username?: string;
   identifier?: string;
+  requiresEmailVerification?: boolean;
 }
 
 function authError(message: string): AuthActionResult {
@@ -51,15 +58,17 @@ async function resolveIdentifierEmails(identifier: string): Promise<string[]> {
     const emails = [normalized];
     if (hasAdminCredentials()) {
       const admin = createAdminClient();
-      const { data: profile } = await admin
-        .from('profiles')
-        .select('id')
-        .ilike('contact_email', normalized)
+      const { data: contact } = await admin
+        .from('profile_contacts')
+        .select('user_id')
+        .eq('kind', 'email')
+        .eq('normalized_value', normalized)
+        .not('verified_at', 'is', null)
         .limit(1)
         .maybeSingle();
 
-      if (profile?.id) {
-        const { data } = await admin.auth.admin.getUserById(profile.id);
+      if (contact?.user_id) {
+        const { data } = await admin.auth.admin.getUserById(contact.user_id);
         if (data.user?.email && !emails.includes(data.user.email)) {
           emails.push(data.user.email);
         }
@@ -131,6 +140,8 @@ export async function createPasswordAccount(
   const displayName = String(formData.get('display_name') ?? '').trim();
   const identifier = normalizeIdentifier(String(formData.get('identifier') ?? ''));
   const password = String(formData.get('password') ?? '');
+  const nextPath = safeNextPath(String(formData.get('next') ?? ''), '/');
+  const afterOnboarding = `/onboarding?next=${encodeURIComponent(nextPath)}`;
   const acceptedTerms = formData.get('terms_agreement') === 'on';
   const acceptedCovenant = formData.get('community_agreement') === 'on';
 
@@ -156,10 +167,14 @@ export async function createPasswordAccount(
     }
 
     const admin = createAdminClient();
-    const email = isEmailIdentifier(identifier)
+    const usesRealEmail = isEmailIdentifier(identifier);
+    if (usesRealEmail && !emailEnabled()) {
+      return authError('Email account creation is not configured on this server yet.');
+    }
+    const email = usesRealEmail
       ? identifier
       : usernameToAuthEmail(identifier);
-    const username = isEmailIdentifier(identifier)
+    const username = usesRealEmail
       ? await uniqueHandle(emailToHandleCandidate(identifier))
       : normalizeUsername(identifier);
 
@@ -173,15 +188,42 @@ export async function createPasswordAccount(
 
     if (existingProfile) return authError('That username is already taken.');
 
-    const { data, error: createError } = await admin.auth.admin.createUser({
-      email,
-      password,
-      email_confirm: true,
-      user_metadata: {
-        full_name: displayName.slice(0, 80),
-        username,
-      },
-    });
+    const userMetadata = {
+      full_name: displayName.slice(0, 80),
+      username,
+    };
+    let userId: string | null = null;
+    let confirmationUrl: string | null = null;
+    let createError: { message: string } | null = null;
+
+    if (usesRealEmail) {
+      const { data, error } = await admin.auth.admin.generateLink({
+        type: 'signup',
+        email,
+        password,
+        options: {
+          data: userMetadata,
+          redirectTo: appUrl(`/auth/confirm?next=${encodeURIComponent(afterOnboarding)}`),
+        },
+      });
+      createError = error;
+      userId = data.user?.id ?? null;
+      const hashedToken = data.properties?.hashed_token;
+      confirmationUrl = hashedToken
+        ? appUrl(
+            `/auth/confirm?token_hash=${encodeURIComponent(hashedToken)}&type=signup&next=${encodeURIComponent(afterOnboarding)}`,
+          )
+        : data.properties?.action_link ?? null;
+    } else {
+      const { data, error } = await admin.auth.admin.createUser({
+        email,
+        password,
+        email_confirm: true,
+        user_metadata: userMetadata,
+      });
+      createError = error;
+      userId = data.user?.id ?? null;
+    }
 
     if (createError) {
       if (/already|registered|exists/i.test(createError.message)) {
@@ -190,7 +232,6 @@ export async function createPasswordAccount(
       return authError(createError.message);
     }
 
-    const userId = data.user?.id;
     if (!userId) return authError('Could not create that account.');
 
     // Essential profile fields. Upsert (not update) so signup still succeeds
@@ -219,21 +260,43 @@ export async function createPasswordAccount(
       return authError('Could not finish creating your profile.');
     }
 
-    // contact_email is optional (added by the profile_rich migration) and only
-    // powers reset-by-email lookup. Never let its absence — e.g. an incompletely
-    // migrated project — block account creation; capture it when the column
-    // exists and move on otherwise.
-    if (isEmailIdentifier(identifier)) {
+    // The profile trigger mirrors this into profile_contacts as unverified;
+    // /auth/confirm records proof of ownership after the signup link succeeds.
+    if (usesRealEmail) {
       const { error: contactError } = await admin
         .from('profiles')
         .update({ contact_email: email })
         .eq('id', userId);
       if (contactError) {
-        console.warn('[auth:signup:contact_email]', contactError.message);
+        await admin.auth.admin.deleteUser(userId);
+        return authError('Could not attach that email to the new account. No account was created.');
       }
     }
 
-    return { ok: true, username, identifier: isEmailIdentifier(identifier) ? email : username };
+    if (usesRealEmail) {
+      if (!confirmationUrl) {
+        await admin.auth.admin.deleteUser(userId);
+        return authError('Could not create a verification link for that email.');
+      }
+      const delivery = await sendEmailWithResult({
+        to: email,
+        subject: 'Confirm your Switchboard account',
+        text:
+          `Confirm your Switchboard email and finish signing in:\n\n${confirmationUrl}\n\n` +
+          `If you did not create this account, ignore this message.`,
+      });
+      if (delivery.status !== 'sent') {
+        await admin.auth.admin.deleteUser(userId);
+        return authError('The confirmation email could not be sent. No account was created.');
+      }
+    }
+
+    return {
+      ok: true,
+      username,
+      identifier: usesRealEmail ? email : username,
+      requiresEmailVerification: usesRealEmail,
+    };
   } catch (error) {
     console.error('[auth:signup:error]', error);
     return authError('Account creation is temporarily unavailable. Please try again.');
@@ -257,15 +320,17 @@ export async function requestPasswordReset(
 
     const supabase = await createClient();
     if (isEmailIdentifier(normalized)) {
-      const { data: profile } = hasAdminCredentials()
+      const { data: verifiedContact } = hasAdminCredentials()
         ? await createAdminClient()
-            .from('profiles')
-            .select('id')
-            .ilike('contact_email', normalized)
+            .from('profile_contacts')
+            .select('user_id')
+            .eq('kind', 'email')
+            .eq('normalized_value', normalized)
+            .not('verified_at', 'is', null)
             .maybeSingle()
         : { data: null };
 
-      if (!profile?.id) {
+      if (!verifiedContact?.user_id) {
         await supabase.auth.resetPasswordForEmail(normalized, {
           redirectTo: appUrl('/auth/callback?next=/reset-password'),
         });
@@ -275,13 +340,36 @@ export async function requestPasswordReset(
 
     if (hasAdminCredentials()) {
       const admin = createAdminClient();
-      const profileQuery = admin.from('profiles').select('id, contact_email');
-      const { data: profile } = isEmailIdentifier(normalized)
-        ? await profileQuery.ilike('contact_email', normalized).maybeSingle()
-        : await profileQuery.eq('handle', normalized).maybeSingle();
+      let userId: string | null = null;
+      if (isEmailIdentifier(normalized)) {
+        const { data: identity } = await admin
+          .from('profile_contacts')
+          .select('user_id')
+          .eq('kind', 'email')
+          .eq('normalized_value', normalized)
+          .not('verified_at', 'is', null)
+          .maybeSingle();
+        userId = identity?.user_id ?? null;
+      } else {
+        const { data: identity } = await admin
+          .from('profiles')
+          .select('id')
+          .eq('handle', normalized)
+          .maybeSingle();
+        userId = identity?.id ?? null;
+      }
+      const { data: verifiedEmail } = userId
+        ? await admin
+            .from('profile_contacts')
+            .select('normalized_value')
+            .eq('user_id', userId)
+            .eq('kind', 'email')
+            .not('verified_at', 'is', null)
+            .maybeSingle()
+        : { data: null };
 
-      if (profile?.id && profile.contact_email) {
-        const { data: authUser } = await admin.auth.admin.getUserById(profile.id);
+      if (userId && verifiedEmail?.normalized_value) {
+        const { data: authUser } = await admin.auth.admin.getUserById(userId);
         if (authUser.user?.email) {
           const { data: link } = await admin.auth.admin.generateLink({
             type: 'recovery',
@@ -297,7 +385,7 @@ export async function requestPasswordReset(
             : link.properties?.action_link;
           if (recoveryUrl) {
             await sendEmail({
-              to: profile.contact_email,
+              to: verifiedEmail.normalized_value,
               subject: 'Reset your Switchboard password',
               text: `Reset your Switchboard password:\n\n${recoveryUrl}\n\nIf you did not request this, you can ignore this email.`,
             });

@@ -13,11 +13,16 @@ async function requireUser() {
   return { supabase, user };
 }
 
-/** Turn a single availability signal on. Signals stack - several can be live at once. */
+/**
+ * Turn a single availability signal on. Signals stack - several can be live at
+ * once - and each carries the audience set the bar currently shows. An empty
+ * `circleIds` means "everyone I know"; otherwise it's the union of the chosen
+ * circles.
+ */
 export async function addSignal(
   emoji: string,
   label: string,
-  circleId: string | null,
+  circleIds: string[],
   durationHours: number = DEFAULT_DURATION_HOURS,
 ): Promise<{ ok: boolean; error?: string }> {
   const { supabase, user } = await requireUser();
@@ -47,7 +52,7 @@ export async function addSignal(
     user_id: user.id,
     emoji,
     label,
-    circle_id: circleId,
+    circle_ids: circleIds,
     expires_at: expiresAt,
   });
   if (error) return { ok: false, error: error.message };
@@ -71,15 +76,18 @@ export async function removeSignal(
   return { ok: true };
 }
 
-/** Re-point every live signal at a new audience (everyone, or a single circle). */
+/**
+ * Re-point every live signal at a new audience: everyone (empty array), or the
+ * union of one or more circles.
+ */
 export async function setSignalsAudience(
-  circleId: string | null,
+  circleIds: string[],
 ): Promise<{ ok: boolean; error?: string }> {
   const { supabase, user } = await requireUser();
   if (!user) return { ok: false, error: 'Not signed in' };
   const { error } = await supabase
     .from('availability_signals')
-    .update({ circle_id: circleId })
+    .update({ circle_ids: circleIds })
     .eq('user_id', user.id);
   if (error) return { ok: false, error: error.message };
   revalidatePath('/');

@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { Button } from '@/components/ui/Button';
 import { Card, SectionHeader } from '@/components/ui/Card';
 import { Chip } from '@/components/ui/Chip';
+import { MultiSelectChips } from '@/components/ui/MultiSelectChips';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { runDiscovery } from '@/lib/actions/discovery';
 import type { Suggestion } from '@/lib/ai/discovery';
@@ -18,7 +19,7 @@ export function DiscoverClient({ defaultInterests }: { defaultInterests: string[
   const [distance, setDistance] = useState(15);
   const [when, setWhen] = useState('');
   const [budget, setBudget] = useState('$$');
-  const [vibe, setVibe] = useState('Relaxed');
+  const [vibes, setVibes] = useState<string[]>([]);
   const [groupSize, setGroupSize] = useState(GROUP_SIZES[1]);
   const [suggestions, setSuggestions] = useState<Suggestion[] | null>(null);
   const [error, setError] = useState('');
@@ -33,7 +34,7 @@ export function DiscoverClient({ defaultInterests }: { defaultInterests: string[
         when,
         budget,
         groupSize,
-        vibe,
+        vibes,
         interests: defaultInterests,
       });
       if (!result.ok) setError(result.error ?? 'Something went wrong');
@@ -105,14 +106,17 @@ export function DiscoverClient({ defaultInterests }: { defaultInterests: string[
         </div>
 
         <div className="space-y-1.5">
-          <p className="text-sm font-medium">Vibe</p>
-          <div className="flex gap-2 flex-wrap">
-            {VIBES.map((v) => (
-              <Chip key={v} selected={vibe === v} onClick={() => setVibe(v)}>
-                {v}
-              </Chip>
-            ))}
-          </div>
+          <p className="text-sm font-medium">
+            Vibe <span className="font-normal text-ink-faint">· pick any that fit</span>
+          </p>
+          <MultiSelectChips
+            ariaLabel="Vibe"
+            className="flex gap-2 flex-wrap"
+            options={VIBES.map((v) => ({ value: v, label: v }))}
+            selected={vibes}
+            onChange={setVibes}
+            allOption={{ label: 'Any vibe' }}
+          />
         </div>
 
         <div className="space-y-1.5">
