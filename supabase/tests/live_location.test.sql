@@ -159,16 +159,14 @@ select is(
 );
 
 -- ————————————————————————— write-scope guard —————————————————————————
--- Ben cannot repoint or overwrite Ava's row (RLS WITH CHECK / USING = auth.uid()).
-select is(
-  (with attempt as (
-     update public.live_locations set latitude = 0, longitude = 0
-     where user_id = '00000000-0000-0000-0000-0000000000a1'
-     returning 1
-   )
-   select count(*)::int from attempt),
-  0,
-  'a user cannot update another user''s live_locations row'
+-- Ben (still the active JWT) cannot forge a row owned by Ava: the WITH CHECK
+-- policy rejects it (SQLSTATE 42501, row-level security policy violation).
+select throws_ok(
+  $$ insert into public.live_locations (user_id, latitude, longitude, expires_at)
+     values ('00000000-0000-0000-0000-0000000000a1', 1, 1, now() + interval '1 hour') $$,
+  '42501',
+  null,
+  'a user cannot insert a live_locations row owned by someone else'
 );
 
 select finish;
