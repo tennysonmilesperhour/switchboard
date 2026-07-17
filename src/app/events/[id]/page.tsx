@@ -715,6 +715,8 @@ export default async function EventPage({
               id: q.id,
               prompt: q.prompt,
               required: q.required,
+              kind: q.kind,
+              options: q.options,
             }))}
             expiresAtIso={
               inviteExpiresAt({

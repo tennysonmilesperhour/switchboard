@@ -129,7 +129,7 @@ export default async function GuestRsvpPage({
   const { data: questionRows } = invite && admin
     ? await admin
         .from('event_questions')
-        .select('id, prompt, required')
+        .select('id, prompt, required, kind, options')
         .eq('event_id', invite.event_id)
         .order('position')
     : { data: null };
@@ -137,6 +137,8 @@ export default async function GuestRsvpPage({
     id: q.id as string,
     prompt: q.prompt as string,
     required: q.required as boolean,
+    kind: q.kind as 'text' | 'choice',
+    options: (q.options as string[] | null) ?? [],
   }));
 
   // An invite link is often a guest's first contact with Switchboard. If they
