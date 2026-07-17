@@ -49,6 +49,16 @@ export function LoginForm({ next = '/', initialMode = 'signin' }: LoginFormProps
     return () => window.cancelAnimationFrame(frame);
   }, []);
 
+  // A username account is signed in the moment it's created, so send them
+  // straight on (into onboarding, then wherever they were headed) instead of
+  // asking them to sign in again. A full navigation picks up the fresh session
+  // cookies the server action just set.
+  useEffect(() => {
+    if (createState.ok && createState.signedIn && createState.redirectTo) {
+      window.location.assign(createState.redirectTo);
+    }
+  }, [createState]);
+
   async function signIn(e: React.FormEvent) {
     e.preventDefault();
     setStatus('submitting');
@@ -189,7 +199,9 @@ export function LoginForm({ next = '/', initialMode = 'signin' }: LoginFormProps
         <div className="rounded-card bg-sage-soft p-5 animate-rise">
           <p className="font-medium text-sage-deep">Account created.</p>
           <p className="mt-1 text-sm text-ink-soft">
-            {createState.requiresEmailVerification ? (
+            {createState.signedIn ? (
+              <>Signing you in…</>
+            ) : createState.requiresEmailVerification ? (
               <>
                 Check <strong>{createState.identifier}</strong> for a confirmation link. The account
                 cannot sign in until that email is verified.
@@ -201,7 +213,7 @@ export function LoginForm({ next = '/', initialMode = 'signin' }: LoginFormProps
               </>
             )}
           </p>
-          {!createState.requiresEmailVerification && (
+          {!createState.signedIn && !createState.requiresEmailVerification && (
             <Button
               type="button"
               size="lg"
