@@ -23,6 +23,23 @@ async function login(page: Page, identifier: string) {
   });
 }
 
+async function currentWizardStep(page: Page) {
+  const text = await page.getByText(/Step \d+ of \d+/).textContent();
+  const match = text?.match(/Step (\d+) of (\d+)/);
+  if (!match) throw new Error(`Could not read wizard step from "${text}"`);
+  return { current: Number(match[1]), total: Number(match[2]) };
+}
+
+async function clickWizardNext(page: Page) {
+  const { current, total } = await currentWizardStep(page);
+  const next = page.getByRole('button', { name: 'Next' });
+  await expect(next).toBeEnabled({ timeout: 5_000 });
+  await next.click();
+  await expect(page.getByText(`Step ${current + 1} of ${total}`)).toBeVisible({
+    timeout: 5_000,
+  });
+}
+
 test.describe('authenticated surface', () => {
   test.skip(!DB, 'requires a seeded database (set E2E_DB=1 — see e2e/README.md)');
 
@@ -56,12 +73,9 @@ test.describe('authenticated surface', () => {
         await page.getByPlaceholder('@username, email, or phone').fill('casey@example.com');
         await page.getByRole('button', { name: 'Add', exact: true }).click();
       }
-      const next = page.getByRole('button', { name: 'Next' });
-      if (await next.isVisible().catch(() => false)) {
-        await expect(next).toBeEnabled({ timeout: 5_000 });
-        await next.click();
-      }
-      else break;
+      if (await page.getByRole('button', { name: 'Next' }).isVisible().catch(() => false)) {
+        await clickWizardNext(page);
+      } else break;
     }
 
     await submit.click();
@@ -84,12 +98,9 @@ test.describe('authenticated surface', () => {
       // People step: pick the seeded friend as a real member.
       const friend = host.getByRole('button', { name: /E2E Guest/ });
       if (await friend.isVisible().catch(() => false)) await friend.click();
-      const next = host.getByRole('button', { name: 'Next' });
-      if (await next.isVisible().catch(() => false)) {
-        await expect(next).toBeEnabled({ timeout: 5_000 });
-        await next.click();
-      }
-      else break;
+      if (await host.getByRole('button', { name: 'Next' }).isVisible().catch(() => false)) {
+        await clickWizardNext(host);
+      } else break;
     }
     await submit.click();
     await host.waitForURL(/\/events\/[0-9a-f-]{36}/, { timeout: 15_000 });
@@ -121,12 +132,9 @@ test.describe('authenticated surface', () => {
       // Style step: turn on "let the group decide".
       const pollToggle = page.getByText('Let the group decide what to do 🗳️');
       if (await pollToggle.isVisible().catch(() => false)) await pollToggle.click();
-      const next = page.getByRole('button', { name: 'Next' });
-      if (await next.isVisible().catch(() => false)) {
-        await expect(next).toBeEnabled({ timeout: 5_000 });
-        await next.click();
-      }
-      else break;
+      if (await page.getByRole('button', { name: 'Next' }).isVisible().catch(() => false)) {
+        await clickWizardNext(page);
+      } else break;
     }
     await submit.click();
     await page.waitForURL(/\/events\/[0-9a-f-]{36}/, { timeout: 15_000 });
