@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/Button';
 import { Avatar } from '@/components/ui/Avatar';
 import { Card, SectionHeader } from '@/components/ui/Card';
+import { CopyButton } from '@/components/ui/CopyButton';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { useToast } from '@/components/ui/Toast';
 import { useConfirm } from '@/components/ui/ConfirmDialog';
@@ -13,6 +14,8 @@ import {
   addBoardPost,
   deleteBoardPost,
   inviteToBoard,
+  ensureBoardInviteLink,
+  rotateBoardInviteLink,
   removeFromBoard,
 } from '@/lib/actions/boards';
 
@@ -104,6 +107,7 @@ export function BoardClient({
   // Invite state.
   const [inviteHandle, setInviteHandle] = useState('');
   const [inviteError, setInviteError] = useState<string | null>(null);
+  const [inviteUrl, setInviteUrl] = useState<string | null>(null);
 
   const memberNames = Object.fromEntries(members.map((m) => [m.id, m.name]));
 
@@ -144,6 +148,26 @@ export function BoardClient({
         router.refresh();
       } else {
         setInviteError(result.error ?? 'Could not add them.');
+      }
+    });
+  }
+
+  function createLink() {
+    startTransition(async () => {
+      const result = await ensureBoardInviteLink(boardId);
+      if (result.ok && result.url) setInviteUrl(result.url);
+      else toast.error(result.error ?? 'Could not create an invite link.');
+    });
+  }
+
+  function rotateLink() {
+    startTransition(async () => {
+      const result = await rotateBoardInviteLink(boardId);
+      if (result.ok && result.url) {
+        setInviteUrl(result.url);
+        toast.success('New link ready. The old one no longer works.');
+      } else {
+        toast.error(result.error ?? 'Could not refresh the link.');
       }
     });
   }
@@ -358,6 +382,46 @@ export function BoardClient({
           </form>
         )}
         {inviteError && <p className="text-xs text-rose-deep mt-2">{inviteError}</p>}
+
+        {isModerator && (
+          <div className="mt-3">
+            {inviteUrl ? (
+              <Card tone="cream" className="space-y-2.5">
+                <p className="text-sm text-ink-soft leading-relaxed">
+                  Share this link. Anyone who opens it while signed in joins the
+                  board as a neighbor.
+                </p>
+                <div className="flex items-center gap-2 rounded-card border border-line bg-paper px-3 py-2.5">
+                  <span
+                    className="min-w-0 flex-1 truncate text-sm text-ink-soft"
+                    title={inviteUrl}
+                  >
+                    {inviteUrl}
+                  </span>
+                  <CopyButton text={inviteUrl} />
+                </div>
+                <button
+                  type="button"
+                  onClick={rotateLink}
+                  disabled={pending}
+                  className="text-xs font-bold text-ink-faint hover:text-rose-deep focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-terracotta rounded-pill px-1"
+                >
+                  Replace with a new link
+                </button>
+              </Card>
+            ) : (
+              <Button
+                type="button"
+                size="sm"
+                variant="ghost"
+                disabled={pending}
+                onClick={createLink}
+              >
+                {pending ? 'Creating…' : 'Create a shareable invite link 🔗'}
+              </Button>
+            )}
+          </div>
+        )}
       </section>
     </div>
   );

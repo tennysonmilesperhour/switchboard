@@ -81,6 +81,68 @@ export async function inviteToBoard(
   return { ok: true };
 }
 
+/**
+ * Mint (or fetch) the board's shareable invite code and return the full join
+ * URL. Moderator-only — enforced inside the security-definer function.
+ */
+export async function ensureBoardInviteLink(
+  boardId: string,
+): Promise<{ ok: boolean; url?: string; error?: string }> {
+  const auth = await requireUser();
+  if (!auth.ok) return auth;
+  const { supabase } = auth;
+
+  const { data: code, error } = await supabase.rpc('ensure_board_invite_code', {
+    p_board: boardId,
+  });
+  if (error || typeof code !== 'string') {
+    return { ok: false, error: 'Could not create an invite link.' };
+  }
+  const base = process.env.NEXT_PUBLIC_APP_URL ?? '';
+  revalidatePath('/boards');
+  return { ok: true, url: `${base}/boards/join/${code}` };
+}
+
+/**
+ * Rotate the invite code, invalidating any link already shared. Moderator-only.
+ */
+export async function rotateBoardInviteLink(
+  boardId: string,
+): Promise<{ ok: boolean; url?: string; error?: string }> {
+  const auth = await requireUser();
+  if (!auth.ok) return auth;
+  const { supabase } = auth;
+
+  const { data: code, error } = await supabase.rpc('rotate_board_invite_code', {
+    p_board: boardId,
+  });
+  if (error || typeof code !== 'string') {
+    return { ok: false, error: 'Could not refresh the invite link.' };
+  }
+  const base = process.env.NEXT_PUBLIC_APP_URL ?? '';
+  revalidatePath('/boards');
+  return { ok: true, url: `${base}/boards/join/${code}` };
+}
+
+/**
+ * Redeem an invite code: join the caller to the board and return its slug (or
+ * null for an unknown code). Used by the /boards/join/[code] landing page.
+ */
+export async function joinBoardViaCode(
+  code: string,
+): Promise<{ ok: boolean; slug?: string }> {
+  const auth = await requireUser();
+  if (!auth.ok) return { ok: false };
+  const { supabase } = auth;
+
+  const { data: slug, error } = await supabase.rpc('join_board_via_code', {
+    p_code: code,
+  });
+  if (error || typeof slug !== 'string') return { ok: false };
+  revalidatePath('/boards');
+  return { ok: true, slug };
+}
+
 export async function removeFromBoard(
   boardId: string,
   memberId: string,
