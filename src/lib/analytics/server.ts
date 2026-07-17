@@ -36,7 +36,9 @@ export async function capture(
         api_key: KEY,
         event,
         distinct_id: distinctId,
-        properties: { ...properties, $lib: 'switchboard-server' },
+        // `app` mirrors the client super-property so Switchboard's events stay
+        // filterable from the other product sharing this PostHog project.
+        properties: { ...properties, app: 'switchboard', $lib: 'switchboard-server' },
         timestamp: new Date().toISOString(),
       }),
       keepalive: true,

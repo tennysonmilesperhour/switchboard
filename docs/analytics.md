@@ -7,11 +7,29 @@ or slows a user action.
 
 ## How it works
 
-- Server-side only, via PostHog's HTTP capture API (`src/lib/analytics/server.ts`).
-  No browser SDK, no cookies, no client key. The core funnel lives in server
-  actions, so it is captured reliably and privately.
-- Set `POSTHOG_KEY` (and optionally `POSTHOG_HOST`, default `https://us.i.posthog.com`)
-  to turn it on. Leave unset in dev and it does nothing.
+Two layers, both no-ops until their key is set, both "bonus, never a blocker":
+
+- **Server-side funnel** — PostHog's HTTP capture API (`src/lib/analytics/server.ts`).
+  No cookies, no client key. The core funnel below lives in server actions, so it
+  is captured reliably and privately. Set `POSTHOG_KEY` (and optionally
+  `POSTHOG_HOST`, default `https://us.i.posthog.com`) to turn it on.
+- **Client-side SDK** — `posthog-js`, mounted in the root layout via
+  `src/components/system/PostHogProvider.tsx`. Covers **web/performance analytics**
+  (pageviews, Web Vitals) and **error tracking** (unhandled exceptions surface as
+  issues in PostHog). Set `NEXT_PUBLIC_POSTHOG_KEY` (same `phc_` project token —
+  it is public and ships to the browser) to turn it on. Session replay is off.
+
+Both leave dev quiet if you leave the keys unset. Every event — client and
+server — carries `app: "switchboard"` so this product's data stays cleanly
+separable from anything else sharing the PostHog project.
+
+### The `/ingest` reverse proxy
+
+The browser SDK talks to a **same-origin** path, `/ingest`, which `next.config.ts`
+rewrites to PostHog's ingestion and asset hosts. This keeps every request and
+lazily-loaded script `'self'` under the strict per-request CSP (`src/proxy.ts`) —
+no `script-src`/`connect-src` widening — and evades ad-blockers. `/ingest` is
+excluded from the auth proxy's matcher so beacons never hit Supabase.
 
 ## The North Star
 
@@ -45,8 +63,22 @@ Switchboard?") shows once, on Home, dismissibly, and **only** when
 `NEXT_PUBLIC_PMF_ENABLED=1`. Off by default so it never nags. Target is ≥40%
 "very disappointed".
 
-## Deliberately not yet tracked
+## Client-side capture (performance + errors)
 
-Client-side pageviews, session length, and notifications-per-user (the guardrail
-anti-goals) need a browser SDK behind a reverse-proxy rewrite (`/ingest`). Add
-that in a later pass if you want those; the server funnel above is the priority.
+The browser SDK adds, behind `NEXT_PUBLIC_POSTHOG_KEY`:
+
+- **Pageviews & pageleaves** — automatic across App Router client navigations.
+- **Web Vitals** — LCP, INP, CLS, etc., for performance analytics.
+- **Autocaptured interactions** — clicks and form activity (shape only).
+- **Error tracking** — unhandled exceptions and promise rejections become
+  PostHog issues.
+
+Client capture is **anonymous by design**: we do not call `posthog.identify`, so
+errors and performance are tracked per-session without tying them to a user —
+consistent with Switchboard's anonymity posture. If you later want authenticated
+debugging, identify with the Supabase user id at sign-in (and reset on sign-out),
+but weigh it against the anonymity guardrail first. Session replay is intentionally
+left off (`disable_session_recording`).
+
+The anonymity guardrail still applies: never attach message, poll-vote, or
+mutual-intent **content** to any event, client or server.
