@@ -1,5 +1,11 @@
-import { describe, expect, test } from 'vitest';
-import { looksLikeEmail } from './email';
+import { afterEach, describe, expect, test, vi } from 'vitest';
+import { looksLikeEmail, sendEmailWithResult } from './email';
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+  delete process.env.RESEND_API_KEY;
+  delete process.env.EMAIL_FROM;
+});
 
 describe('looksLikeEmail', () => {
   test('accepts ordinary addresses', () => {
@@ -19,5 +25,30 @@ describe('looksLikeEmail', () => {
     expect(looksLikeEmail(null)).toBe(false);
     expect(looksLikeEmail(undefined)).toBe(false);
     expect(looksLikeEmail('')).toBe(false);
+  });
+
+  test('reports missing provider configuration explicitly', async () => {
+    await expect(sendEmailWithResult({
+      to: 'sam@example.com',
+      subject: 'Hello',
+      text: 'Hi',
+    })).resolves.toEqual({ status: 'not_configured', provider: 'resend' });
+  });
+
+  test('preserves a provider message id on success', async () => {
+    process.env.RESEND_API_KEY = 'test-key';
+    process.env.EMAIL_FROM = 'Switchboard <test@example.com>';
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ id: 'email_123' }), { status: 200 }),
+    ));
+    await expect(sendEmailWithResult({
+      to: 'sam@example.com',
+      subject: 'Hello',
+      text: 'Hi',
+    })).resolves.toEqual({
+      status: 'sent',
+      provider: 'resend',
+      providerMessageId: 'email_123',
+    });
   });
 });

@@ -25,7 +25,10 @@ export default async function OnboardingPage({
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  if (!user) redirect('/login');
+  if (!user) {
+    const onboardingPath = `/onboarding?next=${encodeURIComponent(nextPath)}`;
+    redirect(`/login?next=${encodeURIComponent(onboardingPath)}`);
+  }
 
   const { data: profile } = await supabase
     .from('profiles')
@@ -33,7 +36,7 @@ export default async function OnboardingPage({
     .eq('id', user.id)
     .single();
 
-  if (profile?.onboarded) redirect('/');
+  if (profile?.onboarded) redirect(nextPath);
 
   return (
     <div className="mx-auto max-w-lg min-h-dvh px-6 py-8">

@@ -627,7 +627,8 @@ export function EventWizard({
         })),
       });
       if (result.ok && result.eventId) {
-        window.location.assign(`/events/${result.eventId}`);
+        const suffix = result.warning ? '?delivery=attention' : '';
+        window.location.assign(`/events/${result.eventId}${suffix}`);
         return;
       }
       setSubmitting(false);

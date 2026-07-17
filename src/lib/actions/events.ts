@@ -9,6 +9,7 @@ import { isEventManager } from '@/lib/server/authz';
 import {
   advanceEventCascade,
   notifyCurrentInviteWave,
+  type InvitationDeliverySummary,
 } from '@/lib/server/cascade-runner';
 import { notifyUsers } from '@/lib/server/notify';
 import { capture } from '@/lib/analytics/server';
@@ -73,10 +74,21 @@ export interface CreateEventResult {
   ok: boolean;
   eventId?: string;
   error?: string;
+  delivery?: InvitationDeliverySummary;
+  warning?: string;
 }
 
 function createEventError(error: string): CreateEventResult {
   return { ok: false, error };
+}
+
+function deliveryWarning(delivery: InvitationDeliverySummary | undefined): string | undefined {
+  if (!delivery) return undefined;
+  const count =
+    delivery.notConfigured + delivery.failed + delivery.invalidRecipient + delivery.manual;
+  return count > 0
+    ? `${count} invitation channel${count === 1 ? '' : 's'} needs attention.`
+    : undefined;
 }
 
 const HANDLE_PATTERN = /^@?[a-z0-9_]{3,24}$/;
@@ -162,9 +174,10 @@ export async function createEvent(input: CreateEventInput): Promise<CreateEventR
     return createEventError('Something went wrong publishing your plan. Nothing was saved.');
   }
 
+  let delivery: InvitationDeliverySummary | undefined;
   if (!input.enablePoll) {
     try {
-      await notifyCurrentInviteWave(eventId);
+      delivery = await notifyCurrentInviteWave(eventId);
     } catch (cascadeError) {
       await reportOperationalError('event-initial-delivery', cascadeError, { eventId });
     }
@@ -175,7 +188,12 @@ export async function createEvent(input: CreateEventInput): Promise<CreateEventR
     has_poll: !!input.enablePoll,
   });
 
-  return { ok: true, eventId };
+  return {
+    ok: true,
+    eventId,
+    delivery,
+    warning: deliveryWarning(delivery),
+  };
 }
 
 export interface AddPeopleResult {
@@ -185,11 +203,12 @@ export interface AddPeopleResult {
   added?: number;
   /** Entries that couldn't be added, each with a short reason. */
   skipped?: Array<{ entry: string; reason: string }>;
+  warning?: string;
 }
 
 /** One resolved thing to insert: either a member (profileId) or a guest. */
 type ResolvedAddition =
-  | { kind: 'member'; profileId: string; label: string }
+  | { kind: 'member'; profileId: string; label: string; contact?: string }
   | { kind: 'guest'; name: string; contact: string | null; label: string };
 
 /**
@@ -208,12 +227,26 @@ async function resolveAddition(
   }
   if (parsed.kind === 'email') {
     const match = await resolveProfileByContact(supabase, parsed.value);
-    if (match) return { kind: 'member', profileId: match.id, label: parsed.display };
+    if (match) {
+      return {
+        kind: 'member',
+        profileId: match.id,
+        label: parsed.display,
+        contact: parsed.value,
+      };
+    }
     return { kind: 'guest', name: parsed.value, contact: parsed.value, label: parsed.display };
   }
   if (parsed.kind === 'phone') {
     const match = await resolveProfileByContact(supabase, parsed.value);
-    if (match) return { kind: 'member', profileId: match.id, label: parsed.display };
+    if (match) {
+      return {
+        kind: 'member',
+        profileId: match.id,
+        label: parsed.display,
+        contact: parsed.value,
+      };
+    }
     return { kind: 'guest', name: parsed.display, contact: parsed.value, label: parsed.display };
   }
   // Plain name — an off-platform guest reachable via their guest link.
@@ -370,6 +403,7 @@ export async function addPeopleToEvent(
       toInsert.push({
         event_id: eventId,
         invitee_id: addition.profileId,
+        guest_contact: addition.contact ?? null,
         position: nextPosition++,
         group_stage: groupStage,
         window_minutes: windowMinutes,
@@ -407,14 +441,20 @@ export async function addPeopleToEvent(
 
   // Send immediately if the cascade is ready for them (e.g. individual mode
   // with no live invite, or a resolved prior wave). The cron sweep is the backstop.
+  let delivery: InvitationDeliverySummary | undefined;
   try {
-    await advanceEventCascade(eventId);
+    delivery = await advanceEventCascade(eventId);
   } catch (cascadeError) {
     await reportOperationalError('add-people-cascade', cascadeError, { eventId });
   }
 
   revalidatePath(`/events/${eventId}`);
-  return { ok: true, added: toInsert.length, skipped };
+  return {
+    ok: true,
+    added: toInsert.length,
+    skipped,
+    warning: deliveryWarning(delivery),
+  };
 }
 
 /**
@@ -465,7 +505,7 @@ export async function removeInvite(
 export async function resendInvite(
   eventId: string,
   inviteId: string,
-): Promise<{ ok: boolean; error?: string }> {
+): Promise<{ ok: boolean; error?: string; warning?: string }> {
   const auth = await requireUser();
   if (!auth.ok) return auth;
   const { user } = auth;
@@ -517,13 +557,14 @@ export async function resendInvite(
     .eq('id', inviteId);
   if (error) return { ok: false, error: 'Could not resend that invite. Try again.' };
 
+  let delivery: InvitationDeliverySummary | undefined;
   try {
-    await advanceEventCascade(eventId);
+    delivery = await advanceEventCascade(eventId);
   } catch (cascadeError) {
     await reportOperationalError('resend-invite-cascade', cascadeError, { eventId });
   }
   revalidatePath(`/events/${eventId}`);
-  return { ok: true };
+  return { ok: true, warning: deliveryWarning(delivery) };
 }
 
 export interface UpdateEventInput {

@@ -3,6 +3,9 @@ import { createAdminClient, hasAdminCredentials } from '@/lib/supabase/admin';
 import { smsEnabled } from '@/lib/server/sms';
 import { bearerMatches } from '@/lib/server/secret';
 
+const EXPECTED_SCHEMA_VERSION = '20260717081000';
+const REQUIRED_PRIVATE_BUCKET = 'media-private';
+
 /**
  * The `<ref>` subdomain of a Supabase URL (`https://<ref>.supabase.co`) — the
  * project identifier. Non-secret: NEXT_PUBLIC_SUPABASE_URL already ships to the
@@ -62,6 +65,8 @@ export async function GET(request: Request) {
 
   let database = false;
   let schema = false;
+  let schemaVersion: string | null = null;
+  let storage = false;
   if (checks.supabaseAdmin) {
     const admin = createAdminClient();
     const { error } = await admin
@@ -70,20 +75,30 @@ export async function GET(request: Request) {
       .limit(1);
     database = !error;
 
-    // Account creation writes `handle` and `contact_email` onto `profiles`.
-    // A database missing the profile_rich migration (e.g. a duplicate/rewired
-    // project after a deployment switch) breaks signup while login keeps
-    // working — so probe those columns explicitly to surface the drift here
-    // instead of only at signup time.
-    const { error: schemaError } = await admin
-      .from('profiles')
-      .select('id, handle, contact_email', { head: true })
-      .limit(1);
-    schema = !schemaError;
+    const [{ data: version, error: schemaError }, { data: buckets, error: storageError }] =
+      await Promise.all([
+        admin.rpc('app_schema_version'),
+        admin.storage.listBuckets(),
+      ]);
+    schemaVersion = typeof version === 'string' ? version : null;
+    schema = !schemaError && schemaVersion === EXPECTED_SCHEMA_VERSION;
+    storage =
+      !storageError &&
+      Boolean(buckets?.some((bucket) => bucket.id === REQUIRED_PRIVATE_BUCKET && !bucket.public));
   }
 
+  // SMS is intentionally not launch-blocking while text delivery is shelved.
+  // Keep reporting `services.sms` so operators can see when it is configured,
+  // but do not mark the demo unhealthy solely because texting is disabled.
   const required =
-    checks.supabasePublic && checks.supabaseAdmin && checks.appUrl && checks.cron && database && schema;
+    checks.supabasePublic &&
+    checks.supabaseAdmin &&
+    checks.appUrl &&
+    checks.cron &&
+    checks.email &&
+    database &&
+    schema &&
+    storage;
 
   // Which database and origin THIS deployment is wired to. Compare across
   // deployments (and against where an invite actually lives) to catch a
@@ -96,7 +111,16 @@ export async function GET(request: Request) {
   };
 
   return NextResponse.json(
-    { ok: required, database, schema, services: checks, config },
+    {
+      ok: required,
+      database,
+      schema,
+      schemaVersion,
+      expectedSchemaVersion: EXPECTED_SCHEMA_VERSION,
+      storage,
+      services: checks,
+      config,
+    },
     {
       status: required ? 200 : 503,
       headers: { 'Cache-Control': 'no-store' },

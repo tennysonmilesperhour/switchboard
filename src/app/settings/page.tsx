@@ -11,6 +11,7 @@ import { InterestPicker } from '@/components/profile/InterestPicker';
 import { AutosaveForm, AutosaveStatus } from './AutosaveForm';
 import { AccountControls } from './AccountControls';
 import { CalendarSubscribe } from './CalendarSubscribe';
+import { ContactVerification } from './ContactVerification';
 import { INTEREST_CATEGORIES, DOWN_TO_GROUP } from '@/lib/interests';
 import {
   signOut,
@@ -29,7 +30,12 @@ const HOURS = Array.from({ length: 24 }, (_, hour) => ({
   }),
 }));
 
-export default async function SettingsPage() {
+export default async function SettingsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ contact?: string }>;
+}) {
+  const { contact: contactNotice } = await searchParams;
   const supabase = await createClient();
   const {
     data: { user },
@@ -50,6 +56,15 @@ export default async function SettingsPage() {
     .rpc('my_private_profile')
     .maybeSingle<{ calendar_token: string; contact_email: string | null; contact_phone: string | null }>();
   const calendarToken = privateProfile?.calendar_token ?? null;
+  const { data: contacts } = await supabase
+    .from('profile_contacts')
+    .select('kind, verified_at');
+  const emailVerified = Boolean(
+    contacts?.some((contact) => contact.kind === 'email' && contact.verified_at),
+  );
+  const phoneVerified = Boolean(
+    contacts?.some((contact) => contact.kind === 'phone' && contact.verified_at),
+  );
 
   // Reveal the moderation entry point only to appointed platform moderators.
   const { data: isModerator } = await supabase.rpc('is_platform_moderator', {
@@ -88,6 +103,40 @@ export default async function SettingsPage() {
             </div>
           )}
         </Card>
+
+        <section>
+          <SectionHeader
+            title="Verified contact details"
+            hint="Only verified details can match contacts or route invitations to your account"
+          />
+          <Card>
+            {contactNotice && (
+              <p
+                role={contactNotice === 'verified' ? 'status' : 'alert'}
+                className={`mb-4 text-sm ${
+                  contactNotice === 'verified' ? 'text-sage-deep' : 'text-rose-deep'
+                }`}
+              >
+                {contactNotice === 'verified'
+                  ? 'Email verified.'
+                  : contactNotice === 'claimed'
+                    ? 'That email is already verified on another account.'
+                    : contactNotice === 'expired'
+                      ? 'That verification link expired. Request a new one.'
+                      : 'Email verification could not be completed.'}
+              </p>
+            )}
+            <ContactVerification
+              email={privateProfile?.contact_email ?? null}
+              phone={privateProfile?.contact_phone ?? null}
+              emailVerified={emailVerified}
+              phoneVerified={phoneVerified}
+            />
+            <Link href="/profile/edit" className="mt-4 inline-block text-sm font-bold text-terracotta-deep">
+              Edit contact details
+            </Link>
+          </Card>
+        </section>
 
         <section>
           <SectionHeader

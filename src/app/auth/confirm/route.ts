@@ -1,6 +1,7 @@
 import { type EmailOtpType } from '@supabase/supabase-js';
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { createAdminClient, hasAdminCredentials } from '@/lib/supabase/admin';
 import { safeNextPath } from '@/lib/security';
 
 /**
@@ -25,6 +26,23 @@ export async function GET(request: Request) {
     const supabase = await createClient();
     const { error } = await supabase.auth.verifyOtp({ type, token_hash: tokenHash });
     if (!error) {
+      // A signup confirmation proves control of the real auth email. Mirror
+      // that proof into contact matching; synthetic username emails are never
+      // contact identifiers.
+      if ((type === 'signup' || type === 'email') && hasAdminCredentials()) {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user?.email && !user.email.endsWith('@users.switchboard.local')) {
+          await createAdminClient()
+            .from('profile_contacts')
+            .update({
+              verified_at: new Date().toISOString(),
+              updated_at: new Date().toISOString(),
+            })
+            .eq('user_id', user.id)
+            .eq('kind', 'email')
+            .eq('normalized_value', user.email.toLowerCase());
+        }
+      }
       return NextResponse.redirect(`${origin}${next}`);
     }
   }
