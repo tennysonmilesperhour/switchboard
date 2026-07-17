@@ -74,6 +74,22 @@ body {
   overscroll-behavior-y: none;
 }
 
+/*
+ * iOS Safari zooms the whole page in toward any focused form control whose
+ * font-size is under 16px and — unlike a pinch gesture — never zooms back out,
+ * stranding the layout magnified with its right edge off-screen. Several of our
+ * fields render at 14-15px, so tapping one triggers it. Holding controls at the
+ * 16px threshold on touch devices stops the auto-zoom, while pointer/desktop
+ * layouts (which never zoom) keep their intended smaller sizes.
+ */
+@media (hover: none) and (pointer: coarse) {
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
+  select,
+  textarea {
+    font-size: 16px;
+  }
+}
+
 /* Display headings carry the brand voice: heavy, tight, confident. */
 h1, h2, h3, .font-display {
   font-family: var(--font-display);
