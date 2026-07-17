@@ -15,7 +15,9 @@ async function login(page: Page, identifier: string) {
   await page.goto('/login');
   await page.getByPlaceholder('email or username').fill(identifier);
   await page.getByPlaceholder('Password', { exact: true }).fill(PASSWORD);
-  await page.getByRole('button', { name: 'Sign in' }).click();
+  // The page has a "Sign in" mode-toggle tab as well as the form's submit
+  // button, both named "Sign in" — scope to the form to click the submit.
+  await page.locator('form').getByRole('button', { name: 'Sign in' }).click();
   await page.waitForURL((url) => !url.pathname.startsWith('/login'), {
     timeout: 15_000,
   });
