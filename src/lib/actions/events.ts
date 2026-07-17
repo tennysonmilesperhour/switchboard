@@ -54,6 +54,8 @@ export interface CreateEventInput {
   enablePoll: boolean;
   pollResolution: 'host_pick' | 'auto' | 'runoff';
   voteDeadline: string | null;
+  /** Whether the ~3h-before reminder sweep should ping this plan's attendees. */
+  remindersEnabled?: boolean;
   /** Presentation */
   coverUrl?: string | null;
   theme?: EventTheme;

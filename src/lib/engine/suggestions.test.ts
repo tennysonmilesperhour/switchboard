@@ -31,6 +31,21 @@ describe('hostSuggestions', () => {
     expect(hostSuggestions(draft())).toEqual([]);
   });
 
+  test('capacity nudge fires only when the guard is on and plans stack up', () => {
+    // Guard off: silent even with a full week.
+    expect(
+      ids(draft({ upcomingPlanCount: 5 })),
+    ).not.toContain('capacity-nudge');
+    // Guard on but below threshold: still silent.
+    expect(
+      ids(draft({ capacityGuard: true, upcomingPlanCount: 2 })),
+    ).not.toContain('capacity-nudge');
+    // Guard on and at threshold: speaks up.
+    expect(
+      ids(draft({ capacityGuard: true, upcomingPlanCount: 3 })),
+    ).toContain('capacity-nudge');
+  });
+
   test('no invitees → nothing to say', () => {
     expect(hostSuggestions(draft({ invitees: [] }))).toEqual([]);
   });

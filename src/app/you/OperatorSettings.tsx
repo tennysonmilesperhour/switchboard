@@ -31,16 +31,14 @@ const TOGGLES: OperatorToggle[] = [
   {
     key: 'capacity_guard',
     label: 'Capacity nudge',
-    desc: 'A gentle heads-up when a stretch of draining plans is stacking up. Never blocks anything.',
+    desc: 'A gentle heads-up on the review step when you already have several plans in the week ahead. Never blocks anything.',
     kind: 'behavior',
-    soon: true,
   },
   {
     key: 'tune_windows',
     label: 'Tune my defaults',
     desc: 'Let your tempo set smarter default response windows when you make plans.',
     kind: 'behavior',
-    soon: true,
   },
 ];
 

@@ -29,7 +29,16 @@ export interface SuggestionDraft {
   hasLocation: boolean;
   /** Group is still deciding *what* to do, so a missing spot is expected. */
   enablePoll: boolean;
+  /**
+   * How many plans the host already has coming up in the next week. Only used
+   * when `capacityGuard` is on (the opt-in "Capacity nudge" operator setting).
+   */
+  upcomingPlanCount?: number;
+  capacityGuard?: boolean;
 }
+
+/** At or above this many upcoming plans, the capacity nudge speaks up. */
+const CAPACITY_NUDGE_THRESHOLD = 3;
 
 const HOUR = 60;
 const DAY = 24 * HOUR;
@@ -82,6 +91,21 @@ export function hostSuggestions(draft: SuggestionDraft): HostSuggestion[] {
   const out: HostSuggestion[] = [];
   const { invitees, startsAt, now } = draft;
   if (invitees.length === 0) return out;
+
+  // Opt-in capacity nudge: a gentle, never-blocking heads-up when a stretch of
+  // plans is stacking up. Placed first so it frames the plan being made, but
+  // it's purely informational — the host can dismiss it and carry on.
+  if (
+    draft.capacityGuard &&
+    (draft.upcomingPlanCount ?? 0) >= CAPACITY_NUDGE_THRESHOLD
+  ) {
+    out.push({
+      id: 'capacity-nudge',
+      emoji: '🫖',
+      title: 'That’s a full stretch coming up',
+      body: `You’ve already got ${draft.upcomingPlanCount} plans in the next week. This one’s welcome too — just make sure you’re leaving yourself room to enjoy them.`,
+    });
+  }
 
   const windows = invitees.map((i) => i.windowMinutes);
   const minWindow = Math.min(...windows);
