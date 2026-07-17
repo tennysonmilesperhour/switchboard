@@ -8,7 +8,7 @@ import { expect, test, type Page } from '@playwright/test';
  * e2eguest ("E2E Guest"), who are seeded as accepted friends.
  */
 const DB = !!process.env.E2E_DB;
-const PASSWORD = 'testpassword123';
+const PASSWORD = process.env.E2E_TEST_PASSWORD ?? 'testpassword123';
 const TITLE = 'Coffee downtown, Game night, Saturday hike…';
 
 async function login(page: Page, identifier: string) {

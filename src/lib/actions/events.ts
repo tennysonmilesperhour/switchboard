@@ -54,7 +54,9 @@ export interface CreateEventInput {
   showExpired: boolean;
   enablePoll: boolean;
   pollResolution: 'host_pick' | 'auto' | 'runoff';
+  suggestDeadline: string | null;
   voteDeadline: string | null;
+  remindersEnabled: boolean;
   /** Presentation */
   coverUrl?: string | null;
   theme?: EventTheme;
@@ -160,6 +162,25 @@ export async function createEvent(input: CreateEventInput): Promise<CreateEventR
   // the future — the client blocks this too, but never trust the client.
   if (input.startsAt && new Date(input.startsAt).getTime() < Date.now()) {
     return createEventError('That date has already passed. Pick a time in the future.');
+  }
+  if (input.startsAt && input.endsAt && new Date(input.endsAt) <= new Date(input.startsAt)) {
+    return createEventError('End time should be after the start time.');
+  }
+  if (input.enablePoll) {
+    const now = Date.now();
+    if (input.suggestDeadline && new Date(input.suggestDeadline).getTime() < now) {
+      return createEventError('Suggestion deadline should be in the future.');
+    }
+    if (input.voteDeadline && new Date(input.voteDeadline).getTime() < now) {
+      return createEventError('Voting deadline should be in the future.');
+    }
+    if (
+      input.suggestDeadline &&
+      input.voteDeadline &&
+      new Date(input.suggestDeadline) > new Date(input.voteDeadline)
+    ) {
+      return createEventError('Suggestion deadline should be before voting closes.');
+    }
   }
 
   const invitees = await resolveInvitees(supabase, input.invitees);
