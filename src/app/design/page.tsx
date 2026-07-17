@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { notFound } from 'next/navigation';
 import { Button } from '@/components/ui/Button';
 import { Chip } from '@/components/ui/Chip';
 import { Avatar, AvatarCluster } from '@/components/ui/Avatar';
@@ -29,6 +30,10 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 }
 
 export default function DesignSystemPage() {
+  // Internal design-system reference. Reachable in local dev and preview
+  // deployments, but not on the production site (where it's only noindex'd).
+  if (process.env.VERCEL_ENV === 'production') notFound();
+
   return (
     <div className="mx-auto max-w-lg min-h-dvh px-5 py-10">
       <header className="mb-10">

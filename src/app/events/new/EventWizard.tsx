@@ -178,6 +178,7 @@ export function EventWizard({
   const [locationName, setLocationName] = useState('');
   const [date, setDate] = useState('');
   const [time, setTime] = useState('');
+  const [endTime, setEndTime] = useState('');
   const [recurrence, setRecurrence] = useState<RecurrenceKind>('none');
   const [customDays, setCustomDays] = useState('14');
   const [capacity, setCapacity] = useState('');
@@ -195,6 +196,9 @@ export function EventWizard({
   const [enablePoll, setEnablePoll] = useState(initialDecide);
   const [pollResolution, setPollResolution] =
     useState<CreateEventInput['pollResolution']>('host_pick');
+  // Optional deadline for the group vote (a local datetime-local string). When
+  // set, the poll runner resolves the poll automatically once it passes.
+  const [voteDeadline, setVoteDeadline] = useState('');
 
   // Step 3/4 - people & order
   const [invitees, setInvitees] = useState<DraftInvitee[]>(() => {
@@ -232,6 +236,23 @@ export function EventWizard({
     if (!date) return null;
     return new Date(`${date}T${time || '18:00'}`).toISOString();
   }, [date, time]);
+
+  // Optional end time, on the same day as the start. Only produces an ISO
+  // timestamp when it lands strictly after the start; an earlier end is treated
+  // as unset (and flagged below) rather than silently persisting a bad range.
+  const endsAt = useMemo(() => {
+    if (!date || !endTime) return null;
+    const end = new Date(`${date}T${endTime}`);
+    if (Number.isNaN(end.getTime())) return null;
+    if (startsAt && end.getTime() <= new Date(startsAt).getTime()) return null;
+    return end.toISOString();
+  }, [date, endTime, startsAt]);
+  const endBeforeStart = useMemo(
+    () =>
+      Boolean(date && endTime && startsAt) &&
+      new Date(`${date}T${endTime}`).getTime() <= new Date(startsAt!).getTime(),
+    [date, endTime, startsAt],
+  );
 
   const suggested = useMemo(
     () => suggestWindow(startsAt ? new Date(startsAt) : new Date(), new Date()),
@@ -595,7 +616,7 @@ export function EventWizard({
         locationName: locationName.trim() || null,
         locationAddress: null,
         startsAt,
-        endsAt: null,
+        endsAt,
         // The zone `startsAt` was computed in, so server-side renders (link
         // unfurls, guest RSVP pages) show the host's intended local time.
         timeZone: resolveTimeZone(),
@@ -607,7 +628,10 @@ export function EventWizard({
         showExpired,
         enablePoll,
         pollResolution,
-        voteDeadline: null,
+        voteDeadline:
+          enablePoll && voteDeadline
+            ? new Date(voteDeadline).toISOString()
+            : null,
         coverUrl: coverUrl.trim() || null,
         wishlistUrl: wishlistUrl.trim() || null,
         theme,
@@ -710,7 +734,7 @@ export function EventWizard({
               />
             </div>
             <div className="space-y-1.5 min-w-0">
-              <label htmlFor="time" className={FIELD_LABEL}>Time</label>
+              <label htmlFor="time" className={FIELD_LABEL}>Start</label>
               <input
                 id="time" type="time" value={time}
                 step={300}
@@ -718,10 +742,26 @@ export function EventWizard({
                 className={`${FIELD} min-w-0 appearance-none [color-scheme:light]`}
               />
             </div>
+            <div className="space-y-1.5 min-w-0">
+              <label htmlFor="endTime" className={FIELD_LABEL}>
+                Ends <span className="font-normal text-ink-faint">(optional)</span>
+              </label>
+              <input
+                id="endTime" type="time" value={endTime}
+                step={300}
+                onChange={(e) => setEndTime(e.target.value)}
+                className={`${FIELD} min-w-0 appearance-none [color-scheme:light]`}
+              />
+            </div>
           </div>
           {startsInPast && (
             <p role="alert" className="text-sm font-medium text-rose-deep">
               That date and time have already passed. Pick a moment in the future.
+            </p>
+          )}
+          {endBeforeStart && (
+            <p role="alert" className="text-sm font-medium text-rose-deep">
+              The end time is before the start. Pick a later time, or leave it blank.
             </p>
           )}
           <div className="space-y-1.5">
@@ -964,6 +1004,25 @@ export function EventWizard({
                     {label}
                   </Chip>
                 ))}
+              </div>
+            )}
+            {enablePoll && (
+              <div className="mt-3 pl-7 space-y-1.5">
+                <label htmlFor="voteDeadline" className="text-sm font-semibold text-ink">
+                  Decide by <span className="font-normal text-ink-faint">(optional)</span>
+                </label>
+                <input
+                  id="voteDeadline"
+                  type="datetime-local"
+                  value={voteDeadline}
+                  min={minDate ? `${minDate}T00:00` : undefined}
+                  onChange={(e) => setVoteDeadline(e.target.value)}
+                  className={`${FIELD} appearance-none [color-scheme:light]`}
+                />
+                <p className="text-xs text-ink-faint">
+                  Voting closes and the winner is picked automatically at this
+                  time. Leave blank to decide whenever you’re ready.
+                </p>
               </div>
             )}
           </Card>
