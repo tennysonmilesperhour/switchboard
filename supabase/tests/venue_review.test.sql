@@ -1,5 +1,5 @@
 -- pgTAP regression tests for the venue review lifecycle
--- (20260717220000_venue_review.sql).
+-- (20260717230000_venue_review.sql).
 --
 -- Run with the Supabase CLI against a local stack:
 --   supabase start
