@@ -1,48 +1,83 @@
 'use client';
 
-import { useState, useTransition } from 'react';
+import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { Switch } from '@/components/ui/Switch';
 import {
   NOTIFICATION_CATEGORIES,
   type NotificationPrefs,
 } from '@/lib/notifications';
 import { updateNotificationPrefs } from '@/lib/actions/profile';
+import { useSettingsSave } from '@/app/settings/SettingsSaveBar';
+
+function prefsEqual(a: NotificationPrefs, b: NotificationPrefs): boolean {
+  return NOTIFICATION_CATEGORIES.every((category) => a[category.key] === b[category.key]);
+}
 
 /**
  * The per-category notification switches, plus an "everything" master that
- * flips them all at once. Optimistic: the UI moves immediately and the save
- * runs in the background, so toggling never feels laggy. If a save fails we
- * roll the row back to what the server last confirmed and surface a note.
+ * flips them all at once. Edits are held locally and committed through the
+ * shared Settings save bar (Save / Cancel), so a toggle no longer writes until
+ * you confirm it. If a save fails we surface a note and leave the section dirty
+ * so the bar stays up for a retry.
  */
 export function NotificationPreferences({
   initial,
 }: {
   initial: NotificationPrefs;
 }) {
+  const { register, setDirty } = useSettingsSave();
+  const id = useId();
   const [prefs, setPrefs] = useState<NotificationPrefs>(initial);
-  const [confirmed, setConfirmed] = useState<NotificationPrefs>(initial);
+  const [baseline, setBaseline] = useState<NotificationPrefs>(initial);
   const [error, setError] = useState(false);
-  const [pending, startTransition] = useTransition();
+
+  // Ref mirrors so the registered save/cancel closures always see the latest
+  // draft and baseline without re-registering.
+  const prefsRef = useRef(prefs);
+  const baselineRef = useRef(baseline);
+  useEffect(() => {
+    prefsRef.current = prefs;
+  }, [prefs]);
+  useEffect(() => {
+    baselineRef.current = baseline;
+  }, [baseline]);
+
+  useEffect(() => {
+    return register(id, {
+      save: async () => {
+        const next = prefsRef.current;
+        setError(false);
+        const result = await updateNotificationPrefs(next);
+        if (result.ok) {
+          setBaseline(next);
+          setDirty(id, false);
+        } else {
+          setError(true);
+          // Keep this section dirty so the save bar stays up for a retry.
+          throw new Error('Could not save notification preferences.');
+        }
+      },
+      cancel: () => {
+        setPrefs(baselineRef.current);
+        setError(false);
+        setDirty(id, false);
+      },
+    });
+  }, [id, register, setDirty]);
+
+  const update = useCallback(
+    (next: NotificationPrefs) => {
+      setPrefs(next);
+      setError(false);
+      setDirty(id, !prefsEqual(next, baselineRef.current));
+    },
+    [id, setDirty],
+  );
 
   const allOn = NOTIFICATION_CATEGORIES.every((c) => prefs[c.key]);
 
-  function persist(next: NotificationPrefs) {
-    const previous = confirmed;
-    setPrefs(next);
-    setError(false);
-    startTransition(async () => {
-      const result = await updateNotificationPrefs(next);
-      if (result.ok) {
-        setConfirmed(next);
-      } else {
-        setPrefs(previous);
-        setError(true);
-      }
-    });
-  }
-
   function setAll(value: boolean) {
-    persist({ plans: value, reminders: value, messages: value, social: value });
+    update({ plans: value, reminders: value, messages: value, social: value });
   }
 
   return (
@@ -84,7 +119,7 @@ export function NotificationPreferences({
               <Switch
                 checked={on}
                 onCheckedChange={(value) =>
-                  persist({ ...prefs, [category.key]: value })
+                  update({ ...prefs, [category.key]: value })
                 }
                 label={`${on ? 'Turn off' : 'Turn on'} ${category.label}`}
               />
@@ -93,16 +128,11 @@ export function NotificationPreferences({
         })}
       </ul>
 
-      <p
-        className="pt-2 text-xs font-semibold text-ink-faint"
-        aria-live="polite"
-      >
-        {error
-          ? 'Couldn’t save — check your connection and try again.'
-          : pending
-            ? 'Saving…'
-            : 'Changes save automatically'}
-      </p>
+      {error && (
+        <p className="pt-2 text-xs font-semibold text-rose-deep" aria-live="polite">
+          Couldn’t save — check your connection and try again.
+        </p>
+      )}
     </div>
   );
 }

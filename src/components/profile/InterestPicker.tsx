@@ -49,8 +49,8 @@ export function InterestPicker({
   const [openGroups, setOpenGroups] = useState<Set<string>>(() => new Set());
 
   // Toggling a chip changes hidden inputs programmatically, which fires no DOM
-  // event — so an enclosing AutosaveForm wouldn't notice. Emit a bubbling
-  // `input` after mount so autosave (and anything else listening) picks it up.
+  // event — so an enclosing settings form wouldn't notice. Emit a bubbling
+  // `input` after mount so dirty-tracking (and anything else listening) picks it up.
   const rootRef = useRef<HTMLDivElement>(null);
   const mounted = useRef(false);
   useEffect(() => {
