@@ -94,6 +94,7 @@ const KIND_TO_CATEGORY: Record<string, NotificationCategory> = {
   event_comment: 'messages',
   photo: 'messages',
   // Connections & matches
+  connection_request: 'social',
   connection_accepted: 'social',
   match: 'social',
   moment: 'social',
