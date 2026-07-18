@@ -17,7 +17,9 @@ Mobile-first PWA · Next.js 16 (App Router) · Supabase (Postgres, Auth, RLS, Re
 | 🟢 **Availability Signals** | One-tap "Coffee Break?" visible only to the circles you choose. Auto-expires. No broadcasts. |
 | ❋ **Digital Living Rooms** | Chat where addresses, tasks, links, and notes file themselves into tabs (Claude Haiku, with a zero-cost rules fallback). |
 | 🧭 **Smart Activity Discovery** | Describe the experience → Claude Sonnet curates a handful of fits, each with a "why". One tap into a plan. |
-| ✨ **Shared Moments** | Check in somewhere; three moments of consent (open → curious → 🤝) before anyone is revealed. |
+| ✨ **Shared Moments** | Check in somewhere; three moments of consent (open → curious → 🤝) before anyone is revealed. Optionally geo-tag the check-in so it lands on the map. |
+| 🎪 **Serendipity Zones** | Named *places* (a conference, cruise, campus, festival) you check into. A zone is the place; a moment is your presence in it. Anchor one to a spot and it appears on the map. |
+| 🧭 **Live on the Map** | Opt in to share your location and appear live to other people sharing nearby — mutual ("see and be seen"), block-aware, coarsened to ~110 m, and auto-off after a couple of hours. Plans, zones, and shared places share the same map as toggleable layers. |
 
 ## Getting started
 

@@ -1,9 +1,22 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Button } from '@/components/ui/Button';
-import { enablePush, getPushState, type PushState } from '@/lib/client/push';
+import { Switch } from '@/components/ui/Switch';
+import {
+  enablePush,
+  disablePush,
+  getPushState,
+  type PushState,
+} from '@/lib/client/push';
 
+/**
+ * The device-level push control: a real on/off switch for "send pushes to this
+ * browser". Turning it on prompts for permission and registers the
+ * subscription; turning it off unsubscribes this device. This is the master
+ * gate — with it off, the per-category preferences below have nothing to act
+ * on. Permission that's been hard-blocked in the browser can't be re-prompted,
+ * so we say so instead of showing a dead toggle.
+ */
 export function PushManager() {
   const [state, setState] = useState<PushState>('default');
   const [busy, setBusy] = useState(false);
@@ -18,10 +31,10 @@ export function PushManager() {
     };
   }, []);
 
-  async function enable() {
+  async function toggle(next: boolean) {
     setBusy(true);
     try {
-      setState(await enablePush());
+      setState(next ? await enablePush() : await disablePush());
     } finally {
       setBusy(false);
     }
@@ -35,23 +48,30 @@ export function PushManager() {
       </p>
     );
   }
-  if (state === 'subscribed') {
-    return (
-      <p className="text-sm text-sage-deep">
-        ✓ Notifications are on - matches, invitations, and confirmed plans.
-      </p>
-    );
-  }
-  if (state === 'denied') {
-    return (
-      <p className="text-sm text-ink-faint">
-        Notifications are blocked in your browser settings.
-      </p>
-    );
-  }
+
+  const subscribed = state === 'subscribed';
+  const blocked = state === 'denied';
+
   return (
-    <Button variant="secondary" size="sm" disabled={busy} onClick={enable}>
-      {busy ? 'Enabling…' : 'Enable notifications 🔔'}
-    </Button>
+    <div className="flex items-start justify-between gap-4">
+      <div className="min-w-0">
+        <p className="text-sm font-bold text-ink">Push on this device</p>
+        <p className="mt-0.5 text-sm text-ink-soft leading-relaxed">
+          {blocked
+            ? 'Notifications are blocked in your browser settings — turn them back on there to enable push.'
+            : subscribed
+              ? 'This browser will receive the categories you’ve turned on below.'
+              : busy
+                ? 'Setting up…'
+                : 'Get matches, invitations, and confirmed plans on this device.'}
+        </p>
+      </div>
+      <Switch
+        checked={subscribed}
+        disabled={busy || blocked}
+        onCheckedChange={toggle}
+        label="Push notifications on this device"
+      />
+    </div>
   );
 }

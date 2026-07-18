@@ -14,6 +14,7 @@ import { reportOperationalError } from '@/lib/server/observability';
 import { LEGAL_VERSION } from '@/lib/legal';
 import { sanitizeUrl } from '@/lib/url';
 import type { ProfileLink, ProfileSocial } from '@/lib/types';
+import type { NotificationPrefs } from '@/lib/notifications';
 
 const HANDLE_PATTERN = USERNAME_PATTERN;
 const MAX_LINKS = 15;
@@ -333,6 +334,34 @@ export async function updateSabbatical(formData: FormData): Promise<void> {
 
   revalidatePath('/settings');
   revalidatePath('/');
+}
+
+/**
+ * Save which categories of notification are allowed to push. Called directly
+ * from the Settings toggles (not a form) so it takes a plain preference object.
+ * These live on the caller's own profile row (self-writable, non-authority),
+ * and gate push only — the in-app feed is untouched.
+ */
+export async function updateNotificationPrefs(
+  prefs: NotificationPrefs,
+): Promise<ActionResult> {
+  const auth = await requireUser();
+  if (!auth.ok) return auth;
+  const { supabase, user } = auth;
+
+  const { error } = await supabase
+    .from('profiles')
+    .update({
+      notify_plans: Boolean(prefs.plans),
+      notify_reminders: Boolean(prefs.reminders),
+      notify_messages: Boolean(prefs.messages),
+      notify_social: Boolean(prefs.social),
+    })
+    .eq('id', user.id);
+  if (error) return { ok: false, error: 'Could not save — please try again.' };
+
+  revalidatePath('/settings');
+  return { ok: true };
 }
 
 export async function updateQuietHours(formData: FormData): Promise<void> {

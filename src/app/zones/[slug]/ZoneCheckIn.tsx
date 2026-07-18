@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/Button';
 import { Chip } from '@/components/ui/Chip';
 import { checkIn } from '@/lib/actions/moments';
 import { EXPERIENCE_PRESETS } from '@/lib/types';
+import { useCurrentLocation } from '@/lib/client/use-current-location';
 
 export function ZoneCheckIn({
   zoneId,
@@ -21,6 +22,7 @@ export function ZoneCheckIn({
   const [hours, setHours] = useState(3);
   const [error, setError] = useState('');
   const [pending, startTransition] = useTransition();
+  const location = useCurrentLocation();
   const router = useRouter();
 
   const emojiFor = (label: string) =>
@@ -71,6 +73,35 @@ export function ZoneCheckIn({
           className="w-full accent-terracotta"
         />
       </div>
+      <div className="flex flex-wrap items-center gap-2">
+        <button
+          type="button"
+          onClick={() => void location.request()}
+          disabled={location.status === 'locating'}
+          aria-pressed={location.status === 'ready'}
+          className={`inline-flex items-center gap-1.5 rounded-pill border px-3 py-1.5 text-xs font-bold transition-colors disabled:opacity-60 ${
+            location.status === 'ready'
+              ? 'border-sage bg-sage-soft text-sage-deep'
+              : 'border-line bg-card text-ink-soft hover:border-terracotta hover:text-terracotta-deep'
+          }`}
+        >
+          📍 {location.status === 'locating'
+            ? 'Locating…'
+            : location.status === 'ready'
+              ? 'Pinned to the map'
+              : 'Add my location to the map'}
+        </button>
+        {location.status === 'ready' && (
+          <button
+            type="button"
+            onClick={location.clear}
+            className="text-xs font-semibold text-ink-faint hover:text-ink-soft"
+          >
+            Clear
+          </button>
+        )}
+        {location.error && <span className="text-xs text-ink-faint">{location.error}</span>}
+      </div>
       {error && <p role="alert" className="text-sm text-rose-deep">{error}</p>}
       <Button
         size="lg"
@@ -78,7 +109,14 @@ export function ZoneCheckIn({
         disabled={pending || selected.length === 0}
         onClick={() =>
           startTransition(async () => {
-            const result = await checkIn(zoneName, selected, headline, hours, zoneId);
+            const result = await checkIn(
+              zoneName,
+              selected,
+              headline,
+              hours,
+              zoneId,
+              location.point,
+            );
             if (!result.ok) {
               setError(result.error ?? 'Could not check in');
               return;

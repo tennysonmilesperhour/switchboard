@@ -11,6 +11,7 @@ import { createAdminClient } from '@/lib/supabase/admin';
 export async function sweepExpired(): Promise<{
   signalsDeleted: number;
   momentsClosed: number;
+  liveLocationsDeleted: number;
 }> {
   const admin = createAdminClient();
   const now = new Date().toISOString();
@@ -28,8 +29,18 @@ export async function sweepExpired(): Promise<{
     .lt('available_until', now)
     .select('id');
 
+  // Live locations are already ignored at read time once past expires_at (the
+  // find_nearby_people RPC filters them out); this just reclaims the rows so a
+  // lapsed share leaves nothing behind.
+  const { data: live } = await admin
+    .from('live_locations')
+    .delete()
+    .lt('expires_at', now)
+    .select('user_id');
+
   return {
     signalsDeleted: signals?.length ?? 0,
     momentsClosed: moments?.length ?? 0,
+    liveLocationsDeleted: live?.length ?? 0,
   };
 }

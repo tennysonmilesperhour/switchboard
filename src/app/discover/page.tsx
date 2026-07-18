@@ -9,7 +9,7 @@ import {
   type DiscoveryPerson,
 } from './PeopleDiscoveryClient';
 import { OpenTables, type OpenTableRow } from '@/components/events/OpenTables';
-import { VenuePerks, type VenueRow } from '@/components/venues/VenuePerks';
+import { VenuePerks, type VenueRow, type VenueClaim } from '@/components/venues/VenuePerks';
 
 export const metadata: Metadata = { title: 'Explore' };
 
@@ -24,6 +24,7 @@ export default async function DiscoverPage() {
     { data: profile },
     { data: openTables },
     { data: venues },
+    { data: myVenues },
     { data: people },
     { data: discoveryMatches },
   ] =
@@ -32,9 +33,15 @@ export default async function DiscoverPage() {
       supabase.rpc('list_open_tables'),
       supabase
         .from('venues')
-        .select('id, name, area, perk')
+        .select('id, name, area, perk, url')
+        .eq('status', 'verified')
         .order('created_at', { ascending: false })
         .limit(10),
+      supabase
+        .from('venues')
+        .select('id, name, area, perk, url, status')
+        .eq('claimed_by', user.id)
+        .order('created_at', { ascending: false }),
       supabase.rpc('list_discoverable_people', { p_category: 'all' }),
       supabase
         .from('matches')
@@ -75,7 +82,10 @@ export default async function DiscoverPage() {
         />
         <OpenTables tables={(openTables ?? []) as OpenTableRow[]} />
         <DiscoverClient defaultInterests={profile?.interests ?? []} />
-        <VenuePerks venues={(venues ?? []) as VenueRow[]} />
+        <VenuePerks
+          venues={(venues ?? []) as VenueRow[]}
+          myClaims={(myVenues ?? []) as VenueClaim[]}
+        />
       </div>
     </AppShell>
   );

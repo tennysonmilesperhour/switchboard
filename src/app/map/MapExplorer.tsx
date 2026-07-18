@@ -1,10 +1,12 @@
 'use client';
 
-import { useMemo, useState, useTransition } from 'react';
+import { useCallback, useMemo, useState, useTransition } from 'react';
 import dynamic from 'next/dynamic';
 import { useToast } from '@/components/ui/Toast';
 import { locateMyPlaces } from '@/lib/actions/map';
-import type { MapLayerKey, MapMarker } from '@/lib/geo';
+import type { MapLayerKey, MapMarker, MapPoint } from '@/lib/geo';
+import type { LiveLocation } from '@/lib/types';
+import { LiveShare } from './LiveShare';
 
 // The Leaflet canvas touches `window`, so it must load client-only. `ssr: false`
 // is only allowed on `next/dynamic` inside a Client Component (this one).
@@ -19,33 +21,80 @@ const LeafletCanvas = dynamic(
 );
 
 const LAYERS: { key: MapLayerKey; label: string; emoji: string }[] = [
+  { key: 'live', label: 'Live', emoji: '🟢' },
   { key: 'plans', label: 'Plans', emoji: '📅' },
   { key: 'zones', label: 'Zones', emoji: '✨' },
   { key: 'places', label: 'Shared places', emoji: '📍' },
 ];
 
-const ALL_ON: Record<MapLayerKey, boolean> = { plans: true, zones: true, places: true };
+// `you` is never a toggle (you always see your own pin while sharing); it just
+// needs a default so the visibility filter lets it through.
+const ALL_ON: Record<MapLayerKey, boolean> = {
+  plans: true,
+  zones: true,
+  places: true,
+  live: true,
+  you: true,
+};
 
-/** Layer toggles + the geographic canvas + a control to place un-located rows. */
-export function MapExplorer({ markers }: { markers: MapMarker[] }) {
+/** Layer toggles + the geographic canvas + live location sharing. */
+export function MapExplorer({
+  markers,
+  mySharing,
+}: {
+  markers: MapMarker[];
+  mySharing: LiveLocation | null;
+}) {
   const [enabled, setEnabled] = useState<Record<MapLayerKey, boolean>>(ALL_ON);
+  const [liveMarkers, setLiveMarkers] = useState<MapMarker[]>([]);
+  const [selfPoint, setSelfPoint] = useState<MapPoint | null>(
+    mySharing ? { lat: mySharing.latitude, lng: mySharing.longitude } : null,
+  );
   const [pending, startTransition] = useTransition();
   const toast = useToast();
 
+  const selfMarker = useMemo<MapMarker | null>(
+    () =>
+      selfPoint
+        ? {
+            id: 'self',
+            layer: 'you',
+            label: 'You’re here (sharing live)',
+            lat: selfPoint.lat,
+            lng: selfPoint.lng,
+          }
+        : null,
+    [selfPoint],
+  );
+
+  const allMarkers = useMemo(
+    () => [...markers, ...liveMarkers, ...(selfMarker ? [selfMarker] : [])],
+    [markers, liveMarkers, selfMarker],
+  );
+
   const counts = useMemo(() => {
-    const tally: Record<MapLayerKey, number> = { plans: 0, zones: 0, places: 0 };
-    for (const marker of markers) tally[marker.layer] += 1;
+    const tally: Record<MapLayerKey, number> = {
+      plans: 0,
+      zones: 0,
+      places: 0,
+      live: 0,
+      you: 0,
+    };
+    for (const marker of allMarkers) tally[marker.layer] += 1;
     return tally;
-  }, [markers]);
+  }, [allMarkers]);
 
   const visible = useMemo(
-    () => markers.filter((marker) => enabled[marker.layer]),
-    [markers, enabled],
+    () => allMarkers.filter((marker) => enabled[marker.layer]),
+    [allMarkers, enabled],
   );
 
   function toggle(key: MapLayerKey) {
     setEnabled((prev) => ({ ...prev, [key]: !prev[key] }));
   }
+
+  const handleNearby = useCallback((next: MapMarker[]) => setLiveMarkers(next), []);
+  const handleSelf = useCallback((point: MapPoint | null) => setSelfPoint(point), []);
 
   function locate() {
     startTransition(async () => {
@@ -71,9 +120,15 @@ export function MapExplorer({ markers }: { markers: MapMarker[] }) {
   return (
     <div className="space-y-3">
       <p className="-mt-1 text-sm leading-relaxed text-ink-soft">
-        Your plans, zones, and shared places on one map. Tap a layer to show or
-        hide it.
+        Your plans, zones, and shared places on one map — plus who’s sharing their
+        location live right now. Tap a layer to show or hide it.
       </p>
+
+      <LiveShare
+        mySharing={mySharing}
+        onNearbyChange={handleNearby}
+        onSelfChange={handleSelf}
+      />
 
       <div className="flex flex-wrap gap-2" role="group" aria-label="Map layers">
         {LAYERS.map((layer) => (
@@ -95,7 +150,7 @@ export function MapExplorer({ markers }: { markers: MapMarker[] }) {
         ))}
       </div>
 
-      <LeafletCanvas markers={visible} />
+      <LeafletCanvas markers={visible} center={selfPoint} />
 
       <div className="flex items-center justify-between gap-3">
         <p className="text-xs leading-relaxed text-ink-faint">

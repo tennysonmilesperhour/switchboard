@@ -3,6 +3,7 @@ import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
 import { AppShell } from '@/components/shell/AppShell';
 import { toMapPoint, type MapMarker } from '@/lib/geo';
+import { getMySharing } from '@/lib/actions/live-location';
 import { MapExplorer } from './MapExplorer';
 
 export const metadata: Metadata = { title: 'Map' };
@@ -21,8 +22,9 @@ export default async function MapPage() {
   if (!user) redirect('/login');
 
   // RLS scopes each query to what the viewer may see. We only pull rows that
-  // already carry a coordinate, capped so the payload stays small.
-  const [{ data: events }, { data: zones }, { data: moments }] = await Promise.all([
+  // already carry a coordinate, capped so the payload stays small. The viewer's
+  // own live-sharing state (if any) seeds the "Share your location" control.
+  const [{ data: events }, { data: zones }, { data: moments }, mySharing] = await Promise.all([
     supabase
       .from('events')
       .select('id, title, starts_at, location_name, latitude, longitude')
@@ -40,6 +42,7 @@ export default async function MapPage() {
       .not('latitude', 'is', null)
       .neq('status', 'closed')
       .limit(300),
+    getMySharing(),
   ]);
 
   const markers: MapMarker[] = [];
@@ -86,7 +89,7 @@ export default async function MapPage() {
 
   return (
     <AppShell title="Map">
-      <MapExplorer markers={markers} />
+      <MapExplorer markers={markers} mySharing={mySharing} />
     </AppShell>
   );
 }

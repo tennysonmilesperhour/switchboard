@@ -7,6 +7,7 @@ import { Avatar } from '@/components/ui/Avatar';
 import { Button } from '@/components/ui/Button';
 import Link from 'next/link';
 import { PushManager } from '@/components/push/PushManager';
+import { NotificationPreferences } from '@/components/settings/NotificationPreferences';
 import { InterestPicker } from '@/components/profile/InterestPicker';
 import { AutosaveForm, AutosaveStatus } from './AutosaveForm';
 import { AccountControls } from './AccountControls';
@@ -45,7 +46,7 @@ export default async function SettingsPage({
   const { data: profile } = await supabase
     .from('profiles')
     .select(
-      'display_name, handle, interests, down_to, sabbatical, sabbatical_message, quiet_hours_start, quiet_hours_end, discoverable, discovery_geography, discovery_demographics, discovery_interests, discovery_involvements, discovery_mutuals, discovery_contexts',
+      'display_name, handle, interests, down_to, sabbatical, sabbatical_message, quiet_hours_start, quiet_hours_end, discoverable, discovery_geography, discovery_demographics, discovery_interests, discovery_involvements, discovery_mutuals, discovery_contexts, notify_plans, notify_reminders, notify_messages, notify_social',
     )
     .eq('id', user.id)
     .single();
@@ -76,6 +77,14 @@ export default async function SettingsPage({
   const sabbatical: boolean = profile?.sabbatical ?? false;
   const sabbaticalMessage: string = profile?.sabbatical_message ?? '';
   const discoveryContexts: string[] = profile?.discovery_contexts ?? [];
+
+  // Notification categories default on; a null (pre-migration) reads as enabled.
+  const notificationPrefs = {
+    plans: profile?.notify_plans ?? true,
+    reminders: profile?.notify_reminders ?? true,
+    messages: profile?.notify_messages ?? true,
+    social: profile?.notify_social ?? true,
+  };
 
   return (
     <AppShell title="Settings" back="/profile">
@@ -151,6 +160,7 @@ export default async function SettingsPage({
                   name="interests"
                   groups={INTEREST_CATEGORIES}
                   initialSelected={interests}
+                  collapsible
                 />
               </div>
               <div className="space-y-3 border-t border-line pt-6">
@@ -254,50 +264,67 @@ export default async function SettingsPage({
         <section>
           <SectionHeader
             title="Notifications"
-            hint="Matches, invitations, and confirmed plans"
+            hint="Control what reaches you, and when"
           />
           <Card>
-            <PushManager />
-          </Card>
-        </section>
+            <div className="divide-y divide-line">
+              <div className="pb-5">
+                <PushManager />
+              </div>
 
-        <section>
-          <SectionHeader
-            title="Quiet hours"
-            hint="No pushes during these hours - they simply wait"
-          />
-          <Card>
-            <AutosaveForm action={updateQuietHours} className="flex flex-wrap items-end gap-3">
-              <div className="space-y-1.5 flex-1">
-                <label htmlFor="quiet_start" className="text-sm font-medium">From</label>
-                <select
-                  id="quiet_start"
-                  name="quiet_start"
-                  defaultValue={profile?.quiet_hours_start ?? ''}
-                  className="w-full rounded-card border border-line bg-paper px-3 py-2.5 text-sm"
-                >
-                  <option value="">Off</option>
-                  {HOURS.map((hour) => (
-                    <option key={hour.value} value={hour.value}>{hour.label}</option>
-                  ))}
-                </select>
+              <div className="py-5">
+                <NotificationPreferences initial={notificationPrefs} />
               </div>
-              <div className="space-y-1.5 flex-1">
-                <label htmlFor="quiet_end" className="text-sm font-medium">Until</label>
-                <select
-                  id="quiet_end"
-                  name="quiet_end"
-                  defaultValue={profile?.quiet_hours_end ?? ''}
-                  className="w-full rounded-card border border-line bg-paper px-3 py-2.5 text-sm"
+
+              <div className="pt-5">
+                <p className="text-sm font-bold text-ink">Quiet hours</p>
+                <p className="mt-0.5 mb-3 text-sm text-ink-soft leading-relaxed">
+                  No pushes during these hours — they simply wait for you.
+                </p>
+                <AutosaveForm
+                  action={updateQuietHours}
+                  className="flex flex-wrap items-end gap-3"
                 >
-                  <option value="">Off</option>
-                  {HOURS.map((hour) => (
-                    <option key={hour.value} value={hour.value}>{hour.label}</option>
-                  ))}
-                </select>
+                  <div className="space-y-1.5 flex-1">
+                    <label htmlFor="quiet_start" className="text-sm font-medium">
+                      From
+                    </label>
+                    <select
+                      id="quiet_start"
+                      name="quiet_start"
+                      defaultValue={profile?.quiet_hours_start ?? ''}
+                      className="w-full rounded-card border border-line bg-paper px-3 py-2.5 text-sm"
+                    >
+                      <option value="">Off</option>
+                      {HOURS.map((hour) => (
+                        <option key={hour.value} value={hour.value}>
+                          {hour.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="space-y-1.5 flex-1">
+                    <label htmlFor="quiet_end" className="text-sm font-medium">
+                      Until
+                    </label>
+                    <select
+                      id="quiet_end"
+                      name="quiet_end"
+                      defaultValue={profile?.quiet_hours_end ?? ''}
+                      className="w-full rounded-card border border-line bg-paper px-3 py-2.5 text-sm"
+                    >
+                      <option value="">Off</option>
+                      {HOURS.map((hour) => (
+                        <option key={hour.value} value={hour.value}>
+                          {hour.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <AutosaveStatus />
+                </AutosaveForm>
               </div>
-              <AutosaveStatus />
-            </AutosaveForm>
+            </div>
           </Card>
         </section>
 
@@ -339,7 +366,7 @@ export default async function SettingsPage({
 
         {isModerator && (
           <section>
-            <SectionHeader title="Moderation" hint="Review community reports" />
+            <SectionHeader title="Moderation" hint="Review reports and venue claims" />
             <Card>
               <Link
                 href="/moderation"
