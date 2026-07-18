@@ -79,10 +79,14 @@ density + safety, not the next sprint.
 
 ### Shipped (follow-up PR, off updated `main`)
 
-- **Settings autosave.** `AutosaveForm` + `AutosaveStatus` replace the per-form
-  Save buttons; changes debounce (~600ms) and submit via the same server
-  action, with an inline "Saving… / Saved ✓". `InterestPicker` emits a
-  synthetic `input` event so chip changes autosave too.
+- **Settings save bar.** Editing any section on `/settings` raises a single
+  floating **Save changes / Cancel** bar (`SettingsSaveProvider` +
+  `SettingsForm` in `src/app/settings/SettingsSaveBar.tsx`). Each section
+  registers as a participant; Save fans out to every dirty section's server
+  action at once, Cancel reverts them (native inputs and `InterestPicker` reset
+  by remounting to their last-saved values). Notification toggles defer through
+  the same bar instead of writing on each tap. `InterestPicker` still emits a
+  synthetic `input` event so chip changes register as unsaved.
 - **Intent launchpad** (`/create`). The broad "what kind of thing is this?"
   layer before the wizard: *I've got a plan* → wizard; *Help me figure it out*
   → wizard with poll/`deciding` pre-enabled (`?decide=1`); *Find something to

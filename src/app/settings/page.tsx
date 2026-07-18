@@ -9,7 +9,7 @@ import Link from 'next/link';
 import { PushManager } from '@/components/push/PushManager';
 import { NotificationPreferences } from '@/components/settings/NotificationPreferences';
 import { InterestPicker } from '@/components/profile/InterestPicker';
-import { AutosaveForm, AutosaveStatus } from './AutosaveForm';
+import { SettingsForm, SettingsSaveProvider } from './SettingsSaveBar';
 import { AccountControls } from './AccountControls';
 import { CalendarSubscribe } from './CalendarSubscribe';
 import { ContactVerification } from './ContactVerification';
@@ -88,330 +88,328 @@ export default async function SettingsPage({
 
   return (
     <AppShell title="Settings" back="/profile">
-      <div className="space-y-7">
-        <Card>
-          <div className="flex items-center gap-4">
-            <Avatar name={profile?.display_name ?? 'You'} seed={user.id} size="lg" />
-            <div>
-              <p className="font-display text-xl">{profile?.display_name}</p>
-              <p className="text-sm text-ink-faint">@{profile?.handle}</p>
-            </div>
-          </div>
-          {(interests.length > 0 || downTo.length > 0) && (
-            <div className="flex flex-wrap gap-1.5 mt-3">
-              {interests.map((interest) => (
-                <span key={interest} className="rounded-pill bg-cream px-2.5 py-1 text-xs text-ink-soft">
-                  {interest}
-                </span>
-              ))}
-              {downTo.map((activity) => (
-                <span key={activity} className="rounded-pill bg-terracotta-soft px-2.5 py-1 text-xs text-terracotta-deep">
-                  {activity}
-                </span>
-              ))}
-            </div>
-          )}
-        </Card>
-
-        <section>
-          <SectionHeader
-            title="Verified contact details"
-            hint="Only verified details can match contacts or route invitations to your account"
-          />
+      <SettingsSaveProvider>
+        <div className="space-y-7">
           <Card>
-            {contactNotice && (
-              <p
-                role={contactNotice === 'verified' ? 'status' : 'alert'}
-                className={`mb-4 text-sm ${
-                  contactNotice === 'verified' ? 'text-sage-deep' : 'text-rose-deep'
-                }`}
-              >
-                {contactNotice === 'verified'
-                  ? 'Email verified.'
-                  : contactNotice === 'claimed'
-                    ? 'That email is already verified on another account.'
-                    : contactNotice === 'expired'
-                      ? 'That verification link expired. Request a new one.'
-                      : 'Email verification could not be completed.'}
-              </p>
-            )}
-            <ContactVerification
-              email={privateProfile?.contact_email ?? null}
-              phone={privateProfile?.contact_phone ?? null}
-              emailVerified={emailVerified}
-              phoneVerified={phoneVerified}
-            />
-            <Link href="/profile/edit" className="mt-4 inline-block text-sm font-bold text-terracotta-deep">
-              Edit contact details
-            </Link>
-          </Card>
-        </section>
-
-        <section>
-          <SectionHeader
-            title="Interests & activities"
-            hint="Help Switchboard suggest the right people and plans"
-          />
-          <Card>
-            <AutosaveForm action={updateInterests} className="space-y-6">
-              <div className="space-y-3">
-                <p className="text-sm font-medium text-ink">Interests</p>
-                <InterestPicker
-                  name="interests"
-                  groups={INTEREST_CATEGORIES}
-                  initialSelected={interests}
-                  collapsible
-                />
+            <div className="flex items-center gap-4">
+              <Avatar name={profile?.display_name ?? 'You'} seed={user.id} size="lg" />
+              <div>
+                <p className="font-display text-xl">{profile?.display_name}</p>
+                <p className="text-sm text-ink-faint">@{profile?.handle}</p>
               </div>
-              <div className="space-y-3 border-t border-line pt-6">
-                <p className="text-sm font-medium text-ink">
-                  Usually down to…
-                </p>
-                <InterestPicker
-                  name="down_to"
-                  groups={[DOWN_TO_GROUP]}
-                  initialSelected={downTo}
-                  searchable={false}
-                />
-              </div>
-              <AutosaveStatus />
-            </AutosaveForm>
-          </Card>
-        </section>
-
-        {calendarToken && (
-          <section>
-            <SectionHeader
-              title="Your calendar"
-              hint="Follow your plans from any calendar app"
-            />
-            <Card>
-              <CalendarSubscribe token={calendarToken} />
-            </Card>
-          </section>
-        )}
-
-        <section>
-          <SectionHeader
-            title="Discoverability"
-            hint="Choose how new people can find you. Interest stays private unless it is mutual."
-          />
-          <Card>
-            <AutosaveForm action={updateDiscoverability} className="space-y-4">
-              <label className="flex items-start gap-3 cursor-pointer">
-                <input
-                  type="checkbox"
-                  name="discoverable"
-                  defaultChecked={profile?.discoverable ?? false}
-                  className="mt-1 size-4 accent-terracotta"
-                />
-                <span>
-                  <span className="font-medium">Show me in people discovery</span>
-                  <span className="block text-sm text-ink-soft mt-0.5 leading-relaxed">
-                    People can quietly mark interest in connecting around a shared context.
-                    No one is notified unless you choose each other.
+            </div>
+            {(interests.length > 0 || downTo.length > 0) && (
+              <div className="flex flex-wrap gap-1.5 mt-3">
+                {interests.map((interest) => (
+                  <span key={interest} className="rounded-pill bg-cream px-2.5 py-1 text-xs text-ink-soft">
+                    {interest}
                   </span>
-                </span>
-              </label>
-
-              <div className="grid gap-2 sm:grid-cols-2">
-                {[
-                  ['discovery_geography', 'Geography', 'Use your profile location.'],
-                  ['discovery_demographics', 'Demographics', 'Use visible profile details.'],
-                  ['discovery_interests', 'Interests', 'Use your selected interests.'],
-                  ['discovery_involvements', 'Involvements', 'Use contexts you list below.'],
-                  ['discovery_mutuals', 'Mutual friends', 'Rank higher with shared friends.'],
-                ].map(([name, label, hint]) => (
-                  <label
-                    key={name}
-                    className="flex items-start gap-2 rounded-card border border-line bg-paper px-3 py-2.5"
-                  >
-                    <input
-                      type="checkbox"
-                      name={name}
-                      defaultChecked={Boolean(profile?.[name as keyof typeof profile])}
-                      className="mt-1 size-4 accent-terracotta"
-                    />
-                    <span>
-                      <span className="block text-sm font-bold text-ink">{label}</span>
-                      <span className="block text-xs text-ink-faint">{hint}</span>
-                    </span>
-                  </label>
+                ))}
+                {downTo.map((activity) => (
+                  <span key={activity} className="rounded-pill bg-terracotta-soft px-2.5 py-1 text-xs text-terracotta-deep">
+                    {activity}
+                  </span>
                 ))}
               </div>
-
-              <div className="space-y-1.5">
-                <label htmlFor="discovery_contexts" className="text-sm font-medium">
-                  Contexts you are open to
-                </label>
-                <textarea
-                  id="discovery_contexts"
-                  name="discovery_contexts"
-                  defaultValue={discoveryContexts.join('\n')}
-                  rows={4}
-                  placeholder="Local volunteering&#10;Startup friends&#10;Parents nearby&#10;Trail running"
-                  className="w-full rounded-card border border-line bg-paper px-3.5 py-2.5 text-sm outline-none focus:border-terracotta"
-                />
-                <p className="text-xs text-ink-faint">
-                  One per line. These become the specific contexts people can mutually match around.
-                </p>
-              </div>
-              <AutosaveStatus />
-            </AutosaveForm>
+            )}
           </Card>
-        </section>
 
-        <section>
-          <SectionHeader
-            title="Notifications"
-            hint="Control what reaches you, and when"
-          />
-          <Card>
-            <div className="divide-y divide-line">
-              <div className="pb-5">
-                <PushManager />
-              </div>
-
-              <div className="py-5">
-                <NotificationPreferences initial={notificationPrefs} />
-              </div>
-
-              <div className="pt-5">
-                <p className="text-sm font-bold text-ink">Quiet hours</p>
-                <p className="mt-0.5 mb-3 text-sm text-ink-soft leading-relaxed">
-                  No pushes during these hours — they simply wait for you.
-                </p>
-                <AutosaveForm
-                  action={updateQuietHours}
-                  className="flex flex-wrap items-end gap-3"
-                >
-                  <div className="space-y-1.5 flex-1">
-                    <label htmlFor="quiet_start" className="text-sm font-medium">
-                      From
-                    </label>
-                    <select
-                      id="quiet_start"
-                      name="quiet_start"
-                      defaultValue={profile?.quiet_hours_start ?? ''}
-                      className="w-full rounded-card border border-line bg-paper px-3 py-2.5 text-sm"
-                    >
-                      <option value="">Off</option>
-                      {HOURS.map((hour) => (
-                        <option key={hour.value} value={hour.value}>
-                          {hour.label}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  <div className="space-y-1.5 flex-1">
-                    <label htmlFor="quiet_end" className="text-sm font-medium">
-                      Until
-                    </label>
-                    <select
-                      id="quiet_end"
-                      name="quiet_end"
-                      defaultValue={profile?.quiet_hours_end ?? ''}
-                      className="w-full rounded-card border border-line bg-paper px-3 py-2.5 text-sm"
-                    >
-                      <option value="">Off</option>
-                      {HOURS.map((hour) => (
-                        <option key={hour.value} value={hour.value}>
-                          {hour.label}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  <AutosaveStatus />
-                </AutosaveForm>
-              </div>
-            </div>
-          </Card>
-        </section>
-
-        <section>
-          <SectionHeader
-            title="Sabbatical"
-            hint="Pause signals, radar, and matchmaking for a while"
-          />
-          <Card>
-            <AutosaveForm action={updateSabbatical} className="space-y-3">
-              <label className="flex items-start gap-3 cursor-pointer">
-                <input
-                  type="checkbox"
-                  name="sabbatical"
-                  defaultChecked={sabbatical}
-                  className="mt-1 size-4 accent-terracotta"
-                />
-                <span>
-                  <span className="font-medium">Take a quiet season</span>
-                  <span className="block text-sm text-ink-soft mt-0.5 leading-relaxed">
-                    You’ll stop appearing on friends’ radars, in matchmaking, and
-                    your live signal is cleared. Friends who reach out see your
-                    note instead of silence.
-                  </span>
-                </span>
-              </label>
-              <input
-                name="sabbatical_message"
-                defaultValue={sabbaticalMessage}
-                maxLength={140}
-                placeholder="Taking a quiet season 🍃"
-                aria-label="Sabbatical note"
-                className="w-full rounded-card border border-line bg-paper px-3.5 py-2.5 text-sm outline-none focus:border-terracotta"
-              />
-              <AutosaveStatus />
-            </AutosaveForm>
-          </Card>
-        </section>
-
-        {isModerator && (
           <section>
-            <SectionHeader title="Moderation" hint="Review reports and venue claims" />
+            <SectionHeader
+              title="Verified contact details"
+              hint="Only verified details can match contacts or route invitations to your account"
+            />
             <Card>
-              <Link
-                href="/moderation"
-                className="flex items-center justify-between rounded-card bg-paper px-3 py-2.5 text-sm font-bold text-terracotta hover:text-terracotta-deep"
-              >
-                Open the moderation queue
-                <span aria-hidden>→</span>
+              {contactNotice && (
+                <p
+                  role={contactNotice === 'verified' ? 'status' : 'alert'}
+                  className={`mb-4 text-sm ${
+                    contactNotice === 'verified' ? 'text-sage-deep' : 'text-rose-deep'
+                  }`}
+                >
+                  {contactNotice === 'verified'
+                    ? 'Email verified.'
+                    : contactNotice === 'claimed'
+                      ? 'That email is already verified on another account.'
+                      : contactNotice === 'expired'
+                        ? 'That verification link expired. Request a new one.'
+                        : 'Email verification could not be completed.'}
+                </p>
+              )}
+              <ContactVerification
+                email={privateProfile?.contact_email ?? null}
+                phone={privateProfile?.contact_phone ?? null}
+                emailVerified={emailVerified}
+                phoneVerified={phoneVerified}
+              />
+              <Link href="/profile/edit" className="mt-4 inline-block text-sm font-bold text-terracotta-deep">
+                Edit contact details
               </Link>
             </Card>
           </section>
-        )}
 
-        <section>
-          <SectionHeader title="Account" hint="Password and account controls" />
-          <Card>
-            <AccountControls />
-          </Card>
-        </section>
+          <section>
+            <SectionHeader
+              title="Interests & activities"
+              hint="Help Switchboard suggest the right people and plans"
+            />
+            <Card>
+              <SettingsForm action={updateInterests} className="space-y-6">
+                <div className="space-y-3">
+                  <p className="text-sm font-medium text-ink">Interests</p>
+                  <InterestPicker
+                    name="interests"
+                    groups={INTEREST_CATEGORIES}
+                    initialSelected={interests}
+                    collapsible
+                  />
+                </div>
+                <div className="space-y-3 border-t border-line pt-6">
+                  <p className="text-sm font-medium text-ink">
+                    Usually down to…
+                  </p>
+                  <InterestPicker
+                    name="down_to"
+                    groups={[DOWN_TO_GROUP]}
+                    initialSelected={downTo}
+                    searchable={false}
+                  />
+                </div>
+              </SettingsForm>
+            </Card>
+          </section>
 
-        <section>
-          <SectionHeader title="Legal" hint="Privacy, terms, copyright, and community expectations" />
-          <Card>
-            <div className="grid grid-cols-2 gap-2 text-sm font-bold text-terracotta">
-              <Link href="/privacy" className="rounded-card bg-paper px-3 py-2 hover:text-terracotta-deep">
-                Privacy
-              </Link>
-              <Link href="/terms" className="rounded-card bg-paper px-3 py-2 hover:text-terracotta-deep">
-                Terms
-              </Link>
-              <Link href="/community" className="rounded-card bg-paper px-3 py-2 hover:text-terracotta-deep">
-                Community
-              </Link>
-              <Link href="/copyright" className="rounded-card bg-paper px-3 py-2 hover:text-terracotta-deep">
-                Copyright
-              </Link>
-            </div>
-          </Card>
-        </section>
+          {calendarToken && (
+            <section>
+              <SectionHeader
+                title="Your calendar"
+                hint="Follow your plans from any calendar app"
+              />
+              <Card>
+                <CalendarSubscribe token={calendarToken} />
+              </Card>
+            </section>
+          )}
 
-        <form action={signOut}>
-          <Button type="submit" variant="ghost" className="w-full">
-            Sign out
-          </Button>
-        </form>
-      </div>
+          <section>
+            <SectionHeader
+              title="Discoverability"
+              hint="Choose how new people can find you. Interest stays private unless it is mutual."
+            />
+            <Card>
+              <SettingsForm action={updateDiscoverability} className="space-y-4">
+                <label className="flex items-start gap-3 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    name="discoverable"
+                    defaultChecked={profile?.discoverable ?? false}
+                    className="mt-1 size-4 accent-terracotta"
+                  />
+                  <span>
+                    <span className="font-medium">Show me in people discovery</span>
+                    <span className="block text-sm text-ink-soft mt-0.5 leading-relaxed">
+                      People can quietly mark interest in connecting around a shared context.
+                      No one is notified unless you choose each other.
+                    </span>
+                  </span>
+                </label>
+
+                <div className="grid gap-2 sm:grid-cols-2">
+                  {[
+                    ['discovery_geography', 'Geography', 'Use your profile location.'],
+                    ['discovery_demographics', 'Demographics', 'Use visible profile details.'],
+                    ['discovery_interests', 'Interests', 'Use your selected interests.'],
+                    ['discovery_involvements', 'Involvements', 'Use contexts you list below.'],
+                    ['discovery_mutuals', 'Mutual friends', 'Rank higher with shared friends.'],
+                  ].map(([name, label, hint]) => (
+                    <label
+                      key={name}
+                      className="flex items-start gap-2 rounded-card border border-line bg-paper px-3 py-2.5"
+                    >
+                      <input
+                        type="checkbox"
+                        name={name}
+                        defaultChecked={Boolean(profile?.[name as keyof typeof profile])}
+                        className="mt-1 size-4 accent-terracotta"
+                      />
+                      <span>
+                        <span className="block text-sm font-bold text-ink">{label}</span>
+                        <span className="block text-xs text-ink-faint">{hint}</span>
+                      </span>
+                    </label>
+                  ))}
+                </div>
+
+                <div className="space-y-1.5">
+                  <label htmlFor="discovery_contexts" className="text-sm font-medium">
+                    Contexts you are open to
+                  </label>
+                  <textarea
+                    id="discovery_contexts"
+                    name="discovery_contexts"
+                    defaultValue={discoveryContexts.join('\n')}
+                    rows={4}
+                    placeholder="Local volunteering&#10;Startup friends&#10;Parents nearby&#10;Trail running"
+                    className="w-full rounded-card border border-line bg-paper px-3.5 py-2.5 text-sm outline-none focus:border-terracotta"
+                  />
+                  <p className="text-xs text-ink-faint">
+                    One per line. These become the specific contexts people can mutually match around.
+                  </p>
+                </div>
+              </SettingsForm>
+            </Card>
+          </section>
+
+          <section>
+            <SectionHeader
+              title="Notifications"
+              hint="Control what reaches you, and when"
+            />
+            <Card>
+              <div className="divide-y divide-line">
+                <div className="pb-5">
+                  <PushManager />
+                </div>
+
+                <div className="py-5">
+                  <NotificationPreferences initial={notificationPrefs} />
+                </div>
+
+                <div className="pt-5">
+                  <p className="text-sm font-bold text-ink">Quiet hours</p>
+                  <p className="mt-0.5 mb-3 text-sm text-ink-soft leading-relaxed">
+                    No pushes during these hours — they simply wait for you.
+                  </p>
+                  <SettingsForm
+                    action={updateQuietHours}
+                    className="flex flex-wrap items-end gap-3"
+                  >
+                    <div className="space-y-1.5 flex-1">
+                      <label htmlFor="quiet_start" className="text-sm font-medium">
+                        From
+                      </label>
+                      <select
+                        id="quiet_start"
+                        name="quiet_start"
+                        defaultValue={profile?.quiet_hours_start ?? ''}
+                        className="w-full rounded-card border border-line bg-paper px-3 py-2.5 text-sm"
+                      >
+                        <option value="">Off</option>
+                        {HOURS.map((hour) => (
+                          <option key={hour.value} value={hour.value}>
+                            {hour.label}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="space-y-1.5 flex-1">
+                      <label htmlFor="quiet_end" className="text-sm font-medium">
+                        Until
+                      </label>
+                      <select
+                        id="quiet_end"
+                        name="quiet_end"
+                        defaultValue={profile?.quiet_hours_end ?? ''}
+                        className="w-full rounded-card border border-line bg-paper px-3 py-2.5 text-sm"
+                      >
+                        <option value="">Off</option>
+                        {HOURS.map((hour) => (
+                          <option key={hour.value} value={hour.value}>
+                            {hour.label}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </SettingsForm>
+                </div>
+              </div>
+            </Card>
+          </section>
+
+          <section>
+            <SectionHeader
+              title="Sabbatical"
+              hint="Pause signals, radar, and matchmaking for a while"
+            />
+            <Card>
+              <SettingsForm action={updateSabbatical} className="space-y-3">
+                <label className="flex items-start gap-3 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    name="sabbatical"
+                    defaultChecked={sabbatical}
+                    className="mt-1 size-4 accent-terracotta"
+                  />
+                  <span>
+                    <span className="font-medium">Take a quiet season</span>
+                    <span className="block text-sm text-ink-soft mt-0.5 leading-relaxed">
+                      You’ll stop appearing on friends’ radars, in matchmaking, and
+                      your live signal is cleared. Friends who reach out see your
+                      note instead of silence.
+                    </span>
+                  </span>
+                </label>
+                <input
+                  name="sabbatical_message"
+                  defaultValue={sabbaticalMessage}
+                  maxLength={140}
+                  placeholder="Taking a quiet season 🍃"
+                  aria-label="Sabbatical note"
+                  className="w-full rounded-card border border-line bg-paper px-3.5 py-2.5 text-sm outline-none focus:border-terracotta"
+                />
+              </SettingsForm>
+            </Card>
+          </section>
+
+          {isModerator && (
+            <section>
+              <SectionHeader title="Moderation" hint="Review reports and venue claims" />
+              <Card>
+                <Link
+                  href="/moderation"
+                  className="flex items-center justify-between rounded-card bg-paper px-3 py-2.5 text-sm font-bold text-terracotta hover:text-terracotta-deep"
+                >
+                  Open the moderation queue
+                  <span aria-hidden>→</span>
+                </Link>
+              </Card>
+            </section>
+          )}
+
+          <section>
+            <SectionHeader title="Account" hint="Password and account controls" />
+            <Card>
+              <AccountControls />
+            </Card>
+          </section>
+
+          <section>
+            <SectionHeader title="Legal" hint="Privacy, terms, copyright, and community expectations" />
+            <Card>
+              <div className="grid grid-cols-2 gap-2 text-sm font-bold text-terracotta">
+                <Link href="/privacy" className="rounded-card bg-paper px-3 py-2 hover:text-terracotta-deep">
+                  Privacy
+                </Link>
+                <Link href="/terms" className="rounded-card bg-paper px-3 py-2 hover:text-terracotta-deep">
+                  Terms
+                </Link>
+                <Link href="/community" className="rounded-card bg-paper px-3 py-2 hover:text-terracotta-deep">
+                  Community
+                </Link>
+                <Link href="/copyright" className="rounded-card bg-paper px-3 py-2 hover:text-terracotta-deep">
+                  Copyright
+                </Link>
+              </div>
+            </Card>
+          </section>
+
+          <form action={signOut}>
+            <Button type="submit" variant="ghost" className="w-full">
+              Sign out
+            </Button>
+          </form>
+        </div>
+      </SettingsSaveProvider>
     </AppShell>
   );
 }
