@@ -177,6 +177,49 @@ export async function sendConnectionRequestToId(
   return { ok: true };
 }
 
+/**
+ * Re-nudge a still-pending outgoing request: fire the "wants to connect"
+ * notification again without inserting a second row (the unique constraint
+ * would reject it anyway). Only the requester can do this, only while it's
+ * pending, and a per-request cooldown keeps a nudge from being turned into a
+ * way to spam someone's bell (blocking already deletes the row, so a blocked
+ * user has nothing left to resend).
+ */
+export async function resendConnectionRequest(
+  connectionId: string,
+): Promise<ConnectionResult> {
+  const auth = await requireUser();
+  if (!auth.ok) return auth;
+  const { supabase, user } = auth;
+
+  if (!UUID_RE.test(connectionId)) return { ok: false, error: 'Unknown request.' };
+
+  // RLS lets the requester read their own row; the explicit ownership/status
+  // checks turn "not yours / already accepted / gone" into a clear message
+  // rather than a silent re-notify.
+  const { data: connection } = await supabase
+    .from('connections')
+    .select('requester_id, addressee_id, status')
+    .eq('id', connectionId)
+    .maybeSingle();
+  if (!connection || connection.requester_id !== user.id) {
+    return { ok: false, error: 'That request is no longer available.' };
+  }
+  if (connection.status !== 'pending') {
+    return { ok: false, error: 'You’re already connected.' };
+  }
+
+  // Per-request cooldown (keyed by the connection, i.e. the specific addressee)
+  // so a resend can't be used to hammer one person's notifications.
+  if (!(await checkRateLimit(`resend-request:${connectionId}`, 3, 60 * 60))) {
+    return { ok: false, error: 'You nudged them recently. Give it a little while.' };
+  }
+
+  await notifyConnectionRequested(supabase, user.id, connection.addressee_id);
+  revalidatePath('/people');
+  return { ok: true };
+}
+
 export async function resolveContactMatches(
   contacts: ContactCandidate[],
 ): Promise<ContactMatch[]> {

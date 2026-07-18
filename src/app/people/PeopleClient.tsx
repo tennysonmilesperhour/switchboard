@@ -20,6 +20,7 @@ import {
   removeConnection,
   renameCircle,
   reportProfile,
+  resendConnectionRequest,
   resolveContactMatches,
   sendConnectionRequest,
   stopGivingSpace,
@@ -282,6 +283,29 @@ export function PeopleClient({
         return;
       }
       toast.success(`Request sent to ${profile.name}.`);
+      router.refresh();
+    });
+  }
+
+  function resendOutgoing(request: RequestRow) {
+    startTransition(async () => {
+      const result = await resendConnectionRequest(request.connectionId);
+      if (!result.ok) {
+        toast.error(result.error ?? 'Could not resend. Try again.');
+        return;
+      }
+      toast.success(`Nudged ${request.name.split(' ')[0]} again.`);
+      router.refresh();
+    });
+  }
+
+  function cancelOutgoing(request: RequestRow) {
+    startTransition(async () => {
+      const result = await removeConnection(request.connectionId);
+      if (!result.ok) {
+        toast.error(result.error ?? 'Could not cancel. Try again.');
+        return;
+      }
       router.refresh();
     });
   }
@@ -565,31 +589,33 @@ export function PeopleClient({
       {/* Outgoing */}
       {outgoing.length > 0 && (
         <section>
-          <SectionHeader title="Waiting to hear back" />
+          <SectionHeader
+            title="Waiting to hear back"
+            hint="Nudge someone who hasn’t responded, or cancel the request"
+          />
           <ul className="space-y-1.5">
             {outgoing.map((request) => (
               <li
                 key={request.connectionId}
                 className="flex items-center gap-3 rounded-card bg-cream px-3.5 py-2.5 text-sm"
               >
-                <span className="flex-1">
+                <span className="flex-1 min-w-0">
                   <strong>{request.name}</strong>{' '}
                   <span className="text-ink-faint">@{request.handle}</span>
                 </span>
                 <button
                   type="button"
                   disabled={pending}
-                  className="rounded-pill px-2 py-1 text-xs text-ink-faint hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-terracotta"
-                  onClick={() =>
-                    startTransition(async () => {
-                      const result = await removeConnection(request.connectionId);
-                      if (!result.ok) {
-                        toast.error(result.error ?? 'Could not cancel. Try again.');
-                        return;
-                      }
-                      router.refresh();
-                    })
-                  }
+                  className="shrink-0 rounded-pill px-2 py-1 text-xs font-semibold text-terracotta-deep hover:text-terracotta focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-terracotta"
+                  onClick={() => resendOutgoing(request)}
+                >
+                  Resend
+                </button>
+                <button
+                  type="button"
+                  disabled={pending}
+                  className="shrink-0 rounded-pill px-2 py-1 text-xs text-ink-faint hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-terracotta"
+                  onClick={() => cancelOutgoing(request)}
                 >
                   Cancel
                 </button>
