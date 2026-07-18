@@ -40,6 +40,18 @@ To seed interactive local test profiles after Supabase is configured:
 npm run seed:test-profiles
 ```
 
+To populate every public-discovery surface (map, zones, moments, discover,
+people, boards, mutual) with mock data geo-tagged around Salt Lake City and
+wired to your own account so RLS lets you see it:
+
+```bash
+# Targets the project your account lives in — confirm with SEED_ALLOW_NONLOCAL=1.
+SEED_ALLOW_NONLOCAL=1 SEED_VIEWER_EMAIL=you@example.com npm run seed:discovery-demo
+```
+
+The viewer must have signed into the app once (so the profile exists). Re-runs
+are idempotent — the script owns only its fixed set of demo rows.
+
 ## Architecture notes
 
 - **Cascade logic lives once**, in `src/lib/engine/cascade.ts` (pure, unit-tested).

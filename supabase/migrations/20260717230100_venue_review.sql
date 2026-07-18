@@ -1,5 +1,14 @@
 -- Venue claims become a reviewed lifecycle instead of instant-live listings.
 --
+-- NOTE: this file originally shared the version timestamp 20260717230000 with
+-- the notification_preferences migration. Two migrations with the same version
+-- collide on the schema_migrations primary key, which aborts a clean apply to a
+-- fresh database ("duplicate key value violates unique constraint
+-- schema_migrations_pkey"). It has been renamed to a unique version; every
+-- statement here is already idempotent (add column / create index if not
+-- exists, drop policy/trigger if exists, create or replace), so re-applying is
+-- safe regardless of whether an environment already ran it under the old name.
+--
 -- Before: any authenticated user could insert a `venues` row (name + perk) with
 -- themselves as `claimed_by`, and it was world-visible immediately
 -- (venues_select `using (true)`) and even surfaced as a "perk for Switchboard
