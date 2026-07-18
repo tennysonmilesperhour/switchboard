@@ -7,6 +7,7 @@ import { Card, SectionHeader } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { createZone } from '@/lib/actions/zones';
 import { EXPERIENCE_PRESETS } from '@/lib/types';
+import { ZoneLocationField } from './ZoneLocationField';
 
 export const metadata: Metadata = { title: 'Serendipity Zones' };
 
@@ -38,9 +39,14 @@ export default async function ZonesPage({
     <AppShell title="Zones" back="/moments">
       <div className="space-y-7">
         <p className="text-sm text-ink-soft leading-relaxed -mt-1">
-          A zone is a Shared Moments space for a conference, cruise, campus,
-          festival, or any gathering. Everyone who checks in through the zone
-          link can serendipitously find each other.
+          A <strong>zone</strong> is a place — a conference, cruise, campus,
+          festival, or any gathering. A <strong>moment</strong> is you checking
+          in, so people in the same zone can serendipitously find each other.
+          Anchor a zone to a spot and it appears on the{' '}
+          <Link href="/map" className="font-semibold text-terracotta-deep underline">
+            map
+          </Link>
+          .
         </p>
 
         {(zones?.length ?? 0) === 0 && (
@@ -96,6 +102,7 @@ export default async function ZonesPage({
                   aria-label="Zone description"
                   className="w-full rounded-card border border-line bg-paper px-3 py-2.5 text-sm outline-none focus:border-terracotta"
                 />
+                <ZoneLocationField className="w-full rounded-card border border-line bg-paper px-3 py-2.5 text-sm outline-none focus:border-terracotta" />
                 <fieldset>
                   <legend className="text-xs text-ink-faint mb-1.5">
                     Curated experiences for this zone

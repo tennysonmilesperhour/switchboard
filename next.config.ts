@@ -11,12 +11,14 @@ const securityHeaders = [
   { key: 'X-Frame-Options', value: 'DENY' },
   { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
   {
-    // Allow same-origin microphone use — the voice-note recorder
-    // (src/components/ui/VoiceRecorder.tsx) calls getUserMedia({ audio: true }).
-    // A blanket `microphone=()` made standards-compliant browsers deny the mic
-    // before the user could grant it. Camera and geolocation stay fully denied.
+    // Allow same-origin microphone and geolocation. The voice-note recorder
+    // (src/components/ui/VoiceRecorder.tsx) calls getUserMedia({ audio: true }),
+    // and live location sharing on the Map (src/lib/actions/live-location.ts)
+    // calls navigator.geolocation — a blanket `()` denies each API before the
+    // user can grant it. Both stay `(self)` so only our own origin may prompt;
+    // camera stays fully denied.
     key: 'Permissions-Policy',
-    value: 'camera=(), microphone=(self), geolocation=()',
+    value: 'camera=(), microphone=(self), geolocation=(self)',
   },
   // The Content-Security-Policy is set per-request in src/proxy.ts so it can
   // carry a fresh nonce for script-src (no 'unsafe-inline'/'unsafe-eval' in

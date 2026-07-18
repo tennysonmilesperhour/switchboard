@@ -5,6 +5,7 @@ import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { notifyUsers } from '@/lib/server/notify';
 import { requireUser } from '@/lib/server/require-user';
+import { isValidCoordinate } from '@/lib/geo';
 
 export interface MomentActionResult {
   ok: boolean;
@@ -19,6 +20,7 @@ export async function checkIn(
   headline: string,
   hoursAvailable: number,
   zoneId: string | null = null,
+  coords: { lat: number; lng: number } | null = null,
 ): Promise<MomentActionResult> {
   const auth = await requireUser();
   if (!auth.ok) return auth;
@@ -33,6 +35,11 @@ export async function checkIn(
     .eq('user_id', user.id)
     .eq('status', 'open');
 
+  // An optional coordinate (the user tapped "use my location") lets the check-in
+  // land on the Map without a later geocode step. Only stored when it's a real
+  // coordinate; a free-text place still works with no point at all.
+  const point = coords && isValidCoordinate(coords.lat, coords.lng) ? coords : null;
+
   const { error } = await supabase.from('moments').insert({
     user_id: user.id,
     place_name: placeName.trim(),
@@ -40,6 +47,8 @@ export async function checkIn(
     headline: headline.trim() || null,
     available_until: new Date(Date.now() + hoursAvailable * 3_600_000).toISOString(),
     zone_id: zoneId,
+    latitude: point?.lat ?? null,
+    longitude: point?.lng ?? null,
   });
   if (error) return { ok: false, error: error.message };
   revalidatePath('/moments');
