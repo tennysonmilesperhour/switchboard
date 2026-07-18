@@ -96,6 +96,9 @@ const KIND_TO_CATEGORY: Record<string, NotificationCategory> = {
   // Connections & matches
   connection_accepted: 'social',
   match: 'social',
+  // Anonymous "someone's down to connect" nudge — never names the sender, so it
+  // belongs with the other consent-first social signals, gated by notify_social.
+  interest_received: 'social',
   moment: 'social',
   ritual: 'social',
 };
