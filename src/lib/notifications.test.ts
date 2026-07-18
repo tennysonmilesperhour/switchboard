@@ -26,6 +26,7 @@ describe('categoryForKind', () => {
     expect(categoryForKind('photo')).toBe('messages');
     expect(categoryForKind('connection_accepted')).toBe('social');
     expect(categoryForKind('match')).toBe('social');
+    expect(categoryForKind('interest_received')).toBe('social');
     expect(categoryForKind('moment')).toBe('social');
     expect(categoryForKind('ritual')).toBe('social');
   });

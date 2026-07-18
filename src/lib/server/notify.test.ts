@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { isQuietTime } from './notify';
+import {
+  isQuietTime,
+  shouldSendInterestNudge,
+  MIN_CONNECTIONS_FOR_INTEREST_NUDGE,
+} from './notify';
 
 /** Build a Date at a fixed UTC hour so assertions are deterministic. */
 function atUtcHour(hour: number): Date {
@@ -42,5 +46,31 @@ describe('isQuietTime', () => {
   it('falls back gracefully on an invalid timezone', () => {
     // Bad zone → uses UTC hour; 12 UTC is outside 22–08.
     expect(isQuietTime(22, 8, 'Not/AZone', atUtcHour(12))).toBe(false);
+  });
+});
+
+describe('shouldSendInterestNudge', () => {
+  it('stays silent when too few connections would deanonymize the sender', () => {
+    // With fewer connections than the floor, "someone is interested" points at
+    // a nearly-identifiable person — the anonymity invariant must win.
+    for (let n = 0; n < MIN_CONNECTIONS_FOR_INTEREST_NUDGE; n++) {
+      expect(shouldSendInterestNudge(n, 0)).toBe(false);
+    }
+  });
+
+  it('nudges at or above the connection floor when nothing is pending', () => {
+    expect(shouldSendInterestNudge(MIN_CONNECTIONS_FOR_INTEREST_NUDGE, 0)).toBe(
+      true,
+    );
+    expect(
+      shouldSendInterestNudge(MIN_CONNECTIONS_FOR_INTEREST_NUDGE + 5, 0),
+    ).toBe(true);
+  });
+
+  it('suppresses a second nudge while an unread one is still waiting', () => {
+    // One standing nudge at a time: avoids spam and stops an idempotent
+    // re-submit of the same intent from re-buzzing the target.
+    expect(shouldSendInterestNudge(10, 1)).toBe(false);
+    expect(shouldSendInterestNudge(10, 3)).toBe(false);
   });
 });

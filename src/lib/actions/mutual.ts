@@ -2,7 +2,7 @@
 
 import { revalidatePath } from 'next/cache';
 import { createClient } from '@/lib/supabase/server';
-import { notifyUsers } from '@/lib/server/notify';
+import { notifyInterestReceived, notifyUsers } from '@/lib/server/notify';
 import { checkRateLimit } from '@/lib/server/rate-limit';
 import { requireUser } from '@/lib/server/require-user';
 import type { IntentKind } from '@/lib/types';
@@ -79,6 +79,15 @@ export async function downToConnect(
       // intent for it. Never cancel with the admin client from here.
       await supabase.rpc('reschedule_cancel_event', { p_event: eventId });
     }
+  } else if (kind === 'down_to_connect') {
+    // One-sided interest, no match yet. Nudge the target ANONYMOUSLY so they
+    // know it's worth opening Mutual Mode and picking people back — without
+    // ever revealing who, or the activity. The target still can't read the raw
+    // intent (RLS), so the anonymity invariant holds; the nudge only fires when
+    // the sender is safely hidden in a crowd of connections. Only for
+    // down_to_connect: discovery (discover_connect) targets aren't necessarily
+    // connections, and reschedule intents are event-scoped, not people-scoped.
+    await notifyInterestReceived(targetId);
   }
 
   revalidatePath('/mutual');

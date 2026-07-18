@@ -64,6 +64,78 @@ export async function notifyUsers(
   return { recorded: !error };
 }
 
+/**
+ * How many accepted connections the recipient must have before we send the
+ * anonymous "someone's down to connect" nudge.
+ *
+ * The nudge deliberately never names the sender — but only a connection can
+ * express down-to-connect interest, so the recipient's connection set IS the
+ * sender's anonymity set. With one or two connections, "someone is interested"
+ * trivially points at a single person, which would break the mutual-mode
+ * anonymity invariant (a target must not learn about unrequited interest). Below
+ * this floor we stay silent; the invariant wins over the nudge.
+ */
+export const MIN_CONNECTIONS_FOR_INTEREST_NUDGE = 3;
+
+/**
+ * Decide whether to send the anonymous interest nudge, given the recipient's
+ * accepted-connection count and how many unread nudges they already have.
+ *
+ * Pure so the policy is unit-testable without a database:
+ *  - the connection floor keeps the sender hidden in a crowd, and
+ *  - one standing unread nudge at a time avoids spam and stops an idempotent
+ *    re-submit of the same intent from re-buzzing the target.
+ */
+export function shouldSendInterestNudge(
+  connectionCount: number,
+  unreadNudgeCount: number,
+): boolean {
+  return (
+    connectionCount >= MIN_CONNECTIONS_FOR_INTEREST_NUDGE &&
+    unreadNudgeCount === 0
+  );
+}
+
+/**
+ * Anonymously nudge `targetId` that someone they're connected with expressed
+ * one-sided interest in Mutual Mode, so they know it's worth opening the tab and
+ * choosing people back. It NEVER reveals who expressed interest or the activity
+ * — that would leak unrequited interest, which the whole feature is built to
+ * hide. No-ops (silently) when the anonymity set is too small or a nudge is
+ * already waiting; best-effort, never throws.
+ */
+export async function notifyInterestReceived(targetId: string): Promise<void> {
+  if (!targetId) return;
+  const admin = createAdminClient();
+
+  const [{ count: connectionCount }, { count: unreadNudgeCount }] =
+    await Promise.all([
+      admin
+        .from('connections')
+        .select('id', { count: 'exact', head: true })
+        .eq('status', 'accepted')
+        .or(`requester_id.eq.${targetId},addressee_id.eq.${targetId}`),
+      admin
+        .from('notifications')
+        .select('id', { count: 'exact', head: true })
+        .eq('user_id', targetId)
+        .eq('kind', 'interest_received')
+        .is('read_at', null),
+    ]);
+
+  if (!shouldSendInterestNudge(connectionCount ?? 0, unreadNudgeCount ?? 0)) {
+    return;
+  }
+
+  await notifyUsers([targetId], {
+    kind: 'interest_received',
+    title: '✨ Someone’s down to connect',
+    body:
+      'Someone you’re connected with is up for an activity with you. Open Mutual Mode and pick who you’re down to — if it lines up, you’ll both find out.',
+    url: '/mutual',
+  });
+}
+
 let vapidConfigured = false;
 
 function configureVapid(): boolean {
