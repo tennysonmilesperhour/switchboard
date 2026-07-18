@@ -3,7 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import { createClient } from '@/lib/supabase/server';
 import { requireUser } from '@/lib/server/require-user';
-import { notifyUsers, sendPushToUsers } from '@/lib/server/notify';
+import { notifyUsers } from '@/lib/server/notify';
 import { normalizePhoneNumber } from '@/lib/phone';
 import { checkRateLimit } from '@/lib/server/rate-limit';
 
@@ -75,6 +75,37 @@ async function connectionStatusFor(
   return data.requester_id === userId ? 'outgoing' : 'incoming';
 }
 
+/**
+ * Record a durable "wants to connect" notification for the addressee (and push
+ * it, honoring their `social` preference). A connection request is exactly the
+ * kind of thing the SB-05 notifications table exists for — something the
+ * recipient must be able to find later in /notifications and act on — so it
+ * goes through notifyUsers, not a push that silently vanishes when they never
+ * enabled notifications, are in quiet hours, or muted the category. This mirrors
+ * how an event invite writes a durable `event_invite` row alongside its pending
+ * surface; the accepted counterpart already uses `connection_accepted`.
+ */
+async function notifyConnectionRequested(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  requesterId: string,
+  addresseeId: string,
+): Promise<void> {
+  // The addressee is entitled to see who requested them (the pending row is
+  // already visible to them on /people), so naming the requester here leaks
+  // nothing and makes the bell self-explanatory.
+  const { data: requester } = await supabase
+    .from('profiles')
+    .select('display_name')
+    .eq('id', requesterId)
+    .maybeSingle();
+  await notifyUsers([addresseeId], {
+    kind: 'connection_request',
+    title: 'New connection request 👋',
+    body: `${requester?.display_name ?? 'Someone'} wants to connect on Switchboard.`,
+    url: '/people',
+  });
+}
+
 export async function sendConnectionRequest(identifier: string): Promise<ConnectionResult> {
   const auth = await requireUser();
   if (!auth.ok) return auth;
@@ -99,15 +130,7 @@ export async function sendConnectionRequest(identifier: string): Promise<Connect
     return { ok: false, error: error.message };
   }
 
-  await sendPushToUsers(
-    [target.id],
-    {
-      title: 'New connection request',
-      body: 'Someone wants to connect on Switchboard.',
-      url: '/people',
-    },
-    'social',
-  );
+  await notifyConnectionRequested(supabase, user.id, target.id);
   revalidatePath('/people');
   return { ok: true };
 }
@@ -149,15 +172,50 @@ export async function sendConnectionRequestToId(
     return { ok: false, error: error.message };
   }
 
-  await sendPushToUsers(
-    [targetId],
-    {
-      title: 'New connection request',
-      body: 'Someone wants to connect on Switchboard.',
-      url: '/people',
-    },
-    'social',
-  );
+  await notifyConnectionRequested(supabase, user.id, targetId);
+  revalidatePath('/people');
+  return { ok: true };
+}
+
+/**
+ * Re-nudge a still-pending outgoing request: fire the "wants to connect"
+ * notification again without inserting a second row (the unique constraint
+ * would reject it anyway). Only the requester can do this, only while it's
+ * pending, and a per-request cooldown keeps a nudge from being turned into a
+ * way to spam someone's bell (blocking already deletes the row, so a blocked
+ * user has nothing left to resend).
+ */
+export async function resendConnectionRequest(
+  connectionId: string,
+): Promise<ConnectionResult> {
+  const auth = await requireUser();
+  if (!auth.ok) return auth;
+  const { supabase, user } = auth;
+
+  if (!UUID_RE.test(connectionId)) return { ok: false, error: 'Unknown request.' };
+
+  // RLS lets the requester read their own row; the explicit ownership/status
+  // checks turn "not yours / already accepted / gone" into a clear message
+  // rather than a silent re-notify.
+  const { data: connection } = await supabase
+    .from('connections')
+    .select('requester_id, addressee_id, status')
+    .eq('id', connectionId)
+    .maybeSingle();
+  if (!connection || connection.requester_id !== user.id) {
+    return { ok: false, error: 'That request is no longer available.' };
+  }
+  if (connection.status !== 'pending') {
+    return { ok: false, error: 'You’re already connected.' };
+  }
+
+  // Per-request cooldown (keyed by the connection, i.e. the specific addressee)
+  // so a resend can't be used to hammer one person's notifications.
+  if (!(await checkRateLimit(`resend-request:${connectionId}`, 3, 60 * 60))) {
+    return { ok: false, error: 'You nudged them recently. Give it a little while.' };
+  }
+
+  await notifyConnectionRequested(supabase, user.id, connection.addressee_id);
   revalidatePath('/people');
   return { ok: true };
 }

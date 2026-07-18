@@ -24,6 +24,7 @@ describe('categoryForKind', () => {
     expect(categoryForKind('reminder')).toBe('reminders');
     expect(categoryForKind('event_comment')).toBe('messages');
     expect(categoryForKind('photo')).toBe('messages');
+    expect(categoryForKind('connection_request')).toBe('social');
     expect(categoryForKind('connection_accepted')).toBe('social');
     expect(categoryForKind('match')).toBe('social');
     expect(categoryForKind('interest_received')).toBe('social');
