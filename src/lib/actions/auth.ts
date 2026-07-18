@@ -6,12 +6,14 @@ import { checkRateLimit } from '@/lib/server/rate-limit';
 import {
   appUrl,
   emailEnabled,
+  looksLikeEmail,
   sendEmail,
   sendEmailWithResult,
 } from '@/lib/server/email';
 import { redirect } from 'next/navigation';
 import {
   PASSWORD_MIN_LENGTH,
+  USERNAME_EMAIL_DOMAIN,
   emailToHandleCandidate,
   isEmailIdentifier,
   isValidUsername,
@@ -333,14 +335,55 @@ export async function createPasswordAccount(
   }
 }
 
+/**
+ * Resolve the account a password-reset request refers to, using the service
+ * role. An email identifier resolves to the account whose own login email is
+ * that address — first via a verified contact row, then via the profile's
+ * stored contact email so email sign-ups still resolve before they've confirmed
+ * (their contact row exists but isn't marked verified yet). A username resolves
+ * by handle. Returns null when nothing matches; the caller still answers
+ * generically, so this never reveals whether an account exists.
+ */
+async function resolveResetUserId(
+  admin: ReturnType<typeof createAdminClient>,
+  normalized: string,
+): Promise<string | null> {
+  if (isEmailIdentifier(normalized)) {
+    const { data: verified } = await admin
+      .from('profile_contacts')
+      .select('user_id')
+      .eq('kind', 'email')
+      .eq('normalized_value', normalized)
+      .not('verified_at', 'is', null)
+      .maybeSingle();
+    if (verified?.user_id) return verified.user_id;
+
+    // `contact_email` is stored normalized (lower-cased) for email sign-ups, so
+    // an exact match finds the account before its contact row is verified —
+    // without the wildcard pitfalls of `ilike` on an address that may contain
+    // `_`/`%`.
+    const { data: profile } = await admin
+      .from('profiles')
+      .select('id')
+      .eq('contact_email', normalized)
+      .maybeSingle();
+    return profile?.id ?? null;
+  }
+
+  if (!isValidUsername(normalized)) return null;
+  const { data: profile } = await admin
+    .from('profiles')
+    .select('id')
+    .eq('handle', normalized)
+    .maybeSingle();
+  return profile?.id ?? null;
+}
+
 export async function requestPasswordReset(
   identifier: string,
 ): Promise<AuthActionResult> {
   const normalized = normalizeIdentifier(identifier);
-  const generic = {
-    ok: true,
-    identifier: normalized,
-  };
+  const generic: AuthActionResult = { ok: true, identifier: normalized };
   if (!normalized) return authError('Enter your email or username.');
 
   try {
@@ -348,81 +391,70 @@ export async function requestPasswordReset(
       return generic;
     }
 
-    const supabase = await createClient();
-    if (isEmailIdentifier(normalized)) {
-      const { data: verifiedContact } = hasAdminCredentials()
-        ? await createAdminClient()
-            .from('profile_contacts')
-            .select('user_id')
-            .eq('kind', 'email')
-            .eq('normalized_value', normalized)
-            .not('verified_at', 'is', null)
-            .maybeSingle()
-        : { data: null };
-
-      if (!verifiedContact?.user_id) {
+    // Without service-role access we can't mint our own recovery link, so lean
+    // on Supabase's built-in recovery email. Real deployments configure admin
+    // credentials + Resend and take the reliable, self-delivered path below.
+    if (!hasAdminCredentials()) {
+      if (isEmailIdentifier(normalized)) {
+        const supabase = await createClient();
         await supabase.auth.resetPasswordForEmail(normalized, {
           redirectTo: appUrl('/auth/callback?next=/reset-password'),
         });
-        return generic;
+      }
+      return generic;
+    }
+
+    const admin = createAdminClient();
+    const userId = await resolveResetUserId(admin, normalized);
+    if (!userId) return generic;
+
+    // Decide where the recovery link may be delivered. An account's own login
+    // email is its canonical recovery address, so email sign-ups always recover
+    // there — even before the contact row is marked verified. Username accounts
+    // have a synthetic, undeliverable login email, so they may only recover
+    // through a *verified* real-email contact — never an address someone merely
+    // typed in but never proved they control (docs/SECURITY.md §9).
+    const { data: authUser } = await admin.auth.admin.getUserById(userId);
+    const authEmail = authUser.user?.email ?? null;
+    const loginEmailDeliverable =
+      !!authEmail &&
+      looksLikeEmail(authEmail) &&
+      !authEmail.endsWith(`@${USERNAME_EMAIL_DOMAIN}`);
+
+    let deliverTo: string | null = loginEmailDeliverable ? authEmail : null;
+    if (!deliverTo) {
+      const { data: verifiedEmail } = await admin
+        .from('profile_contacts')
+        .select('normalized_value')
+        .eq('user_id', userId)
+        .eq('kind', 'email')
+        .not('verified_at', 'is', null)
+        .maybeSingle();
+      deliverTo = verifiedEmail?.normalized_value ?? null;
+    }
+
+    if (authEmail && deliverTo) {
+      const { data: link } = await admin.auth.admin.generateLink({
+        type: 'recovery',
+        email: authEmail,
+        options: { redirectTo: appUrl('/auth/confirm?next=/reset-password') },
+      });
+      // Build the link through our own /auth/confirm route using the token
+      // hash, so recovery never depends on Supabase's verify-redirect or a
+      // particular email-template shape. Fall back to the raw action link.
+      const hashed = link.properties?.hashed_token;
+      const recoveryUrl = hashed
+        ? appUrl(`/auth/confirm?token_hash=${hashed}&type=recovery&next=/reset-password`)
+        : link.properties?.action_link;
+      if (recoveryUrl) {
+        await sendEmail({
+          to: deliverTo,
+          subject: 'Reset your Switchboard password',
+          text: `Reset your Switchboard password:\n\n${recoveryUrl}\n\nIf you did not request this, you can ignore this email.`,
+        });
       }
     }
 
-    if (hasAdminCredentials()) {
-      const admin = createAdminClient();
-      let userId: string | null = null;
-      if (isEmailIdentifier(normalized)) {
-        const { data: identity } = await admin
-          .from('profile_contacts')
-          .select('user_id')
-          .eq('kind', 'email')
-          .eq('normalized_value', normalized)
-          .not('verified_at', 'is', null)
-          .maybeSingle();
-        userId = identity?.user_id ?? null;
-      } else {
-        const { data: identity } = await admin
-          .from('profiles')
-          .select('id')
-          .eq('handle', normalized)
-          .maybeSingle();
-        userId = identity?.id ?? null;
-      }
-      const { data: verifiedEmail } = userId
-        ? await admin
-            .from('profile_contacts')
-            .select('normalized_value')
-            .eq('user_id', userId)
-            .eq('kind', 'email')
-            .not('verified_at', 'is', null)
-            .maybeSingle()
-        : { data: null };
-
-      if (userId && verifiedEmail?.normalized_value) {
-        const { data: authUser } = await admin.auth.admin.getUserById(userId);
-        if (authUser.user?.email) {
-          const { data: link } = await admin.auth.admin.generateLink({
-            type: 'recovery',
-            email: authUser.user.email,
-            options: { redirectTo: appUrl('/auth/confirm?next=/reset-password') },
-          });
-          // Build the link through our own /auth/confirm route using the token
-          // hash, so recovery never depends on Supabase's verify-redirect or a
-          // particular email-template shape. Fall back to the raw action link.
-          const hashed = link.properties?.hashed_token;
-          const recoveryUrl = hashed
-            ? appUrl(`/auth/confirm?token_hash=${hashed}&type=recovery&next=/reset-password`)
-            : link.properties?.action_link;
-          if (recoveryUrl) {
-            await sendEmail({
-              to: verifiedEmail.normalized_value,
-              subject: 'Reset your Switchboard password',
-              text: `Reset your Switchboard password:\n\n${recoveryUrl}\n\nIf you did not request this, you can ignore this email.`,
-            });
-          }
-        }
-      }
-    }
     return generic;
   } catch (error) {
     console.error('[auth:reset-request:error]', error);
