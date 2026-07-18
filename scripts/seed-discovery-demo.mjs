@@ -251,6 +251,7 @@ await connect(ids.priya, ids.nina);
   await delIn('mutual_intents', 'target_id', mockIds);
 
   await delIn('availability_signals', 'user_id', mockIds);
+  await delIn('live_locations', 'user_id', mockIds);
   await delIn('moments', 'user_id', mockIds);
   await admin.from('moments').delete().eq('user_id', viewerId).in('place_name', [SLC.publik.name, SLC.libertyPark.name]);
   await delIn('events', 'host_id', mockIds); // invites/polls cascade
@@ -394,17 +395,44 @@ await admin.from('availability_signals').insert(
   signals.map((s) => ({ user_id: s.user, emoji: s.emoji, label: s.label, expires_at: inHours(s.hours) })),
 );
 
-// 6b) Venue perks → the "Perks near you" strip on Discover (public, world-readable).
-await admin.from('venues').insert([
-  { name: 'Publik Coffee Roasters', area: 'West Temple', claimed_by: ids.leo,
-    perk: '10% off pour-overs when you check in with a Switchboard plan.' },
-  { name: 'Fisher Brewing Co.', area: 'Granary District', claimed_by: ids.omar,
-    perk: 'First round on the house for open-table groups of 4+.' },
-  { name: 'The Rose Establishment', area: 'Downtown', claimed_by: ids.nina,
-    perk: 'Free pastry with any coffee on weekday mornings.' },
-  { name: 'Pago', area: '9th & 9th', claimed_by: ids.mara,
-    perk: 'Complimentary small plate for dinner plans booked here.' },
-]);
+// 6b) Venue perks → the "Perks near you" strip on Discover. As of the venue-review
+//     migration a venue is only world-visible once status = 'verified', so the
+//     demo rows are seeded pre-verified (service role bypasses the moderator gate).
+await admin.from('venues').insert(
+  [
+    { name: 'Publik Coffee Roasters', area: 'West Temple', claimed_by: ids.leo,
+      perk: '10% off pour-overs when you check in with a Switchboard plan.' },
+    { name: 'Fisher Brewing Co.', area: 'Granary District', claimed_by: ids.omar,
+      perk: 'First round on the house for open-table groups of 4+.' },
+    { name: 'The Rose Establishment', area: 'Downtown', claimed_by: ids.nina,
+      perk: 'Free pastry with any coffee on weekday mornings.' },
+    { name: 'Pago', area: '9th & 9th', claimed_by: ids.mara,
+      perk: 'Complimentary small plate for dinner plans booked here.' },
+  ].map((v) => ({ ...v, status: 'verified', reviewed_at: new Date(now - DAY).toISOString() })),
+);
+
+// 6c) Live location — opt-in "who's sharing nearby" presence. Discovery is mutual
+//     (find_nearby_people returns rows only to a caller who is themselves sharing)
+//     and defaults to a 5 km radius, so the viewer gets a live point downtown and
+//     the cast is clustered within ~5 km of it. All time-boxed (expire in 2h).
+const share = (userId, lat, lng, headline, emoji, visibility = 'sharers') =>
+  admin.from('live_locations').upsert(
+    {
+      user_id: userId, latitude: lat, longitude: lng, accuracy_m: 30,
+      headline, emoji, visibility, updated_at: new Date().toISOString(), expires_at: inHours(2),
+    },
+    { onConflict: 'user_id' },
+  );
+// The viewer shares too, so "see and be seen" is satisfied and the map lights up
+// immediately. (It's their own ephemeral row — turn it off from the map anytime.)
+await share(viewerId, 40.766, -111.891, 'Downtown for the afternoon', '📍');
+await share(ids.nina, 40.7663, -111.8887, 'Coffee downtown', '☕');
+await share(ids.leo, 40.7642, -111.9012, 'At the farmers market', '🧺');
+await share(ids.mara, 40.7527, -111.862, 'Working from 9th & 9th', '💻', 'connections');
+await share(ids.omar, 40.755, -111.866, 'Bouldering later, say hi', '🧗', 'connections');
+await share(ids.ivy, 40.7466, -111.8747, 'Walking the Liberty Park loop', '🚶');
+await share(ids.sam, 40.736, -111.876, 'Shooting film around the block', '📷');
+await share(ids.priya, 40.779, -111.902, 'Trying the new coffee spot', '☕');
 
 // 7) Neighborhood board the viewer belongs to.
 {
@@ -446,7 +474,7 @@ await admin.from('venues').insert([
 }
 
 console.log('\nDiscovery demo seeded. Sign in as', viewerEmail, 'and explore:');
-console.log('  • /map        — toggle Plans / Zones / Shared places (all around SLC)');
+console.log('  • /map        — Plans / Zones / Shared places layers + live people sharing nearby (SLC)');
 console.log('  • /zones      — 5 public serendipity zones');
 console.log('  • /moments    — your places + "someone else is here too"');
 console.log('  • /discover   — 2 open tables to join + people to meet');
