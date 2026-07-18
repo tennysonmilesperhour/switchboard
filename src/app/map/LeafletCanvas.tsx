@@ -133,10 +133,16 @@ export function LeafletCanvas({
     map.setView([center.lat, center.lng], Math.max(map.getZoom() ?? 0, 14));
   }, [center]);
 
+  // `isolate` (isolation: isolate) gives the map its own stacking context.
+  // Leaflet sets high z-indexes on its panes and controls (zoom buttons and
+  // attribution reach z-index 1000); the `.leaflet-container` itself creates no
+  // stacking context, so without this those values leak into the page's root
+  // context and out-stack app chrome like the More sheet overlay (z-40),
+  // painting the map's controls on top of it. Isolating scopes them to the map.
   return (
     <div
       ref={containerRef}
-      className="h-[60vh] w-full overflow-hidden rounded-card border border-line"
+      className="isolate h-[60vh] w-full overflow-hidden rounded-card border border-line"
     />
   );
 }
