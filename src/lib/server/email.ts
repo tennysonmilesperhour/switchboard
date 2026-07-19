@@ -23,7 +23,7 @@ export type DeliveryStatus = 'sent' | 'not_configured' | 'invalid_recipient' | '
 
 export interface ProviderDeliveryResult {
   status: DeliveryStatus;
-  provider: 'resend' | 'plivo';
+  provider: 'resend' | 'twilio';
   providerMessageId?: string;
   errorCode?: string;
 }
