@@ -10,9 +10,9 @@ export { looksLikePhoneNumber, normalizePhoneNumber };
 
 export function smsEnabled(): boolean {
   return Boolean(
-    process.env.PLIVO_AUTH_ID
-      && process.env.PLIVO_AUTH_TOKEN
-      && process.env.PLIVO_FROM_NUMBER,
+    process.env.TWILIO_ACCOUNT_SID
+      && process.env.TWILIO_AUTH_TOKEN
+      && process.env.TWILIO_FROM_NUMBER,
   );
 }
 
@@ -25,60 +25,56 @@ export async function sendSmsWithResult(
   message: SmsMessage,
 ): Promise<ProviderDeliveryResult> {
   const to = normalizePhoneNumber(message.to);
-  if (!to) return { status: 'invalid_recipient', provider: 'plivo' };
+  if (!to) return { status: 'invalid_recipient', provider: 'twilio' };
   if (!smsEnabled()) {
     console.info('[sms:skipped] provider is not configured');
-    return { status: 'not_configured', provider: 'plivo' };
+    return { status: 'not_configured', provider: 'twilio' };
   }
 
-  const authId = process.env.PLIVO_AUTH_ID as string;
-  const authToken = process.env.PLIVO_AUTH_TOKEN as string;
-  const from = normalizePhoneNumber(process.env.PLIVO_FROM_NUMBER) as string;
-  const authorization = Buffer.from(`${authId}:${authToken}`).toString('base64');
+  const accountSid = process.env.TWILIO_ACCOUNT_SID as string;
+  const authToken = process.env.TWILIO_AUTH_TOKEN as string;
+  const from = normalizePhoneNumber(process.env.TWILIO_FROM_NUMBER) as string;
+  const authorization = Buffer.from(`${accountSid}:${authToken}`).toString('base64');
+  const form = new URLSearchParams({
+    From: from,
+    To: to,
+    Body: message.body,
+  });
 
   try {
-    const response = await fetch(`https://api.plivo.com/v1/Account/${authId}/Message/`, {
-      method: 'POST',
-      headers: {
-        Authorization: `Basic ${authorization}`,
-        'Content-Type': 'application/json',
+    const response = await fetch(
+      `https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Messages.json`,
+      {
+        method: 'POST',
+        headers: {
+          Authorization: `Basic ${authorization}`,
+          'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body: form.toString(),
       },
-      body: JSON.stringify({
-        src: from,
-        dst: to,
-        text: message.body,
-      }),
-    });
+    );
     if (!response.ok) {
       console.error(`[sms:failed] provider returned ${response.status}`);
       return {
         status: 'failed',
-        provider: 'plivo',
+        provider: 'twilio',
         errorCode: `http_${response.status}`,
       };
     }
     const body = await response.json().catch(() => null) as
-      | { message_uuid?: unknown; messageUuid?: unknown; error?: unknown }
+      | { sid?: unknown; error_code?: unknown }
       | null;
-    if (body?.error) {
-      return { status: 'failed', provider: 'plivo', errorCode: 'provider_error' };
+    if (body?.error_code) {
+      return { status: 'failed', provider: 'twilio', errorCode: 'provider_error' };
     }
-    const firstMessageUuid = Array.isArray(body?.message_uuid)
-      ? body.message_uuid[0]
-      : Array.isArray(body?.messageUuid)
-        ? body.messageUuid[0]
-        : undefined;
-    const providerMessageId = typeof firstMessageUuid === 'string'
-      ? firstMessageUuid
-      : typeof body?.message_uuid === 'string'
-        ? body.message_uuid
-        : typeof body?.messageUuid === 'string'
-          ? body.messageUuid
-          : undefined;
-    return { status: 'sent', provider: 'plivo', providerMessageId };
+    return {
+      status: 'sent',
+      provider: 'twilio',
+      providerMessageId: typeof body?.sid === 'string' ? body.sid : undefined,
+    };
   } catch (error) {
     console.error('[sms:error]', error);
-    return { status: 'failed', provider: 'plivo', errorCode: 'network_error' };
+    return { status: 'failed', provider: 'twilio', errorCode: 'network_error' };
   }
 }
 
