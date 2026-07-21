@@ -257,7 +257,7 @@ export function EventWizard({
   const [showInviteList, setShowInviteList] = useState(false);
   const [showAccepted, setShowAccepted] = useState(true);
   const [showExpired, setShowExpired] = useState(false);
-  const [openTable, setOpenTable] = useState(false);
+  const [openTable, setOpenTable] = useState(true);
   const [remindersEnabled, setRemindersEnabled] = useState(true);
 
   const startsAt = useMemo(() => {
