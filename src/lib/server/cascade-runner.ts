@@ -18,6 +18,7 @@ import {
   sendSmsWithResult,
 } from '@/lib/server/sms';
 import type { Invite, SwitchboardEvent } from '@/lib/types';
+import { directInvitePath } from '@/lib/invite-links';
 
 function toEngineInvite(invite: Invite): CascadeInvite {
   return {
@@ -77,6 +78,11 @@ async function deliverInvitations(
 
   await Promise.all(current.map(async (invite) => {
     let hasChannel = false;
+    // One canonical destination for every direct invite. In particular, do not
+    // send registered members to the RLS-gated event URL: it fails when opened
+    // signed out, in another browser, or under a different account. Possession
+    // of this per-invite token is already the authorization used by guest RSVP.
+    const invitePath = directInvitePath(event.id, invite.guest_token);
 
     if (invite.invitee_id) {
       hasChannel = true;
@@ -84,7 +90,7 @@ async function deliverInvitations(
         kind: 'event_invite',
         title: 'You are invited',
         body: `${event.title} - you have a little while to respond.`,
-        url: `/events/${event.id}`,
+        url: invitePath,
       });
       const status: DeliveryStatus = result.recorded ? 'sent' : 'failed';
       countDelivery(summary, status);
@@ -104,7 +110,7 @@ async function deliverInvitations(
         to: invite.guest_contact,
         subject: `You are invited: ${event.title}`,
         text: invite.invitee_id
-          ? memberInviteText(event)
+          ? memberInviteText(event, invitePath)
           : guestInviteText(event, invite.guest_name, invite.guest_token),
       });
       countDelivery(summary, result.status);
@@ -123,7 +129,7 @@ async function deliverInvitations(
       const result = await sendSmsWithResult({
         to: invite.guest_contact,
         body: invite.invitee_id
-          ? `You are invited to ${event.title} on Switchboard: ${appUrl(`/events/${event.id}`)}`
+          ? `You are invited to ${event.title} on Switchboard: ${appUrl(invitePath)}`
           : guestInviteSmsText(event.title, invite.guest_token),
       });
       countDelivery(summary, result.status);
@@ -212,14 +218,14 @@ export async function advanceEventCascade(
   return deliverInvitations(event, invites, sentIds);
 }
 
-function memberInviteText(event: SwitchboardEvent): string {
+function memberInviteText(event: SwitchboardEvent, invitePath: string): string {
   const when = event.starts_at
     ? formatDateTime(event.starts_at, event.time_zone)
     : 'Time to be decided';
   return (
     `You are invited to ${event.title}.\n` +
     `When: ${when}\n\n` +
-    `Open the plan: ${appUrl(`/events/${event.id}`)}\n\n` +
+    `Open the plan: ${appUrl(invitePath)}\n\n` +
     `No pressure either way.\n\n- Switchboard`
   );
 }
