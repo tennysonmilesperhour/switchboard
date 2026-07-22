@@ -63,6 +63,20 @@ function buildCsp(nonce: string): string {
 }
 
 export async function proxy(request: NextRequest) {
+  // Keep one canonical origin in production. This makes old bookmarks and
+  // shared invite links converge before auth/session cookies are evaluated,
+  // while leaving local development and Vercel preview URLs usable.
+  if (
+    process.env.VERCEL_ENV === 'production' &&
+    request.nextUrl.hostname !== 'switchboardsocial.me'
+  ) {
+    const url = request.nextUrl.clone();
+    url.protocol = 'https:';
+    url.hostname = 'switchboardsocial.me';
+    url.port = '';
+    return NextResponse.redirect(url, 308);
+  }
+
   // Fresh, unguessable nonce per request. It rides the REQUEST headers so
   // Next.js can extract it and stamp its framework/bundle <script> tags, and
   // the CSP rides the RESPONSE so the browser enforces it. Rebuilt on each
