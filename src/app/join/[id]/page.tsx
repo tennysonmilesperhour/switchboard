@@ -6,6 +6,7 @@ import { createAdminClient, hasAdminCredentials } from '@/lib/supabase/admin';
 import { reportOperationalError } from '@/lib/server/observability';
 import { formatDateTime } from '@/lib/format';
 import { resolveEventZone } from '@/lib/server/event-zone';
+import { eventSharePath } from '@/lib/links';
 import { Button } from '@/components/ui/Button';
 import { Icon } from '@/components/ui/Icon';
 import { JoinViaLinkClient } from './JoinViaLinkClient';
@@ -70,7 +71,8 @@ export default async function JoinPage({
     ? await admin
         .from('events')
         .select(
-          'id, title, description, location_name, starts_at, time_zone, host_id, status, open_table',
+          'id, title, description, location_name, starts_at, time_zone, host_id, status, ' +
+            'open_table, share_token, share_link_active',
         )
         .eq('id', id)
         .maybeSingle<{
@@ -83,11 +85,23 @@ export default async function JoinPage({
           host_id: string;
           status: string;
           open_table: boolean;
+          share_token: string;
+          share_link_active: boolean;
         }>()
     : { data: null, error: null };
   if (eventError) {
     await reportOperationalError('join.event-lookup', eventError, {});
     throw new Error('Join lookup failed');
+  }
+
+  // Every /join/<id> link already out in the world — texted, pasted into group
+  // chats, sitting in someone's messages from weeks ago — forwards to the plan's
+  // public share link. Those were the broken ones: they demanded an account,
+  // then host approval, then open_table, and dead-ended if any of the three was
+  // missing. Forwarding resurrects them rather than stranding the people who
+  // were already sent one.
+  if (event && event.share_link_active && !user) {
+    redirect(eventSharePath(event.share_token));
   }
 
   // Figure out how the signed-in viewer already relates to this plan. Anyone
@@ -121,6 +135,13 @@ export default async function JoinPage({
         (existing.status !== 'queued' || event.status === 'deciding'));
     if (canViewEvent) redirect(`/events/${event.id}`);
     alreadyInvolved = existing != null || cohost != null;
+
+    // A signed-in visitor with no connection to the plan is in the same
+    // position as a stranger: send them to the share link, where they can
+    // actually respond, instead of an ask-to-join button that waits on the host.
+    if (!alreadyInvolved && event.share_link_active) {
+      redirect(eventSharePath(event.share_token));
+    }
   }
 
   const host =

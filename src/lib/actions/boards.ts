@@ -5,6 +5,7 @@ import { revalidatePath } from 'next/cache';
 import { createClient } from '@/lib/supabase/server';
 import { requireUser, requireUserOrRedirect } from '@/lib/server/require-user';
 import { normalizeUsername } from '@/lib/auth-identity';
+import { boardJoinUrl } from '@/lib/links';
 
 function slugify(name: string): string {
   return name
@@ -98,9 +99,8 @@ export async function ensureBoardInviteLink(
   if (error || typeof code !== 'string') {
     return { ok: false, error: 'Could not create an invite link.' };
   }
-  const base = process.env.NEXT_PUBLIC_APP_URL ?? '';
   revalidatePath('/boards');
-  return { ok: true, url: `${base}/boards/join/${code}` };
+  return { ok: true, url: boardJoinUrl(code) };
 }
 
 /**
@@ -119,9 +119,8 @@ export async function rotateBoardInviteLink(
   if (error || typeof code !== 'string') {
     return { ok: false, error: 'Could not refresh the invite link.' };
   }
-  const base = process.env.NEXT_PUBLIC_APP_URL ?? '';
   revalidatePath('/boards');
-  return { ok: true, url: `${base}/boards/join/${code}` };
+  return { ok: true, url: boardJoinUrl(code) };
 }
 
 /**

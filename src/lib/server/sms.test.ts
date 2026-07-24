@@ -1,51 +1,87 @@
 import { afterEach, describe, expect, test, vi } from 'vitest';
-import { sendSmsWithResult } from './sms';
+import { sendSmsWithResult, guestInviteSmsText } from './sms';
 
+// These asserted against Plivo until #94 moved delivery back to Twilio, so the
+// suite has been red ever since — which is its own problem: a permanently
+// failing test is a test nobody reads, on the exact path that kept shipping
+// broken invite links.
 afterEach(() => {
   vi.unstubAllGlobals();
-  delete process.env.PLIVO_AUTH_ID;
-  delete process.env.PLIVO_AUTH_TOKEN;
-  delete process.env.PLIVO_FROM_NUMBER;
+  vi.unstubAllEnvs();
+  delete process.env.TWILIO_ACCOUNT_SID;
+  delete process.env.TWILIO_AUTH_TOKEN;
+  delete process.env.TWILIO_FROM_NUMBER;
 });
 
 describe('sendSmsWithResult', () => {
   test('reports invalid recipients and missing configuration', async () => {
     await expect(sendSmsWithResult({ to: 'not a phone', body: 'Hello' })).resolves.toEqual({
       status: 'invalid_recipient',
-      provider: 'plivo',
+      provider: 'twilio',
     });
     await expect(sendSmsWithResult({ to: '+1 555 555 0100', body: 'Hello' })).resolves.toEqual({
       status: 'not_configured',
-      provider: 'plivo',
+      provider: 'twilio',
     });
   });
 
-  test('sends through Plivo and preserves the message id on success', async () => {
-    process.env.PLIVO_AUTH_ID = 'test-auth-id';
-    process.env.PLIVO_AUTH_TOKEN = 'test-auth-token';
-    process.env.PLIVO_FROM_NUMBER = '+15555550199';
+  test('sends through Twilio and preserves the message id on success', async () => {
+    process.env.TWILIO_ACCOUNT_SID = 'ACtest';
+    process.env.TWILIO_AUTH_TOKEN = 'test-auth-token';
+    process.env.TWILIO_FROM_NUMBER = '+15555550199';
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(
-      new Response(JSON.stringify({ message_uuid: ['sms_123'] }), { status: 202 }),
+      new Response(JSON.stringify({ sid: 'SM123' }), { status: 201 }),
     ));
+
     await expect(sendSmsWithResult({ to: '+1 555 555 0100', body: 'Hello' })).resolves.toEqual({
       status: 'sent',
-      provider: 'plivo',
-      providerMessageId: 'sms_123',
+      provider: 'twilio',
+      providerMessageId: 'SM123',
     });
-    expect(fetch).toHaveBeenCalledWith(
-      'https://api.plivo.com/v1/Account/test-auth-id/Message/',
+
+    const [url, init] = (fetch as unknown as ReturnType<typeof vi.fn>).mock.calls[0];
+    expect(url).toBe('https://api.twilio.com/2010-04-01/Accounts/ACtest/Messages.json');
+    expect(init).toEqual(
       expect.objectContaining({
         method: 'POST',
         headers: expect.objectContaining({
-          Authorization: `Basic ${Buffer.from('test-auth-id:test-auth-token').toString('base64')}`,
-          'Content-Type': 'application/json',
-        }),
-        body: JSON.stringify({
-          src: '+15555550199',
-          dst: '+15555550100',
-          text: 'Hello',
+          Authorization: `Basic ${Buffer.from('ACtest:test-auth-token').toString('base64')}`,
+          'Content-Type': 'application/x-www-form-urlencoded',
         }),
       }),
     );
+    const form = new URLSearchParams(init.body as string);
+    expect(form.get('From')).toBe('+15555550199');
+    expect(form.get('To')).toBe('+15555550100');
+    expect(form.get('Body')).toBe('Hello');
+  });
+
+  test('surfaces a provider error body as a failure', async () => {
+    process.env.TWILIO_ACCOUNT_SID = 'ACtest';
+    process.env.TWILIO_AUTH_TOKEN = 'test-auth-token';
+    process.env.TWILIO_FROM_NUMBER = '+15555550199';
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ error_code: 30007 }), { status: 201 }),
+    ));
+
+    await expect(sendSmsWithResult({ to: '+1 555 555 0100', body: 'Hello' })).resolves.toEqual({
+      status: 'failed',
+      provider: 'twilio',
+      errorCode: 'provider_error',
+    });
+  });
+});
+
+describe('guestInviteSmsText', () => {
+  test('ends with an absolute https link so it linkifies in a messages app', () => {
+    vi.stubEnv('NEXT_PUBLIC_APP_URL', 'https://switchboardsocial.me');
+    const body = guestInviteSmsText('Taco night', 'tok-123');
+
+    expect(body).toContain('Taco night');
+    expect(body).toMatch(/https:\/\/switchboardsocial\.me\/rsvp\/tok-123$/);
+    // A trailing character after the URL is the classic way a texted link
+    // arrives broken — some clients swallow it into the href, others stop the
+    // link short. The URL must be the last thing in the message.
+    expect(body.trimEnd()).toBe(body);
   });
 });

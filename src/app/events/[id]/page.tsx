@@ -35,7 +35,8 @@ import { threadGate, THREAD_PREVIEW_COUNT } from '@/lib/engine/thread';
 import { formatDateTime, formatDateTimeRange } from '@/lib/format';
 import { resolveEventZone } from '@/lib/server/event-zone';
 import { googleCalendarUrl } from '@/lib/calendar-links';
-import { appUrl, looksLikeEmail } from '@/lib/server/email';
+import { looksLikeEmail } from '@/lib/server/email';
+import { eventShareUrl, guestRsvpUrl } from '@/lib/links';
 import { looksLikePhoneNumber } from '@/lib/phone';
 import type {
   EventQuestion,
@@ -460,7 +461,10 @@ export default async function EventPage({
     : null;
   const guestLinks = canManage
     ? hostInvites
-        .filter((i) => !i.invitee_id && i.guest_token && i.status === 'sent')
+        .filter(
+          (i): i is typeof i & { guest_token: string } =>
+            !i.invitee_id && Boolean(i.guest_token) && i.status === 'sent',
+        )
         .map((i) => {
           // When someone is invited by email or phone, guest_name is the raw
           // contact string. Don't leak that into the name slot — show a
@@ -478,7 +482,7 @@ export default async function EventPage({
             // Build from the one canonical origin helper (same one the email/SMS
             // send paths use) so a copied guest link can never be stamped with
             // an ephemeral preview deployment origin or a bare relative path.
-            url: appUrl(`/rsvp/${i.guest_token}`),
+            url: guestRsvpUrl(i.guest_token),
           };
         })
     : [];
@@ -684,11 +688,21 @@ export default async function EventPage({
                   ✏️ Edit plan
                 </Link>
               )}
-            <ShareButton
-              path={`/events/${event.id}`}
-              title={event.title}
-              text={`${event.title} on Switchboard`}
-            />
+            {/* Share the plan's PUBLIC link, never /events/<id>: the event URL
+                is RLS-gated, so a recipient who isn't already an invitee lands
+                on a sign-up wall and then a dead end — exactly how texted
+                invitations kept arriving broken.
+
+                Host/co-host only. The link admits whoever holds it, so who may
+                hand it out is the host's call, not every invitee's — the same
+                boundary as the Invite link card and share_link_active. */}
+            {canManage && (
+              <ShareButton
+                url={eventShareUrl(event.share_token)}
+                title={event.title}
+                text={`${event.title} on Switchboard`}
+              />
+            )}
           </div>
           {venuePerk && (
             <p className="rounded-card bg-gold-soft px-3.5 py-3 text-sm">
@@ -888,9 +902,8 @@ export default async function EventPage({
           (event.status === 'inviting' || event.status === 'confirmed') && (
             <InviteLink
               eventId={event.id}
-              shareUrl={appUrl(`/join/${event.id}`)}
-              sharePath={`/join/${event.id}`}
-              enabled={event.open_table}
+              shareUrl={eventShareUrl(event.share_token)}
+              enabled={event.share_link_active}
               eventTitle={event.title}
             />
           )}

@@ -10,6 +10,7 @@
  */
 
 import { isEmail } from '@/lib/auth-identity';
+import { absoluteUrl } from '@/lib/links';
 
 export interface EmailMessage {
   to: string;
@@ -99,12 +100,13 @@ export async function sendEmails(messages: EmailMessage[]): Promise<number> {
   return results.filter(Boolean).length;
 }
 
-/** Absolute URL for a path, using the configured app origin. */
+/**
+ * Absolute URL for a path, using the configured app origin.
+ *
+ * Kept as the name the send paths already import; the implementation (and the
+ * validation of what counts as a usable origin) lives in one place now — see
+ * `src/lib/links.ts`.
+ */
 export function appUrl(path = ''): string {
-  const configured = process.env.NEXT_PUBLIC_APP_URL;
-  if (!configured && process.env.NODE_ENV === 'production') {
-    throw new Error('NEXT_PUBLIC_APP_URL must be configured in production');
-  }
-  const base = (configured ?? 'http://localhost:3000').replace(/\/$/, '');
-  return `${base}${path}`;
+  return absoluteUrl(path);
 }
