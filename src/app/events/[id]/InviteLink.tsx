@@ -7,39 +7,33 @@ import { Card, SectionHeader } from '@/components/ui/Card';
 import { CopyButton } from '@/components/ui/CopyButton';
 import { ShareButton } from '@/components/ui/ShareButton';
 import { useToast } from '@/components/ui/Toast';
-import { setEventInviteLink } from '@/lib/actions/events';
+import { rotateEventShareLink, setEventShareLink } from '@/lib/actions/events';
 
 interface InviteLinkProps {
   eventId: string;
-  /** Absolute URL of the public join page (computed server-side). */
+  /** Absolute URL of the plan's public share link (computed server-side). */
   shareUrl: string;
-  /** App-relative path for the native share sheet. */
-  sharePath: string;
-  /** Whether the link is currently live (event.open_table). */
+  /** Whether the link is currently live (event.share_link_active). */
   enabled: boolean;
   eventTitle: string;
 }
 
 /**
- * Host/co-host control for the post-creation invite link. Turn it on and you
- * get one link to copy and send however you like; anyone who opens it can ask to
- * join, and you approve each request. Turn it off and the link stops taking new
- * requests.
+ * Host/co-host control for the plan's public invite link.
+ *
+ * The link is live by default and works for anyone the host sends it to —
+ * signed out, no account, any device. The controls here are the safety valves:
+ * turn it off if it travelled further than intended, or rotate it to invalidate
+ * what was already shared while keeping the plan open.
  */
-export function InviteLink({
-  eventId,
-  shareUrl,
-  sharePath,
-  enabled,
-  eventTitle,
-}: InviteLinkProps) {
+export function InviteLink({ eventId, shareUrl, enabled, eventTitle }: InviteLinkProps) {
   const [pending, startTransition] = useTransition();
   const router = useRouter();
   const toast = useToast();
 
   function toggle(next: boolean) {
     startTransition(async () => {
-      const result = await setEventInviteLink(eventId, next);
+      const result = await setEventShareLink(eventId, next);
       if (!result.ok) {
         toast.error(result.error ?? 'Could not update the invite link.');
         return;
@@ -49,17 +43,29 @@ export function InviteLink({
     });
   }
 
+  function rotate() {
+    startTransition(async () => {
+      const result = await rotateEventShareLink(eventId);
+      if (!result.ok) {
+        toast.error(result.error ?? 'Could not refresh the invite link.');
+        return;
+      }
+      toast.success('New link ready. The old one no longer works.');
+      router.refresh();
+    });
+  }
+
   return (
     <section>
       <SectionHeader
         title="Invite link"
-        hint="Share one link to invite more people after the plan is made"
+        hint="One link that works for anyone you send it to"
       />
       {enabled ? (
         <Card tone="cream" className="space-y-3">
           <p className="text-sm text-ink-soft leading-relaxed">
-            Send this to anyone - text, email, a group chat. They open it, ask to
-            join, and you get the final say on who’s in.
+            Send this to anyone - text, email, a group chat. They can open it and
+            RSVP without making an account, and you’ll see them on the list.
           </p>
           <div className="flex items-center gap-2 rounded-card border border-line bg-paper px-3 py-2.5">
             <span className="min-w-0 flex-1 truncate text-sm text-ink-soft" title={shareUrl}>
@@ -69,11 +75,20 @@ export function InviteLink({
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <ShareButton
-              path={sharePath}
+              url={shareUrl}
               title={eventTitle}
               text={`You’re invited: ${eventTitle}`}
               label="Share"
             />
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              disabled={pending}
+              onClick={rotate}
+            >
+              Get a new link
+            </Button>
             <Button
               type="button"
               variant="ghost"
@@ -88,9 +103,9 @@ export function InviteLink({
       ) : (
         <Card tone="cream" className="space-y-3">
           <p className="text-sm text-ink-soft leading-relaxed">
-            Want to invite more people without adding each one by hand? Turn on a
-            shareable link. Anyone who opens it can ask to join, and every request
-            still comes to you to approve.
+            The invite link for this plan is off, so anyone who already has it
+            sees “this link isn’t active”. Turn it back on to share the plan
+            again.
           </p>
           <Button
             type="button"
@@ -99,7 +114,7 @@ export function InviteLink({
             disabled={pending}
             onClick={() => toggle(true)}
           >
-            {pending ? 'Creating…' : 'Create invite link 🔗'}
+            {pending ? 'Turning on…' : 'Turn on invite link 🔗'}
           </Button>
         </Card>
       )}

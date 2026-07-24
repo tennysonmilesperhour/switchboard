@@ -134,9 +134,16 @@ export interface SwitchboardEvent {
   capacity: number | null;
   invite_mode: InviteMode;
   status: EventStatus;
-  /** Open table: anyone can ask to join (via the shared invite link or the
-   *  friends-of-friends discover feed); the host approves each request. */
+  /** Open table: anyone can ask to join (via the friends-of-friends discover
+   *  feed or the older /join link); the host approves each request. */
   open_table: boolean;
+  /** Capability token behind the plan's public share link (`/i/<token>`) — the
+   *  one link a host can text to anyone. Immutable except through
+   *  `rotate_event_share_token`. */
+  share_token: string;
+  /** Host's kill switch for that share link. Defaults true in the database, so
+   *  every plan has a working link however it was created. */
+  share_link_active: boolean;
   /** Visibility settings */
   show_invite_list: boolean;
   show_accepted: boolean;

@@ -837,6 +837,67 @@ export async function setEventInviteLink(
   return { ok: true };
 }
 
+/**
+ * Turn the plan's public share link on or off.
+ *
+ * This is the kill switch for `/i/<share_token>` — the link a host texts to
+ * people who aren't on the plan yet. It is separate from `open_table` (which
+ * governs the older ask-to-join flow) and defaults to ON in the database, not in
+ * a client `useState`: the previous "default invite links to on" fix only
+ * changed the creation wizard's initial state, so every plan created any other
+ * way (cloned, recurring, ritual) kept a dead link.
+ */
+export async function setEventShareLink(
+  eventId: string,
+  active: boolean,
+): Promise<{ ok: boolean; error?: string }> {
+  const auth = await requireUser();
+  if (!auth.ok) return auth;
+  const { user } = auth;
+  if (!(await isEventManager(user.id, eventId))) {
+    return { ok: false, error: 'Only the host can change this.' };
+  }
+
+  const admin = createAdminClient();
+  const { error } = await admin
+    .from('events')
+    .update({ share_link_active: active })
+    .eq('id', eventId);
+  if (error) {
+    await reportOperationalError('event-share-link', error, { eventId });
+    return { ok: false, error: 'Could not update the invite link. Try again.' };
+  }
+
+  revalidatePath(`/events/${eventId}`);
+  return { ok: true };
+}
+
+/**
+ * Mint a fresh share token, invalidating any link already sent. Host/co-host
+ * only — enforced inside the security-definer function, which is why the
+ * caller id is passed explicitly (auth.uid() is null under the service role).
+ */
+export async function rotateEventShareLink(
+  eventId: string,
+): Promise<{ ok: boolean; error?: string }> {
+  const auth = await requireUser();
+  if (!auth.ok) return auth;
+  const { user } = auth;
+
+  const admin = createAdminClient();
+  const { error } = await admin.rpc('rotate_event_share_token', {
+    p_event: eventId,
+    p_user: user.id,
+  });
+  if (error) {
+    await reportOperationalError('event-share-link-rotate', error, { eventId });
+    return { ok: false, error: 'Could not refresh the invite link. Try again.' };
+  }
+
+  revalidatePath(`/events/${eventId}`);
+  return { ok: true };
+}
+
 export async function confirmEvent(eventId: string): Promise<void> {
   const { user } = await requireUserOrRedirect();
   if (!(await isEventManager(user.id, eventId))) return;

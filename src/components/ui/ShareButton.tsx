@@ -3,8 +3,17 @@
 import { useToast } from '@/components/ui/Toast';
 
 interface ShareButtonProps {
-  /** App-relative path (e.g. "/events/123"); resolved to an absolute URL. */
-  path: string;
+  /**
+   * The ABSOLUTE url to share, built server-side by `src/lib/links.ts`.
+   *
+   * This used to be an app-relative path that the component resolved with
+   * `window.location.origin` — which stamped every shared link with whatever
+   * host the *sender* was on. A host using a `*.vercel.app` preview (behind
+   * deployment protection), a `www.` variant, or a PWA pinned to a retired
+   * domain would text out a link that 401s or dead-ends for the recipient. The
+   * origin is a deployment fact, not a browser fact, so the server decides it.
+   */
+  url: string;
   title?: string;
   text?: string;
   label?: string;
@@ -17,7 +26,7 @@ interface ShareButtonProps {
  * text in, instead of forcing an app install.
  */
 export function ShareButton({
-  path,
+  url,
   title,
   text,
   label = 'Share',
@@ -26,8 +35,6 @@ export function ShareButton({
   const toast = useToast();
 
   async function share() {
-    const url =
-      typeof window !== 'undefined' ? `${window.location.origin}${path}` : path;
     const nav = typeof navigator !== 'undefined' ? navigator : undefined;
     if (nav?.share) {
       try {

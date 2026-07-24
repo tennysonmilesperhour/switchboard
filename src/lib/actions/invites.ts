@@ -236,6 +236,111 @@ export async function claimGuestInvite(token: string): Promise<{ ok: boolean }> 
   return { ok: true };
 }
 
+export interface ShareLinkRsvpResult extends RespondResult {
+  /**
+   * The responder's own durable RSVP token, so the caller can send them on to
+   * `/rsvp/<token>` — the same page a directly-invited guest lands on, where
+   * they can add the plan to a calendar or change their answer later.
+   */
+  token?: string;
+}
+
+/**
+ * RSVP through a plan's public share link (`/i/<share_token>`).
+ *
+ * This is the path for someone who was never added to the plan by hand: they
+ * were texted the link, they have no account, and they should be able to answer
+ * anyway. Possession of the unguessable share token is the authorization
+ * (docs/SECURITY.md §5); the database function re-locks the event, honours
+ * capacity, and refuses a plan whose link is switched off or that is no longer
+ * taking answers.
+ *
+ * The caller id is resolved here from the session and passed explicitly — never
+ * taken from the client — because auth.uid() is null under the service role.
+ */
+export async function respondViaShareLink(
+  shareToken: string,
+  accept: boolean,
+  name: string,
+  contact: string | null = null,
+): Promise<ShareLinkRsvpResult> {
+  // Rate-limited per link: the share token is public by design, so this is the
+  // one place a stranger can create invite rows (docs/SECURITY.md §9).
+  if (!(await checkRateLimit(`share-rsvp:${shareToken}`, 20, 60 * 60))) {
+    return { ok: false, error: 'Too many attempts. Try again later.' };
+  }
+
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  const admin = createAdminClient();
+  const { data, error } = await admin.rpc('rsvp_via_share_token', {
+    p_token: shareToken,
+    p_user: user?.id ?? null,
+    p_name: name,
+    p_contact: contact,
+    p_accept: accept,
+  });
+  if (error) {
+    await reportOperationalError('share-rsvp.respond', error, {});
+    return { ok: false, error: 'Could not record your RSVP. Try again.' };
+  }
+
+  const row = Array.isArray(data) ? data[0] : data;
+  const outcome = typeof row?.outcome === 'string' ? row.outcome : null;
+  if (!outcome) return { ok: false, error: 'This invitation isn’t available.' };
+  if (outcome === 'link_off') {
+    return { ok: false, outcome, error: 'This invite link has been turned off.' };
+  }
+  if (outcome === 'not_accepting') {
+    return { ok: false, outcome, error: 'This plan isn’t taking answers right now.' };
+  }
+  if (outcome === 'name_required') {
+    return { ok: false, outcome, error: 'Please add your name so the host knows who’s coming.' };
+  }
+
+  const eventId = await eventIdForShareToken(admin, shareToken);
+  if (eventId) {
+    await advanceEventCascade(eventId);
+    if (outcome === 'accepted') {
+      const { data: event } = await admin
+        .from('events')
+        .select('id, title, host_id')
+        .eq('id', eventId)
+        .maybeSingle();
+      if (event) {
+        await notifyUsers([event.host_id], {
+          kind: 'rsvp_accepted',
+          title: 'Someone’s in 🎉',
+          body: `${name || 'A guest'} accepted your invitation to ${event.title}.`,
+          url: `/events/${event.id}`,
+        });
+      }
+    }
+    revalidatePath(`/events/${eventId}`);
+  }
+
+  return {
+    ok: true,
+    outcome,
+    token: typeof row?.token === 'string' ? row.token : undefined,
+  };
+}
+
+async function eventIdForShareToken(
+  admin: AnswerClient,
+  shareToken: string,
+): Promise<string | null> {
+  const { data } = await admin
+    .from('events')
+    .select('id')
+    .eq('share_token', shareToken)
+    .maybeSingle<{ id: string }>();
+  return data?.id ?? null;
+}
+
 /** Guest RSVP via token - no account required. */
 export async function respondToGuestInvite(
   token: string,

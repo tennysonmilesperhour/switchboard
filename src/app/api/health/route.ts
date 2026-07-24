@@ -3,7 +3,12 @@ import { createAdminClient, hasAdminCredentials } from '@/lib/supabase/admin';
 import { smsEnabled } from '@/lib/server/sms';
 import { bearerMatches } from '@/lib/server/secret';
 
-const EXPECTED_SCHEMA_VERSION = '20260717220000';
+// Bump this in the SAME commit as any migration that bumps app_schema_version().
+// It went stale for four migrations, which left /api/health reporting
+// `schema:false, ok:false` regardless of reality — so the one alarm built to
+// catch "the guest link is reading a database missing this migration" stopped
+// meaning anything, and drift kept surfacing as broken invite links instead.
+const EXPECTED_SCHEMA_VERSION = '20260724120000';
 const REQUIRED_PRIVATE_BUCKET = 'media-private';
 
 /**
