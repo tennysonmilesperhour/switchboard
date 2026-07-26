@@ -21,8 +21,9 @@ interface InviteLinkProps {
 /**
  * Host/co-host control for the plan's public invite link.
  *
- * The link is live by default and works for anyone the host sends it to —
- * signed out, no account, any device. The controls here are the safety valves:
+ * The link is live by default and opens the plan for anyone the host sends it to
+ * — signed out, no account, any device; answering is the step that asks for a
+ * sign-in. The controls here are the safety valves:
  * turn it off if it travelled further than intended, or rotate it to invalidate
  * what was already shared while keeping the plan open.
  */
@@ -64,8 +65,9 @@ export function InviteLink({ eventId, shareUrl, enabled, eventTitle }: InviteLin
       {enabled ? (
         <Card tone="cream" className="space-y-3">
           <p className="text-sm text-ink-soft leading-relaxed">
-            Send this to anyone - text, email, a group chat. They can open it and
-            RSVP without making an account, and you’ll see them on the list.
+            Send this to anyone - text, email, a group chat. Anyone who opens it
+            sees the plan right away; to say yes or no they sign in, and then
+            you’ll see them on the list by name.
           </p>
           <div className="flex items-center gap-2 rounded-card border border-line bg-paper px-3 py-2.5">
             <span className="min-w-0 flex-1 truncate text-sm text-ink-soft" title={shareUrl}>

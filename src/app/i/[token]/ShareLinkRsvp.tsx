@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useTransition } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/Button';
 import { Icon } from '@/components/ui/Icon';
@@ -8,29 +9,34 @@ import { respondViaShareLink } from '@/lib/actions/invites';
 
 interface ShareLinkRsvpProps {
   shareToken: string;
-  /** Prefilled for a signed-in viewer; empty for a stranger. */
+  /** The signed-in viewer's profile name, when they have one. */
   defaultName: string;
-  authed: boolean;
 }
 
 /**
- * RSVP straight from a plan's public share link — no account, no waiting on the
- * host to approve. The only thing asked of a stranger is a name, so the host
- * knows who is coming.
+ * The answer buttons on a plan's public share link, for a signed-in viewer.
+ * Signed-out visitors get `RsvpSignInGate` instead — reading the plan is open to
+ * anyone with the link, answering it takes an account.
+ *
+ * The host sees the responder's profile name (resolved server-side, not posted
+ * from here); the name field only appears for the rare account that has none
+ * yet, so an answer never reaches a host as an anonymous row.
  *
  * On success the responder is handed off to their own `/rsvp/<token>` page: the
  * durable per-person link they can reopen to add the plan to a calendar or
  * change their answer, and the same surface a directly-invited guest gets.
  */
-export function ShareLinkRsvp({ shareToken, defaultName, authed }: ShareLinkRsvpProps) {
+export function ShareLinkRsvp({ shareToken, defaultName }: ShareLinkRsvpProps) {
   const [name, setName] = useState(defaultName);
   const [error, setError] = useState('');
+  const [signInNeeded, setSignInNeeded] = useState(false);
   const [pending, startTransition] = useTransition();
   const router = useRouter();
+  const needsName = defaultName.trim().length === 0;
 
   function respond(accept: boolean) {
     const trimmed = name.trim();
-    if (!trimmed) {
+    if (needsName && !trimmed) {
       setError('Please add your name so the host knows who’s coming.');
       return;
     }
@@ -38,6 +44,9 @@ export function ShareLinkRsvp({ shareToken, defaultName, authed }: ShareLinkRsvp
     startTransition(async () => {
       const result = await respondViaShareLink(shareToken, accept, trimmed);
       if (!result.ok || !result.token) {
+        // A session can lapse while an invitation sits open in a tab. Say so and
+        // offer the way back, rather than a dead-end "something went wrong".
+        setSignInNeeded(result.outcome === 'auth_required');
         setError(result.error ?? 'Something went wrong. Try again.');
         return;
       }
@@ -49,7 +58,7 @@ export function ShareLinkRsvp({ shareToken, defaultName, authed }: ShareLinkRsvp
 
   return (
     <div className="mt-8">
-      {!authed && (
+      {needsName && (
         <label className="block mb-4">
           <span className="block text-sm font-bold text-ink mb-1.5">Your name</span>
           <input
@@ -67,6 +76,17 @@ export function ShareLinkRsvp({ shareToken, defaultName, authed }: ShareLinkRsvp
       {error && (
         <p role="alert" className="text-sm text-rose-deep mb-3">
           {error}
+          {signInNeeded && (
+            <>
+              {' '}
+              <Link
+                href={`/login?next=${encodeURIComponent(`/i/${shareToken}`)}`}
+                className="font-bold underline"
+              >
+                Sign in
+              </Link>
+            </>
+          )}
         </p>
       )}
       <div className="flex gap-3">
@@ -90,11 +110,6 @@ export function ShareLinkRsvp({ shareToken, defaultName, authed }: ShareLinkRsvp
           Can’t make it
         </Button>
       </div>
-      {!authed && (
-        <p className="text-xs text-ink-faint mt-3 text-center">
-          No account needed. You can make one later if you want the plan in your app.
-        </p>
-      )}
     </div>
   );
 }

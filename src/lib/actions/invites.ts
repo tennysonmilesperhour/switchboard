@@ -249,11 +249,16 @@ export interface ShareLinkRsvpResult extends RespondResult {
  * RSVP through a plan's public share link (`/i/<share_token>`).
  *
  * This is the path for someone who was never added to the plan by hand: they
- * were texted the link, they have no account, and they should be able to answer
- * anyway. Possession of the unguessable share token is the authorization
- * (docs/SECURITY.md §5); the database function re-locks the event, honours
- * capacity, and refuses a plan whose link is switched off or that is no longer
- * taking answers.
+ * were texted the link and they can read the whole plan without an account.
+ * Answering is where an account starts mattering — a session is required here,
+ * so the host ends up with a person they can see and re-invite rather than an
+ * unreachable name, and the responder gets the plan in their app.
+ *
+ * Possession of the unguessable share token is still the authorization
+ * (docs/SECURITY.md §5); being signed in is an added requirement, not a
+ * replacement for holding the link. The database function re-checks the session
+ * id it is handed, re-locks the event, honours capacity, and refuses a plan
+ * whose link is switched off or that is no longer taking answers.
  *
  * The caller id is resolved here from the session and passed explicitly — never
  * taken from the client — because auth.uid() is null under the service role.
@@ -261,25 +266,48 @@ export interface ShareLinkRsvpResult extends RespondResult {
 export async function respondViaShareLink(
   shareToken: string,
   accept: boolean,
-  name: string,
+  name = '',
   contact: string | null = null,
 ): Promise<ShareLinkRsvpResult> {
+  // Viewing the plan never needs an account; answering it does. Checked first,
+  // and before the service-role client is touched: the page shows the sign-in
+  // gate, this is the backstop for a session that expired while the page sat
+  // open — and signed-out traffic must not spend the rate-limit budget that
+  // belongs to the people who can actually answer.
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) {
+    return {
+      ok: false,
+      outcome: 'auth_required',
+      error: 'Sign in to RSVP - it takes a moment.',
+    };
+  }
+
   // Rate-limited per link: the share token is public by design, so this is the
   // one place a stranger can create invite rows (docs/SECURITY.md §9).
   if (!(await checkRateLimit(`share-rsvp:${shareToken}`, 20, 60 * 60))) {
     return { ok: false, error: 'Too many attempts. Try again later.' };
   }
 
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
   const admin = createAdminClient();
+
+  // The host sees a real name, not whatever the browser posted: prefer the
+  // signed-in profile's display name and treat the client's value as the
+  // fallback for an account that somehow has none yet.
+  const { data: profile } = await admin
+    .from('profiles')
+    .select('display_name')
+    .eq('id', user.id)
+    .maybeSingle<{ display_name: string | null }>();
+  const responderName = profile?.display_name?.trim() || name;
+
   const { data, error } = await admin.rpc('rsvp_via_share_token', {
     p_token: shareToken,
-    p_user: user?.id ?? null,
-    p_name: name,
+    p_user: user.id,
+    p_name: responderName,
     p_contact: contact,
     p_accept: accept,
   });
@@ -296,6 +324,12 @@ export async function respondViaShareLink(
   }
   if (outcome === 'not_accepting') {
     return { ok: false, outcome, error: 'This plan isn’t taking answers right now.' };
+  }
+  // The database enforces the same session requirement this action does, so
+  // this only surfaces if the two ever disagree — say the migration behind it
+  // has not been applied. Report it the same way, never as a generic failure.
+  if (outcome === 'auth_required') {
+    return { ok: false, outcome, error: 'Sign in to RSVP - it takes a moment.' };
   }
   if (outcome === 'name_required') {
     return { ok: false, outcome, error: 'Please add your name so the host knows who’s coming.' };
@@ -314,7 +348,7 @@ export async function respondViaShareLink(
         await notifyUsers([event.host_id], {
           kind: 'rsvp_accepted',
           title: 'Someone’s in 🎉',
-          body: `${name || 'A guest'} accepted your invitation to ${event.title}.`,
+          body: `${responderName || 'A guest'} accepted your invitation to ${event.title}.`,
           url: `/events/${event.id}`,
         });
       }
@@ -341,15 +375,43 @@ async function eventIdForShareToken(
   return data?.id ?? null;
 }
 
-/** Guest RSVP via token - no account required. */
+/**
+ * Answer a per-person invitation via its guest token (`/rsvp/<guest_token>`).
+ *
+ * The link opens for anyone: an invited guest reads the plan, the time, and the
+ * place with no account and no app. The answer is the part that needs a signed-in
+ * account — the same rule as the public share link, so a recipient never has to
+ * guess which kind of link they were sent. The page renders a sign-in gate in
+ * place of the buttons; this check is what makes the gate real.
+ *
+ * The token remains the authorization for *this* invitation (docs/SECURITY.md
+ * §5) — the session is an added requirement. Once signed in, the page claims the
+ * invite onto the account (`claimGuestInvite`) so the plan shows up in the app
+ * instead of living only in the link.
+ */
 export async function respondToGuestInvite(
   token: string,
   accept: boolean,
   answers: Record<string, string> = {},
 ): Promise<RespondResult> {
+  // Session first, then the budget: a signed-out visitor can't answer, and must
+  // not be able to burn through the invited guest's rate-limit allowance trying.
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) {
+    return {
+      ok: false,
+      outcome: 'auth_required',
+      error: 'Sign in to RSVP - it takes a moment.',
+    };
+  }
+
   if (!(await checkRateLimit(`guest-rsvp:${token}`, 10, 60 * 60))) {
     return { ok: false, error: 'Too many attempts. Try again later.' };
   }
+
   const admin = createAdminClient();
 
   const { data: invite } = await admin

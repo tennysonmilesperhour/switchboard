@@ -875,9 +875,10 @@ export default async function EventPage({
           <section>
             <SectionHeader title="Guest links" hint="For people you invited who aren’t on Switchboard" />
             <p className="text-sm text-ink-soft mb-2.5 leading-relaxed">
-              Each link opens a private RSVP page for that person - no account
-              or app needed. Copy it and send it however you like (text, email,
-              DM); they’ll see the plan and can reply right there.
+              Each link opens a private invitation page for that person - the
+              plan shows up with no account or app. Copy it and send it however
+              you like (text, email, DM); they sign in once to reply, which is
+              also how they end up connected to you.
             </p>
             <ul className="space-y-2">
               {guestLinks.map((guest) => (

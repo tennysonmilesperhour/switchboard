@@ -89,6 +89,6 @@ export function guestInviteSmsText(
 ): string {
   return (
     `You are invited to ${eventTitle} on Switchboard. ` +
-    `RSVP or create an account: ${appUrl(`/rsvp/${token}`)}`
+    `See the plan (sign in to reply): ${appUrl(`/rsvp/${token}`)}`
   );
 }
