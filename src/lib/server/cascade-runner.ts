@@ -246,7 +246,10 @@ function guestInviteText(
     `${hello}\n\n` +
     `You’re invited to ${event.title}.\n` +
     `When: ${when}${where}\n\n` +
-    `RSVP here (no account needed): ${appUrl(`/rsvp/${token}`)}\n\n` +
+    // Set the expectation the link actually meets: it opens straight to the
+    // plan, and the sign-in is only asked for at the moment they answer.
+    `See the plan here: ${appUrl(`/rsvp/${token}`)}\n` +
+    `(Sign in - or make an account - when you’re ready to reply.)\n\n` +
     `No pressure either way - if you can’t make it, the invitation quietly ` +
     `moves along.\n\n— Switchboard`
   );

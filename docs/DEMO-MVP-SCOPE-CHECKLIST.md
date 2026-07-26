@@ -38,10 +38,10 @@ against the actual app routes, `src/lib/actions/*`, and `supabase/migrations/*`.
 - **Verify:** On the review step, run the simulator and read the projected order.
 </details>
 
-<details><summary><b>A3</b> — Shareable guest links + RSVP with no account</summary>
+<details><summary><b>A3</b> — Shareable guest links: read with no account, sign in to answer</summary>
 
-- **What it is:** Share a plain link with someone who has no account; they RSVP straight from the link and get an add-to-calendar option. No signup required.
-- **Verify:** Open an invite link in a signed-out browser and accept as a guest. — `/join/[id]`, `/rsvp/[token]`
+- **What it is:** Share a plain link with someone who has no account; the plan opens for them immediately — who's hosting, when, where — with no signup and no app. Answering is the one step that asks them to sign in or make an account, which is also what puts the plan (and its add-to-calendar links) in their app.
+- **Verify:** Open an invite link in a signed-out browser: the plan renders, and where the RSVP buttons would be there's a sign-in step that returns you to the same link to answer. — `/i/[token]`, `/rsvp/[token]`, `/join/[id]`
 </details>
 
 <details><summary><b>A4</b> — Post-send cascade editing — reorder, resend, change the window</summary>

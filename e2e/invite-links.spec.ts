@@ -11,8 +11,14 @@ import { expect, test, type Page, type Browser } from '@playwright/test';
  * That is what these tests do. Each one takes a link out of the real host UI
  * (never a URL assembled by the test) and opens it in a FRESH browser context
  * with no cookies and no session, which is the closest thing to a phone that
- * has never heard of Switchboard. Anything that renders a sign-in wall, an
- * error, or "this link isn't active" is a failed contract.
+ * has never heard of Switchboard.
+ *
+ * The contract has two halves, and both are asserted here:
+ *   - READING is open. The plan renders for a signed-out stranger. A sign-in
+ *     wall, an error, or "this link isn't active" is a failed contract.
+ *   - ANSWERING takes an account. Where the buttons would be, a signed-out
+ *     visitor gets a sign-in step that carries them back to this same
+ *     invitation to answer.
  *
  * If you add a new way to hand someone a link, add it here.
  */
@@ -114,7 +120,7 @@ test.describe('invite link contract', () => {
     }
   });
 
-  test('a stranger can open the host share link and RSVP with no account', async ({
+  test('a stranger can read the plan, and is asked to sign in to answer', async ({
     page,
     browser,
   }) => {
@@ -125,19 +131,51 @@ test.describe('invite link contract', () => {
     await asStranger(browser, async (stranger) => {
       await stranger.goto(link);
 
-      // The whole point: the plan is visible, immediately, with no sign-in wall.
+      // Half one: the plan is visible, immediately, with no sign-in wall.
       await expect(
         stranger.getByRole('heading', { name: 'Stranger RSVP plan' }),
       ).toBeVisible({ timeout: 15_000 });
       await expect(stranger).not.toHaveURL(/\/(welcome|login)/);
       await expect(stranger.getByText('isn’t active')).toHaveCount(0);
 
-      await stranger.getByLabel('Your name').fill('Jordan');
-      await stranger.getByRole('button', { name: /I.?m in/ }).click();
+      // Half two: answering asks for an account — and the way in is right here,
+      // carrying a return path to this invitation rather than a generic home.
+      await expect(
+        stranger.getByRole('heading', { name: 'Sign in to RSVP' }),
+      ).toBeVisible({ timeout: 15_000 });
+      await expect(stranger.getByRole('button', { name: /I.?m in/ })).toHaveCount(0);
+
+      const signIn = stranger.getByRole('link', { name: 'Sign in' });
+      await expect(signIn).toHaveAttribute(
+        'href',
+        `/login?next=${encodeURIComponent(new URL(link).pathname)}`,
+      );
+      await signIn.click();
+      await stranger.waitForURL(/\/login/, { timeout: 15_000 });
+    });
+  });
+
+  test('a signed-in recipient can RSVP straight from the share link', async ({
+    page,
+    browser,
+  }) => {
+    await login(page, 'e2ehost');
+    await createPlan(page, 'Signed-in RSVP plan');
+    const link = await readShareLink(page);
+
+    // A different account, a different device, holding only the texted link.
+    await asStranger(browser, async (recipient) => {
+      await login(recipient, 'e2eguest');
+      await recipient.goto(link);
+      await expect(
+        recipient.getByRole('heading', { name: 'Signed-in RSVP plan' }),
+      ).toBeVisible({ timeout: 15_000 });
+
+      await recipient.getByRole('button', { name: /I.?m in/ }).click();
 
       // They land on their own durable RSVP page, confirmed.
-      await stranger.waitForURL(/\/rsvp\/[0-9a-f-]{36}/, { timeout: 15_000 });
-      await expect(stranger.getByText(/You.?re in/)).toBeVisible({ timeout: 15_000 });
+      await recipient.waitForURL(/\/rsvp\/[0-9a-f-]{36}/, { timeout: 15_000 });
+      await expect(recipient.getByText(/You.?re in/)).toBeVisible({ timeout: 15_000 });
     });
   });
 
@@ -149,16 +187,17 @@ test.describe('invite link contract', () => {
     await createPlan(page, 'Durable link plan');
     const link = await readShareLink(page);
 
-    // Two different strangers, two fresh devices, same link.
-    for (const name of ['Sam', 'Riley']) {
+    // Two different strangers, two fresh devices, same link: each one still gets
+    // the plan and a live way to answer.
+    for (let i = 0; i < 2; i += 1) {
       await asStranger(browser, async (stranger) => {
         await stranger.goto(link);
         await expect(
           stranger.getByRole('heading', { name: 'Durable link plan' }),
         ).toBeVisible({ timeout: 15_000 });
-        await stranger.getByLabel('Your name').fill(name);
-        await stranger.getByRole('button', { name: /I.?m in/ }).click();
-        await stranger.waitForURL(/\/rsvp\/[0-9a-f-]{36}/, { timeout: 15_000 });
+        await expect(
+          stranger.getByRole('heading', { name: 'Sign in to RSVP' }),
+        ).toBeVisible({ timeout: 15_000 });
       });
     }
   });
@@ -204,6 +243,13 @@ test.describe('invite link contract', () => {
         stranger.getByRole('heading', { name: 'Guest link plan' }),
       ).toBeVisible({ timeout: 15_000 });
       await expect(stranger).not.toHaveURL(/\/(welcome|login)/);
+
+      // Same two halves as the public link, so a recipient never has to work out
+      // which kind of link they were sent: the plan reads, the answer signs in.
+      await expect(
+        stranger.getByRole('heading', { name: 'Sign in to RSVP' }),
+      ).toBeVisible({ timeout: 15_000 });
+      await expect(stranger.getByRole('button', { name: /I.?m in/ })).toHaveCount(0);
     });
   });
 });

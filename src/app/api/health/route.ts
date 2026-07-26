@@ -8,7 +8,7 @@ import { bearerMatches } from '@/lib/server/secret';
 // `schema:false, ok:false` regardless of reality — so the one alarm built to
 // catch "the guest link is reading a database missing this migration" stopped
 // meaning anything, and drift kept surfacing as broken invite links instead.
-const EXPECTED_SCHEMA_VERSION = '20260724120000';
+const EXPECTED_SCHEMA_VERSION = '20260726120000';
 const REQUIRED_PRIVATE_BUCKET = 'media-private';
 
 /**

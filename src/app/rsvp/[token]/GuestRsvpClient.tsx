@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState, useTransition } from 'react';
+import Link from 'next/link';
 import { Button } from '@/components/ui/Button';
 import { Icon } from '@/components/ui/Icon';
 import { claimGuestInvite, respondToGuestInvite } from '@/lib/actions/invites';
@@ -40,6 +41,7 @@ export function GuestRsvpClient({
 }: GuestRsvpClientProps) {
   const [status, setStatus] = useState(initialStatus);
   const [error, setError] = useState('');
+  const [signInNeeded, setSignInNeeded] = useState(false);
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [pending, startTransition] = useTransition();
 
@@ -61,8 +63,12 @@ export function GuestRsvpClient({
     startTransition(async () => {
       const result = await respondToGuestInvite(token, accept, accept ? answers : {});
       if (!result.ok) {
+        // A session can lapse while an invitation sits open in a tab, and the
+        // answer needs one. Offer the way back instead of a dead end — and never
+        // treat 'auth_required' as this invitation's new status.
+        setSignInNeeded(result.outcome === 'auth_required');
         setError(result.error ?? 'Something went wrong');
-        if (result.outcome) setStatus(result.outcome);
+        if (result.outcome && result.outcome !== 'auth_required') setStatus(result.outcome);
         return;
       }
       setStatus(result.outcome ?? (accept ? 'accepted' : 'declined'));
@@ -152,7 +158,20 @@ export function GuestRsvpClient({
         </div>
       )}
       {error && (
-        <p role="alert" className="text-sm text-rose-deep mb-3">{error}</p>
+        <p role="alert" className="text-sm text-rose-deep mb-3">
+          {error}
+          {signInNeeded && (
+            <>
+              {' '}
+              <Link
+                href={`/login?next=${encodeURIComponent(`/rsvp/${token}`)}`}
+                className="font-bold underline"
+              >
+                Sign in
+              </Link>
+            </>
+          )}
+        </p>
       )}
       <div className="flex gap-3">
         <Button

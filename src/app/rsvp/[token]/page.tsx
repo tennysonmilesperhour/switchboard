@@ -7,6 +7,7 @@ import { serializeJsonLd } from '@/lib/security';
 import { googleCalendarUrl, outlookCalendarUrl } from '@/lib/calendar-links';
 import { resolveEventZone } from '@/lib/server/event-zone';
 import { Icon } from '@/components/ui/Icon';
+import { RsvpSignInGate } from '@/components/events/RsvpSignInGate';
 import { GuestRsvpClient } from './GuestRsvpClient';
 import { JoinPrompt } from './JoinPrompt';
 
@@ -43,7 +44,10 @@ export async function generateMetadata({
   };
 }
 
-/** Public guest RSVP - reached via an unguessable token link, no account needed. */
+/**
+ * Public guest invitation — reached via an unguessable token link. Viewing needs
+ * no account; answering needs a signed-in one.
+ */
 export default async function GuestRsvpPage({
   params,
 }: {
@@ -141,9 +145,11 @@ export default async function GuestRsvpPage({
     options: (q.options as string[] | null) ?? [],
   }));
 
-  // An invite link is often a guest's first contact with Switchboard. If they
-  // aren't signed in, we nudge them to join or sign in (below) so they can stay
-  // connected with the host — but the RSVP itself never requires an account.
+  // An invite link is often a guest's first contact with Switchboard, so the
+  // plan itself renders for anyone holding the token — no account, no app. The
+  // answer is what needs a session: a signed-out visitor gets the sign-in gate
+  // where the buttons would be (and, for an invitation that's already been
+  // answered or has moved on, the softer join nudge instead).
   // Resolve the viewer defensively: the anon Supabase client throws when its
   // credentials aren't configured (CI and local e2e run the app without them),
   // and a missing session must never break this public page — so treat an
@@ -256,25 +262,35 @@ export default async function GuestRsvpPage({
                 dangerouslySetInnerHTML={{ __html: serializeJsonLd(jsonLd) }}
               />
             )}
-            <GuestRsvpClient
-              token={token}
-              guestName={invite.guest_name ?? 'there'}
-              initialStatus={invite.status}
-              questions={questions}
-              authed={Boolean(user)}
-              unclaimed={invite.invitee_id === null}
-              calendarEvent={
-                event.starts_at
-                  ? {
-                      title: event.title,
-                      description: event.description,
-                      location: event.location_name,
-                      startsAt: event.starts_at,
-                    }
-                  : null
-              }
-            />
-            {!user && <JoinPrompt hostName={hostName} next={`/rsvp/${token}`} />}
+            {!user && invite.status === 'sent' ? (
+              // Still answerable, nobody signed in: the gate replaces the
+              // buttons and carries them back here once they're in.
+              <RsvpSignInGate next={`/rsvp/${token}`} hostName={host?.display_name ?? undefined} />
+            ) : (
+              <GuestRsvpClient
+                token={token}
+                guestName={invite.guest_name ?? 'there'}
+                initialStatus={invite.status}
+                questions={questions}
+                authed={Boolean(user)}
+                unclaimed={invite.invitee_id === null}
+                calendarEvent={
+                  event.starts_at
+                    ? {
+                        title: event.title,
+                        description: event.description,
+                        location: event.location_name,
+                        startsAt: event.starts_at,
+                      }
+                    : null
+                }
+              />
+            )}
+            {/* Already answered, or the invitation has moved on: no gate to show,
+                so keep the warm nudge for a signed-out reader. */}
+            {!user && invite.status !== 'sent' && (
+              <JoinPrompt hostName={hostName} next={`/rsvp/${token}`} />
+            )}
             <p className="text-xs text-ink-faint mt-10 leading-relaxed">
               Switchboard makes plans without pressure - invitations flow one
               person at a time, so nobody feels like a backup. If you can’t

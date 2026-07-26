@@ -1293,8 +1293,9 @@ export function EventWizard({
             <Card tone="cream">
               <p className="text-sm text-ink-soft leading-relaxed">
                 You haven’t connected with anyone yet - you can still invite
-                people as <strong>guests</strong> below. They’ll get a link, no
-                account needed.
+                people as <strong>guests</strong> below. They’ll get a link that
+                opens the plan straight away; replying is what asks them to sign
+                in.
               </p>
             </Card>
           )}

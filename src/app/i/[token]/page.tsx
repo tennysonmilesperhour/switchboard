@@ -5,16 +5,19 @@ import { reportOperationalError } from '@/lib/server/observability';
 import { formatDateTime } from '@/lib/format';
 import { serializeJsonLd } from '@/lib/security';
 import { resolveEventZone } from '@/lib/server/event-zone';
+import { eventSharePath } from '@/lib/links';
 import { Icon } from '@/components/ui/Icon';
+import { RsvpSignInGate } from '@/components/events/RsvpSignInGate';
 import { ShareLinkRsvp } from './ShareLinkRsvp';
 
 /**
  * The public share link for a plan: `/i/<share_token>`.
  *
- * This is the one link a host can text to anyone. It works signed out, on a new
- * device, with no Switchboard account — the unguessable token is the
+ * This is the one link a host can text to anyone. Reading it works signed out,
+ * on a new device, with no Switchboard account — the unguessable token is the
  * authorization (docs/SECURITY.md §5), exactly as it is for `/rsvp/<token>` and
- * the calendar feed.
+ * the calendar feed. Only the RSVP asks for a session: a signed-out visitor sees
+ * the whole plan plus a sign-in gate that returns them here to answer.
  *
  * Deliberately NOT reached through `/events/<id>` (RLS-gated: dead for anyone
  * not already invited) or `/join/<id>` (needs an account, host approval, and the
@@ -114,9 +117,11 @@ export default async function SharedInvitePage({
         .maybeSingle<{ display_name: string }>()
     : { data: null };
 
-  // A signed-in viewer gets their name prefilled and their RSVP attached to
-  // their account. Resolve defensively: the anon client throws when its
-  // credentials aren't configured, and that must never break this public page.
+  // Who is reading this decides which half of the page they get: the answer
+  // buttons (signed in, RSVP attached to their account, name already known) or
+  // the sign-in gate. Resolve defensively — the anon client throws when its
+  // credentials aren't configured, and that must never break this public page,
+  // whose job is to render the plan either way.
   const user = await getUser().catch(() => null);
   const { data: viewerProfile } = user && admin
     ? await admin
@@ -200,11 +205,17 @@ export default async function SharedInvitePage({
                 dangerouslySetInnerHTML={{ __html: serializeJsonLd(jsonLd) }}
               />
             )}
-            <ShareLinkRsvp
-              shareToken={token}
-              defaultName={viewerProfile?.display_name ?? ''}
-              authed={Boolean(user)}
-            />
+            {user ? (
+              <ShareLinkRsvp
+                shareToken={token}
+                defaultName={viewerProfile?.display_name ?? ''}
+              />
+            ) : (
+              <RsvpSignInGate
+                next={eventSharePath(token)}
+                hostName={host?.display_name ?? undefined}
+              />
+            )}
             <p className="text-xs text-ink-faint mt-10 leading-relaxed">
               Switchboard makes plans without pressure - invitations flow one
               person at a time, so nobody feels like a backup. If you can’t make

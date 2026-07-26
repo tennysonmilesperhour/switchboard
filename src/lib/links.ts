@@ -82,6 +82,10 @@ export function absoluteUrl(path = ''): string {
 // Every share surface routes through one of these. If you are adding a new way
 // to hand someone a link, add it here and cover it in e2e/public.spec.ts —
 // that test opens each of these signed out and asserts the plan renders.
+//
+// Every link here is *readable* signed out: that is the contract, and it is what
+// keeps a texted link from arriving as a sign-in wall. Answering an invitation is
+// the one action that requires an account (src/lib/actions/invites.ts).
 
 /** App-relative path for a plan's public share link. */
 export function eventSharePath(shareToken: string): string {
@@ -89,8 +93,8 @@ export function eventSharePath(shareToken: string): string {
 }
 
 /**
- * The one link to give a human for a plan: public, unguessable, works signed
- * out, no account needed. This is what every Share/Copy affordance emits.
+ * The one link to give a human for a plan: public, unguessable, opens the plan
+ * for anyone signed out. This is what every Share/Copy affordance emits.
  */
 export function eventShareUrl(shareToken: string): string {
   return absoluteUrl(eventSharePath(shareToken));
