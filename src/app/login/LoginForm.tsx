@@ -84,7 +84,16 @@ export function LoginForm({ next = '/', initialMode = 'signin' }: LoginFormProps
         return;
       }
 
+      // Sign-in succeeded. The 8s guard above only covers the server action —
+      // it does NOT cover this navigation, and a pending navigation keeps this
+      // document painted, so anything that stops the next page from committing
+      // leaves the button spinning "Signing in..." with no error at all. Say
+      // something actionable instead of thinking forever.
       window.location.assign(next);
+      window.setTimeout(() => {
+        setMessage('You are signed in, but the app did not finish loading. Reload to continue.');
+        setStatus('error');
+      }, 10_000);
     } catch {
       setMessage('Sign-in could not connect. Check your connection and try again.');
       setStatus('error');

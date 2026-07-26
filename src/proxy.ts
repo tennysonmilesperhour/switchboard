@@ -1,5 +1,11 @@
 import { createServerClient } from '@supabase/ssr';
 import { NextResponse, type NextRequest } from 'next/server';
+import {
+  AUTH_BOUNCE_COOKIE,
+  AUTH_BOUNCE_MAX_AGE_SECONDS,
+  authLandingAction,
+  isAuthLandingPath,
+} from '@/lib/auth-bounce';
 
 /** Paths reachable without a session. */
 const PUBLIC_PREFIXES = [
@@ -154,8 +160,41 @@ export async function proxy(request: NextRequest) {
     return res;
   }
 
-  if (user && (pathname === '/welcome' || pathname === '/login')) {
-    return redirectWithCsp('/');
+  if (user && isAuthLandingPath(pathname)) {
+    // A protected page decides "signed out" with its own getUser(), and this
+    // rule decides "signed in" with ours. When the two disagree they redirect
+    // at each other forever: the browser keeps the previous document painted,
+    // so a user who just submitted the login form watches "Signing in..." spin
+    // with no error — see src/lib/auth-bounce.ts. Bounce once; if the browser
+    // comes straight back, the session we can see is not one the pages can
+    // use, so drop it and let them sign in cleanly instead of looping.
+    // Releasing only stops the redirect; it deliberately does NOT clear the
+    // session. A signed-in visitor can reach this path innocently (the /login
+    // header links to /welcome), and signing them out for navigating would be a
+    // worse bug than the one being fixed. Rendering is enough to break the
+    // loop — a fresh sign-in overwrites the stale cookies anyway.
+    const alreadyBounced = Boolean(request.cookies.get(AUTH_BOUNCE_COOKIE));
+    if (authLandingAction(alreadyBounced) === 'release') {
+      const res = nextWithCsp();
+      res.cookies.delete(AUTH_BOUNCE_COOKIE);
+      return res;
+    }
+
+    const res = redirectWithCsp('/');
+    res.cookies.set(AUTH_BOUNCE_COOKIE, '1', {
+      maxAge: AUTH_BOUNCE_MAX_AGE_SECONDS,
+      httpOnly: true,
+      sameSite: 'lax',
+      secure: process.env.NODE_ENV === 'production',
+      path: '/',
+    });
+    return res;
+  }
+
+  // Reaching any other route means the bounce resolved, so retire the marker
+  // rather than letting it shadow a later, healthy sign-in.
+  if (request.cookies.get(AUTH_BOUNCE_COOKIE)) {
+    response.cookies.delete(AUTH_BOUNCE_COOKIE);
   }
 
   // Funnel authenticated-but-not-onboarded users into onboarding from ANY
