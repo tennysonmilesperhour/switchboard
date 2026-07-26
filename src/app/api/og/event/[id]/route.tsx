@@ -63,7 +63,7 @@ export async function GET(
         }}
       >
         <div style={{ display: 'flex', fontSize: 32, color: '#b0563a' }}>
-          ✦ Switchboard
+          Switchboard
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
           <div style={{ display: 'flex', fontSize: 76, lineHeight: 1.05, fontWeight: 700 }}>

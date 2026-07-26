@@ -5,6 +5,16 @@ import { LoginForm } from './LoginForm';
 
 export const metadata: Metadata = { title: 'Sign in' };
 
+const ERROR_MESSAGES: Record<string, string> = {
+  auth: 'That sign-in attempt did not work. Try again.',
+  oauth_provider:
+    'Google did not complete sign-in. Try again, or use your email or username below.',
+  oauth_exchange:
+    'Google approved the sign-in, but Switchboard could not finish it. Try again; if it keeps happening, contact support.',
+  oauth_missing_code:
+    'Google sign-in returned without a login code. Try again, or use your email or username.',
+};
+
 export default async function LoginPage({
   searchParams,
 }: {
@@ -48,7 +58,7 @@ export default async function LoginPage({
                 .
               </p>
             ) : (
-              <p>That sign-in attempt didn’t work. Try again.</p>
+              <p>{ERROR_MESSAGES[error] ?? ERROR_MESSAGES.auth}</p>
             )}
           </div>
         ) : null}

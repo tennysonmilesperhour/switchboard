@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 /**
  * Focused coverage for `requestPasswordReset`. The recovery email is delivered
- * through the app's own Resend integration (`sendEmail`) using an admin-minted
+ * through the app's own Resend integration (`sendEmailWithResult`) using an admin-minted
  * recovery link — Supabase SMTP is only a fallback when service-role access is
  * absent. These tests pin the two things that matter: a real reset link
  * actually goes out for legitimate accounts (including email sign-ups whose
@@ -102,13 +102,16 @@ const mocks = vi.hoisted(() => {
     },
     error: null,
   }));
-  const sendEmail = vi.fn(
+  const sendEmailWithResult = vi.fn(
     async (message: {
       to: string;
       subject: string;
       text: string;
       html?: string;
-    }) => typeof message.to === 'string',
+    }) => ({
+      status: typeof message.to === 'string' ? 'sent' : 'invalid_recipient',
+      provider: 'resend',
+    }),
   );
   const resetPasswordForEmail = vi.fn(async () => ({ data: {}, error: null }));
   const checkRateLimit = vi.fn(async () => true);
@@ -119,7 +122,7 @@ const mocks = vi.hoisted(() => {
     makeBuilder,
     getUserById,
     generateLink,
-    sendEmail,
+    sendEmailWithResult,
     resetPasswordForEmail,
     checkRateLimit,
     hasAdminCredentials,
@@ -148,7 +151,7 @@ vi.mock('@/lib/server/rate-limit', () => ({
 
 vi.mock('@/lib/server/email', async (importActual) => {
   const actual = await importActual<typeof import('@/lib/server/email')>();
-  return { ...actual, sendEmail: mocks.sendEmail };
+  return { ...actual, sendEmailWithResult: mocks.sendEmailWithResult };
 });
 
 import { requestPasswordReset } from './auth';
@@ -174,7 +177,7 @@ describe('requestPasswordReset', () => {
   it('rejects an empty identifier', async () => {
     const result = await requestPasswordReset('   ');
     expect(result.ok).toBe(false);
-    expect(mocks.sendEmail).not.toHaveBeenCalled();
+    expect(mocks.sendEmailWithResult).not.toHaveBeenCalled();
   });
 
   it('emails a reset link to an email account that has not confirmed its contact yet', async () => {
@@ -194,8 +197,8 @@ describe('requestPasswordReset', () => {
     expect(mocks.generateLink).toHaveBeenCalledWith(
       expect.objectContaining({ type: 'recovery', email: 'alice@example.com' }),
     );
-    expect(mocks.sendEmail).toHaveBeenCalledTimes(1);
-    const message = mocks.sendEmail.mock.calls[0][0];
+    expect(mocks.sendEmailWithResult).toHaveBeenCalledTimes(1);
+    const message = mocks.sendEmailWithResult.mock.calls[0][0];
     expect(message.to).toBe('alice@example.com');
     expect(message.text).toContain('/auth/confirm?token_hash=HASH&type=recovery');
     // With service-role access we never depend on Supabase SMTP.
@@ -213,8 +216,8 @@ describe('requestPasswordReset', () => {
 
     await requestPasswordReset('alice@example.com');
 
-    expect(mocks.sendEmail).toHaveBeenCalledTimes(1);
-    expect(mocks.sendEmail.mock.calls[0][0].to).toBe('alice@example.com');
+    expect(mocks.sendEmailWithResult).toHaveBeenCalledTimes(1);
+    expect(mocks.sendEmailWithResult.mock.calls[0][0].to).toBe('alice@example.com');
   });
 
   it('delivers a username account recovery to its verified email contact', async () => {
@@ -233,8 +236,8 @@ describe('requestPasswordReset', () => {
     expect(mocks.generateLink).toHaveBeenCalledWith(
       expect.objectContaining({ email: 'bob@users.switchboard.local' }),
     );
-    expect(mocks.sendEmail).toHaveBeenCalledTimes(1);
-    expect(mocks.sendEmail.mock.calls[0][0].to).toBe('bob@real.com');
+    expect(mocks.sendEmailWithResult).toHaveBeenCalledTimes(1);
+    expect(mocks.sendEmailWithResult.mock.calls[0][0].to).toBe('bob@real.com');
   });
 
   it('never sends a link to an unverified, merely-typed contact address', async () => {
@@ -250,17 +253,17 @@ describe('requestPasswordReset', () => {
     });
 
     await requestPasswordReset('carol');
-    expect(mocks.sendEmail).not.toHaveBeenCalled();
+    expect(mocks.sendEmailWithResult).not.toHaveBeenCalled();
 
     await requestPasswordReset('victim@example.com');
-    expect(mocks.sendEmail).not.toHaveBeenCalled();
+    expect(mocks.sendEmailWithResult).not.toHaveBeenCalled();
   });
 
   it('reveals nothing and sends nothing for an unknown account', async () => {
     seed({});
     const result = await requestPasswordReset('nobody@example.com');
     expect(result).toEqual({ ok: true, identifier: 'nobody@example.com' });
-    expect(mocks.sendEmail).not.toHaveBeenCalled();
+    expect(mocks.sendEmailWithResult).not.toHaveBeenCalled();
     expect(mocks.resetPasswordForEmail).not.toHaveBeenCalled();
   });
 
@@ -271,7 +274,7 @@ describe('requestPasswordReset', () => {
       'alice@example.com',
       expect.objectContaining({ redirectTo: expect.stringContaining('/auth/callback') }),
     );
-    expect(mocks.sendEmail).not.toHaveBeenCalled();
+    expect(mocks.sendEmailWithResult).not.toHaveBeenCalled();
   });
 
   it('returns generic and skips delivery when rate limited', async () => {
@@ -285,6 +288,6 @@ describe('requestPasswordReset', () => {
     });
     const result = await requestPasswordReset('alice@example.com');
     expect(result.ok).toBe(true);
-    expect(mocks.sendEmail).not.toHaveBeenCalled();
+    expect(mocks.sendEmailWithResult).not.toHaveBeenCalled();
   });
 });

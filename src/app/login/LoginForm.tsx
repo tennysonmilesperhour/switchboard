@@ -96,19 +96,21 @@ export function LoginForm({ next = '/', initialMode = 'signin' }: LoginFormProps
     setOauthPending(true);
     const supabase = createClient();
     const callback = `${window.location.origin}/auth/callback?next=${encodeURIComponent(next)}`;
-    const { error } = await supabase.auth.signInWithOAuth({
+    const { data, error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
-      options: { redirectTo: callback },
+      options: {
+        redirectTo: callback,
+        skipBrowserRedirect: true,
+      },
     });
-    // On success the browser is already navigating to Google, so this only runs
-    // when kickoff failed (e.g. the Google provider isn't enabled on the
-    // project). Surface it instead of leaving the click looking dead.
-    if (error) {
+    if (error || !data.url) {
       setOauthError(
         'Google sign-in isn’t available right now. Use your email or username instead.',
       );
       setOauthPending(false);
+      return;
     }
+    window.location.assign(data.url);
   }
 
   function switchMode(nextMode: Mode) {
