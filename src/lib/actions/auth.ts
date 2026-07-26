@@ -7,7 +7,6 @@ import {
   appUrl,
   emailEnabled,
   looksLikeEmail,
-  sendEmail,
   sendEmailWithResult,
 } from '@/lib/server/email';
 import { redirect } from 'next/navigation';
@@ -414,7 +413,14 @@ export async function requestPasswordReset(
     // have a synthetic, undeliverable login email, so they may only recover
     // through a *verified* real-email contact — never an address someone merely
     // typed in but never proved they control (docs/SECURITY.md §9).
-    const { data: authUser } = await admin.auth.admin.getUserById(userId);
+    const { data: authUser, error: authUserError } =
+      await admin.auth.admin.getUserById(userId);
+    if (authUserError) {
+      console.error('[auth:reset-request:user-lookup]', {
+        code: authUserError.code ?? 'unknown',
+        status: authUserError.status ?? null,
+      });
+    }
     const authEmail = authUser.user?.email ?? null;
     const loginEmailDeliverable =
       !!authEmail &&
@@ -434,11 +440,17 @@ export async function requestPasswordReset(
     }
 
     if (authEmail && deliverTo) {
-      const { data: link } = await admin.auth.admin.generateLink({
+      const { data: link, error: linkError } = await admin.auth.admin.generateLink({
         type: 'recovery',
         email: authEmail,
         options: { redirectTo: appUrl('/auth/confirm?next=/reset-password') },
       });
+      if (linkError) {
+        console.error('[auth:reset-request:link]', {
+          code: linkError.code ?? 'unknown',
+          status: linkError.status ?? null,
+        });
+      }
       // Build the link through our own /auth/confirm route using the token
       // hash, so recovery never depends on Supabase's verify-redirect or a
       // particular email-template shape. Fall back to the raw action link.
@@ -447,10 +459,21 @@ export async function requestPasswordReset(
         ? appUrl(`/auth/confirm?token_hash=${hashed}&type=recovery&next=/reset-password`)
         : link.properties?.action_link;
       if (recoveryUrl) {
-        await sendEmail({
+        const delivery = await sendEmailWithResult({
           to: deliverTo,
           subject: 'Reset your Switchboard password',
           text: `Reset your Switchboard password:\n\n${recoveryUrl}\n\nIf you did not request this, you can ignore this email.`,
+        });
+        if (delivery.status !== 'sent') {
+          console.error('[auth:reset-request:delivery]', {
+            status: delivery.status,
+            code: delivery.errorCode ?? null,
+          });
+        }
+      } else if (!linkError) {
+        console.error('[auth:reset-request:link]', {
+          code: 'missing_recovery_url',
+          status: null,
         });
       }
     }

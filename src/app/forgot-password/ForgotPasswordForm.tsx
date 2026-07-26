@@ -17,7 +17,7 @@ export function ForgotPasswordForm() {
       const result = await requestPasswordReset(identifier);
       setMessage(
         result.ok
-          ? 'If that account has a recovery email, instructions are on the way.'
+          ? 'If an account matches and has a verified recovery email, we’ll send instructions. Username-only accounts need a verified recovery email before they can receive a reset.'
           : result.error ?? 'Enter your email or username.',
       );
     } catch {
