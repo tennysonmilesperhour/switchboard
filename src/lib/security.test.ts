@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { serializeJsonLd, safeNextPath, csvCell } from './security';
+import { serializeJsonLd, safeNextPath, csvCell, safeHttpUrl } from './security';
 
 describe('serializeJsonLd', () => {
   it('produces valid JSON that round-trips', () => {
@@ -87,5 +87,40 @@ describe('csvCell', () => {
   it('combines neutralization with quoting when both apply', () => {
     // '=a,b' -> prefix quote, then needs CSV quoting for the comma.
     expect(csvCell('=a,b')).toBe('"\'=a,b"');
+  });
+});
+
+describe('safeHttpUrl', () => {
+  it('keeps ordinary http(s) links', () => {
+    expect(safeHttpUrl('https://example.com/wishlist')).toBe(
+      'https://example.com/wishlist',
+    );
+    expect(safeHttpUrl('http://example.com/')).toBe('http://example.com/');
+  });
+
+  it('reads a scheme-less value as https, the way a host types it', () => {
+    expect(safeHttpUrl('example.com/registry')).toBe('https://example.com/registry');
+    expect(safeHttpUrl('  example.com  ')).toBe('https://example.com/');
+  });
+
+  it('rejects script-bearing schemes instead of repairing them', () => {
+    // The dangerous case: prepending https:// to a rejected scheme would turn
+    // an executable href into a "valid" one.
+    for (const value of [
+      'javascript:alert(1)',
+      'JavaScript:alert(1)',
+      'data:text/html,<script>alert(1)</script>',
+      'vbscript:msgbox(1)',
+      'file:///etc/passwd',
+    ]) {
+      expect(safeHttpUrl(value)).toBeNull();
+    }
+  });
+
+  it('returns null for empty and unparseable values', () => {
+    expect(safeHttpUrl(null)).toBeNull();
+    expect(safeHttpUrl(undefined)).toBeNull();
+    expect(safeHttpUrl('   ')).toBeNull();
+    expect(safeHttpUrl('http://')).toBeNull();
   });
 });

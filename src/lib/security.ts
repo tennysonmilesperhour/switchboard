@@ -59,6 +59,31 @@ export function safeNextPath(
 }
 
 /**
+ * Validate a host-supplied outbound URL before it becomes an `href` or `src`.
+ *
+ * Cover images and wishlist links are typed by a host and rendered to guests on
+ * public pages, so the stored value is untrusted at the sink: `javascript:` and
+ * `data:` in an `href` execute on click. Only absolute http(s) URLs survive; a
+ * scheme-less value is read as `https://`, matching how a host actually types
+ * "example.com". Anything else returns null, so the caller renders nothing.
+ */
+export function safeHttpUrl(value: string | null | undefined): string | null {
+  const raw = value?.trim();
+  if (!raw) return null;
+  // Only prepend a scheme when there is none at all — never "fix" a rejected
+  // scheme like `javascript:alert(1)` into `https://javascript:alert(1)`.
+  const candidate = /^[a-z][a-z0-9+.-]*:/i.test(raw) ? raw : `https://${raw}`;
+  try {
+    const url = new URL(candidate);
+    if (url.protocol !== 'http:' && url.protocol !== 'https:') return null;
+    if (!url.hostname) return null;
+    return url.toString();
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Encode one field for a CSV export. Two distinct concerns:
  *   1. RFC 4180 quoting so commas/quotes/newlines don't corrupt columns.
  *   2. Spreadsheet formula injection: a cell beginning with `= + - @` (or a
