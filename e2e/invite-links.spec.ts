@@ -45,9 +45,19 @@ async function currentWizardStep(page: Page) {
 }
 
 /** Create a published plan as the host and return its event page URL. */
-async function createPlan(page: Page, title: string): Promise<string> {
+async function createPlan(
+  page: Page,
+  title: string,
+  details?: { where?: string; what?: string },
+): Promise<string> {
   await page.goto('/events/new');
   await page.getByPlaceholder(TITLE).fill(title);
+  if (details?.where) {
+    await page.getByPlaceholder('Café Luna, my place, Miller Park…').fill(details.where);
+  }
+  if (details?.what) {
+    await page.locator('#description').fill(details.what);
+  }
 
   const submit = page.getByRole('button', {
     name: /Send invitations|Create & start deciding/,
@@ -176,6 +186,34 @@ test.describe('invite link contract', () => {
       // They land on their own durable RSVP page, confirmed.
       await recipient.waitForURL(/\/rsvp\/[0-9a-f-]{36}/, { timeout: 15_000 });
       await expect(recipient.getByText(/You.?re in/)).toBeVisible({ timeout: 15_000 });
+    });
+  });
+
+  test('the plan the host filled in is what the recipient reads', async ({
+    page,
+    browser,
+  }) => {
+    const where = 'Miller Park pavilion 3';
+    const what = 'Burgers on us — bring a chair.\nParking is off the north lot.';
+    await login(page, 'e2ehost');
+    await createPlan(page, 'Detailed plan', { where, what });
+    const link = await readShareLink(page);
+
+    // The bug this guards: an invitation that arrives as a title, a date, and
+    // two buttons — with the location and details the host typed nowhere on it.
+    await asStranger(browser, async (stranger) => {
+      await stranger.goto(link);
+      await expect(
+        stranger.getByRole('heading', { name: 'Detailed plan' }),
+      ).toBeVisible({ timeout: 15_000 });
+      await expect(stranger.getByText(where)).toBeVisible({ timeout: 15_000 });
+      await expect(stranger.getByText(/Burgers on us/)).toBeVisible();
+      // Both lines of a multi-line description survive to the guest.
+      await expect(stranger.getByText(/Parking is off the north lot/)).toBeVisible();
+      // And they can put it on a calendar without an account.
+      await expect(
+        stranger.getByRole('link', { name: /Google Calendar/ }),
+      ).toBeVisible();
     });
   });
 

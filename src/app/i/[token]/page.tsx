@@ -2,11 +2,10 @@ import type { Metadata } from 'next';
 import { createAdminClient, hasAdminCredentials } from '@/lib/supabase/admin';
 import { getUser } from '@/lib/supabase/server';
 import { reportOperationalError } from '@/lib/server/observability';
-import { formatDateTime } from '@/lib/format';
-import { serializeJsonLd } from '@/lib/security';
+import { safeHttpUrl, serializeJsonLd } from '@/lib/security';
 import { resolveEventZone } from '@/lib/server/event-zone';
 import { eventSharePath } from '@/lib/links';
-import { Icon } from '@/components/ui/Icon';
+import { InvitePlanDetails } from '@/components/events/InvitePlanDetails';
 import { RsvpSignInGate } from '@/components/events/RsvpSignInGate';
 import { ShareLinkRsvp } from './ShareLinkRsvp';
 
@@ -36,11 +35,13 @@ interface ShareEvent {
   host_id: string;
   status: string;
   share_link_active: boolean;
+  cover_url: string | null;
+  wishlist_url: string | null;
 }
 
 const EVENT_FIELDS =
   'id, title, description, location_name, location_address, starts_at, ends_at, ' +
-  'time_zone, host_id, status, share_link_active';
+  'time_zone, host_id, status, share_link_active, cover_url, wishlist_url';
 
 /** Plans that can still take an answer through the link. */
 function isAccepting(event: ShareEvent): boolean {
@@ -140,6 +141,7 @@ export default async function SharedInvitePage({
         '@type': 'Event',
         name: event.title,
         ...(event.description ? { description: event.description } : {}),
+        ...(safeHttpUrl(event.cover_url) ? { image: safeHttpUrl(event.cover_url) } : {}),
         ...(event.starts_at ? { startDate: event.starts_at } : {}),
         ...(event.ends_at ? { endDate: event.ends_at } : {}),
         eventAttendanceMode: 'https://schema.org/OfflineEventAttendanceMode',
@@ -176,26 +178,18 @@ export default async function SharedInvitePage({
           </div>
         ) : (
           <>
-            <p className="text-sm font-bold tracking-wide uppercase text-terracotta-deep">
-              {host?.display_name ?? 'A friend'} invited you
-            </p>
-            <h1 className="font-extrabold tracking-tight text-4xl text-ink mt-2 text-balance">
-              {event.title}
-            </h1>
-            <p className="mt-3 text-ink font-bold">
-              {formatDateTime(event.starts_at, zone)}
-            </p>
-            {event.location_name && (
-              <p className="text-ink-soft text-sm mt-1 inline-flex items-center gap-1.5">
-                <Icon name="mapPin" size={15} className="text-terracotta" />
-                {event.location_name}
-              </p>
-            )}
-            {event.description && (
-              <p className="text-ink-soft text-sm mt-3 leading-relaxed">
-                {event.description}
-              </p>
-            )}
+            <InvitePlanDetails
+              hostName={host?.display_name ?? null}
+              title={event.title}
+              coverUrl={event.cover_url}
+              startsAt={event.starts_at}
+              endsAt={event.ends_at}
+              timeZone={zone}
+              locationName={event.location_name}
+              locationAddress={event.location_address}
+              description={event.description}
+              wishlistUrl={event.wishlist_url}
+            />
             {jsonLd && (
               <script
                 type="application/ld+json"

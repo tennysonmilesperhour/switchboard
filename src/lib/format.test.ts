@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { formatDateTime, formatDate } from './format';
+import { formatDateTime, formatDate, formatDateTimeRange } from './format';
 
 describe('formatDateTime', () => {
   // The reported bug: a host in US Mountain (MDT, UTC-6 in July) sets a plan for
@@ -58,5 +58,30 @@ describe('formatDate', () => {
 
   it('returns a placeholder for a dateless plan', () => {
     expect(formatDate(null)).toBe('Date TBD');
+  });
+});
+
+describe('formatDateTimeRange', () => {
+  const start = '2026-07-31T18:00:00.000Z';
+  const end = '2026-07-31T21:00:00.000Z';
+
+  it('labels the zone once across the range, not on both ends', () => {
+    const out = formatDateTimeRange(start, end, 'America/Los_Angeles');
+    expect(out).toBe('Fri, Jul 31, 11:00 AM – 2:00 PM PDT');
+    expect(out.match(/PDT/g)).toHaveLength(1);
+  });
+
+  it('falls back to the start line when there is no end', () => {
+    expect(formatDateTimeRange(start, null, 'America/Los_Angeles')).toBe(
+      formatDateTime(start, 'America/Los_Angeles'),
+    );
+  });
+
+  it('is Time TBD when there is no start, even with an end', () => {
+    expect(formatDateTimeRange(null, end, 'America/Los_Angeles')).toBe('Time TBD');
+  });
+
+  it('survives a malformed zone rather than throwing', () => {
+    expect(() => formatDateTimeRange(start, end, 'Not/AZone')).not.toThrow();
   });
 });

@@ -27,6 +27,7 @@ import { normalizePhoneNumber } from '@/lib/phone';
 import { suggestWindow } from '@/lib/engine/windows';
 import { parseInviteEntries, type ParsedInviteEntry } from '@/lib/invite-entry';
 import { isValidCoordinate } from '@/lib/geo';
+import { safeHttpUrl } from '@/lib/security';
 import { geocode } from '@/lib/server/geocode';
 
 export interface WizardInvitee {
@@ -231,8 +232,14 @@ export async function createEvent(input: CreateEventInput): Promise<CreateEventR
 
   const invitees = await resolveInvitees(supabase, input.invitees);
 
+  // Both land in an `href`/`src` on pages guests open, including the public
+  // invitation links — so they get the same scheme check `updateEvent` applies,
+  // rather than only being cleaned up on a later edit.
+  const wishlistUrl = safeHttpUrl(input.wishlistUrl);
+  const coverUrl = safeHttpUrl(input.coverUrl);
+
   const { data: eventId, error } = await supabase.rpc('create_event_atomic', {
-    p_input: { ...input, title, invitees },
+    p_input: { ...input, title, wishlistUrl, coverUrl, invitees },
   });
   if (error || typeof eventId !== 'string') {
     await reportOperationalError('event-create', error ?? 'Missing event id', {
@@ -717,19 +724,7 @@ export async function updateEventDetails(
     return { ok: false, error: 'Capacity must be a whole number of at least 1.' };
   }
 
-  let wishlistUrl: string | null = null;
-  if (input.wishlistUrl?.trim()) {
-    const value = input.wishlistUrl.trim();
-    const candidate = /^https?:\/\//i.test(value) ? value : `https://${value}`;
-    try {
-      const url = new URL(candidate);
-      if ((url.protocol === 'http:' || url.protocol === 'https:') && url.hostname.includes('.')) {
-        wishlistUrl = url.toString();
-      }
-    } catch {
-      wishlistUrl = null;
-    }
-  }
+  const wishlistUrl = safeHttpUrl(input.wishlistUrl);
 
   const admin = createAdminClient();
   const { data: before } = await admin

@@ -2,11 +2,9 @@ import type { Metadata } from 'next';
 import { createAdminClient, hasAdminCredentials } from '@/lib/supabase/admin';
 import { getUser } from '@/lib/supabase/server';
 import { reportOperationalError } from '@/lib/server/observability';
-import { formatDateTime } from '@/lib/format';
-import { serializeJsonLd } from '@/lib/security';
-import { googleCalendarUrl, outlookCalendarUrl } from '@/lib/calendar-links';
+import { safeHttpUrl, serializeJsonLd } from '@/lib/security';
 import { resolveEventZone } from '@/lib/server/event-zone';
-import { Icon } from '@/components/ui/Icon';
+import { InvitePlanDetails } from '@/components/events/InvitePlanDetails';
 import { RsvpSignInGate } from '@/components/events/RsvpSignInGate';
 import { GuestRsvpClient } from './GuestRsvpClient';
 import { JoinPrompt } from './JoinPrompt';
@@ -102,7 +100,8 @@ export default async function GuestRsvpPage({
     ? await admin
         .from('events')
         .select(
-          'title, description, location_name, location_address, starts_at, ends_at, time_zone, host_id',
+          'title, description, location_name, location_address, starts_at, ends_at, ' +
+            'time_zone, host_id, cover_url, wishlist_url',
         )
         .eq('id', invite.event_id)
         .maybeSingle<{
@@ -114,6 +113,8 @@ export default async function GuestRsvpPage({
           ends_at: string | null;
           time_zone: string | null;
           host_id: string;
+          cover_url: string | null;
+          wishlist_url: string | null;
         }>()
     : { data: null, error: null };
   if (eventError) {
@@ -160,20 +161,6 @@ export default async function GuestRsvpPage({
   // profile zone for plans created before the zone was captured on the event.
   const zone = admin ? await resolveEventZone(admin, event) : null;
 
-  // A guest can never reach the RLS-gated .ics route, so give them the pure
-  // web-calendar deep links instead. Same "add to calendar" affordance as the
-  // host event page.
-  const calendarEvent =
-    event?.starts_at
-      ? {
-          title: event.title,
-          description: event.description,
-          location: event.location_name ?? event.location_address,
-          startsAt: event.starts_at,
-          endsAt: event.ends_at,
-        }
-      : null;
-
   // schema.org/Event JSON-LD so the guest link unfurls richly and is machine
   // readable, matching the host event page.
   const jsonLd = event
@@ -182,6 +169,7 @@ export default async function GuestRsvpPage({
         '@type': 'Event',
         name: event.title,
         ...(event.description ? { description: event.description } : {}),
+        ...(safeHttpUrl(event.cover_url) ? { image: safeHttpUrl(event.cover_url) } : {}),
         ...(event.starts_at ? { startDate: event.starts_at } : {}),
         ...(event.ends_at ? { endDate: event.ends_at } : {}),
         eventAttendanceMode: 'https://schema.org/OfflineEventAttendanceMode',
@@ -215,44 +203,18 @@ export default async function GuestRsvpPage({
           </div>
         ) : (
           <>
-            <p className="text-sm font-bold tracking-wide uppercase text-terracotta-deep">
-              {host?.display_name ?? 'A friend'} invited you
-            </p>
-            <h1 className="font-extrabold tracking-tight text-4xl text-ink mt-2 text-balance">
-              {event.title}
-            </h1>
-            <p className="mt-3 text-ink font-bold">{formatDateTime(event.starts_at, zone)}</p>
-            {event.location_name && (
-              <p className="text-ink-soft text-sm mt-1 inline-flex items-center gap-1.5">
-                <Icon name="mapPin" size={15} className="text-terracotta" />
-                {event.location_name}
-              </p>
-            )}
-            {event.description && (
-              <p className="text-ink-soft text-sm mt-3 leading-relaxed">
-                {event.description}
-              </p>
-            )}
-            {calendarEvent && (
-              <div className="mt-4 flex flex-wrap gap-2">
-                <a
-                  href={googleCalendarUrl(calendarEvent)}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1.5 rounded-pill border border-line bg-card px-3.5 py-2 text-xs font-bold text-ink-soft shadow-lift hover:border-terracotta hover:text-terracotta-deep active:scale-[0.98] transition-all"
-                >
-                  📅 Google Calendar
-                </a>
-                <a
-                  href={outlookCalendarUrl(calendarEvent)}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1.5 rounded-pill border border-line bg-card px-3.5 py-2 text-xs font-bold text-ink-soft shadow-lift hover:border-terracotta hover:text-terracotta-deep active:scale-[0.98] transition-all"
-                >
-                  📅 Outlook
-                </a>
-              </div>
-            )}
+            <InvitePlanDetails
+              hostName={host?.display_name ?? null}
+              title={event.title}
+              coverUrl={event.cover_url}
+              startsAt={event.starts_at}
+              endsAt={event.ends_at}
+              timeZone={zone}
+              locationName={event.location_name}
+              locationAddress={event.location_address}
+              description={event.description}
+              wishlistUrl={event.wishlist_url}
+            />
             {jsonLd && (
               <script
                 type="application/ld+json"
@@ -279,8 +241,9 @@ export default async function GuestRsvpPage({
                     ? {
                         title: event.title,
                         description: event.description,
-                        location: event.location_name,
+                        location: event.location_name ?? event.location_address,
                         startsAt: event.starts_at,
+                        endsAt: event.ends_at,
                       }
                     : null
                 }
