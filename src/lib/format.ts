@@ -54,9 +54,19 @@ export function formatDateTimeRange(
   endIso: string | null,
   timeZone?: string | null,
 ): string {
-  const start = formatDateTime(startIso, timeZone);
   const end = formatTimeOnly(endIso, timeZone);
-  if (!startIso || !end) return start;
+  if (!startIso || !end) return formatDateTime(startIso, timeZone);
+  // The zone label belongs on the range, not on each end of it: labelling both
+  // reads as "11:00 AM PDT – 2:00 PM PDT", which looks like two zones. The end
+  // already carries it, so the start drops it while staying in the same zone.
+  const start = format(new Date(startIso), {
+    weekday: 'short',
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+    ...(timeZone ? { timeZone } : {}),
+  });
   return `${start} – ${end}`;
 }
 
