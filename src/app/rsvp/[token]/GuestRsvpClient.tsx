@@ -28,6 +28,30 @@ interface GuestRsvpClientProps {
   authed?: boolean;
   /** True when this guest invite has no account attached yet. */
   unclaimed?: boolean;
+  /**
+   * The plan's id, for the way through to `/events/<id>`. This page is a
+   * confirmation card, not the plan: the thread, the host's updates, and the
+   * rest of the guest list live on the event page, and without a link there an
+   * accepted guest has nowhere to go from here.
+   */
+  eventId?: string | null;
+}
+
+/** The onward link, shown once answering has earned the responder a way in. */
+function OpenThePlan({ eventId, tone }: { eventId: string; tone: 'sage' | 'gold' }) {
+  return (
+    <Link
+      href={`/events/${eventId}`}
+      className={`mt-4 inline-flex items-center gap-1.5 rounded-pill border bg-card px-4 py-2.5 text-sm font-bold shadow-lift active:scale-[0.98] transition-all ${
+        tone === 'sage'
+          ? 'border-sage text-sage-deep hover:bg-sage-soft'
+          : 'border-gold text-gold-deep hover:bg-gold-soft'
+      }`}
+    >
+      Open the plan
+      <Icon name="back" size={15} className="rotate-180" />
+    </Link>
+  );
 }
 
 export function GuestRsvpClient({
@@ -38,8 +62,12 @@ export function GuestRsvpClient({
   calendarEvent = null,
   authed = false,
   unclaimed = false,
+  eventId = null,
 }: GuestRsvpClientProps) {
   const [status, setStatus] = useState(initialStatus);
+  // Answering binds the invite to the account, so the plan becomes reachable
+  // the moment someone says yes — even on an invite that arrived unclaimed.
+  const [planId, setPlanId] = useState<string | null>(eventId);
   const [error, setError] = useState('');
   const [signInNeeded, setSignInNeeded] = useState(false);
   const [answers, setAnswers] = useState<Record<string, string>>({});
@@ -71,6 +99,7 @@ export function GuestRsvpClient({
         if (result.outcome && result.outcome !== 'auth_required') setStatus(result.outcome);
         return;
       }
+      if (result.eventId) setPlanId(result.eventId);
       setStatus(result.outcome ?? (accept ? 'accepted' : 'declined'));
     });
   }
@@ -87,6 +116,15 @@ export function GuestRsvpClient({
         <p className="text-sm text-ink-soft mt-1">
           The host has been told. See you there.
         </p>
+        {authed && planId && (
+          <>
+            <p className="text-sm text-ink-soft mt-3">
+              The plan page has the chat, the host’s updates, and who else is
+              coming.
+            </p>
+            <OpenThePlan eventId={planId} tone="sage" />
+          </>
+        )}
         {calendarEvent && (
           <div className="mt-4 flex flex-wrap gap-2">
             <a
@@ -128,6 +166,9 @@ export function GuestRsvpClient({
         <p className="text-sm text-ink-soft mt-1">
           If a spot opens, the host will reach out.
         </p>
+        {/* The thread stays gated to people who are in, but the plan page is
+            where any change to that reaches them first. */}
+        {authed && planId && <OpenThePlan eventId={planId} tone="gold" />}
       </div>
     );
   }

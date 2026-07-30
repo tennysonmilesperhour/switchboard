@@ -16,6 +16,12 @@ export interface RespondResult {
   ok: boolean;
   outcome?: 'accepted' | 'declined' | 'waitlisted' | string;
   error?: string;
+  /**
+   * The plan this answer belongs to, so the RSVP page can hand the responder
+   * onward to `/events/<id>` — the thread, the updates, and everyone else who
+   * is coming — instead of ending at the confirmation card.
+   */
+  eventId?: string;
 }
 
 type AnswerClient = ReturnType<typeof createAdminClient>;
@@ -385,9 +391,13 @@ async function eventIdForShareToken(
  * place of the buttons; this check is what makes the gate real.
  *
  * The token remains the authorization for *this* invitation (docs/SECURITY.md
- * §5) — the session is an added requirement. Once signed in, the page claims the
- * invite onto the account (`claimGuestInvite`) so the plan shows up in the app
- * instead of living only in the link.
+ * §5) — the session is an added requirement. Answering also binds the invite to
+ * the account, which is what lets the responder open `/events/<id>` afterwards:
+ * every in-app surface, and the event page's own RLS, finds a person's invite by
+ * `invitee_id = auth.uid()`, so an accepted invite still carrying
+ * `invitee_id = null` leaves them unable to reach the plan they just said yes
+ * to. The page also claims on load, but that is a best-effort client effect;
+ * this is the path every answer goes through.
  */
 export async function respondToGuestInvite(
   token: string,
@@ -438,6 +448,25 @@ export async function respondToGuestInvite(
     await saveInviteAnswers(admin, invite.id, invite.event_id, answers);
   }
 
+  // Bind the invite to the account that answered, mirroring what
+  // `rsvp_via_share_token` does inline for the share link. Without this an
+  // accepted guest is a row with `invitee_id = null`: invisible on /plans, in
+  // notifications, and — because the event page resolves the viewer's invite by
+  // `invitee_id` — unable to open the plan, its thread, or its updates at all.
+  // Idempotent and keyed by the same token that authorized the answer; a null
+  // return just means there was nothing left to claim.
+  const { error: claimError } = await supabase.rpc('claim_guest_invite', {
+    p_token: token,
+  });
+  // Never fail the answer over this — the RSVP itself is already recorded. But
+  // do surface it, because a silent failure here is exactly what makes an
+  // invitation vanish from the app after someone accepts it.
+  if (claimError) {
+    await reportOperationalError('guest-rsvp.claim', claimError, {
+      eventId: invite.event_id,
+    });
+  }
+
   await advanceEventCascade(invite.event_id);
 
   if (outcome === 'accepted') {
@@ -455,5 +484,16 @@ export async function respondToGuestInvite(
       });
     }
   }
-  return { ok: true, outcome: typeof outcome === 'string' ? outcome : undefined };
+
+  // The invite now belongs to this account, so the surfaces that list it by
+  // `invitee_id` are stale.
+  revalidatePath('/');
+  revalidatePath('/plans');
+  revalidatePath(`/events/${invite.event_id}`);
+
+  return {
+    ok: true,
+    outcome: typeof outcome === 'string' ? outcome : undefined,
+    eventId: invite.event_id,
+  };
 }
