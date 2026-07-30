@@ -89,10 +89,12 @@ async function createPlan(
  */
 async function readShareLink(page: Page): Promise<string> {
   const card = page.locator('section', { has: page.getByText('Invite link') });
-  const shown = card.locator('[title^="http"]').first();
+  const shown = card.getByRole('link').filter({ hasText: /^https?:\/\// }).first();
   await expect(shown).toBeVisible({ timeout: 10_000 });
-  const url = await shown.getAttribute('title');
-  if (!url) throw new Error('Invite link card exposed no URL');
+  const url = await shown.getAttribute('href');
+  if (!url) throw new Error('Invite link card exposed no clickable URL');
+  await expect(shown).toHaveAttribute('target', '_blank');
+  await expect(shown).toHaveAttribute('rel', /noopener/);
   return url;
 }
 

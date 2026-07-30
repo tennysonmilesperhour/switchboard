@@ -6,22 +6,31 @@ import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { VoiceRecorder, type RecordedClip } from '@/components/ui/VoiceRecorder';
 import { useToast } from '@/components/ui/Toast';
-import { cancelEvent, confirmEvent, markHappened, startInviting } from '@/lib/actions/events';
+import { useConfirm } from '@/components/ui/ConfirmDialog';
+import {
+  cancelEvent,
+  confirmEvent,
+  deleteEventPermanently,
+  markHappened,
+  startInviting,
+} from '@/lib/actions/events';
 import { uploadAudio } from '@/lib/client/upload-audio';
 import type { SwitchboardEvent } from '@/lib/types';
 
 interface HostControlsProps {
   event: SwitchboardEvent;
   pollDecided: boolean;
+  isPrimaryHost: boolean;
 }
 
-export function HostControls({ event, pollDecided }: HostControlsProps) {
+export function HostControls({ event, pollDecided, isPrimaryHost }: HostControlsProps) {
   const [pending, startTransition] = useTransition();
   const [cancelling, setCancelling] = useState(false);
   const [reason, setReason] = useState('');
   const [clip, setClip] = useState<RecordedClip | null>(null);
   const router = useRouter();
   const toast = useToast();
+  const confirm = useConfirm();
 
   function run(action: () => Promise<void>) {
     startTransition(async () => {
@@ -56,13 +65,34 @@ export function HostControls({ event, pollDecided }: HostControlsProps) {
     });
   }
 
-  if (event.status === 'cancelled' || event.status === 'past') return null;
+  async function deletePlan() {
+    const approved = await confirm({
+      title: `Permanently delete “${event.title}”?`,
+      body:
+        'This removes the plan, invitations, polls, comments, room messages, and share links. This cannot be undone.',
+      confirmLabel: 'Delete permanently',
+      danger: true,
+    });
+    if (!approved) return;
+    startTransition(async () => {
+      const result = await deleteEventPermanently(event.id);
+      if (!result.ok) {
+        toast.error(result.error ?? 'Could not delete this plan.');
+        return;
+      }
+      toast.success('Plan permanently deleted.');
+      router.replace('/plans');
+      router.refresh();
+    });
+  }
+
+  const isClosed = event.status === 'cancelled' || event.status === 'past';
 
   const elapsed = !!event.starts_at && new Date(event.starts_at) < new Date();
 
   return (
     <section className="border-t border-line pt-6 space-y-2.5">
-      {elapsed ? (
+      {!isClosed && (elapsed ? (
         <Button
           variant="accept"
           size="lg"
@@ -98,9 +128,9 @@ export function HostControls({ event, pollDecided }: HostControlsProps) {
             </Button>
           )}
         </>
-      )}
+      ))}
 
-      {cancelling ? (
+      {!isClosed && (cancelling ? (
         <Card tone="terracotta" className="space-y-2.5">
           <div>
             <p className="text-sm font-bold text-ink">Cancel this plan?</p>
@@ -144,6 +174,17 @@ export function HostControls({ event, pollDecided }: HostControlsProps) {
           onClick={() => setCancelling(true)}
         >
           Cancel this plan
+        </Button>
+      ))}
+
+      {isPrimaryHost && (
+        <Button
+          variant="danger"
+          className="w-full"
+          disabled={pending}
+          onClick={deletePlan}
+        >
+          {pending ? 'Deleting…' : 'Delete permanently'}
         </Button>
       )}
     </section>

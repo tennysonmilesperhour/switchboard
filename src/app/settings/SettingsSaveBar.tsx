@@ -11,8 +11,8 @@ import {
   useRef,
   useState,
 } from 'react';
-import { useFormStatus } from 'react-dom';
 import { Button } from '@/components/ui/Button';
+import type { ActionResult } from '@/lib/actions/profile';
 
 /**
  * Explicit save / cancel for the Settings page.
@@ -27,7 +27,7 @@ import { Button } from '@/components/ui/Button';
 
 interface Participant {
   /** Persist this section's edits. Resolves once the save settles. */
-  save: () => Promise<void>;
+  save: () => Promise<ActionResult>;
   /** Discard this section's edits, restoring the last saved values. */
   cancel: () => void;
 }
@@ -58,6 +58,9 @@ export function SettingsSaveProvider({
   const participants = useRef(new Map<string, Participant>());
   const [dirtyIds, setDirtyIds] = useState<Set<string>>(() => new Set());
   const [saving, setSaving] = useState(false);
+  const [notice, setNotice] = useState<{ kind: 'success' | 'error'; text: string } | null>(
+    null,
+  );
 
   // A ref mirror of the dirty set so the Save/Cancel handlers can read the
   // current value without being re-created on every change.
@@ -80,6 +83,7 @@ export function SettingsSaveProvider({
   }, []);
 
   const setDirty = useCallback((id: string, dirty: boolean) => {
+    if (dirty) setNotice(null);
     setDirtyIds((prev) => {
       if (dirty === prev.has(id)) return prev;
       const next = new Set(prev);
@@ -106,12 +110,21 @@ export function SettingsSaveProvider({
     const ids = Array.from(dirtyRef.current);
     if (ids.length === 0) return;
     setSaving(true);
+    setNotice(null);
     try {
-      // allSettled: one section failing to save shouldn't strand the spinner or
-      // roll back the sections that succeeded — each participant clears its own
-      // dirty flag on success and keeps it (surfacing an inline error) on failure.
-      await Promise.allSettled(
-        ids.map((id) => participants.current.get(id)?.save() ?? Promise.resolve()),
+      // Next.js dispatches Server Actions sequentially. Save each dirty section
+      // deliberately and retain failed sections as dirty instead of presenting a
+      // false success when the database rejects a write.
+      const results: ActionResult[] = [];
+      for (const id of ids) {
+        const participant = participants.current.get(id);
+        if (participant) results.push(await participant.save());
+      }
+      const failure = results.find((result) => !result.ok);
+      setNotice(
+        failure
+          ? { kind: 'error', text: failure.error ?? 'Some changes could not be saved.' }
+          : { kind: 'success', text: 'Changes saved.' },
       );
     } finally {
       setSaving(false);
@@ -137,7 +150,11 @@ export function SettingsSaveProvider({
             className="animate-rise pointer-events-auto mx-auto flex max-w-lg items-center gap-3 rounded-card border border-line bg-card/95 px-4 py-3 shadow-float backdrop-blur-xl"
           >
             <p className="min-w-0 flex-1 text-sm font-semibold text-ink" aria-live="polite">
-              {saving ? 'Saving your changes…' : 'You have unsaved changes'}
+              {saving
+                ? 'Saving your changes…'
+                : notice?.kind === 'error'
+                  ? notice.text
+                  : 'You have unsaved changes'}
             </p>
             <Button
               type="button"
@@ -152,6 +169,18 @@ export function SettingsSaveProvider({
               {saving ? 'Saving…' : 'Save changes'}
             </Button>
           </div>
+        </div>
+      )}
+      {dirtyCount === 0 && notice && (
+        <div
+          role={notice.kind === 'error' ? 'alert' : 'status'}
+          className={`fixed inset-x-0 bottom-24 z-40 mx-auto w-fit max-w-[calc(100%-2rem)] rounded-pill px-4 py-2 text-sm font-semibold shadow-float ${
+            notice.kind === 'error'
+              ? 'bg-rose-deep text-paper'
+              : 'bg-sage-deep text-paper'
+          }`}
+        >
+          {notice.text}
         </div>
       )}
     </SettingsSaveContext.Provider>
@@ -181,7 +210,7 @@ export function SettingsForm({
   children,
   className,
 }: {
-  action: (formData: FormData) => void | Promise<void>;
+  action: (formData: FormData) => Promise<ActionResult>;
   children: React.ReactNode;
   className?: string;
 }) {
@@ -189,18 +218,13 @@ export function SettingsForm({
   const id = useId();
   const formRef = useRef<HTMLFormElement>(null);
   const baselineRef = useRef('');
-  const resolveRef = useRef<(() => void) | null>(null);
   // Bumping this key remounts the fields, restoring their last-saved defaults.
   const [revision, setRevision] = useState(0);
 
-  // Called when a submission settles (via the inner FormStatusReporter). The
-  // live values are now the saved values, so re-baseline and clear dirty.
-  const handleSettled = useCallback(() => {
+  const markSaved = useCallback(() => {
     const form = formRef.current;
     if (form) baselineRef.current = serialize(form);
     setDirty(id, false);
-    resolveRef.current?.();
-    resolveRef.current = null;
   }, [id, setDirty]);
 
   useEffect(() => {
@@ -214,11 +238,11 @@ export function SettingsForm({
     form.addEventListener('change', onChange);
 
     const unregister = register(id, {
-      save: () =>
-        new Promise<void>((resolve) => {
-          resolveRef.current = resolve;
-          form.requestSubmit();
-        }),
+      save: async () => {
+        const result = await action(new FormData(form));
+        if (result.ok) markSaved();
+        return result;
+      },
       cancel: () => {
         setRevision((n) => n + 1);
         setDirty(id, false);
@@ -230,30 +254,18 @@ export function SettingsForm({
       form.removeEventListener('change', onChange);
       unregister();
     };
-  }, [id, register, setDirty]);
+  }, [action, id, markSaved, register, setDirty]);
 
   return (
-    <form ref={formRef} action={action} className={className}>
+    <form
+      ref={formRef}
+      className={className}
+      onSubmit={(event) => event.preventDefault()}
+    >
       {/* Keyed fragment: bumping the key on cancel remounts these fields to
           their defaults without adding a wrapper element that would break the
           form's `space-y-*` spacing. */}
       <Fragment key={revision}>{children}</Fragment>
-      <FormStatusReporter onSettled={handleSettled} />
     </form>
   );
-}
-
-/**
- * Bridges a native form-action submission back to the parent: `useFormStatus`
- * only works inside the <form>, so this invisible child watches `pending` and
- * fires once it falls back to idle (i.e. the save completed).
- */
-function FormStatusReporter({ onSettled }: { onSettled: () => void }) {
-  const { pending } = useFormStatus();
-  const wasPending = useRef(false);
-  useEffect(() => {
-    if (wasPending.current && !pending) onSettled();
-    wasPending.current = pending;
-  }, [pending, onSettled]);
-  return null;
 }

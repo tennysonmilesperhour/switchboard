@@ -8,7 +8,7 @@ import { bearerMatches } from '@/lib/server/secret';
 // `schema:false, ok:false` regardless of reality — so the one alarm built to
 // catch "the guest link is reading a database missing this migration" stopped
 // meaning anything, and drift kept surfacing as broken invite links instead.
-const EXPECTED_SCHEMA_VERSION = '20260726120000';
+const EXPECTED_SCHEMA_VERSION = '20260729120000';
 const REQUIRED_PRIVATE_BUCKET = 'media-private';
 
 /**
@@ -39,6 +39,9 @@ export async function GET(request: Request) {
     cron: Boolean(process.env.CRON_SECRET),
     email: Boolean(process.env.RESEND_API_KEY && process.env.EMAIL_FROM),
     sms: smsEnabled(),
+    phoneVerification: Boolean(
+      process.env.CONTACT_VERIFICATION_SECRET && smsEnabled(),
+    ),
     push: Boolean(
       process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY &&
       process.env.VAPID_PRIVATE_KEY,
@@ -113,6 +116,10 @@ export async function GET(request: Request) {
     supabaseRef: projectRef(process.env.NEXT_PUBLIC_SUPABASE_URL),
     supabaseUrl: process.env.NEXT_PUBLIC_SUPABASE_URL ?? null,
     appUrl: process.env.NEXT_PUBLIC_APP_URL ?? null,
+    deploymentVersion:
+      process.env.VERCEL_GIT_COMMIT_SHA?.slice(0, 12) ??
+      process.env.NEXT_PUBLIC_APP_VERSION ??
+      null,
   };
 
   return NextResponse.json(

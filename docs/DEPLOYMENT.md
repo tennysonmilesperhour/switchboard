@@ -59,6 +59,8 @@ The app reads these (see `.env.example` for the full list). Set them in Vercel
 - `CRON_SECRET` — required; the cron endpoint refuses to run without it
 - `ANTHROPIC_API_KEY` — optional; AI features degrade gracefully without it
 - `RESEND_API_KEY`, `EMAIL_FROM` — optional; off-platform email
+- `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_FROM_NUMBER`,
+  `CONTACT_VERIFICATION_SECRET` — required together for phone verification
 - `NEXT_PUBLIC_VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY` — optional; web push
 
 ## Scheduled work (cron)

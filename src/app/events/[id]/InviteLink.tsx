@@ -70,9 +70,15 @@ export function InviteLink({ eventId, shareUrl, enabled, eventTitle }: InviteLin
             you’ll see them on the list by name.
           </p>
           <div className="flex items-center gap-2 rounded-card border border-line bg-paper px-3 py-2.5">
-            <span className="min-w-0 flex-1 truncate text-sm text-ink-soft" title={shareUrl}>
+            <a
+              href={shareUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="min-w-0 flex-1 truncate rounded text-sm font-semibold text-terracotta-deep underline decoration-terracotta/40 underline-offset-2 hover:text-terracotta focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-terracotta"
+              title={shareUrl}
+            >
               {shareUrl}
-            </span>
+            </a>
             <CopyButton text={shareUrl} />
           </div>
           <div className="flex flex-wrap items-center gap-2">
