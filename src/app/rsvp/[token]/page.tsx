@@ -236,6 +236,11 @@ export default async function GuestRsvpPage({
                 questions={questions}
                 authed={Boolean(user)}
                 unclaimed={invite.invitee_id === null}
+                // Only offer the way through once this invite actually belongs
+                // to the viewer — /events/<id> is RLS-gated on exactly that, so
+                // linking an unclaimed invite would bounce them to /join. A
+                // fresh answer claims the invite and returns the id itself.
+                eventId={user && invite.invitee_id === user.id ? invite.event_id : null}
                 calendarEvent={
                   event.starts_at
                     ? {

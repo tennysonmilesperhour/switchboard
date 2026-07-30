@@ -16,6 +16,12 @@ export interface RespondResult {
   ok: boolean;
   outcome?: 'accepted' | 'declined' | 'waitlisted' | string;
   error?: string;
+  /**
+   * The plan this answer belongs to, so the RSVP page can hand the responder
+   * onward to `/events/<id>` — the thread, the updates, and everyone else who
+   * is coming — instead of ending at the confirmation card.
+   */
+  eventId?: string;
 }
 
 type AnswerClient = ReturnType<typeof createAdminClient>;
@@ -209,7 +215,9 @@ export async function declineJoinRequest(
  * already-claimed invite. Best-effort: a failure here must never break the
  * public RSVP page, so callers ignore the result.
  */
-export async function claimGuestInvite(token: string): Promise<{ ok: boolean }> {
+export async function claimGuestInvite(
+  token: string,
+): Promise<{ ok: boolean; eventId?: string }> {
   const supabase = await createClient();
   const {
     data: { user },
@@ -233,7 +241,7 @@ export async function claimGuestInvite(token: string): Promise<{ ok: boolean }> 
   revalidatePath('/');
   revalidatePath('/plans');
   revalidatePath('/notifications');
-  return { ok: true };
+  return { ok: true, eventId };
 }
 
 export interface ShareLinkRsvpResult extends RespondResult {
@@ -385,9 +393,13 @@ async function eventIdForShareToken(
  * place of the buttons; this check is what makes the gate real.
  *
  * The token remains the authorization for *this* invitation (docs/SECURITY.md
- * §5) — the session is an added requirement. Once signed in, the page claims the
- * invite onto the account (`claimGuestInvite`) so the plan shows up in the app
- * instead of living only in the link.
+ * §5) — the session is an added requirement. Answering also binds the invite to
+ * the account, which is what lets the responder open `/events/<id>` afterwards:
+ * every in-app surface, and the event page's own RLS, finds a person's invite by
+ * `invitee_id = auth.uid()`, so an accepted invite still carrying
+ * `invitee_id = null` leaves them unable to reach the plan they just said yes
+ * to. The page also claims on load, but that is a best-effort client effect;
+ * this is the path every answer goes through.
  */
 export async function respondToGuestInvite(
   token: string,
@@ -438,6 +450,28 @@ export async function respondToGuestInvite(
     await saveInviteAnswers(admin, invite.id, invite.event_id, answers);
   }
 
+  // Bind the invite to the account that answered, mirroring what
+  // `rsvp_via_share_token` does inline for the share link. Without this an
+  // accepted guest is a row with `invitee_id = null`: invisible on /plans, in
+  // notifications, and — because the event page resolves the viewer's invite by
+  // `invitee_id` — unable to open the plan, its thread, or its updates at all.
+  // Idempotent and keyed by the same token that authorized the answer; a null
+  // return just means there was nothing left to claim.
+  const { data: claimedEventId, error: claimError } = await supabase.rpc(
+    'claim_guest_invite',
+    {
+      p_token: token,
+    },
+  );
+  // Never fail the answer over this — the RSVP itself is already recorded. But
+  // do surface it, because a silent failure here is exactly what makes an
+  // invitation vanish from the app after someone accepts it.
+  if (claimError) {
+    await reportOperationalError('guest-rsvp.claim', claimError, {
+      eventId: invite.event_id,
+    });
+  }
+
   await advanceEventCascade(invite.event_id);
 
   if (outcome === 'accepted') {
@@ -455,5 +489,21 @@ export async function respondToGuestInvite(
       });
     }
   }
-  return { ok: true, outcome: typeof outcome === 'string' ? outcome : undefined };
+
+  if (claimedEventId) {
+    // The invite now belongs to this account, so the surfaces that list it by
+    // `invitee_id` are stale.
+    revalidatePath('/');
+    revalidatePath('/plans');
+    revalidatePath(`/events/${invite.event_id}`);
+  }
+
+  return {
+    ok: true,
+    outcome: typeof outcome === 'string' ? outcome : undefined,
+    // Only offer an onward route when the claim actually succeeded. Returning
+    // the id after an RPC error would render a link to an RLS-gated page that
+    // immediately bounces the responder back out.
+    eventId: claimedEventId ?? undefined,
+  };
 }

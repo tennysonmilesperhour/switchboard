@@ -72,9 +72,20 @@ const mocks = vi.hoisted(() => {
     return { data: null, error: null };
   });
 
+  // `claim_guest_invite` resolves the caller from `auth.uid()`, so it must run
+  // on the session-scoped client — never the service-role one, which has no
+  // session and would claim nothing.
+  const userRpc = vi.fn(
+    async (): Promise<{ data: string | null; error: { message: string } | null }> => ({
+      data: 'event-1',
+      error: null,
+    }),
+  );
+
   return {
     db,
     rpc,
+    userRpc,
     makeBuilder,
     checkRateLimit: vi.fn(async () => true),
     advanceEventCascade: vi.fn(async () => undefined),
@@ -89,6 +100,7 @@ vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }));
 vi.mock('@/lib/supabase/server', () => ({
   createClient: async () => ({
     auth: { getUser: async () => ({ data: { user: mocks.db.user }, error: null }) },
+    rpc: mocks.userRpc,
   }),
 }));
 
@@ -115,6 +127,7 @@ import { respondViaShareLink, respondToGuestInvite } from './invites';
 afterEach(() => {
   vi.clearAllMocks();
   mocks.checkRateLimit.mockResolvedValue(true);
+  mocks.userRpc.mockResolvedValue({ data: 'event-1', error: null });
   mocks.db.user = null;
   mocks.db.profiles = {};
   mocks.db.invites = {};
@@ -208,5 +221,56 @@ describe('respondToGuestInvite', () => {
       p_token: 'guest-token-1',
       p_accept: true,
     });
+  });
+
+  it('binds the answered invite to the account, on the session client', async () => {
+    mocks.db.user = { id: 'user-3' };
+    mocks.db.invites['guest-token-1'] = {
+      id: 'invite-1',
+      event_id: 'event-1',
+      status: 'sent',
+      guest_name: 'Casey',
+    };
+    mocks.db.events['event-1'] = { id: 'event-1', title: 'Taco night', host_id: 'host-1' };
+
+    const result = await respondToGuestInvite('guest-token-1', true);
+
+    // An accepted invite still carrying invitee_id = null is invisible on
+    // /plans and unreachable at /events/<id> — the responder ends up stuck on
+    // the confirmation card with no way into the plan they just joined.
+    expect(mocks.userRpc).toHaveBeenCalledWith('claim_guest_invite', {
+      p_token: 'guest-token-1',
+    });
+    // Never the service-role client: it has no session, so auth.uid() is null
+    // and the claim would silently no-op.
+    expect(mocks.rpc).not.toHaveBeenCalledWith('claim_guest_invite', expect.anything());
+    // And the caller gets the id it needs to link onward.
+    expect(result.eventId).toBe('event-1');
+  });
+
+  it('still records a declined answer, and keeps the claim best-effort', async () => {
+    mocks.db.user = { id: 'user-3' };
+    mocks.db.invites['guest-token-1'] = {
+      id: 'invite-1',
+      event_id: 'event-1',
+      status: 'sent',
+      guest_name: 'Casey',
+    };
+    mocks.db.events['event-1'] = { id: 'event-1', title: 'Taco night', host_id: 'host-1' };
+    mocks.userRpc.mockResolvedValue({ data: null, error: { message: 'claim exploded' } });
+
+    const result = await respondToGuestInvite('guest-token-1', true);
+
+    // The RSVP is already written by this point; a failed claim must not throw
+    // it away — but it must not pass silently either.
+    expect(result.ok).toBe(true);
+    expect(mocks.reportOperationalError).toHaveBeenCalledWith(
+      'guest-rsvp.claim',
+      expect.anything(),
+      expect.objectContaining({ eventId: 'event-1' }),
+    );
+    // Do not offer a link to the RLS-gated event page when the invite never
+    // became reachable by this account.
+    expect(result.eventId).toBeUndefined();
   });
 });
