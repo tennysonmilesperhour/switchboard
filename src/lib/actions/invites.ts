@@ -215,7 +215,9 @@ export async function declineJoinRequest(
  * already-claimed invite. Best-effort: a failure here must never break the
  * public RSVP page, so callers ignore the result.
  */
-export async function claimGuestInvite(token: string): Promise<{ ok: boolean }> {
+export async function claimGuestInvite(
+  token: string,
+): Promise<{ ok: boolean; eventId?: string }> {
   const supabase = await createClient();
   const {
     data: { user },
@@ -239,7 +241,7 @@ export async function claimGuestInvite(token: string): Promise<{ ok: boolean }> 
   revalidatePath('/');
   revalidatePath('/plans');
   revalidatePath('/notifications');
-  return { ok: true };
+  return { ok: true, eventId };
 }
 
 export interface ShareLinkRsvpResult extends RespondResult {
@@ -455,9 +457,12 @@ export async function respondToGuestInvite(
   // `invitee_id` — unable to open the plan, its thread, or its updates at all.
   // Idempotent and keyed by the same token that authorized the answer; a null
   // return just means there was nothing left to claim.
-  const { error: claimError } = await supabase.rpc('claim_guest_invite', {
-    p_token: token,
-  });
+  const { data: claimedEventId, error: claimError } = await supabase.rpc(
+    'claim_guest_invite',
+    {
+      p_token: token,
+    },
+  );
   // Never fail the answer over this — the RSVP itself is already recorded. But
   // do surface it, because a silent failure here is exactly what makes an
   // invitation vanish from the app after someone accepts it.
@@ -485,15 +490,20 @@ export async function respondToGuestInvite(
     }
   }
 
-  // The invite now belongs to this account, so the surfaces that list it by
-  // `invitee_id` are stale.
-  revalidatePath('/');
-  revalidatePath('/plans');
-  revalidatePath(`/events/${invite.event_id}`);
+  if (claimedEventId) {
+    // The invite now belongs to this account, so the surfaces that list it by
+    // `invitee_id` are stale.
+    revalidatePath('/');
+    revalidatePath('/plans');
+    revalidatePath(`/events/${invite.event_id}`);
+  }
 
   return {
     ok: true,
     outcome: typeof outcome === 'string' ? outcome : undefined,
-    eventId: invite.event_id,
+    // Only offer an onward route when the claim actually succeeded. Returning
+    // the id after an RPC error would render a link to an RLS-gated page that
+    // immediately bounces the responder back out.
+    eventId: claimedEventId ?? undefined,
   };
 }

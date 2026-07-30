@@ -269,5 +269,8 @@ describe('respondToGuestInvite', () => {
       expect.anything(),
       expect.objectContaining({ eventId: 'event-1' }),
     );
+    // Do not offer a link to the RLS-gated event page when the invite never
+    // became reachable by this account.
+    expect(result.eventId).toBeUndefined();
   });
 });

@@ -78,7 +78,9 @@ export function GuestRsvpClient({
   // invisible everywhere else in the app. Runs once, best-effort.
   useEffect(() => {
     if (authed && unclaimed) {
-      void claimGuestInvite(token);
+      void claimGuestInvite(token).then((result) => {
+        if (result.eventId) setPlanId(result.eventId);
+      });
     }
   }, [authed, unclaimed, token]);
 
