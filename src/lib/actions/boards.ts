@@ -189,6 +189,47 @@ export async function addBoardPost(
   return { ok: true };
 }
 
+export async function updateBoardPost(
+  postId: string,
+  slug: string,
+  input: {
+    title: string;
+    body: string;
+    location: string;
+    cadence: string;
+    startsAt: string | null;
+  },
+): Promise<{ ok: boolean; error?: string }> {
+  const auth = await requireUser();
+  if (!auth.ok) return auth;
+  const { supabase, user } = auth;
+
+  const title = input.title.trim().slice(0, 120);
+  if (!title) return { ok: false, error: 'Give it a title.' };
+
+  // The author predicate is repeated here even though RLS enforces it. A
+  // successful request that updated zero rows must not be presented as saved.
+  const { data, error } = await supabase
+    .from('board_posts')
+    .update({
+      title,
+      body: input.body.trim() || null,
+      location: input.location.trim() || null,
+      cadence: input.cadence.trim() || null,
+      starts_at: input.startsAt,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', postId)
+    .eq('author_id', user.id)
+    .select('id')
+    .maybeSingle();
+  if (error) return { ok: false, error: 'Could not save that post.' };
+  if (!data) return { ok: false, error: 'Only the author can edit this post.' };
+
+  revalidatePath(`/boards/${slug}`);
+  return { ok: true };
+}
+
 export async function deleteBoardPost(
   postId: string,
   slug: string,

@@ -236,18 +236,23 @@ export async function completeOnboarding(formData: FormData): Promise<void> {
   redirect(afterOnboarding);
 }
 
-export async function updateInterests(formData: FormData): Promise<void> {
+export async function updateInterests(formData: FormData): Promise<ActionResult> {
   const { supabase, user } = await requireUserOrRedirect();
 
   const interests = formData.getAll('interests').map(String).filter(Boolean);
   const downTo = formData.getAll('down_to').map(String).filter(Boolean);
 
-  await supabase
+  const { error } = await supabase
     .from('profiles')
     .update({ interests, down_to: downTo })
     .eq('id', user.id);
+  if (error) {
+    await reportOperationalError('settings.interests', error, { userId: user.id });
+    return { ok: false, error: 'Could not save your selections. Try again.' };
+  }
 
   revalidatePath('/settings');
+  return { ok: true };
 }
 
 function compactLines(raw: FormDataEntryValue | null, maxItems = 12): string[] {
@@ -259,11 +264,11 @@ function compactLines(raw: FormDataEntryValue | null, maxItems = 12): string[] {
     .map((value) => value.slice(0, 60));
 }
 
-export async function updateDiscoverability(formData: FormData): Promise<void> {
+export async function updateDiscoverability(formData: FormData): Promise<ActionResult> {
   const { supabase, user } = await requireUserOrRedirect();
 
   const discoverable = formData.get('discoverable') === 'on';
-  await supabase
+  const { error } = await supabase
     .from('profiles')
     .update({
       discoverable,
@@ -279,9 +284,14 @@ export async function updateDiscoverability(formData: FormData): Promise<void> {
         : [],
     })
     .eq('id', user.id);
+  if (error) {
+    await reportOperationalError('settings.discoverability', error, { userId: user.id });
+    return { ok: false, error: 'Could not save your discovery settings. Try again.' };
+  }
 
   revalidatePath('/settings');
   revalidatePath('/discover');
+  return { ok: true };
 }
 
 /**
@@ -312,19 +322,23 @@ export async function setDiscoverable(enabled: boolean): Promise<ActionResult> {
   return { ok: true };
 }
 
-export async function updateSabbatical(formData: FormData): Promise<void> {
+export async function updateSabbatical(formData: FormData): Promise<ActionResult> {
   const { supabase, user } = await requireUserOrRedirect();
 
   const on = formData.get('sabbatical') === 'on';
   const message = String(formData.get('sabbatical_message') ?? '').trim();
 
-  await supabase
+  const { error } = await supabase
     .from('profiles')
     .update({
       sabbatical: on,
       sabbatical_message: on ? message || null : null,
     })
     .eq('id', user.id);
+  if (error) {
+    await reportOperationalError('settings.sabbatical', error, { userId: user.id });
+    return { ok: false, error: 'Could not save your quiet-season settings. Try again.' };
+  }
 
   // Entering a quiet season pulls down any live availability signal so you
   // stop appearing on friends' radars right away.
@@ -334,6 +348,7 @@ export async function updateSabbatical(formData: FormData): Promise<void> {
 
   revalidatePath('/settings');
   revalidatePath('/');
+  return { ok: true };
 }
 
 /**
@@ -364,7 +379,7 @@ export async function updateNotificationPrefs(
   return { ok: true };
 }
 
-export async function updateQuietHours(formData: FormData): Promise<void> {
+export async function updateQuietHours(formData: FormData): Promise<ActionResult> {
   const { supabase, user } = await requireUserOrRedirect();
 
   const rawStart = formData.get('quiet_start');
@@ -372,12 +387,17 @@ export async function updateQuietHours(formData: FormData): Promise<void> {
   const start = rawStart === '' || rawStart === null ? null : Number(rawStart);
   const end = rawEnd === '' || rawEnd === null ? null : Number(rawEnd);
 
-  await supabase
+  const { error } = await supabase
     .from('profiles')
     .update({ quiet_hours_start: start, quiet_hours_end: end })
     .eq('id', user.id);
+  if (error) {
+    await reportOperationalError('settings.quiet-hours', error, { userId: user.id });
+    return { ok: false, error: 'Could not save your quiet hours. Try again.' };
+  }
 
   revalidatePath('/settings');
+  return { ok: true };
 }
 
 /** Revoke the current calendar-subscription link by rotating the token. Any

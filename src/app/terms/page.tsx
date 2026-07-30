@@ -2,6 +2,10 @@ import Link from 'next/link';
 
 const SECTIONS = [
   {
+    title: 'Eligibility',
+    body: 'You must be at least 18 years old to create or use a Switchboard account. Adults may organize plans where children attend with their parent or guardian, but children may not hold accounts or participate independently.',
+  },
+  {
     title: 'Early Access Service',
     body: 'Switchboard is an early-access service. Features may change, break, or be removed. We may limit, suspend, or discontinue parts of the service.',
   },
@@ -23,7 +27,7 @@ const SECTIONS = [
   },
   {
     title: 'Safety and Enforcement',
-    body: 'We may remove content, restrict features, suspend accounts, preserve records, or report activity if needed to protect users, comply with law, prevent abuse, or keep the service reliable.',
+    body: 'Meetups involve real people and real-world risk. Use an appropriate public or trusted venue, tell someone you trust where you are going, keep guardians present for kid-inclusive plans, and never publish a child’s name, age, school, contact details, or live location. We may remove content, restrict features, suspend accounts, preserve records, or report activity if needed to protect users, comply with law, prevent abuse, or keep the service reliable.',
   },
   {
     title: 'No Warranty',
@@ -34,7 +38,7 @@ const SECTIONS = [
 export default function TermsPage() {
   return (
     <main className="mx-auto max-w-2xl px-6 py-16 text-ink">
-      <p className="text-sm font-bold text-terracotta">Effective July 9, 2026</p>
+      <p className="text-sm font-bold text-terracotta">Effective July 29, 2026</p>
       <h1 className="mt-2 text-4xl font-black">Terms of Use</h1>
       <p className="mt-4 text-sm leading-relaxed text-ink-soft">
         These terms are the basic rules for using Switchboard. They work together

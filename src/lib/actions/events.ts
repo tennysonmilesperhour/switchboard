@@ -1060,6 +1060,80 @@ export async function cancelEvent(
 }
 
 /**
+ * Permanently remove a hosted plan and its event-bound content. This is
+ * intentionally primary-host-only: co-hosts may help run a plan, but cannot
+ * erase its history. Active plans with accepted guests must be cancelled first
+ * so nobody loses a commitment without receiving the cancellation notice.
+ */
+export async function deleteEventPermanently(
+  eventId: string,
+): Promise<{ ok: boolean; error?: string }> {
+  const auth = await requireUser();
+  if (!auth.ok) return auth;
+  const { user } = auth;
+
+  const admin = createAdminClient();
+  const { data: event, error: eventError } = await admin
+    .from('events')
+    .select('host_id, room_id, status')
+    .eq('id', eventId)
+    .maybeSingle<{
+      host_id: string;
+      room_id: string | null;
+      status: string;
+    }>();
+  if (eventError || !event) return { ok: false, error: 'That plan was not found.' };
+  if (event.host_id !== user.id) {
+    return { ok: false, error: 'Only the primary host can permanently delete this plan.' };
+  }
+
+  if (event.status !== 'cancelled' && event.status !== 'past') {
+    const { count } = await admin
+      .from('invites')
+      .select('id', { count: 'exact', head: true })
+      .eq('event_id', eventId)
+      .eq('status', 'accepted');
+    if ((count ?? 0) > 0) {
+      return {
+        ok: false,
+        error: 'Cancel the plan first so everyone who accepted is notified.',
+      };
+    }
+  }
+
+  // The event foreign keys cascade through invitations, polls, questions,
+  // comments, announcements, capsules, and co-hosts. The room is a sibling row,
+  // so remove it explicitly after the event; its messages, members, and items
+  // cascade from rooms.
+  const { error: deleteError } = await admin
+    .from('events')
+    .delete()
+    .eq('id', eventId)
+    .eq('host_id', user.id);
+  if (deleteError) {
+    await reportOperationalError('event.delete', deleteError, { eventId, userId: user.id });
+    return { ok: false, error: 'Could not permanently delete this plan.' };
+  }
+  if (event.room_id) {
+    const { error: roomError } = await admin
+      .from('rooms')
+      .delete()
+      .eq('id', event.room_id)
+      .eq('kind', 'event');
+    if (roomError) {
+      await reportOperationalError('event.delete-room', roomError, {
+        eventId,
+        userId: user.id,
+      });
+    }
+  }
+
+  revalidatePath('/plans');
+  revalidatePath('/');
+  return { ok: true };
+}
+
+/**
  * Clone a plan into a fresh one - same crew, same place, carrying the invite
  * mode, visibility, presentation, and recurrence forward. Anyone who said "not
  * my thing" is quietly left off; everyone else keeps their place in the order.

@@ -17,6 +17,7 @@ import {
   ensureBoardInviteLink,
   rotateBoardInviteLink,
   removeFromBoard,
+  updateBoardPost,
 } from '@/lib/actions/boards';
 
 export interface BoardPostRow {
@@ -29,6 +30,7 @@ export interface BoardPostRow {
   cadence: string | null;
   starts_at: string | null;
   created_at: string;
+  updated_at: string | null;
 }
 
 export interface BoardMemberRow {
@@ -103,6 +105,7 @@ export function BoardClient({
   const [cadence, setCadence] = useState('');
   const [date, setDate] = useState('');
   const [postError, setPostError] = useState<string | null>(null);
+  const [editingPostId, setEditingPostId] = useState<string | null>(null);
 
   // Invite state.
   const [inviteHandle, setInviteHandle] = useState('');
@@ -116,25 +119,60 @@ export function BoardClient({
     if (!title.trim()) return;
     setPostError(null);
     startTransition(async () => {
-      const result = await addBoardPost(boardId, {
-        kind,
-        title,
-        body,
-        location,
-        cadence,
-        startsAt: date ? new Date(`${date}T12:00`).toISOString() : null,
-      });
+      const startsAt = date ? new Date(`${date}T12:00`).toISOString() : null;
+      const result = editingPostId
+        ? await updateBoardPost(editingPostId, slug, {
+            title,
+            body,
+            location,
+            cadence,
+            startsAt,
+          })
+        : await addBoardPost(boardId, {
+            kind,
+            title,
+            body,
+            location,
+            cadence,
+            startsAt,
+          });
       if (result.ok) {
         setTitle('');
         setBody('');
         setLocation('');
         setCadence('');
         setDate('');
+        setEditingPostId(null);
+        setKind('notice');
+        toast.success(editingPostId ? 'Board post updated.' : 'Posted to the board.');
         router.refresh();
       } else {
         setPostError(result.error ?? 'Could not post that.');
       }
     });
+  }
+
+  function editPost(post: BoardPostRow) {
+    setEditingPostId(post.id);
+    setKind(post.kind);
+    setTitle(post.title);
+    setBody(post.body ?? '');
+    setLocation(post.location ?? '');
+    setCadence(post.cadence ?? '');
+    setDate(post.starts_at ? post.starts_at.slice(0, 10) : '');
+    setPostError(null);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  function cancelEdit() {
+    setEditingPostId(null);
+    setKind('notice');
+    setTitle('');
+    setBody('');
+    setLocation('');
+    setCadence('');
+    setDate('');
+    setPostError(null);
   }
 
   function invite(e: React.FormEvent) {
@@ -182,12 +220,13 @@ export function BoardClient({
               {(
                 [
                   ['notice', '📌 Notice'],
-                  ['event', '🔁 Recurring event'],
+                  ['event', '🔁 Recurring announcement'],
                 ] as const
               ).map(([value, label]) => (
                 <button
                   key={value}
                   type="button"
+                  disabled={editingPostId !== null}
                   onClick={() => setKind(value)}
                   aria-pressed={kind === value}
                   className={`rounded-pill px-3 py-1.5 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-terracotta ${
@@ -254,8 +293,24 @@ export function BoardClient({
                 className="w-full"
                 disabled={pending || !title.trim()}
               >
-                Post to the board
+                {pending
+                  ? 'Saving…'
+                  : editingPostId
+                    ? 'Save changes'
+                    : 'Post to the board'}
               </Button>
+              {editingPostId && (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  className="w-full"
+                  disabled={pending}
+                  onClick={cancelEdit}
+                >
+                  Cancel editing
+                </Button>
+              )}
             </div>
           </Card>
         </form>
@@ -306,14 +361,26 @@ export function BoardClient({
                         </p>
                       </div>
                       {canRemove && (
-                        <button
-                          type="button"
-                          onClick={() => removePost(post.id)}
-                          disabled={pending}
-                          className="rounded-pill px-2 py-1 text-[11px] text-ink-faint hover:text-rose-deep shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-terracotta"
-                        >
-                          remove
-                        </button>
+                        <div className="flex shrink-0 items-center gap-1">
+                          {post.author_id === currentUserId && (
+                            <button
+                              type="button"
+                              onClick={() => editPost(post)}
+                              disabled={pending}
+                              className="rounded-pill px-2 py-1 text-[11px] font-semibold text-terracotta-deep hover:text-terracotta focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-terracotta"
+                            >
+                              edit
+                            </button>
+                          )}
+                          <button
+                            type="button"
+                            onClick={() => removePost(post.id)}
+                            disabled={pending}
+                            className="rounded-pill px-2 py-1 text-[11px] text-ink-faint hover:text-rose-deep focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-terracotta"
+                          >
+                            remove
+                          </button>
+                        </div>
                       )}
                     </div>
                   </Card>
@@ -392,12 +459,15 @@ export function BoardClient({
                   board as a neighbor.
                 </p>
                 <div className="flex items-center gap-2 rounded-card border border-line bg-paper px-3 py-2.5">
-                  <span
-                    className="min-w-0 flex-1 truncate text-sm text-ink-soft"
+                  <a
+                    href={inviteUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="min-w-0 flex-1 truncate rounded text-sm font-semibold text-terracotta-deep underline decoration-terracotta/40 underline-offset-2 hover:text-terracotta focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-terracotta"
                     title={inviteUrl}
                   >
                     {inviteUrl}
-                  </span>
+                  </a>
                   <CopyButton text={inviteUrl} />
                 </div>
                 <button

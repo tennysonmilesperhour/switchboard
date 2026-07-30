@@ -54,8 +54,8 @@ export function NotificationPreferences({
         } else {
           setError(true);
           // Keep this section dirty so the save bar stays up for a retry.
-          throw new Error('Could not save notification preferences.');
         }
+        return result;
       },
       cancel: () => {
         setPrefs(baselineRef.current);

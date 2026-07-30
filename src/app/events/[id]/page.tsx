@@ -913,7 +913,13 @@ export default async function EventPage({
           <AddInvitees eventId={event.id} connections={addableConnections} />
         )}
 
-        {canManage && <HostControls event={event} pollDecided={poll?.phase === 'decided'} />}
+        {canManage && (
+          <HostControls
+            event={event}
+            pollDecided={poll?.phase === 'decided'}
+            isPrimaryHost={isHost}
+          />
+        )}
 
         {isHost && <CoHostManager eventId={event.id} cohosts={cohosts} />}
 

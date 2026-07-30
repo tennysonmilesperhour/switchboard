@@ -320,7 +320,7 @@ export function LoginForm({ next = '/', initialMode = 'signin' }: LoginFormProps
                 className="mt-1 size-4 accent-terracotta"
               />
               <span>
-                I agree to the{' '}
+                I confirm I am at least 18 years old and agree to the{' '}
                 <Link href="/terms" className="font-bold text-terracotta">Terms</Link>
                 ,{' '}
                 <Link href="/privacy" className="font-bold text-terracotta">Privacy Notice</Link>

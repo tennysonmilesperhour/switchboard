@@ -34,6 +34,16 @@ export default function CommunityPage() {
           and boundary-pushing are not.
         </p>
       </section>
+      <section className="mt-8 space-y-3 leading-relaxed text-ink-soft">
+        <h2 className="text-xl font-extrabold text-ink">Meet Up With Care</h2>
+        <p>
+          Choose an appropriate public or trusted place, share your plans with
+          someone you trust, and leave whenever something feels wrong. For
+          kid-inclusive plans, a parent or guardian stays responsible and
+          present. Never post a child’s name, age, school, contact details, or
+          live location.
+        </p>
+      </section>
       <div className="mt-10 flex flex-wrap gap-4 text-sm font-bold text-terracotta">
         <Link href="/terms">Terms</Link>
         <Link href="/privacy">Privacy</Link>
