@@ -32,6 +32,7 @@ import type { InviteMode, EventTheme } from '@/lib/types';
 import { EVENT_THEMES } from '@/lib/themes';
 import { ContactImportControls } from '@/components/ContactImportControls';
 import { resolveTimeZone } from '@/lib/client/time-zone';
+import { hasInviteDetails } from '@/lib/event-details';
 import {
   resolveContactMatches,
   type ContactCandidate,
@@ -633,7 +634,10 @@ export function EventWizard({
   const selectedFriendCount = invitees.filter((i) => i.profileId).length;
 
   const canNext = [
-    title.trim().length > 0 && !startsInPast && !endsBeforeStart,
+    title.trim().length > 0 &&
+      hasInviteDetails(locationName, description) &&
+      !startsInPast &&
+      !endsBeforeStart,
     true,
     invitees.length > 0,
     true,
@@ -857,7 +861,7 @@ export function EventWizard({
           </div>
           <div className="space-y-1.5">
             <label htmlFor="location" className={FIELD_LABEL}>
-              Where? <span className="font-normal text-ink-faint">(optional)</span>
+              Where?
             </label>
             <PlaceSearchInput
               id="location"
@@ -871,7 +875,7 @@ export function EventWizard({
           </div>
           <div className="space-y-1.5">
             <label htmlFor="description" className={FIELD_LABEL}>
-              Details <span className="font-normal text-ink-faint">(optional)</span>
+              Details
             </label>
             <textarea
               id="description" value={description} rows={3}
@@ -879,6 +883,16 @@ export function EventWizard({
               className={`${FIELD} resize-none`}
             />
           </div>
+          <p
+            className={`text-xs ${
+              hasInviteDetails(locationName, description)
+                ? 'text-ink-faint'
+                : 'font-semibold text-terracotta-deep'
+            }`}
+          >
+            Add at least a location or a short detail so people know what
+            they’re responding to.
+          </p>
           <div className="space-y-1.5">
             <label htmlFor="capacity" className={FIELD_LABEL}>
               How many spots? <span className="font-normal text-ink-faint">(leave blank for one-on-one)</span>

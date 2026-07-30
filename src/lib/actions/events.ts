@@ -29,6 +29,7 @@ import { parseInviteEntries, type ParsedInviteEntry } from '@/lib/invite-entry';
 import { isValidCoordinate } from '@/lib/geo';
 import { safeHttpUrl } from '@/lib/security';
 import { geocode } from '@/lib/server/geocode';
+import { hasInviteDetails } from '@/lib/event-details';
 
 export interface WizardInvitee {
   /** Profile id for members; null for guests. */
@@ -202,6 +203,11 @@ export async function createEvent(input: CreateEventInput): Promise<CreateEventR
 
   const title = input.title.trim();
   if (!title) return createEventError('Please give your plan a name before sending it.');
+  if (!hasInviteDetails(input.locationName, input.description)) {
+    return createEventError(
+      'Add a location or a short detail so invitees know what they’re answering.',
+    );
+  }
   if (input.invitees.length === 0) {
     return createEventError('Add at least one person to invite before sending.');
   }
