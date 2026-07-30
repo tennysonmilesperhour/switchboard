@@ -11,6 +11,7 @@
     "seed:test-profiles": "node --env-file-if-exists=.env.local scripts/seed-test-profiles.mjs",
     "seed:discovery-demo": "node --env-file-if-exists=.env.local scripts/seed-discovery-demo.mjs",
     "migrate:legacy-media": "node --env-file-if-exists=.env.local scripts/migrate-legacy-media.mjs",
+    "backfill:guest-invites": "node --env-file-if-exists=.env.local scripts/backfill-orphaned-guest-invites.mjs",
     "e2e": "playwright test"
   },
   "dependencies": {
@@ -36,6 +37,7 @@
     "eslint": "^9",
     "eslint-config-next": "16.2.12",
     "leaflet": "^1.9.4",
+    "postgres": "3.4.7",
     "tailwindcss": "^4",
     "typescript": "^5",
     "vitest": "^4.1.9"
