@@ -84,15 +84,19 @@ const KIND_TO_CATEGORY: Record<string, NotificationCategory> = {
   // Invitations & plans
   event_invite: 'plans',
   rsvp_accepted: 'plans',
+  rsvp_declined_note: 'plans',
   join_request: 'plans',
   join_approved: 'plans',
   event_updated: 'plans',
   event_cancelled: 'plans',
+  announcement: 'plans',
+  board_response: 'plans',
   // Event reminders
   reminder: 'reminders',
   // Comments & photos
   event_comment: 'messages',
   photo: 'messages',
+  room_message: 'messages',
   // Connections & matches
   connection_request: 'social',
   connection_accepted: 'social',

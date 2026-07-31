@@ -218,6 +218,11 @@ export function CascadeProgress({ invites, mode, eventId, editable }: CascadePro
                           {deliveryText}
                         </span>
                       )}
+                      {invite.status === 'declined' && invite.decline_message && (
+                        <span className="mt-1 block rounded-md bg-paper/70 px-2 py-1 text-xs italic text-ink-soft">
+                          “{invite.decline_message}”
+                        </span>
+                      )}
                     </span>
                     {canReWindow && (
                       <select

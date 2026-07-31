@@ -22,6 +22,13 @@ export interface RespondResult {
    * is coming — instead of ending at the confirmation card.
    */
   eventId?: string;
+  /** Nonfatal follow-up when the RSVP saved but account attachment did not. */
+  warning?: string;
+}
+
+function cleanDeclineMessage(value: string): string | null {
+  const cleaned = value.replace(/\s+/g, ' ').trim().slice(0, 280);
+  return cleaned || null;
 }
 
 type AnswerClient = ReturnType<typeof createAdminClient>;
@@ -68,6 +75,7 @@ export async function respondToInvite(
   accept: boolean,
   note: DeclineNote = null,
   answers: Record<string, string> = {},
+  declineMessage = '',
 ): Promise<RespondResult> {
   const auth = await requireUser();
   if (!auth.ok) return auth;
@@ -88,6 +96,18 @@ export async function respondToInvite(
     .single();
 
   if (invite) {
+    const message = !accept ? cleanDeclineMessage(declineMessage) : null;
+    if (!accept) {
+      const { error: messageError } = await supabase
+        .from('invites')
+        .update({ decline_message: message })
+        .eq('id', inviteId);
+      if (messageError) {
+        await reportOperationalError('invite-decline.message', messageError, {
+          eventId: invite.event_id,
+        });
+      }
+    }
     if (data === 'accepted') {
       // Only persist answers once accepted, and only for this event's questions.
       await saveInviteAnswers(supabase, inviteId, invite.event_id, answers);
@@ -112,6 +132,21 @@ export async function respondToInvite(
           kind: 'rsvp_accepted',
           title: 'Someone’s in 🎉',
           body: `Your invitation to ${event.title} was accepted.`,
+          url: `/events/${event.id}`,
+        });
+      }
+    } else if (data === 'declined' && message) {
+      const admin = createAdminClient();
+      const { data: event } = await admin
+        .from('events')
+        .select('id, title, host_id')
+        .eq('id', invite.event_id)
+        .maybeSingle();
+      if (event) {
+        await notifyUsers([event.host_id], {
+          kind: 'rsvp_declined_note',
+          title: 'A guest left a note',
+          body: `Someone declined ${event.title}: “${message}”`,
           url: `/events/${event.id}`,
         });
       }
@@ -405,6 +440,8 @@ export async function respondToGuestInvite(
   token: string,
   accept: boolean,
   answers: Record<string, string> = {},
+  note: DeclineNote = null,
+  declineMessage = '',
 ): Promise<RespondResult> {
   // Session first, then the budget: a signed-out visitor can't answer, and must
   // not be able to burn through the invited guest's rate-limit allowance trying.
@@ -450,6 +487,19 @@ export async function respondToGuestInvite(
     await saveInviteAnswers(admin, invite.id, invite.event_id, answers);
   }
 
+  const message = outcome === 'declined' ? cleanDeclineMessage(declineMessage) : null;
+  if (outcome === 'declined') {
+    const { error: noteError } = await admin
+      .from('invites')
+      .update({ decline_note: note, decline_message: message })
+      .eq('id', invite.id);
+    if (noteError) {
+      await reportOperationalError('guest-rsvp.decline-note', noteError, {
+        eventId: invite.event_id,
+      });
+    }
+  }
+
   // Bind the invite to the account that answered, mirroring what
   // `rsvp_via_share_token` does inline for the share link. Without this an
   // accepted guest is a row with `invitee_id = null`: invisible on /plans, in
@@ -488,6 +538,20 @@ export async function respondToGuestInvite(
         url: `/events/${event.id}`,
       });
     }
+  } else if (outcome === 'declined' && message) {
+    const { data: event } = await admin
+      .from('events')
+      .select('id, title, host_id')
+      .eq('id', invite.event_id)
+      .maybeSingle();
+    if (event) {
+      await notifyUsers([event.host_id], {
+        kind: 'rsvp_declined_note',
+        title: 'A guest left a note',
+        body: `${invite.guest_name ?? 'A guest'} declined ${event.title}: “${message}”`,
+        url: `/events/${event.id}`,
+      });
+    }
   }
 
   if (claimedEventId) {
@@ -505,5 +569,8 @@ export async function respondToGuestInvite(
     // the id after an RPC error would render a link to an RLS-gated page that
     // immediately bounces the responder back out.
     eventId: claimedEventId ?? undefined,
+    warning: claimError
+      ? 'Your RSVP was saved, but we could not add the plan to your account yet.'
+      : undefined,
   };
 }

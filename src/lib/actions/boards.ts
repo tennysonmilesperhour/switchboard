@@ -6,6 +6,8 @@ import { createClient } from '@/lib/supabase/server';
 import { requireUser, requireUserOrRedirect } from '@/lib/server/require-user';
 import { normalizeUsername } from '@/lib/auth-identity';
 import { boardJoinUrl } from '@/lib/links';
+import { createAdminClient } from '@/lib/supabase/admin';
+import { notifyUsers } from '@/lib/server/notify';
 
 function slugify(name: string): string {
   return name
@@ -158,7 +160,7 @@ export async function removeFromBoard(
 export async function addBoardPost(
   boardId: string,
   input: {
-    kind: 'notice' | 'event';
+    kind: 'notice' | 'event' | 'offer' | 'request';
     title: string;
     body: string;
     location: string;
@@ -186,6 +188,41 @@ export async function addBoardPost(
   if (error) return { ok: false, error: error.message };
 
   revalidatePath('/boards');
+  return { ok: true };
+}
+
+export async function respondToBoardPost(
+  postId: string,
+  slug: string,
+): Promise<{ ok: boolean; error?: string }> {
+  const auth = await requireUser();
+  if (!auth.ok) return auth;
+  const { error } = await auth.supabase.from('board_post_responses').insert({
+    post_id: postId,
+    responder_id: auth.user.id,
+  });
+  if (error?.code === '23505') return { ok: true };
+  if (error) return { ok: false, error: error.message };
+  const admin = createAdminClient();
+  const { data: post } = await admin.from('board_posts').select('author_id, title').eq('id', postId).maybeSingle();
+  if (post && post.author_id !== auth.user.id) {
+    await notifyUsers([post.author_id], {
+      kind: 'board_response',
+      title: 'A neighbor can help',
+      body: `Someone responded to “${post.title}”.`,
+      url: `/boards/${slug}`,
+    });
+  }
+  revalidatePath(`/boards/${slug}`);
+  return { ok: true };
+}
+
+export async function fulfillBoardPost(postId: string, slug: string): Promise<{ ok: boolean; error?: string }> {
+  const auth = await requireUser();
+  if (!auth.ok) return auth;
+  const { data, error } = await auth.supabase.from('board_posts').update({ fulfilled_at: new Date().toISOString(), fulfilled_by: auth.user.id }).eq('id', postId).eq('author_id', auth.user.id).select('id').maybeSingle();
+  if (error || !data) return { ok: false, error: 'Only the author can mark this complete.' };
+  revalidatePath(`/boards/${slug}`);
   return { ok: true };
 }
 

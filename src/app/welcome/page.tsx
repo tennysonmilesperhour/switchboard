@@ -8,34 +8,19 @@ export const metadata: Metadata = {
 
 const FEATURES = [
   {
-    emoji: '🪜',
-    title: 'Cascading Invites',
-    body: 'Invite people one at a time, in your order. If someone accepts, it stops. No group-text chaos, no one feels like a backup.',
-  },
-  {
-    emoji: '🗳️',
-    title: 'Anonymous Weighted Input',
-    body: 'Everyone ranks options privately - and says how strongly they feel. The best idea rises without anyone dominating.',
-  },
-  {
-    emoji: '◐',
-    title: 'Mutual Mode',
-    body: 'Quietly mark who you’d love to grab coffee with. If they pick you too, you both find out. If not, no one ever knows.',
-  },
-  {
-    emoji: '🟢',
-    title: 'Availability Signals',
-    body: 'One tap says "I’m around." Friends discover it naturally - no broadcast, no pressure, no explanation needed.',
-  },
-  {
-    emoji: '❋',
-    title: 'Living Rooms',
-    body: 'Conversations where the addresses, photos, tasks, and plans file themselves. Stop scrolling to find that one message.',
+    emoji: '📅',
+    title: 'Make a plan',
+    body: 'Invite people without a chaotic group text. Switchboard handles the asking, reminders, and details.',
   },
   {
     emoji: '✨',
-    title: 'Shared Moments',
-    body: 'Same airport, same layover, same taste in conversation? Switchboard notices - and only introduces you if you’re both curious.',
+    title: 'Find the mutual yes',
+    body: 'Share interest privately. Both people hear about it only when the feeling matches.',
+  },
+  {
+    emoji: '💬',
+    title: 'Keep everything together',
+    body: 'Each plan gets one Living Room for the conversation, address, photos, tasks, and shared costs.',
   },
 ] as const;
 

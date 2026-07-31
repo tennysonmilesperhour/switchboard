@@ -25,6 +25,27 @@ export interface ActionResult {
   error?: string;
 }
 
+/** Record explicit acceptance of the current 18+ terms for an existing user. */
+export async function acceptLatestTerms(formData: FormData): Promise<void> {
+  const { supabase, user } = await requireUserOrRedirect();
+  const nextPath = safeNextPath(String(formData.get('next') ?? ''), '/');
+  if (formData.get('terms_agreement') !== 'on') {
+    redirect(`/legal-update?error=agreement&next=${encodeURIComponent(nextPath)}`);
+  }
+
+  const { error } = await supabase
+    .from('profiles')
+    .update({
+      legal_terms_version: LEGAL_VERSION,
+      legal_terms_accepted_at: new Date().toISOString(),
+    })
+    .eq('id', user.id);
+  if (error) {
+    redirect(`/legal-update?error=save&next=${encodeURIComponent(nextPath)}`);
+  }
+  redirect(nextPath);
+}
+
 function parseLinks(raw: string): ProfileLink[] {
   let parsed: unknown;
   try {
