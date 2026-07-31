@@ -45,6 +45,10 @@ There is now one answer, and nothing may re-derive it:
   `status === 'inviting' || ...` at a call site.
 - **The invariant:** if the app offers a host any way to send a link, what the
   recipient opens must render the plan. `hostCanShare ⊆ canReadPlan`.
+- A plan whose date is still being polled (`deciding`) is both readable **and**
+  answerable — the unsettled date is a caveat shown above the buttons, not a
+  refusal. `ANSWERABLE_EVENT_STATUSES` and the tuple in `rsvp_via_share_token`
+  are the same set, in two languages, and the test proves it.
 - Adding an `EventStatus`, or changing who may answer, fails
   `src/lib/share-link.test.ts` until you decide what a recipient sees — it walks
   every status × kill-switch combination and cross-checks the status tuple

@@ -69,12 +69,21 @@ export interface ShareLinkSubject {
 /**
  * Event statuses that can take an answer through a share link.
  *
- * Mirrors the `status not in ('inviting', 'confirmed')` guard inside
- * `rsvp_via_share_token`. Kept in sync by a test that reads the migration —
- * a page that offers RSVP buttons the database will refuse is the same class of
- * broken link as one that never rendered.
+ * Mirrors the status guard inside `rsvp_via_share_token`. Kept in sync by a test
+ * that reads the migration — a page that offers RSVP buttons the database will
+ * refuse is the same class of broken link as one that never rendered.
+ *
+ * `deciding` is in this set: a plan whose date is still being polled can be
+ * answered. Someone who taps a link to a barbecue wants to say they're coming,
+ * and "we haven't settled Saturday vs Sunday" is not a reason to turn them away.
+ * They accept, and the accepted invite lets them into the plan to vote on the
+ * date they just committed to.
  */
-export const ANSWERABLE_EVENT_STATUSES: readonly EventStatus[] = ['inviting', 'confirmed'];
+export const ANSWERABLE_EVENT_STATUSES: readonly EventStatus[] = [
+  'deciding',
+  'inviting',
+  'confirmed',
+];
 
 /**
  * Classify a plan's share link. `null`/`undefined` means the token resolved to
@@ -125,7 +134,7 @@ export function canReadPlan(state: ShareLinkState): boolean {
 
 /** Can the recipient RSVP? Must match what `rsvp_via_share_token` will accept. */
 export function canAnswer(state: ShareLinkState): boolean {
-  return state === 'live';
+  return state === 'live' || state === 'deciding';
 }
 
 /**
@@ -162,6 +171,11 @@ export interface ShareLinkNotice {
  * Recipient-facing copy for a state, or `null` when there is nothing to say
  * because the link simply works.
  *
+ * Where this lands on the page follows from `canAnswer`: for a state that can't
+ * be answered it stands in for the buttons, and for one that can (`deciding`) it
+ * sits above them as a caveat — one copy source, so the two placements can never
+ * describe the plan differently.
+ *
  * `hostName` is woven in where it makes the message land better; a missing name
  * degrades to "The host" rather than an empty gap.
  */
@@ -190,10 +204,10 @@ export function shareLinkNotice(
       };
     case 'deciding':
       return {
-        heading: 'Still picking a date',
+        heading: 'The date isn’t set yet',
         body:
-          `${host} hasn’t locked in the date yet. Keep this link — the moment ` +
-          'it’s set, you can say yes right here.',
+          `${host} is still choosing between a few. Say you’re in anyway — ` +
+          'you’ll get the date the moment it lands, and you can help pick it.',
       };
     case 'cancelled':
       return {
@@ -218,9 +232,9 @@ export function hostShareGuidance(state: ShareLinkState): string | null {
       return null;
     case 'deciding':
       return (
-        'The date isn’t locked in yet, so anyone you send this to can see the ' +
-        'plan but can’t answer until you settle the date. The link keeps ' +
-        'working — no need to resend it.'
+        'The date isn’t settled yet, and the link works anyway: anyone you send ' +
+        'it to can see the plan and say they’re in. They’ll get the date once ' +
+        'you close the poll, so there’s no need to resend it.'
       );
     case 'off':
       return (

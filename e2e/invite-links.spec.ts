@@ -257,7 +257,7 @@ test.describe('invite link contract', () => {
     }
   });
 
-  test('a plan still deciding its date has a link that reads, not a dead end', async ({
+  test('a plan still deciding its date can be read AND answered', async ({
     page,
     browser,
   }) => {
@@ -280,16 +280,39 @@ test.describe('invite link contract', () => {
       await expect(stranger).not.toHaveURL(/\/(welcome|login)/);
       await expect(stranger.getByText('isn’t active')).toHaveCount(0);
 
-      // Answering is not open yet — and the recipient is told why, in terms of
-      // the plan, rather than being sent to create an account that would not
-      // have helped.
-      await expect(stranger.getByText('Still picking a date')).toBeVisible({
+      // The unsettled date is a caveat, shown before they answer…
+      await expect(stranger.getByText('The date isn’t set yet')).toBeVisible({
         timeout: 15_000,
       });
-      await expect(stranger.getByRole('button', { name: /I.?m in/ })).toHaveCount(0);
+
+      // …not a refusal. Answering is open on the same terms as any other plan:
+      // an account, and then the buttons.
       await expect(
         stranger.getByRole('heading', { name: 'Sign in to RSVP' }),
-      ).toHaveCount(0);
+      ).toBeVisible({ timeout: 15_000 });
+    });
+  });
+
+  test('a signed-in recipient can say I’m in before the date is settled', async ({
+    page,
+    browser,
+  }) => {
+    await login(page, 'e2ehost');
+    await createPlan(page, 'Decide then RSVP plan', { groupDecides: true });
+    const link = await readShareLink(page);
+
+    await asStranger(browser, async (recipient) => {
+      await login(recipient, 'e2eguest');
+      await recipient.goto(link);
+      await expect(
+        recipient.getByRole('heading', { name: 'Decide then RSVP plan' }),
+      ).toBeVisible({ timeout: 15_000 });
+
+      // The yes lands even though the plan has no date yet, and carries them to
+      // their own durable RSVP page like any other acceptance.
+      await recipient.getByRole('button', { name: /I.?m in/ }).click();
+      await recipient.waitForURL(/\/rsvp\/[0-9a-f-]{36}/, { timeout: 20_000 });
+      await expect(recipient.getByText(/You.?re in/)).toBeVisible({ timeout: 15_000 });
     });
   });
 

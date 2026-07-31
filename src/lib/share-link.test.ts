@@ -75,6 +75,22 @@ describe('shareLinkState', () => {
     // "this invite link isn't active" for as long as the poll ran.
     expect(shareLinkState({ status: 'deciding', share_link_active: true })).toBe('deciding');
   });
+
+  it('lets a plan still picking its date be answered, with a caveat', () => {
+    // Readable was only half the fix. Someone who taps a link to a barbecue
+    // wants to say they're coming; an unsettled date is a caveat to show them,
+    // not a reason to withhold the buttons.
+    expect(canAnswer('deciding')).toBe(true);
+    expect(canReadPlan('deciding')).toBe(true);
+    // …and the caveat is present, so the yes is an informed one.
+    expect(shareLinkNotice('deciding')?.heading).toBe('The date isn’t set yet');
+  });
+
+  it('still refuses an answer to a plan that is over, off, or unpublished', () => {
+    for (const state of ['missing', 'off', 'unpublished', 'cancelled', 'past'] as const) {
+      expect(canAnswer(state), state).toBe(false);
+    }
+  });
 });
 
 describe('the invariants that keep links working', () => {
@@ -115,6 +131,19 @@ describe('the invariants that keep links working', () => {
         expect(notice?.heading, state).toBeTruthy();
         expect(notice?.body, state).toBeTruthy();
       }
+    }
+  });
+
+  it('gives an answerable-but-incomplete state a caveat, not a refusal', () => {
+    // The page shows this copy ABOVE the buttons rather than instead of them, so
+    // for any state that is both answerable and noticed, the wording has to read
+    // as a heads-up. Nothing here may tell someone they cannot respond.
+    for (const state of ALL_STATES) {
+      const notice = shareLinkNotice(state);
+      if (!notice || !canAnswer(state)) continue;
+      expect(`${notice.heading} ${notice.body}`.toLowerCase(), state).not.toMatch(
+        /can’t answer|cannot answer|isn’t taking|nothing to answer/,
+      );
     }
   });
 

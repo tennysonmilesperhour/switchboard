@@ -150,11 +150,11 @@ export default async function SharedInvitePage({
   const zone = admin && event ? await resolveEventZone(admin, event) : null;
 
   // One classification, three decisions: whether the plan renders at all,
-  // whether the answer buttons appear, and what the recipient is told instead.
-  // A plan whose date is still being polled (status `deciding`) is READABLE —
-  // it used to fall into the same "isn't active" dead end as a switched-off
-  // link, which is how a host running a date poll had every recipient told
-  // their invitation was dead.
+  // whether the answer buttons appear, and what the recipient is told alongside
+  // them. A plan whose date is still being polled (status `deciding`) is both
+  // readable and answerable — it used to fall into the same "isn't active" dead
+  // end as a switched-off link, which is how a host running a date poll had
+  // every recipient told their invitation was dead.
   const state = shareLinkState(event);
   const readable = canReadPlan(state);
   const answerable = canAnswer(state);
@@ -228,31 +228,34 @@ export default async function SharedInvitePage({
                 dangerouslySetInnerHTML={{ __html: serializeJsonLd(jsonLd) }}
               />
             )}
-            {/* Readable but not answerable (the date is still being picked,
-                the plan is behind us, the host called it off): say which, where
-                the buttons would be. Never a sign-in gate — signing in would not
-                change the answer, and sending someone to create an account to
-                discover that is its own kind of broken link. */}
-            {!answerable ? (
-              notice && (
-                <div className="mt-8 rounded-card bg-cream px-4 py-3.5">
-                  <p className="text-sm font-bold text-ink">{notice.heading}</p>
-                  <p className="mt-1 text-sm leading-relaxed text-ink-soft">
-                    {notice.body}
-                  </p>
-                </div>
-              )
-            ) : user ? (
-              <ShareLinkRsvp
-                shareToken={token}
-                defaultName={viewerProfile?.display_name ?? ''}
-              />
-            ) : (
-              <RsvpSignInGate
-                next={eventSharePath(token)}
-                hostName={host?.display_name ?? undefined}
-              />
+            {/* One notice, two jobs, decided by whether the plan can be
+                answered. For a plan still picking its date it sits ABOVE the
+                buttons as a caveat — "I'm in" there is a yes to the plan rather
+                than to a time, and the date arrives later. For a plan that's
+                behind us or called off it stands IN for the buttons, and there
+                is deliberately no sign-in gate: signing in wouldn't change the
+                answer, and sending someone to make an account to discover that
+                is its own kind of broken link. */}
+            {notice && (
+              <div className="mt-8 rounded-card bg-cream px-4 py-3.5">
+                <p className="text-sm font-bold text-ink">{notice.heading}</p>
+                <p className="mt-1 text-sm leading-relaxed text-ink-soft">
+                  {notice.body}
+                </p>
+              </div>
             )}
+            {answerable &&
+              (user ? (
+                <ShareLinkRsvp
+                  shareToken={token}
+                  defaultName={viewerProfile?.display_name ?? ''}
+                />
+              ) : (
+                <RsvpSignInGate
+                  next={eventSharePath(token)}
+                  hostName={host?.display_name ?? undefined}
+                />
+              ))}
             <p className="text-xs text-ink-faint mt-10 leading-relaxed">
               Switchboard makes plans without pressure - invitations flow one
               person at a time, so nobody feels like a backup. If you can’t make
