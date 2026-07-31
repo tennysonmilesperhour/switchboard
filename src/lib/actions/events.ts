@@ -589,7 +589,7 @@ export async function addPeopleToEvent(
 export async function inviteConnectionNow(
   eventId: string,
   profileId: string,
-): Promise<{ ok: boolean; error?: string; name?: string; warning?: string }> {
+): Promise<ActionResult & { name?: string; warning?: string }> {
   const auth = await requireUser();
   if (!auth.ok) return auth;
   const { supabase, user } = auth;
@@ -679,8 +679,13 @@ export async function inviteConnectionNow(
     .select('id')
     .single<{ id: string }>();
   if (error || !inserted) {
-    await reportOperationalError('invite-connection-now', error, { eventId });
-    return { ok: false, error: 'Could not send that invite. Try again.' };
+    return reportAndFail(
+      'SB-INVITE-SEND',
+      'invite-connection-now',
+      error,
+      { eventId },
+      'Could not send that invite. Try again.',
+    );
   }
 
   let delivery: InvitationDeliverySummary | undefined;
