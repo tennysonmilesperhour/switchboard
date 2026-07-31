@@ -161,6 +161,95 @@ test.describe('authenticated surface', () => {
     await page.getByRole('button', { name: 'Absolutely love this' }).first().click();
   });
 
+  // ——— Reaching one person on a plan ———
+  //
+  // The two halves of "tap a profile, contact them": someone with no account,
+  // who can only be reached off-platform from what the host typed, and someone
+  // who has one, who gets the invitation in the app.
+
+  test('a host can email a guest invitee straight from the plan', async ({ page }) => {
+    await login(page, 'e2ehost');
+    await page.goto('/events/new');
+    await page.getByPlaceholder(TITLE).fill('Guest contact plan');
+
+    const submit = page.getByRole('button', {
+      name: /Send invitations|Create & start deciding/,
+    });
+    await reachWizardReview(page, async (step) => {
+      if (step === 3) {
+        await page.getByPlaceholder('Name (optional)').fill('Casey Guest');
+        await page.getByPlaceholder('@username, email, or phone').fill('casey@example.com');
+        await page.getByRole('button', { name: 'Add', exact: true }).click();
+        await expect(page.getByText('1 person selected')).toBeVisible({ timeout: 5_000 });
+      }
+    });
+    await expect(submit).toBeVisible({ timeout: 5_000 });
+    await submit.click();
+    await page.waitForURL(/\/events\/[0-9a-f-]{36}/, { timeout: 15_000 });
+
+    // Tap them in the invitation flow: their card opens with the address the
+    // host typed and a one-tap mail action.
+    await page.getByRole('button', { name: /Contact Casey Guest/ }).click();
+    await expect(page.getByText('casey@example.com').first()).toBeVisible({
+      timeout: 5_000,
+    });
+
+    const send = page.getByRole('link', { name: 'Email' });
+    await expect(send).toBeVisible();
+    const href = (await send.getAttribute('href')) ?? '';
+    expect(href.startsWith('mailto:casey%40example.com?')).toBe(true);
+    // The prefilled body carries a real, absolute link to the plan — the whole
+    // point of sending from here rather than from the phone's contact list.
+    expect(decodeURIComponent(href)).toMatch(/https?:\/\/[^\s]+\/(rsvp|i)\//);
+  });
+
+  test('a host invites a connection directly and it arrives in the app', async ({
+    browser,
+  }) => {
+    const hostCtx = await browser.newContext();
+    const host = await hostCtx.newPage();
+    await login(host, 'e2ehost');
+    await host.goto('/events/new');
+    await host.getByPlaceholder(TITLE).fill('Direct invite plan');
+
+    // Start the plan with a guest, so the seeded friend is still un-invited and
+    // therefore offered in the add-people panel.
+    const submit = host.getByRole('button', {
+      name: /Send invitations|Create & start deciding/,
+    });
+    await reachWizardReview(host, async (step) => {
+      if (step === 3) {
+        await host.getByPlaceholder('Name (optional)').fill('Casey Guest');
+        await host.getByPlaceholder('@username, email, or phone').fill('casey@example.com');
+        await host.getByRole('button', { name: 'Add', exact: true }).click();
+        await expect(host.getByText('1 person selected')).toBeVisible({ timeout: 5_000 });
+      }
+    });
+    await expect(submit).toBeVisible({ timeout: 5_000 });
+    await submit.click();
+    await host.waitForURL(/\/events\/[0-9a-f-]{36}/, { timeout: 15_000 });
+    const eventUrl = host.url();
+
+    // Tap the friend in "From your people" and ask them now, ahead of the line.
+    await host.getByRole('button', { name: /Open E2E Guest/ }).click();
+    await host.getByRole('button', { name: 'Send invite now' }).click();
+    await expect(host.getByText(/Invitation sent to E2E Guest/)).toBeVisible({
+      timeout: 15_000,
+    });
+
+    // It is a real, live invite: the friend can answer it without any link
+    // being sent to them.
+    const guestCtx = await browser.newContext();
+    const guest = await guestCtx.newPage();
+    await login(guest, 'e2eguest');
+    await guest.goto(eventUrl);
+    await guest.getByRole('button', { name: /I.?m in/ }).click();
+    await expect(guest.getByText(/You.?re in/)).toBeVisible({ timeout: 15_000 });
+
+    await hostCtx.close();
+    await guestCtx.close();
+  });
+
   // ——— Golden journey 3: mutual match between two users ———
   test('two users reach a mutual match', async ({ browser }) => {
     const aCtx = await browser.newContext();

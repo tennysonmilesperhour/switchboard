@@ -9,12 +9,13 @@ import { signMediaRef } from '@/lib/server/media';
 import { advanceEventCascade } from '@/lib/server/cascade-runner';
 import { AppShell } from '@/components/shell/AppShell';
 import { Card, SectionHeader } from '@/components/ui/Card';
-import { Avatar } from '@/components/ui/Avatar';
 import { PlanCard, planColor } from '@/components/ui/PlanCard';
 import { themeColor } from '@/lib/themes';
 import { CopyButton } from '@/components/ui/CopyButton';
 import { ShareButton } from '@/components/ui/ShareButton';
 import { CascadeProgress } from '@/components/events/CascadeProgress';
+import { AttendeeGrid } from '@/components/events/AttendeeGrid';
+import type { InviteePerson } from '@/components/events/InviteeSheet';
 import { HostCard, type HostCardData } from '@/components/events/HostCard';
 import { JoinRequests } from '@/components/events/JoinRequests';
 import { RsvpCard } from '@/components/events/RsvpCard';
@@ -35,10 +36,14 @@ import { threadGate, THREAD_PREVIEW_COUNT } from '@/lib/engine/thread';
 import { formatDateTime, formatDateTimeRange } from '@/lib/format';
 import { resolveEventZone } from '@/lib/server/event-zone';
 import { googleCalendarUrl } from '@/lib/calendar-links';
-import { looksLikeEmail } from '@/lib/server/email';
-import { eventShareUrl, guestRsvpUrl } from '@/lib/links';
+import { appOrigin, eventShareUrl, guestRsvpUrl } from '@/lib/links';
 import { hostCanShare, shareLinkState } from '@/lib/share-link';
-import { looksLikePhoneNumber } from '@/lib/phone';
+import { INVITE_STATUS_LABEL } from '@/lib/invite-status';
+import {
+  appInviteMessage,
+  looksLikeContactString,
+  planInviteMessage,
+} from '@/lib/invitee-contact';
 import type {
   EventQuestion,
   Invite,
@@ -186,6 +191,8 @@ export default async function EventPage({
   let hostInvites: Array<
     Invite & {
       invitee_name: string;
+      invitee_handle: string | null;
+      invitee_avatar_url: string | null;
       deliveries?: Array<{
         channel: 'in_app' | 'email' | 'sms';
         status: 'sent' | 'not_configured' | 'invalid_recipient' | 'failed';
@@ -197,7 +204,7 @@ export default async function EventPage({
   if (canManage) {
     const { data } = await admin
       .from('invites')
-      .select('*, invitee:profiles(display_name)')
+      .select('*, invitee:profiles(display_name, handle, avatar_url)')
       .eq('event_id', id)
       .order('position');
     hostInvites = (data ?? []).map((row) => {
@@ -205,6 +212,8 @@ export default async function EventPage({
       return {
         ...(row as Invite),
         invitee_name: profile?.display_name ?? row.guest_name ?? 'Guest',
+        invitee_handle: (profile?.handle as string | null) ?? null,
+        invitee_avatar_url: (profile?.avatar_url as string | null) ?? null,
       };
     });
 
@@ -254,7 +263,12 @@ export default async function EventPage({
   // Host's own connections, for one-tap adding to the flow (only needed while
   // the Add-people panel is shown). Anyone already on the invite list is
   // filtered out so the picker only offers new people.
-  const addableConnections: Array<{ id: string; name: string; handle: string }> = [];
+  const addableConnections: Array<{
+    id: string;
+    name: string;
+    handle: string;
+    avatarUrl: string | null;
+  }> = [];
   if (canManage && event.status === 'inviting') {
     const invitedIds = new Set(
       hostInvites
@@ -264,7 +278,7 @@ export default async function EventPage({
     const { data: connectionRows } = await supabase
       .from('connections')
       .select(
-        'requester_id, addressee_id, requester:profiles!connections_requester_id_fkey(id, display_name, handle), addressee:profiles!connections_addressee_id_fkey(id, display_name, handle)',
+        'requester_id, addressee_id, requester:profiles!connections_requester_id_fkey(id, display_name, handle, avatar_url), addressee:profiles!connections_addressee_id_fkey(id, display_name, handle, avatar_url)',
       )
       .eq('status', 'accepted')
       .or(`requester_id.eq.${user.id},addressee_id.eq.${user.id}`);
@@ -277,23 +291,46 @@ export default async function EventPage({
         id: other.id,
         name: other.display_name ?? 'Friend',
         handle: other.handle ?? '',
+        avatarUrl: other.avatar_url ?? null,
       });
     }
   }
 
   // Accepted attendees (respects visibility settings; admin read + TS check).
-  let attendees: Array<{ id: string; name: string }> = [];
+  // `id` is the profile id where there is one — the "give space" check below
+  // compares it against profile ids — with the invite id standing in for a
+  // guest who has no account. `inviteId` is what the contact card is keyed on.
+  let attendees: Array<{
+    id: string;
+    inviteId: string;
+    inviteeId: string | null;
+    name: string;
+    handle: string | null;
+    avatarUrl: string | null;
+    guestToken: string | null;
+    guestContact: string | null;
+    status: Invite['status'];
+  }> = [];
   if (canManage || event.show_accepted) {
     const { data } = await admin
       .from('invites')
-      .select('id, invitee_id, guest_name, invitee:profiles(display_name)')
+      .select(
+        'id, invitee_id, guest_name, guest_contact, guest_token, status, invitee:profiles(display_name, handle, avatar_url)',
+      )
       .eq('event_id', id)
       .eq('status', 'accepted');
     attendees = (data ?? []).map((row) => {
       const profile = Array.isArray(row.invitee) ? row.invitee[0] : row.invitee;
       return {
         id: row.invitee_id ?? row.id,
+        inviteId: row.id as string,
+        inviteeId: (row.invitee_id as string | null) ?? null,
         name: profile?.display_name ?? row.guest_name ?? 'Guest',
+        handle: (profile?.handle as string | null) ?? null,
+        avatarUrl: (profile?.avatar_url as string | null) ?? null,
+        guestToken: (row.guest_token as string | null) ?? null,
+        guestContact: (row.guest_contact as string | null) ?? null,
+        status: row.status as Invite['status'],
       };
     });
   }
@@ -479,10 +516,7 @@ export default async function EventPage({
           const rawName = i.guest_name?.trim() ?? '';
           const contact = i.guest_contact?.trim() || null;
           const nameIsContact =
-            !rawName ||
-            rawName === contact ||
-            looksLikeEmail(rawName) ||
-            looksLikePhoneNumber(rawName);
+            !rawName || rawName === contact || looksLikeContactString(rawName);
           return {
             name: nameIsContact ? 'Guest' : rawName,
             contact,
@@ -493,6 +527,142 @@ export default async function EventPage({
           };
         })
     : [];
+
+  // ————————————————————— contact cards —————————————————————
+  // Tapping anyone on this plan opens their card, and for a host or co-host
+  // that card carries the way to reach them. The only contact detail this page
+  // will hand to the browser is `invites.guest_contact` — the email or phone
+  // the host themselves typed when they added that person, which is also what
+  // the cascade already texts and emails. An account holder's own
+  // `contact_email`/`contact_phone` are deliberately not here: they are
+  // withheld from the API by column grant (see
+  // `20260710120000_lock_sensitive_profile_columns.sql`), and `contact_public`
+  // promises them to a QR card someone chooses to scan, not to every host of
+  // every plan they were invited to.
+  //
+  // Anyone who isn't managing the plan (an invitee reading "Who's in" on a plan
+  // with `show_accepted`) gets identity fields only. That check lives in
+  // `inviteePerson` rather than at each render site, because these objects
+  // become props of a client component and therefore ship to the browser
+  // whether or not the UI draws them.
+  let hostName: string | null = null;
+  if (canManage) {
+    const { data } = await admin
+      .from('profiles')
+      .select('display_name')
+      .eq('id', event.host_id)
+      .maybeSingle<{ display_name: string | null }>();
+    hostName = data?.display_name ?? null;
+  }
+  const planWhen = formatDateTimeRange(event.starts_at, event.ends_at, eventZone);
+  // Narrowed once, outside the closure below: TypeScript drops the `!event`
+  // redirect's narrowing at a function boundary.
+  const plan = event;
+
+  function inviteePerson(input: {
+    inviteId: string;
+    inviteeId: string | null;
+    name: string;
+    handle: string | null;
+    avatarUrl: string | null;
+    guestToken: string | null;
+    guestContact: string | null;
+    status: Invite['status'];
+  }): InviteePerson {
+    const isGuest = !input.inviteeId;
+    if (!canManage) {
+      // Identity only. Built first so a viewer who will never be shown a link
+      // doesn't go anywhere near `appOrigin()`, which throws in production on a
+      // misconfigured origin — that alarm belongs to the people sending links.
+      return {
+        id: input.inviteId,
+        name: input.name,
+        handle: input.handle,
+        avatarUrl: input.avatarUrl,
+        seed: input.inviteeId ?? input.inviteId,
+        isGuest,
+        statusLabel: INVITE_STATUS_LABEL[input.status],
+        contact: null,
+        inviteUrl: null,
+        messages: null,
+      };
+    }
+
+    // Which link this person gets sent.
+    //
+    // Their own `/rsvp/<guest_token>` while it is theirs to answer — the same
+    // rule the Guest links section below uses, including why it is *not*
+    // offered once an invite belongs to an account: holding that token is the
+    // authorization to answer the invite (`respond_to_guest_invite`), so it
+    // isn't something to pass around on behalf of someone who has their own
+    // way in. Otherwise the plan's public link, and only when share-link.ts
+    // says the host may hand it out at all — the app must never offer a way to
+    // send a link its own recipient page would reject.
+    const personalUrl =
+      isGuest && input.guestToken && input.status === 'sent'
+        ? guestRsvpUrl(input.guestToken)
+        : null;
+    const inviteUrl =
+      personalUrl ??
+      (hostCanShare(shareState) ? eventShareUrl(plan.share_token) : null);
+
+    return {
+      id: input.inviteId,
+      name: input.name,
+      handle: input.handle,
+      avatarUrl: input.avatarUrl,
+      // Match the seed the list rows use, so a face doesn't change colour
+      // between the row and the card it opens.
+      seed: input.inviteeId ?? input.inviteId,
+      isGuest,
+      statusLabel: INVITE_STATUS_LABEL[input.status],
+      contact: input.guestContact?.trim() || null,
+      inviteUrl,
+      messages: {
+        plan: planInviteMessage({
+          eventTitle: plan.title,
+          when: planWhen,
+          where: plan.location_name,
+          hostName,
+          inviteUrl,
+        }),
+        app: appInviteMessage({
+          appUrl: appOrigin(),
+          eventTitle: plan.title,
+          inviteUrl,
+        }),
+      },
+    };
+  }
+
+  const inviteeCards: Record<string, InviteePerson> = Object.fromEntries(
+    hostInvites.map((invite) => [
+      invite.id,
+      inviteePerson({
+        inviteId: invite.id,
+        inviteeId: invite.invitee_id,
+        name: invite.invitee_name,
+        handle: invite.invitee_handle,
+        avatarUrl: invite.invitee_avatar_url,
+        guestToken: invite.guest_token,
+        guestContact: invite.guest_contact,
+        status: invite.status,
+      }),
+    ]),
+  );
+
+  const attendeeCards: InviteePerson[] = attendees.map((attendee) =>
+    inviteePerson({
+      inviteId: attendee.inviteId,
+      inviteeId: attendee.inviteeId,
+      name: attendee.name,
+      handle: attendee.handle,
+      avatarUrl: attendee.avatarUrl,
+      guestToken: attendee.guestToken,
+      guestContact: attendee.guestContact,
+      status: attendee.status,
+    }),
+  );
 
   const statusLabel: Record<SwitchboardEvent['status'], string> = {
     draft: 'Draft',
@@ -583,7 +753,10 @@ export default async function EventPage({
             status={statusLabel[event.status]}
             when={formatDateTimeRange(event.starts_at, event.ends_at, eventZone)}
             where={event.location_name ?? undefined}
-            attendees={attendees.map((attendee) => ({ name: attendee.name }))}
+            attendees={attendees.map((attendee) => ({
+              name: attendee.name,
+              src: attendee.avatarUrl,
+            }))}
             attendeesLabel={
               attendees.length > 0
                 ? `${attendees.length}${event.capacity ? ` of ${event.capacity}` : ''} going`
@@ -840,16 +1013,7 @@ export default async function EventPage({
               title="Who’s in"
               hint={`${attendees.length}${event.capacity ? ` of ${event.capacity}` : ''} so far`}
             />
-            <div className="flex flex-wrap gap-3">
-              {attendees.map((attendee) => (
-                <div key={attendee.id} className="flex flex-col items-center gap-1 w-16">
-                  <Avatar name={attendee.name} seed={attendee.id} size="md" ring />
-                  <span className="text-xs font-semibold text-ink-soft truncate w-full text-center">
-                    {attendee.name.split(' ')[0]}
-                  </span>
-                </div>
-              ))}
-            </div>
+            <AttendeeGrid people={attendeeCards} />
           </section>
         )}
 
@@ -879,6 +1043,7 @@ export default async function EventPage({
               mode={event.invite_mode}
               eventId={event.id}
               editable={canManage && event.status === 'inviting'}
+              people={inviteeCards}
             />
           </section>
         )}

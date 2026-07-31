@@ -222,6 +222,43 @@ the public buckets. When adding a new gated-media surface, upload to
 `media-private` and sign at the (server) render site — never store or render a
 public URL for gated content.
 
+## Contact details on a plan (the invitee card)
+
+Tapping someone on an event opens their card, and for a host or co-host that
+card can text or email them (`src/components/events/InviteeSheet.tsx`). There is
+exactly one source for what it shows, and it is not the profile:
+
+- **`invites.guest_contact` only.** That value is the email or phone *the host
+  themselves entered* when they added the person — the same string the cascade
+  already sends the invitation to, and the same one the guest-list CSV exports.
+  Showing it back to the host reveals nothing they did not provide.
+- **An account holder's `contact_email` / `contact_phone` are never on this
+  surface.** They are withheld from the API by column grant
+  (`20260710120000_lock_sensitive_profile_columns.sql`) and reachable only by
+  their owner through `my_private_profile()`. `contact_public` is *not* a
+  licence to widen this: its promise to the user is "put these on the QR /
+  contact card people scan", not "show them to every host of every plan I was
+  invited to". Honouring an opt-in more broadly than it was worded is the same
+  bug as ignoring it.
+- **The gate is on the server, in one place.** `inviteePerson` in
+  `src/app/events/[id]/page.tsx` returns identity fields and nothing else unless
+  `canManage`. It has to be there rather than in the component, because these
+  objects are props of a client component and ship to the browser whether or not
+  the UI draws them.
+- **Addresses are validated before they reach a URL.** `classifyContact`
+  (`src/lib/invitee-contact.ts`) normalises a phone to E.164 and requires
+  `isEmail` for an address, so neither can carry a `?`, `&`, or newline into the
+  `sms:`/`mailto:` it is interpolated into; everything else in the link is
+  `encodeURIComponent`d (§6). Covered by `invitee-contact.test.ts`.
+
+A direct invite (`inviteConnectionNow`) writes with the service-role client and
+so re-authorizes twice (§5): the caller must manage the event, and must have an
+accepted connection to the target read through *their own* RLS client, with
+`are_blocked` consulted for a block that outlived its connection row.
+
+Litmus test: *is any contact detail on this page something the viewer did not
+themselves supply?*
+
 ## Live location (opt-in presence)
 
 Live location (`live_locations`, `find_nearby_people`) is the most sensitive PII

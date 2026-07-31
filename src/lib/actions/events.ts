@@ -8,9 +8,11 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import { isEventManager } from '@/lib/server/authz';
 import {
   advanceEventCascade,
+  deliverInviteNow,
   notifyCurrentInviteWave,
   type InvitationDeliverySummary,
 } from '@/lib/server/cascade-runner';
+import { getRelationship } from '@/lib/server/relationship';
 import { notifyUsers } from '@/lib/server/notify';
 import { formatDateTime } from '@/lib/format';
 import { capture } from '@/lib/analytics/server';
@@ -539,6 +541,139 @@ export async function addPeopleToEvent(
     skipped,
     warning: deliveryWarning(delivery),
   };
+}
+
+/**
+ * Invite one of your connections to a live plan, and send it to them now.
+ *
+ * `addPeopleToEvent` puts someone at the back of the cascade, where they wait
+ * for their turn — right for filling out a plan, wrong for the moment a host is
+ * looking at a specific person and wants to ask *them*. This sends immediately:
+ * the invite is written `sent`, and it lands in their notifications (and push,
+ * if they've allowed it) through the same delivery path the cascade uses, so a
+ * hand-sent invitation is indistinguishable from a cascaded one once it
+ * arrives.
+ *
+ * Jumping the line is safe because a live invite is not a claim on a seat:
+ * capacity is enforced when someone *accepts* (`respond_to_invite`, under the
+ * event row lock). It is refused on a full plan anyway, since the next cascade
+ * tick would cancel it straight back and leave the host wondering why nothing
+ * happened.
+ *
+ * Two gates, both server-side: the caller must manage this plan, and must
+ * already be connected to the person (docs/SECURITY.md §§4-5). The connection
+ * is read through the caller's own RLS client — `connections_select` is
+ * participants-only, so a forged profile id resolves to "not connected" rather
+ * than to somebody else's relationship.
+ */
+export async function inviteConnectionNow(
+  eventId: string,
+  profileId: string,
+): Promise<{ ok: boolean; error?: string; name?: string; warning?: string }> {
+  const auth = await requireUser();
+  if (!auth.ok) return auth;
+  const { supabase, user } = auth;
+  if (!(await isEventManager(user.id, eventId))) {
+    return { ok: false, error: 'Only the host can invite people to this plan.' };
+  }
+  if (profileId === user.id) return { ok: false, error: 'That’s you.' };
+
+  const relationship = await getRelationship(supabase, user.id, profileId);
+  if (relationship.status !== 'accepted') {
+    return {
+      ok: false,
+      error: 'You can only send a direct invite to someone you’re connected to.',
+    };
+  }
+  // A block that was placed without tearing down the connection row would
+  // otherwise slip through the check above.
+  const { data: blocked } = await supabase.rpc('are_blocked', {
+    a: user.id,
+    b: profileId,
+  });
+  if (blocked) return { ok: false, error: 'You can’t invite this person.' };
+
+  const admin = createAdminClient();
+  const { data: event } = await admin
+    .from('events')
+    .select('id, status, capacity, invite_mode, starts_at')
+    .eq('id', eventId)
+    .maybeSingle<{
+      id: string;
+      status: string;
+      capacity: number | null;
+      invite_mode: InviteMode;
+      starts_at: string | null;
+    }>();
+  if (!event) return { ok: false, error: 'Plan not found.' };
+  if (event.status !== 'inviting') {
+    return { ok: false, error: 'This plan isn’t sending invitations right now.' };
+  }
+
+  const { data: profile } = await admin
+    .from('profiles')
+    .select('display_name')
+    .eq('id', profileId)
+    .maybeSingle<{ display_name: string | null }>();
+  const name = profile?.display_name?.trim() || 'They';
+
+  const { data: existing } = await admin
+    .from('invites')
+    .select('invitee_id, position, group_stage, status')
+    .eq('event_id', eventId);
+  const rows = existing ?? [];
+  if (rows.some((row) => row.invitee_id === profileId)) {
+    return { ok: false, error: `${name} is already on this plan.` };
+  }
+
+  // Same reasoning as resendInvite: don't send into a full plan.
+  const accepted = rows.filter((row) => row.status === 'accepted').length;
+  const cap =
+    event.capacity ?? (event.invite_mode === 'individual' ? 1 : null);
+  if (cap !== null && accepted >= cap) {
+    return { ok: false, error: 'This plan is already full.' };
+  }
+
+  const position = rows.reduce((max, row) => Math.max(max, row.position), -1) + 1;
+  const groupStage =
+    event.invite_mode === 'group'
+      ? rows.reduce((max, row) => Math.max(max, row.group_stage), -1) + 1
+      : 0;
+
+  const { data: inserted, error } = await admin
+    .from('invites')
+    .insert({
+      event_id: eventId,
+      invitee_id: profileId,
+      position,
+      group_stage: groupStage,
+      // Same window rule the wizard and the add-people panel use, so a
+      // hand-sent invite expires on the plan's schedule rather than the
+      // table's 24h default.
+      window_minutes: event.starts_at
+        ? suggestWindow(new Date(event.starts_at), new Date()).windowMinutes
+        : 1440,
+      status: 'sent',
+      sent_at: new Date().toISOString(),
+    })
+    .select('id')
+    .single<{ id: string }>();
+  if (error || !inserted) {
+    await reportOperationalError('invite-connection-now', error, { eventId });
+    return { ok: false, error: 'Could not send that invite. Try again.' };
+  }
+
+  let delivery: InvitationDeliverySummary | undefined;
+  try {
+    delivery = await deliverInviteNow(eventId, inserted.id);
+  } catch (deliveryError) {
+    await reportOperationalError('invite-connection-deliver', deliveryError, {
+      eventId,
+    });
+  }
+
+  revalidatePath(`/events/${eventId}`);
+  return { ok: true, name, warning: deliveryWarning(delivery) };
 }
 
 /**
