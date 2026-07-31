@@ -1,16 +1,29 @@
 'use server';
 
+import type { ActionResult } from '@/lib/errors';
+
 import { revalidatePath } from 'next/cache';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { requireUser } from '@/lib/server/require-user';
 import { extractItems } from '@/lib/ai/extract';
 import { isOwnPublicStorageUrl } from '@/lib/server/media';
+import { notifyRoomActivity } from '@/lib/server/notify';
+
+async function notifyRoom(roomId: string, senderId: string): Promise<void> {
+  const admin = createAdminClient();
+  const { data: room } = await admin
+    .from('rooms')
+    .select('title')
+    .eq('id', roomId)
+    .maybeSingle();
+  if (room) await notifyRoomActivity(roomId, room.title, senderId);
+}
 
 export async function sendMessage(
   roomId: string,
   body: string,
-): Promise<{ ok: boolean; error?: string }> {
+): Promise<ActionResult> {
   const trimmed = body.trim();
   if (!trimmed) return { ok: false, error: 'Empty message' };
 
@@ -24,6 +37,10 @@ export async function sendMessage(
     .select('id')
     .single();
   if (error) return { ok: false, error: error.message };
+
+  notifyRoom(roomId, user.id).catch((notifyError) =>
+    console.error('Room notification failed', notifyError),
+  );
 
   // Quietly file useful information into the room. Best-effort.
   try {
@@ -53,7 +70,7 @@ export async function sendPhotoMessage(
   roomId: string,
   imageUrl: string,
   caption?: string,
-): Promise<{ ok: boolean; error?: string }> {
+): Promise<ActionResult> {
   const auth = await requireUser();
   if (!auth.ok) return auth;
   const { supabase, user } = auth;
@@ -78,6 +95,10 @@ export async function sendPhotoMessage(
     .select('id')
     .single();
   if (error) return { ok: false, error: error.message };
+
+  notifyRoom(roomId, user.id).catch((notifyError) =>
+    console.error('Room notification failed', notifyError),
+  );
 
   // File it into the Photos tab. Best-effort, mirrors the auto-filing path —
   // membership was already proven by the message insert above.
@@ -108,3 +129,13 @@ export async function toggleTask(
   revalidatePath(`/rooms/${roomId}`);
 }
 
+export async function markRoomRead(roomId: string): Promise<void> {
+  const auth = await requireUser();
+  if (!auth.ok) return;
+  await auth.supabase
+    .from('room_members')
+    .update({ last_read_at: new Date().toISOString() })
+    .eq('room_id', roomId)
+    .eq('member_id', auth.user.id);
+  revalidatePath('/rooms');
+}

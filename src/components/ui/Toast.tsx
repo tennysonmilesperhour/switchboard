@@ -1,5 +1,6 @@
 'use client';
 
+import { errorRef, type ErrorCode } from '@/lib/errors';
 import {
   createContext,
   useCallback,
@@ -16,11 +17,20 @@ interface Toast {
   id: number;
   message: string;
   tone: ToastTone;
+  /** Rendered after the message, quietly, when the caller has one. */
+  code?: ErrorCode | null;
 }
 
 interface ToastApi {
-  /** Surface a failure to the user (the common case for swallowed errors). */
-  error: (message: string) => void;
+  /**
+   * Surface a failure to the user (the common case for swallowed errors).
+   *
+   * Pass the `code` from the action result whenever there is one. A toast is
+   * the most screenshot-hostile surface in the app — it disappears in five
+   * seconds — so the code has to be in the same glance as the message, not
+   * behind anything.
+   */
+  error: (message: string, code?: ErrorCode | null) => void;
   /** Subtle confirmation that something worked. */
   success: (message: string) => void;
   info: (message: string) => void;
@@ -37,14 +47,17 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
     setToasts((current) => current.filter((t) => t.id !== id));
   }, []);
 
-  const push = useCallback((message: string, tone: ToastTone) => {
-    const id = nextId.current++;
-    setToasts((current) => [...current, { id, message, tone }]);
-  }, []);
+  const push = useCallback(
+    (message: string, tone: ToastTone, code?: ErrorCode | null) => {
+      const id = nextId.current++;
+      setToasts((current) => [...current, { id, message, tone, code }]);
+    },
+    [],
+  );
 
   const api = useMemo<ToastApi>(
     () => ({
-      error: (m) => push(m, 'error'),
+      error: (m, code) => push(m, 'error', code),
       success: (m) => push(m, 'success'),
       info: (m) => push(m, 'info'),
     }),
@@ -86,6 +99,11 @@ function ToastItem({ toast, onDone }: { toast: Toast; onDone: () => void }) {
       className={`animate-rise pointer-events-auto max-w-sm rounded-btn px-4 py-3 text-sm font-semibold shadow-float ${TONES[toast.tone]}`}
     >
       {toast.message}
+      {toast.code && (
+        <span className="ml-1.5 font-mono text-[11px] uppercase tracking-wide opacity-70">
+          {errorRef(toast.code)}
+        </span>
+      )}
     </button>
   );
 }
@@ -99,7 +117,7 @@ export function useToast(): ToastApi {
   const ctx = useContext(ToastContext);
   if (ctx) return ctx;
   return {
-    error: (m) => console.error('[toast:error]', m),
+    error: (m, code) => console.error('[toast:error]', code ?? '', m),
     success: (m) => console.info('[toast:success]', m),
     info: (m) => console.info('[toast:info]', m),
   };

@@ -84,10 +84,13 @@ const KIND_TO_CATEGORY: Record<string, NotificationCategory> = {
   // Invitations & plans
   event_invite: 'plans',
   rsvp_accepted: 'plans',
+  rsvp_declined_note: 'plans',
   join_request: 'plans',
   join_approved: 'plans',
   event_updated: 'plans',
   event_cancelled: 'plans',
+  announcement: 'plans',
+  board_response: 'plans',
   // A plan whose date was still being voted on now has one. Goes to everyone
   // who already said yes through the share link, so it must honour notify_plans
   // like every other plan update rather than falling through uncategorised.
@@ -97,6 +100,7 @@ const KIND_TO_CATEGORY: Record<string, NotificationCategory> = {
   // Comments & photos
   event_comment: 'messages',
   photo: 'messages',
+  room_message: 'messages',
   // Connections & matches
   connection_request: 'social',
   connection_accepted: 'social',

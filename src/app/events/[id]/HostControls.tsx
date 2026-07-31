@@ -77,7 +77,7 @@ export function HostControls({ event, pollDecided, isPrimaryHost }: HostControls
     startTransition(async () => {
       const result = await deleteEventPermanently(event.id);
       if (!result.ok) {
-        toast.error(result.error ?? 'Could not delete this plan.');
+        toast.error(result.error ?? 'Could not delete this plan.', result.code);
         return;
       }
       toast.success('Plan permanently deleted.');

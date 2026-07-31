@@ -8,7 +8,12 @@ import { Button } from '@/components/ui/Button';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { useToast } from '@/components/ui/Toast';
 import { useConfirm } from '@/components/ui/ConfirmDialog';
-import { sendMessage, sendPhotoMessage, toggleTask } from '@/lib/actions/rooms';
+import {
+  markRoomRead,
+  sendMessage,
+  sendPhotoMessage,
+  toggleTask,
+} from '@/lib/actions/rooms';
 import { addExpense, deleteExpense } from '@/lib/actions/expenses';
 import { uploadImage } from '@/lib/client/upload-image';
 import { formatRelative } from '@/lib/format';
@@ -94,6 +99,10 @@ export function RoomClient({
   const toast = useToast();
   const confirm = useConfirm();
 
+  useEffect(() => {
+    markRoomRead(roomId).catch(() => undefined);
+  }, [roomId]);
+
   async function onPickPhoto(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     e.target.value = ''; // allow re-picking the same file
@@ -118,7 +127,7 @@ export function RoomClient({
       const result = await sendPhotoMessage(roomId, url);
       if (!result.ok) {
         setMessages((current) => current.filter((m) => m.id !== optimistic.id));
-        toast.error(result.error ?? 'Could not send the photo.');
+        toast.error(result.error ?? 'Could not send the photo.', result.code);
       } else {
         router.refresh(); // pick up the filed Photos-tab item
       }

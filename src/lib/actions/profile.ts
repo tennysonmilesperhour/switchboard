@@ -1,5 +1,7 @@
 'use server';
 
+import type { ErrorCode } from '@/lib/errors';
+
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import { createClient } from '@/lib/supabase/server';
@@ -23,6 +25,31 @@ const MAX_SOCIALS = 15;
 export interface ActionResult {
   ok: boolean;
   error?: string;
+  /** Stable failure code from `@/lib/errors`, shown beside the message. */
+  code?: ErrorCode;
+  /** The next step, when the reader has one. */
+  fix?: string | null;
+}
+
+/** Record explicit acceptance of the current 18+ terms for an existing user. */
+export async function acceptLatestTerms(formData: FormData): Promise<void> {
+  const { supabase, user } = await requireUserOrRedirect();
+  const nextPath = safeNextPath(String(formData.get('next') ?? ''), '/');
+  if (formData.get('terms_agreement') !== 'on') {
+    redirect(`/legal-update?error=agreement&next=${encodeURIComponent(nextPath)}`);
+  }
+
+  const { error } = await supabase
+    .from('profiles')
+    .update({
+      legal_terms_version: LEGAL_VERSION,
+      legal_terms_accepted_at: new Date().toISOString(),
+    })
+    .eq('id', user.id);
+  if (error) {
+    redirect(`/legal-update?error=save&next=${encodeURIComponent(nextPath)}`);
+  }
+  redirect(nextPath);
 }
 
 function parseLinks(raw: string): ProfileLink[] {

@@ -23,7 +23,8 @@ import {
   nextOccurrenceAfter,
   normalizeCustomInterval,
 } from '@/lib/engine/recurrence';
-import { reportOperationalError } from '@/lib/server/observability';
+import { reportAndFail, reportOperationalError } from '@/lib/server/observability';
+import type { ActionResult, ErrorCode } from '@/lib/errors';
 import { looksLikeEmail, sendEmails } from '@/lib/server/email';
 import { looksLikePhoneNumber, sendSmsMessages } from '@/lib/server/sms';
 import { normalizePhoneNumber } from '@/lib/phone';
@@ -94,6 +95,10 @@ export interface CreateEventResult {
   ok: boolean;
   eventId?: string;
   error?: string;
+  /** Stable failure code from `@/lib/errors`, shown beside the message. */
+  code?: ErrorCode;
+  /** The next step, when the reader has one. */
+  fix?: string | null;
   delivery?: InvitationDeliverySummary;
   warning?: string;
 }
@@ -251,10 +256,13 @@ export async function createEvent(input: CreateEventInput): Promise<CreateEventR
     p_input: { ...input, title, wishlistUrl, coverUrl, invitees },
   });
   if (error || typeof eventId !== 'string') {
-    await reportOperationalError('event-create', error ?? 'Missing event id', {
-      userId: user.id,
-    });
-    return createEventError('Something went wrong publishing your plan. Nothing was saved.');
+    return reportAndFail(
+      'SB-PLAN-CREATE',
+      'event-create',
+      error ?? 'Missing event id',
+      { userId: user.id },
+      'Something went wrong publishing your plan. Nothing was saved.',
+    );
   }
 
   let delivery: InvitationDeliverySummary | undefined;
@@ -285,6 +293,10 @@ export async function createEvent(input: CreateEventInput): Promise<CreateEventR
 export interface AddPeopleResult {
   ok: boolean;
   error?: string;
+  /** Stable failure code from `@/lib/errors`, shown beside the message. */
+  code?: ErrorCode;
+  /** The next step, when the reader has one. */
+  fix?: string | null;
   /** How many new invitees were appended to the cascade. */
   added?: number;
   /** Entries that couldn't be added, each with a short reason. */
@@ -521,8 +533,16 @@ export async function addPeopleToEvent(
 
   const { error } = await admin.from('invites').insert(toInsert);
   if (error) {
-    await reportOperationalError('add-people', error, { eventId });
-    return { ok: false, error: 'Could not add people. Try again.', skipped };
+    return {
+      ...(await reportAndFail(
+        'SB-INVITE-SEND',
+        'add-people',
+        error,
+        { eventId },
+        'Could not add people. Try again.',
+      )),
+      skipped,
+    };
   }
 
   // Send immediately if the cascade is ready for them (e.g. individual mode
@@ -684,7 +704,7 @@ export async function inviteConnectionNow(
 export async function removeInvite(
   eventId: string,
   inviteId: string,
-): Promise<{ ok: boolean; error?: string }> {
+): Promise<ActionResult> {
   const auth = await requireUser();
   if (!auth.ok) return auth;
   const { user } = auth;
@@ -724,7 +744,7 @@ export async function removeInvite(
 export async function resendInvite(
   eventId: string,
   inviteId: string,
-): Promise<{ ok: boolean; error?: string; warning?: string }> {
+): Promise<ActionResult & { warning?: string }> {
   const auth = await requireUser();
   if (!auth.ok) return auth;
   const { user } = auth;
@@ -810,7 +830,7 @@ export async function moveQueuedInvite(
   eventId: string,
   inviteId: string,
   up: boolean,
-): Promise<{ ok: boolean; error?: string }> {
+): Promise<ActionResult> {
   const auth = await requireUser();
   if (!auth.ok) return auth;
   const { supabase, user } = auth;
@@ -833,7 +853,7 @@ export async function setInviteWindow(
   eventId: string,
   inviteId: string,
   minutes: number,
-): Promise<{ ok: boolean; error?: string }> {
+): Promise<ActionResult> {
   const auth = await requireUser();
   if (!auth.ok) return auth;
   const { supabase, user } = auth;
@@ -852,7 +872,7 @@ export async function setInviteWindow(
 export async function updateEventDetails(
   eventId: string,
   input: UpdateEventInput,
-): Promise<{ ok: boolean; error?: string }> {
+): Promise<ActionResult> {
   const auth = await requireUser();
   if (!auth.ok) return auth;
   const { user } = auth;
@@ -895,8 +915,13 @@ export async function updateEventDetails(
     })
     .eq('id', eventId);
   if (error) {
-    await reportOperationalError('event-update', error, { eventId });
-    return { ok: false, error: 'Could not save your changes. Try again.' };
+    return reportAndFail(
+      'SB-PLAN-SAVE',
+      'event-update',
+      error,
+      { eventId },
+      'Could not save your changes. Try again.',
+    );
   }
 
   // Notify accepted guests only when the logistics they'd act on actually change.
@@ -941,7 +966,7 @@ export async function updateEventDetails(
 export async function setEventInviteLink(
   eventId: string,
   enabled: boolean,
-): Promise<{ ok: boolean; error?: string }> {
+): Promise<ActionResult> {
   const auth = await requireUser();
   if (!auth.ok) return auth;
   const { user } = auth;
@@ -987,7 +1012,7 @@ export async function setEventInviteLink(
 export async function setEventShareLink(
   eventId: string,
   active: boolean,
-): Promise<{ ok: boolean; error?: string }> {
+): Promise<ActionResult> {
   const auth = await requireUser();
   if (!auth.ok) return auth;
   const { user } = auth;
@@ -1001,8 +1026,13 @@ export async function setEventShareLink(
     .update({ share_link_active: active })
     .eq('id', eventId);
   if (error) {
-    await reportOperationalError('event-share-link', error, { eventId });
-    return { ok: false, error: 'Could not update the invite link. Try again.' };
+    return reportAndFail(
+      'SB-SHARE-SAVE',
+      'event-share-link',
+      error,
+      { eventId },
+      'Could not update the invite link. Try again.',
+    );
   }
 
   revalidatePath(`/events/${eventId}`);
@@ -1016,7 +1046,7 @@ export async function setEventShareLink(
  */
 export async function rotateEventShareLink(
   eventId: string,
-): Promise<{ ok: boolean; error?: string }> {
+): Promise<ActionResult> {
   const auth = await requireUser();
   if (!auth.ok) return auth;
   const { user } = auth;
@@ -1027,8 +1057,13 @@ export async function rotateEventShareLink(
     p_user: user.id,
   });
   if (error) {
-    await reportOperationalError('event-share-link-rotate', error, { eventId });
-    return { ok: false, error: 'Could not refresh the invite link. Try again.' };
+    return reportAndFail(
+      'SB-SHARE-SAVE',
+      'event-share-link-rotate',
+      error,
+      { eventId },
+      'Could not refresh the invite link. Try again.',
+    );
   }
 
   revalidatePath(`/events/${eventId}`);
@@ -1203,65 +1238,30 @@ export async function cancelEvent(
  */
 export async function deleteEventPermanently(
   eventId: string,
-): Promise<{ ok: boolean; error?: string }> {
+): Promise<ActionResult> {
   const auth = await requireUser();
   if (!auth.ok) return auth;
-  const { user } = auth;
-
-  const admin = createAdminClient();
-  const { data: event, error: eventError } = await admin
-    .from('events')
-    .select('host_id, room_id, status')
-    .eq('id', eventId)
-    .maybeSingle<{
-      host_id: string;
-      room_id: string | null;
-      status: string;
-    }>();
-  if (eventError || !event) return { ok: false, error: 'That plan was not found.' };
-  if (event.host_id !== user.id) {
-    return { ok: false, error: 'Only the primary host can permanently delete this plan.' };
-  }
-
-  if (event.status !== 'cancelled' && event.status !== 'past') {
-    const { count } = await admin
-      .from('invites')
-      .select('id', { count: 'exact', head: true })
-      .eq('event_id', eventId)
-      .eq('status', 'accepted');
-    if ((count ?? 0) > 0) {
-      return {
-        ok: false,
-        error: 'Cancel the plan first so everyone who accepted is notified.',
-      };
-    }
-  }
-
-  // The event foreign keys cascade through invitations, polls, questions,
-  // comments, announcements, capsules, and co-hosts. The room is a sibling row,
-  // so remove it explicitly after the event; its messages, members, and items
-  // cascade from rooms.
-  const { error: deleteError } = await admin
-    .from('events')
-    .delete()
-    .eq('id', eventId)
-    .eq('host_id', user.id);
-  if (deleteError) {
-    await reportOperationalError('event.delete', deleteError, { eventId, userId: user.id });
+  const { supabase, user } = auth;
+  const { data: outcome, error } = await supabase.rpc(
+    'delete_hosted_event_permanently',
+    { p_event: eventId },
+  );
+  if (error) {
+    await reportOperationalError('event.delete', error, { eventId, userId: user.id });
     return { ok: false, error: 'Could not permanently delete this plan.' };
   }
-  if (event.room_id) {
-    const { error: roomError } = await admin
-      .from('rooms')
-      .delete()
-      .eq('id', event.room_id)
-      .eq('kind', 'event');
-    if (roomError) {
-      await reportOperationalError('event.delete-room', roomError, {
-        eventId,
-        userId: user.id,
-      });
-    }
+  if (outcome === 'not_found') return { ok: false, error: 'That plan was not found.' };
+  if (outcome === 'forbidden') {
+    return { ok: false, error: 'Only the primary host can permanently delete this plan.' };
+  }
+  if (outcome === 'accepted_guests') {
+    return {
+      ok: false,
+      error: 'Cancel the plan first so everyone who accepted is notified.',
+    };
+  }
+  if (outcome !== 'deleted') {
+    return { ok: false, error: 'Could not permanently delete this plan.' };
   }
 
   revalidatePath('/plans');
@@ -1492,7 +1492,7 @@ async function notifyDateSettled(
 export async function addCoHost(
   eventId: string,
   handle: string,
-): Promise<{ ok: boolean; error?: string }> {
+): Promise<ActionResult> {
   const auth = await requireUser();
   if (!auth.ok) return auth;
   const { supabase, user } = auth;

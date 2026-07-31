@@ -46,6 +46,21 @@ export default function GlobalError({
         <p style={{ maxWidth: '20rem', fontSize: '0.875rem', color: '#565a60' }}>
           A hiccup on our end, not yours. Give it another try in a moment.
         </p>
+        {/* The root layout failed, so nothing here can import from the app —
+            this code is written out literally rather than read from
+            @/lib/errors. It is registered there as SB-LAYOUT-CRASH, and
+            errors.test.ts asserts this file still carries it. */}
+        <p
+          style={{
+            fontFamily: 'ui-monospace, monospace',
+            fontSize: '11px',
+            letterSpacing: '0.05em',
+            color: '#8b9098',
+            margin: 0,
+          }}
+        >
+          SB-LAYOUT-CRASH{error.digest ? ` · ${error.digest}` : ''}
+        </p>
         <button
           type="button"
           onClick={reset}

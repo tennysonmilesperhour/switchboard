@@ -27,6 +27,28 @@ and follow its precedents.** In short:
 Security invariants are covered by unit tests (`npm test`) and pgTAP
 (`supabase test db`) — keep them green and add coverage for new surfaces.
 
+# Error messages
+
+Every failure a human sees carries a code from **`src/lib/errors.ts`** —
+`SB-<AREA>-<REASON>`, rendered quietly beside the message and written into the
+matching server log line. This exists because "This invite link isn't active"
+was shown for four unrelated causes, so a screenshot of it diagnosed nothing.
+
+- **Operational failures get a code.** Anything where the reader can't tell what
+  went wrong or whose fault it is. Use `failure(code)` or, when it's also being
+  logged, `reportAndFail(code, area, error)` — that one call guarantees the
+  screen and the log agree.
+- **Validation does not.** "Add your name." already names the cause and the fix.
+  A code there is noise that teaches people to ignore codes.
+- **`actor` decides the advice**: `operator` failures must have `fix: null`
+  (never tell someone to retry a misconfigured server); `reader` failures must
+  have a real next step.
+- Codes are permanent. Never renumber or reuse one — old screenshots and old
+  logs would start lying.
+- `src/lib/errors.test.ts` reads the source and fails if a
+  `reportOperationalError` area has no code, if a mapping is orphaned, if a
+  toast drops `result.code`, or if an error boundary stops showing the digest.
+
 # Invite links
 
 Shared invite links broke for recipients repeatedly, always the same way: the

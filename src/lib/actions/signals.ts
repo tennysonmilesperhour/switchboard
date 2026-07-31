@@ -1,5 +1,7 @@
 'use server';
 
+import type { ActionResult } from '@/lib/errors';
+
 import { revalidatePath } from 'next/cache';
 import { createClient } from '@/lib/supabase/server';
 
@@ -24,9 +26,12 @@ export async function addSignal(
   label: string,
   circleIds: string[],
   durationHours: number = DEFAULT_DURATION_HOURS,
-): Promise<{ ok: boolean; error?: string }> {
+): Promise<ActionResult> {
   const { supabase, user } = await requireUser();
   if (!user) return { ok: false, error: 'Not signed in' };
+  const cleanLabel = label.trim().replace(/[\r\n]+/g, ' ').slice(0, 40);
+  const cleanEmoji = emoji.trim().slice(0, 12);
+  if (!cleanLabel || !cleanEmoji) return { ok: false, error: 'Add an emoji and a short status.' };
 
   // Signals stay quiet during a sabbatical.
   const { data: profile } = await supabase
@@ -43,15 +48,15 @@ export async function addSignal(
     .from('availability_signals')
     .delete()
     .eq('user_id', user.id)
-    .eq('label', label);
+    .eq('label', cleanLabel);
 
   const expiresAt = new Date(
     Date.now() + durationHours * 3_600_000,
   ).toISOString();
   const { error } = await supabase.from('availability_signals').insert({
     user_id: user.id,
-    emoji,
-    label,
+    emoji: cleanEmoji,
+    label: cleanLabel,
     circle_ids: circleIds,
     expires_at: expiresAt,
   });
@@ -63,7 +68,7 @@ export async function addSignal(
 /** Turn a single availability signal off, leaving the others live. */
 export async function removeSignal(
   label: string,
-): Promise<{ ok: boolean; error?: string }> {
+): Promise<ActionResult> {
   const { supabase, user } = await requireUser();
   if (!user) return { ok: false, error: 'Not signed in' };
   const { error } = await supabase
@@ -82,7 +87,7 @@ export async function removeSignal(
  */
 export async function setSignalsAudience(
   circleIds: string[],
-): Promise<{ ok: boolean; error?: string }> {
+): Promise<ActionResult> {
   const { supabase, user } = await requireUser();
   if (!user) return { ok: false, error: 'Not signed in' };
   const { error } = await supabase
@@ -95,7 +100,7 @@ export async function setSignalsAudience(
 }
 
 /** Turn every signal off at once. */
-export async function clearSignal(): Promise<{ ok: boolean; error?: string }> {
+export async function clearSignal(): Promise<ActionResult> {
   const { supabase, user } = await requireUser();
   if (!user) return { ok: false, error: 'Not signed in' };
   const { error } = await supabase

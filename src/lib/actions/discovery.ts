@@ -1,5 +1,7 @@
 'use server';
 
+import type { ActionResult } from '@/lib/errors';
+
 import { createClient } from '@/lib/supabase/server';
 import {
   discoverActivities,
@@ -9,7 +11,7 @@ import {
 
 export async function runDiscovery(
   input: DiscoveryInput,
-): Promise<{ ok: boolean; suggestions: Suggestion[]; error?: string }> {
+): Promise<ActionResult & { suggestions: Suggestion[] }> {
   const supabase = await createClient();
   const {
     data: { user },

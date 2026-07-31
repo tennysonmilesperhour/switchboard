@@ -92,7 +92,7 @@ export function CascadeProgress({
       if (!ok) return;
       const result = await removeInvite(eventId, invite.id);
       if (!result.ok) {
-        toast.error(result.error ?? 'Could not remove that invite.');
+        toast.error(result.error ?? 'Could not remove that invite.', result.code);
         return;
       }
       router.refresh();
@@ -104,7 +104,7 @@ export function CascadeProgress({
     startTransition(async () => {
       const result = await resendInvite(eventId, invite.id);
       if (!result.ok) {
-        toast.error(result.error ?? 'Could not resend that invite.');
+        toast.error(result.error ?? 'Could not resend that invite.', result.code);
         return;
       }
       if (result.warning) {
@@ -122,7 +122,7 @@ export function CascadeProgress({
     startTransition(async () => {
       const result = await moveQueuedInvite(eventId, invite.id, up);
       if (!result.ok) {
-        toast.error(result.error ?? 'Could not reorder the line.');
+        toast.error(result.error ?? 'Could not reorder the line.', result.code);
         return;
       }
       router.refresh();
@@ -134,7 +134,7 @@ export function CascadeProgress({
     startTransition(async () => {
       const result = await setInviteWindow(eventId, invite.id, minutes);
       if (!result.ok) {
-        toast.error(result.error ?? 'Could not change the window.');
+        toast.error(result.error ?? 'Could not change the window.', result.code);
         return;
       }
       router.refresh();
@@ -234,6 +234,11 @@ export function CascadeProgress({
                           }`}
                         >
                           {deliveryText}
+                        </span>
+                      )}
+                      {invite.status === 'declined' && invite.decline_message && (
+                        <span className="mt-1 block rounded-md bg-paper/70 px-2 py-1 text-xs italic text-ink-soft">
+                          “{invite.decline_message}”
                         </span>
                       )}
                     </span>

@@ -122,6 +122,15 @@ export const INTEREST_CATEGORIES: InterestGroup[] = [
       'Environment', 'Faith community', 'Local politics',
     ],
   },
+  {
+    label: 'Family & Kids',
+    emoji: '🧸',
+    options: [
+      'Playdates', 'Family outings', 'Parent meetups', 'Caregiver support',
+      'Kid-friendly restaurants', 'Parks and playgrounds', 'Story time',
+      'Youth sports', 'School community', 'Family volunteering',
+    ],
+  },
 ];
 
 /**

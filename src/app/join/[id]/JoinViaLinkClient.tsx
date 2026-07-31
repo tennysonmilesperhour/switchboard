@@ -27,7 +27,7 @@ export function JoinViaLinkClient({
       if (result.ok) {
         setAsked(true);
       } else {
-        toast.error(result.error ?? 'Could not send your request.');
+        toast.error(result.error ?? 'Could not send your request.', result.code);
       }
     });
   }

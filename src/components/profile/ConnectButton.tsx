@@ -78,7 +78,7 @@ export function ConnectButton({
             if (!connectionId) return;
             const result = await acceptConnection(connectionId);
             if (!result.ok) {
-              toast.error(result.error ?? 'Could not accept. Try again.');
+              toast.error(result.error ?? 'Could not accept. Try again.', result.code);
               return;
             }
             setLocalStatus('accepted');
@@ -103,7 +103,7 @@ export function ConnectButton({
         startTransition(async () => {
           const result = await sendConnectionRequestToId(targetId);
           if (!result.ok) {
-            toast.error(result.error ?? 'Could not send that request.');
+            toast.error(result.error ?? 'Could not send that request.', result.code);
             return;
           }
           setLocalStatus('outgoing');

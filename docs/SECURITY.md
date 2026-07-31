@@ -292,6 +292,16 @@ coordinate straight off the table?*
 
 ## Known residual risks / follow-ups
 
+## Give Space safety invariant
+
+Give Space is a shield, never a tracking surface. An avoid entry may only
+filter or privately annotate information the viewer was already authorized to
+see on a page they opened. It must never generate a notification or digest,
+widen a query, reveal attendance that was hidden, or appear on a map, zone,
+moment, or other location surface. Avoid entries remain readable only by their
+owner. Any future feature that conflicts with this rule must change the privacy
+model explicitly and receive a dedicated security review first.
+
 These are accepted or deferred, documented so they aren't rediscovered as
 surprises:
 

@@ -17,7 +17,7 @@ import {
  * on. Permission that's been hard-blocked in the browser can't be re-prompted,
  * so we say so instead of showing a dead toggle.
  */
-export function PushManager() {
+export function PushManager({ serverConfigured = true }: { serverConfigured?: boolean }) {
   const [state, setState] = useState<PushState>('default');
   const [busy, setBusy] = useState(false);
 
@@ -38,6 +38,10 @@ export function PushManager() {
     } finally {
       setBusy(false);
     }
+  }
+
+  if (!serverConfigured) {
+    return <p role="alert" className="text-sm text-rose-deep">Push is not configured on this server yet. An administrator needs to add the VAPID keys.</p>;
   }
 
   if (state === 'unsupported') {

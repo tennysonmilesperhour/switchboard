@@ -142,7 +142,7 @@ export function MatchmakerCard({ proposal }: { proposal: ProposalCardData }) {
             startTransition(async () => {
               const result = await respondToIntroduction(proposal.id, true);
               if (!result.ok) {
-                toast.error(result.error ?? 'Could not respond. Try again.');
+                toast.error(result.error ?? 'Could not respond. Try again.', result.code);
                 return;
               }
               router.refresh();
@@ -159,7 +159,7 @@ export function MatchmakerCard({ proposal }: { proposal: ProposalCardData }) {
             startTransition(async () => {
               const result = await respondToIntroduction(proposal.id, false);
               if (!result.ok) {
-                toast.error(result.error ?? 'Could not respond. Try again.');
+                toast.error(result.error ?? 'Could not respond. Try again.', result.code);
                 return;
               }
               router.refresh();

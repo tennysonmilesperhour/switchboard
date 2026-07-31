@@ -1,5 +1,7 @@
 'use server';
 
+import type { ErrorCode } from '@/lib/errors';
+
 import {
   createHash,
   createHmac,
@@ -20,6 +22,10 @@ export type ContactKind = 'email' | 'phone';
 export interface ContactVerificationResult {
   ok: boolean;
   error?: string;
+  /** Stable failure code from `@/lib/errors`, shown beside the message. */
+  code?: ErrorCode;
+  /** The next step, when the reader has one. */
+  fix?: string | null;
   message?: string;
 }
 

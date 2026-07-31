@@ -1,5 +1,7 @@
 'use server';
 
+import type { ActionResult } from '@/lib/errors';
+
 import { revalidatePath } from 'next/cache';
 import { createClient } from '@/lib/supabase/server';
 import { requireUser } from '@/lib/server/require-user';
@@ -14,7 +16,7 @@ export async function addSuggestion(
   eventId: string,
   label: string,
   detail?: string,
-): Promise<{ ok: boolean; error?: string }> {
+): Promise<ActionResult> {
   const trimmed = label.trim();
   if (!trimmed) return { ok: false, error: 'Suggestion is empty' };
 
@@ -52,7 +54,7 @@ export async function castVote(
   eventId: string,
   optionId: string,
   weight: Weight,
-): Promise<{ ok: boolean; error?: string }> {
+): Promise<ActionResult> {
   const auth = await requireUser();
   if (!auth.ok) return auth;
   const { supabase, user } = auth;

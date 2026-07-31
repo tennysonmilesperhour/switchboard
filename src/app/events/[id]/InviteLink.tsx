@@ -43,7 +43,7 @@ export function InviteLink({ eventId, shareUrl, state, eventTitle }: InviteLinkP
     startTransition(async () => {
       const result = await setEventShareLink(eventId, next);
       if (!result.ok) {
-        toast.error(result.error ?? 'Could not update the invite link.');
+        toast.error(result.error ?? 'Could not update the invite link.', result.code);
         return;
       }
       toast.success(next ? 'Invite link is live.' : 'Invite link turned off.');
@@ -55,7 +55,7 @@ export function InviteLink({ eventId, shareUrl, state, eventTitle }: InviteLinkP
     startTransition(async () => {
       const result = await rotateEventShareLink(eventId);
       if (!result.ok) {
-        toast.error(result.error ?? 'Could not refresh the invite link.');
+        toast.error(result.error ?? 'Could not refresh the invite link.', result.code);
         return;
       }
       toast.success('New link ready. The old one no longer works.');

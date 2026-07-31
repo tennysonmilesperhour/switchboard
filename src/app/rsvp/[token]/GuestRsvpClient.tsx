@@ -65,6 +65,8 @@ export function GuestRsvpClient({
   eventId = null,
 }: GuestRsvpClientProps) {
   const [status, setStatus] = useState(initialStatus);
+  const [declining, setDeclining] = useState(false);
+  const [declineMessage, setDeclineMessage] = useState('');
   // Answering binds the invite to the account, so the plan becomes reachable
   // the moment someone says yes — even on an invite that arrived unclaimed.
   const [planId, setPlanId] = useState<string | null>(eventId);
@@ -84,14 +86,23 @@ export function GuestRsvpClient({
     }
   }, [authed, unclaimed, token]);
 
-  function respond(accept: boolean) {
+  function respond(
+    accept: boolean,
+    note: 'keep_asking' | 'not_my_thing' | null = null,
+  ) {
     if (accept && !requiredAnswered(questions, answers)) {
       setError('Please answer the required questions');
       return;
     }
     setError('');
     startTransition(async () => {
-      const result = await respondToGuestInvite(token, accept, accept ? answers : {});
+      const result = await respondToGuestInvite(
+        token,
+        accept,
+        accept ? answers : {},
+        note,
+        accept ? '' : declineMessage,
+      );
       if (!result.ok) {
         // A session can lapse while an invitation sits open in a tab, and the
         // answer needs one. Offer the way back instead of a dead end — and never
@@ -102,6 +113,7 @@ export function GuestRsvpClient({
         return;
       }
       if (result.eventId) setPlanId(result.eventId);
+      if (result.warning) setError(result.warning);
       setStatus(result.outcome ?? (accept ? 'accepted' : 'declined'));
     });
   }
@@ -118,6 +130,7 @@ export function GuestRsvpClient({
         <p className="text-sm text-ink-soft mt-1">
           The host has been told. See you there.
         </p>
+        {error && <p role="status" className="mt-2 text-sm text-gold-deep">{error}</p>}
         {authed && planId && (
           <>
             <p className="text-sm text-ink-soft mt-3">
@@ -216,27 +229,68 @@ export function GuestRsvpClient({
           )}
         </p>
       )}
-      <div className="flex gap-3">
-        <Button
-          variant="accept"
-          size="lg"
-          className="flex-1"
-          disabled={pending}
-          onClick={() => respond(true)}
-        >
-          <Icon name="check" size={18} />
-          I’m in
-        </Button>
-        <Button
-          variant="secondary"
-          size="lg"
-          className="flex-1"
-          disabled={pending}
-          onClick={() => respond(false)}
-        >
-          Can’t make it
-        </Button>
-      </div>
+      {!declining ? (
+        <div className="flex gap-3">
+          <Button
+            variant="accept"
+            size="lg"
+            className="flex-1"
+            disabled={pending}
+            onClick={() => respond(true)}
+          >
+            <Icon name="check" size={18} />
+            I’m in
+          </Button>
+          <Button
+            variant="secondary"
+            size="lg"
+            className="flex-1"
+            disabled={pending}
+            onClick={() => setDeclining(true)}
+          >
+            Can’t make it
+          </Button>
+        </div>
+      ) : (
+        <div className="space-y-2 animate-rise">
+          <label className="block pb-1">
+            <span className="mb-1 block text-xs font-semibold text-ink-soft">
+              Optional note to the host
+            </span>
+            <textarea
+              value={declineMessage}
+              onChange={(event) => setDeclineMessage(event.target.value.slice(0, 280))}
+              maxLength={280}
+              rows={3}
+              placeholder="A sentence is plenty — no explanation required."
+              className="w-full rounded-card border border-line bg-paper px-3 py-2 text-sm outline-none focus:border-terracotta"
+            />
+          </label>
+          <Button
+            variant="secondary"
+            className="w-full"
+            disabled={pending}
+            onClick={() => respond(false, 'keep_asking')}
+          >
+            Can’t this time — keep asking! 💛
+          </Button>
+          <Button
+            variant="ghost"
+            className="w-full"
+            disabled={pending}
+            onClick={() => respond(false, 'not_my_thing')}
+          >
+            Not really my thing
+          </Button>
+          <button
+            type="button"
+            className="w-full pt-1 text-xs text-ink-faint hover:text-ink"
+            onClick={() => setDeclining(false)}
+          >
+            Go back
+          </button>
+        </div>
+      )}
     </div>
   );
 }

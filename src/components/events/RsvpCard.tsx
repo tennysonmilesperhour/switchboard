@@ -21,6 +21,7 @@ interface RsvpCardProps {
 /** Invitee accept/decline with graceful decline options that teach. */
 export function RsvpCard({ inviteId, expiresAtIso, questions = [] }: RsvpCardProps) {
   const [declining, setDeclining] = useState(false);
+  const [declineMessage, setDeclineMessage] = useState('');
   const [error, setError] = useState('');
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [pending, startTransition] = useTransition();
@@ -35,7 +36,13 @@ export function RsvpCard({ inviteId, expiresAtIso, questions = [] }: RsvpCardPro
     }
     setError('');
     startTransition(async () => {
-      const result = await respondToInvite(inviteId, accept, note, accept ? answers : {});
+      const result = await respondToInvite(
+        inviteId,
+        accept,
+        note,
+        accept ? answers : {},
+        accept ? '' : declineMessage,
+      );
       if (!result.ok) {
         setError(result.error ?? 'Something went wrong');
         return;
@@ -90,6 +97,22 @@ export function RsvpCard({ inviteId, expiresAtIso, questions = [] }: RsvpCardPro
       ) : (
         <div className="mt-4 space-y-2 animate-rise">
           <p className="text-sm text-ink-soft">No problem - which is it?</p>
+          <label className="block pb-1">
+            <span className="mb-1 block text-xs font-semibold text-ink-soft">
+              Optional note to the host
+            </span>
+            <textarea
+              value={declineMessage}
+              onChange={(event) => setDeclineMessage(event.target.value.slice(0, 280))}
+              maxLength={280}
+              rows={3}
+              placeholder="A sentence is plenty — no explanation required."
+              className="w-full rounded-card border border-line bg-paper px-3 py-2 text-sm outline-none focus:border-terracotta"
+            />
+            <span className="mt-1 block text-right text-[11px] text-ink-faint">
+              {declineMessage.length}/280
+            </span>
+          </label>
           <Button
             variant="secondary"
             className="w-full"

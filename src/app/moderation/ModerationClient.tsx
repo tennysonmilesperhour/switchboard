@@ -42,7 +42,7 @@ function ReportCard({ report }: { report: OpenReport }) {
     startTransition(async () => {
       const result = await resolveReport(report.id, status, note);
       if (!result.ok) {
-        toast.error(result.error ?? 'Could not update the report.');
+        toast.error(result.error ?? 'Could not update the report.', result.code);
         return;
       }
       router.refresh();

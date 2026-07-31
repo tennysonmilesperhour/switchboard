@@ -67,7 +67,7 @@ export function OpenTables({ tables }: { tables: OpenTableRow[] }) {
                           );
                           toast.success('Asked to join. The host will get back to you.');
                         } else {
-                          toast.error(result.error ?? 'Could not send your request.');
+                          toast.error(result.error ?? 'Could not send your request.', result.code);
                         }
                       })
                     }
