@@ -1,5 +1,7 @@
 'use server';
 
+import type { ErrorCode } from '@/lib/errors';
+
 import { createAdminClient, hasAdminCredentials } from '@/lib/supabase/admin';
 import { createClient } from '@/lib/supabase/server';
 import { checkRateLimit } from '@/lib/server/rate-limit';
@@ -26,6 +28,10 @@ import { safeNextPath } from '@/lib/security';
 export interface AuthActionResult {
   ok: boolean;
   error?: string;
+  /** Stable failure code from `@/lib/errors`, shown beside the message. */
+  code?: ErrorCode;
+  /** The next step, when the reader has one. */
+  fix?: string | null;
   username?: string;
   identifier?: string;
   requiresEmailVerification?: boolean;

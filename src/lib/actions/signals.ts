@@ -1,5 +1,7 @@
 'use server';
 
+import type { ActionResult } from '@/lib/errors';
+
 import { revalidatePath } from 'next/cache';
 import { createClient } from '@/lib/supabase/server';
 
@@ -24,7 +26,7 @@ export async function addSignal(
   label: string,
   circleIds: string[],
   durationHours: number = DEFAULT_DURATION_HOURS,
-): Promise<{ ok: boolean; error?: string }> {
+): Promise<ActionResult> {
   const { supabase, user } = await requireUser();
   if (!user) return { ok: false, error: 'Not signed in' };
 
@@ -63,7 +65,7 @@ export async function addSignal(
 /** Turn a single availability signal off, leaving the others live. */
 export async function removeSignal(
   label: string,
-): Promise<{ ok: boolean; error?: string }> {
+): Promise<ActionResult> {
   const { supabase, user } = await requireUser();
   if (!user) return { ok: false, error: 'Not signed in' };
   const { error } = await supabase
@@ -82,7 +84,7 @@ export async function removeSignal(
  */
 export async function setSignalsAudience(
   circleIds: string[],
-): Promise<{ ok: boolean; error?: string }> {
+): Promise<ActionResult> {
   const { supabase, user } = await requireUser();
   if (!user) return { ok: false, error: 'Not signed in' };
   const { error } = await supabase
@@ -95,7 +97,7 @@ export async function setSignalsAudience(
 }
 
 /** Turn every signal off at once. */
-export async function clearSignal(): Promise<{ ok: boolean; error?: string }> {
+export async function clearSignal(): Promise<ActionResult> {
   const { supabase, user } = await requireUser();
   if (!user) return { ok: false, error: 'Not signed in' };
   const { error } = await supabase

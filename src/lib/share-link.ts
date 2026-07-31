@@ -41,6 +41,7 @@
  * what a recipient holding a link sees. That is the point.
  */
 
+import type { ErrorCode } from './errors';
 import type { EventStatus } from './types';
 
 /** What a share link does right now, from the recipient's point of view. */
@@ -165,6 +166,37 @@ export function unfurlsPlanDetails(state: ShareLinkState): boolean {
 export interface ShareLinkNotice {
   heading: string;
   body: string;
+  /**
+   * The code shown beside the message.
+   *
+   * This is the whole reason `/i/<token>` stopped being diagnosable: four
+   * unrelated causes shared one sentence, so a screenshot narrowed nothing. Each
+   * state now names itself, and `errors.test.ts` proves every state has a
+   * distinct code.
+   */
+  code: ErrorCode;
+}
+
+/** The code for a state, or null when the link simply works. */
+export function shareLinkCode(state: ShareLinkState): ErrorCode | null {
+  switch (state) {
+    case 'live':
+      return null;
+    case 'missing':
+      return 'SB-LINK-UNKNOWN';
+    case 'off':
+      return 'SB-LINK-OFF';
+    case 'unpublished':
+      return 'SB-LINK-DRAFT';
+    case 'cancelled':
+      return 'SB-LINK-CANCELLED';
+    case 'past':
+      return 'SB-LINK-PAST';
+    case 'deciding':
+      // Not a failure — the plan is answerable. It carries a code anyway so a
+      // host reporting "they say the date isn't set" is unambiguous.
+      return 'SB-LINK-DECIDING';
+  }
 }
 
 /**
@@ -190,6 +222,7 @@ export function shareLinkNotice(
     case 'missing':
     case 'off':
       return {
+        code: shareLinkCode(state)!,
         heading: 'This invite link isn’t active',
         body:
           'It may have been turned off, or replaced with a newer one. Ask ' +
@@ -197,6 +230,7 @@ export function shareLinkNotice(
       };
     case 'unpublished':
       return {
+        code: shareLinkCode(state)!,
         heading: 'This plan isn’t ready yet',
         body:
           'It’s still being put together. Ask whoever sent the link to send it ' +
@@ -204,6 +238,7 @@ export function shareLinkNotice(
       };
     case 'deciding':
       return {
+        code: shareLinkCode(state)!,
         heading: 'The date isn’t set yet',
         body:
           `${host} is still choosing between a few. Say you’re in anyway — ` +
@@ -211,11 +246,13 @@ export function shareLinkNotice(
       };
     case 'cancelled':
       return {
+        code: shareLinkCode(state)!,
         heading: 'This plan was called off',
         body: `${host} cancelled it, so there’s nothing to answer. No hard feelings.`,
       };
     case 'past':
       return {
+        code: shareLinkCode(state)!,
         heading: 'This one has already happened',
         body: 'You’re seeing the plan as it was. Ask about the next one.',
       };

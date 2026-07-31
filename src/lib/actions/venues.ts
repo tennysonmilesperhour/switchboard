@@ -1,5 +1,7 @@
 'use server';
 
+import type { ActionResult } from '@/lib/errors';
+
 import { revalidatePath } from 'next/cache';
 import { requireUser } from '@/lib/server/require-user';
 
@@ -14,7 +16,7 @@ export async function claimVenue(
   area: string,
   perk: string,
   url: string,
-): Promise<{ ok: boolean; error?: string }> {
+): Promise<ActionResult> {
   const auth = await requireUser();
   if (!auth.ok) return auth;
   const { supabase, user } = auth;
@@ -45,7 +47,7 @@ export async function reviewVenue(
   venueId: string,
   decision: 'verified' | 'rejected',
   note: string,
-): Promise<{ ok: boolean; error?: string }> {
+): Promise<ActionResult> {
   const auth = await requireUser();
   if (!auth.ok) return auth;
   const { supabase } = auth;

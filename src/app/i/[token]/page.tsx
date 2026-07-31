@@ -12,6 +12,8 @@ import {
   shareLinkState,
   unfurlsPlanDetails,
 } from '@/lib/share-link';
+import { errorRef } from '@/lib/errors';
+import { ErrorNotice } from '@/components/ui/ErrorNotice';
 import { InvitePlanDetails } from '@/components/events/InvitePlanDetails';
 import { RsvpSignInGate } from '@/components/events/RsvpSignInGate';
 import { ShareLinkRsvp } from './ShareLinkRsvp';
@@ -204,6 +206,15 @@ export default async function SharedInvitePage({
               {notice?.heading ?? 'This invite link isn’t active'}
             </h1>
             <p className="text-ink-soft text-sm mt-2">{notice?.body}</p>
+            {/* The code, not just the sentence. Four different causes used to
+                render this same page, so a screenshot of it narrowed nothing —
+                this line is what makes "it says the link isn't active" into an
+                answerable report. */}
+            {notice && (
+              <p className="mt-4 font-mono text-[11px] uppercase tracking-wide text-ink-faint">
+                {errorRef(notice.code)}
+              </p>
+            )}
           </div>
         ) : (
           <>
@@ -237,12 +248,12 @@ export default async function SharedInvitePage({
                 answer, and sending someone to make an account to discover that
                 is its own kind of broken link. */}
             {notice && (
-              <div className="mt-8 rounded-card bg-cream px-4 py-3.5">
-                <p className="text-sm font-bold text-ink">{notice.heading}</p>
-                <p className="mt-1 text-sm leading-relaxed text-ink-soft">
-                  {notice.body}
-                </p>
-              </div>
+              <ErrorNotice
+                className="mt-8 rounded-card bg-cream px-4 py-3.5"
+                message={notice.heading}
+                fix={notice.body}
+                code={notice.code}
+              />
             )}
             {answerable &&
               (user ? (

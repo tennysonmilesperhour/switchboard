@@ -194,7 +194,7 @@ export function BoardClient({
     startTransition(async () => {
       const result = await ensureBoardInviteLink(boardId);
       if (result.ok && result.url) setInviteUrl(result.url);
-      else toast.error(result.error ?? 'Could not create an invite link.');
+      else toast.error(result.error ?? 'Could not create an invite link.', result.code);
     });
   }
 
@@ -205,7 +205,7 @@ export function BoardClient({
         setInviteUrl(result.url);
         toast.success('New link ready. The old one no longer works.');
       } else {
-        toast.error(result.error ?? 'Could not refresh the link.');
+        toast.error(result.error ?? 'Could not refresh the link.', result.code);
       }
     });
   }

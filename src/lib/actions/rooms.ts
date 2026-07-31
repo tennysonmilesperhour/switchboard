@@ -1,5 +1,7 @@
 'use server';
 
+import type { ActionResult } from '@/lib/errors';
+
 import { revalidatePath } from 'next/cache';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
@@ -10,7 +12,7 @@ import { isOwnPublicStorageUrl } from '@/lib/server/media';
 export async function sendMessage(
   roomId: string,
   body: string,
-): Promise<{ ok: boolean; error?: string }> {
+): Promise<ActionResult> {
   const trimmed = body.trim();
   if (!trimmed) return { ok: false, error: 'Empty message' };
 
@@ -53,7 +55,7 @@ export async function sendPhotoMessage(
   roomId: string,
   imageUrl: string,
   caption?: string,
-): Promise<{ ok: boolean; error?: string }> {
+): Promise<ActionResult> {
   const auth = await requireUser();
   if (!auth.ok) return auth;
   const { supabase, user } = auth;

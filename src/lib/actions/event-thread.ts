@@ -1,5 +1,7 @@
 'use server';
 
+import type { ErrorCode } from '@/lib/errors';
+
 import { revalidatePath } from 'next/cache';
 import { requireUser } from '@/lib/server/require-user';
 import { createAdminClient } from '@/lib/supabase/admin';
@@ -10,6 +12,10 @@ import type { SwitchboardEvent } from '@/lib/types';
 export interface ThreadResult {
   ok: boolean;
   error?: string;
+  /** Stable failure code from `@/lib/errors`, shown beside the message. */
+  code?: ErrorCode;
+  /** The next step, when the reader has one. */
+  fix?: string | null;
 }
 
 interface CommentInput {

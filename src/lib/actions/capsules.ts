@@ -1,5 +1,7 @@
 'use server';
 
+import type { ActionResult } from '@/lib/errors';
+
 import { revalidatePath } from 'next/cache';
 import { requireUser } from '@/lib/server/require-user';
 import { isStoredMediaPath, isOwnPublicStorageUrl } from '@/lib/server/media';
@@ -8,7 +10,7 @@ export async function addCapsuleEntry(
   eventId: string,
   line: string,
   photoUrl: string,
-): Promise<{ ok: boolean; error?: string }> {
+): Promise<ActionResult> {
   const trimmed = line.trim();
   if (!trimmed) return { ok: false, error: 'Write one line first' };
 

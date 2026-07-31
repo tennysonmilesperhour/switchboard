@@ -6,7 +6,8 @@ import { requireUser } from '@/lib/server/require-user';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { advanceEventCascade } from '@/lib/server/cascade-runner';
 import { notifyUsers } from '@/lib/server/notify';
-import { reportOperationalError } from '@/lib/server/observability';
+import { reportAndFail, reportOperationalError } from '@/lib/server/observability';
+import { failure, type ErrorCode } from '@/lib/errors';
 import { capture } from '@/lib/analytics/server';
 import { ANALYTICS_EVENTS } from '@/lib/analytics/events';
 import type { DeclineNote } from '@/lib/types';
@@ -16,6 +17,14 @@ export interface RespondResult {
   ok: boolean;
   outcome?: 'accepted' | 'declined' | 'waitlisted' | string;
   error?: string;
+  /**
+   * Stable code for the failure, from `@/lib/errors`. Rendered beside the
+   * message so a report is a diagnosis rather than a starting point, and logged
+   * with the same value server-side so the two join up.
+   */
+  code?: ErrorCode;
+  /** The next step, when the reader has one. */
+  fix?: string | null;
   /**
    * The plan this answer belongs to, so the RSVP page can hand the responder
    * onward to `/events/<id>` — the thread, the updates, and everyone else who
@@ -288,16 +297,15 @@ export async function respondViaShareLink(
   } = await supabase.auth.getUser();
   if (!user) {
     return {
-      ok: false,
+      ...failure('SB-RSVP-AUTH', 'Sign in to RSVP - it takes a moment.'),
       outcome: 'auth_required',
-      error: 'Sign in to RSVP - it takes a moment.',
     };
   }
 
   // Rate-limited per link: the share token is public by design, so this is the
   // one place a stranger can create invite rows (docs/SECURITY.md §9).
   if (!(await checkRateLimit(`share-rsvp:${shareToken}`, 20, 60 * 60))) {
-    return { ok: false, error: 'Too many attempts. Try again later.' };
+    return failure('SB-RATE-LIMIT', 'Too many attempts. Try again later.');
   }
 
   const admin = createAdminClient();
@@ -320,27 +328,40 @@ export async function respondViaShareLink(
     p_accept: accept,
   });
   if (error) {
-    await reportOperationalError('share-rsvp.respond', error, {});
-    return { ok: false, error: 'Could not record your RSVP. Try again.' };
+    return {
+      ...(await reportAndFail('SB-RSVP-SAVE', 'share-rsvp.respond', error)),
+    };
   }
 
   const row = Array.isArray(data) ? data[0] : data;
   const outcome = typeof row?.outcome === 'string' ? row.outcome : null;
-  if (!outcome) return { ok: false, error: 'This invitation isn’t available.' };
+  if (!outcome) return failure('SB-LINK-UNKNOWN', 'This invitation isn’t available.');
   if (outcome === 'link_off') {
-    return { ok: false, outcome, error: 'This invite link has been turned off.' };
+    return {
+      ...failure('SB-LINK-OFF', 'This invite link has been turned off.'),
+      outcome,
+    };
   }
   if (outcome === 'not_accepting') {
-    return { ok: false, outcome, error: 'This plan isn’t taking answers right now.' };
+    return {
+      ...failure('SB-RSVP-CLOSED', 'This plan isn’t taking answers right now.'),
+      outcome,
+    };
   }
   // The database enforces the same session requirement this action does, so
   // this only surfaces if the two ever disagree — say the migration behind it
   // has not been applied. Report it the same way, never as a generic failure.
   if (outcome === 'auth_required') {
-    return { ok: false, outcome, error: 'Sign in to RSVP - it takes a moment.' };
+    return {
+      ...failure('SB-RSVP-AUTH', 'Sign in to RSVP - it takes a moment.'),
+      outcome,
+    };
   }
   if (outcome === 'name_required') {
-    return { ok: false, outcome, error: 'Please add your name so the host knows who’s coming.' };
+    return {
+      ...failure('SB-RSVP-NAME', 'Please add your name so the host knows who’s coming.'),
+      outcome,
+    };
   }
 
   const eventId = await eventIdForShareToken(admin, shareToken);
@@ -414,14 +435,13 @@ export async function respondToGuestInvite(
   } = await supabase.auth.getUser();
   if (!user) {
     return {
-      ok: false,
+      ...failure('SB-RSVP-AUTH', 'Sign in to RSVP - it takes a moment.'),
       outcome: 'auth_required',
-      error: 'Sign in to RSVP - it takes a moment.',
     };
   }
 
   if (!(await checkRateLimit(`guest-rsvp:${token}`, 10, 60 * 60))) {
-    return { ok: false, error: 'Too many attempts. Try again later.' };
+    return failure('SB-RATE-LIMIT', 'Too many attempts. Try again later.');
   }
 
   const admin = createAdminClient();

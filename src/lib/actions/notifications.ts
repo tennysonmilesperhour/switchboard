@@ -1,5 +1,7 @@
 'use server';
 
+import type { ActionResult } from '@/lib/errors';
+
 import { revalidatePath } from 'next/cache';
 import { requireUser } from '@/lib/server/require-user';
 
@@ -8,7 +10,7 @@ import { requireUser } from '@/lib/server/require-user';
  * including ones too old to appear in the visible feed, which previously
  * could keep the badge lit with nothing on screen to acknowledge.
  */
-export async function markAllNotificationsRead(): Promise<{ ok: boolean; error?: string }> {
+export async function markAllNotificationsRead(): Promise<ActionResult> {
   const auth = await requireUser();
   if (!auth.ok) return auth;
   const { supabase, user } = auth;
@@ -28,7 +30,7 @@ export async function markAllNotificationsRead(): Promise<{ ok: boolean; error?:
 /** Mark one notification read — fired when the user opens or taps it. */
 export async function markNotificationRead(
   id: string,
-): Promise<{ ok: boolean; error?: string }> {
+): Promise<ActionResult> {
   const auth = await requireUser();
   if (!auth.ok) return auth;
   const { supabase, user } = auth;

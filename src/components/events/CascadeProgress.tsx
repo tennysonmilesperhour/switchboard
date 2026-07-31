@@ -74,7 +74,7 @@ export function CascadeProgress({ invites, mode, eventId, editable }: CascadePro
       if (!ok) return;
       const result = await removeInvite(eventId, invite.id);
       if (!result.ok) {
-        toast.error(result.error ?? 'Could not remove that invite.');
+        toast.error(result.error ?? 'Could not remove that invite.', result.code);
         return;
       }
       router.refresh();
@@ -86,7 +86,7 @@ export function CascadeProgress({ invites, mode, eventId, editable }: CascadePro
     startTransition(async () => {
       const result = await resendInvite(eventId, invite.id);
       if (!result.ok) {
-        toast.error(result.error ?? 'Could not resend that invite.');
+        toast.error(result.error ?? 'Could not resend that invite.', result.code);
         return;
       }
       if (result.warning) {
@@ -104,7 +104,7 @@ export function CascadeProgress({ invites, mode, eventId, editable }: CascadePro
     startTransition(async () => {
       const result = await moveQueuedInvite(eventId, invite.id, up);
       if (!result.ok) {
-        toast.error(result.error ?? 'Could not reorder the line.');
+        toast.error(result.error ?? 'Could not reorder the line.', result.code);
         return;
       }
       router.refresh();
@@ -116,7 +116,7 @@ export function CascadeProgress({ invites, mode, eventId, editable }: CascadePro
     startTransition(async () => {
       const result = await setInviteWindow(eventId, invite.id, minutes);
       if (!result.ok) {
-        toast.error(result.error ?? 'Could not change the window.');
+        toast.error(result.error ?? 'Could not change the window.', result.code);
         return;
       }
       router.refresh();

@@ -1,5 +1,7 @@
 'use server';
 
+import type { ErrorCode } from '@/lib/errors';
+
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import { createClient } from '@/lib/supabase/server';
@@ -23,6 +25,10 @@ const MAX_SOCIALS = 15;
 export interface ActionResult {
   ok: boolean;
   error?: string;
+  /** Stable failure code from `@/lib/errors`, shown beside the message. */
+  code?: ErrorCode;
+  /** The next step, when the reader has one. */
+  fix?: string | null;
 }
 
 function parseLinks(raw: string): ProfileLink[] {

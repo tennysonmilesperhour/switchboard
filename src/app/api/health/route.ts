@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { createAdminClient, hasAdminCredentials } from '@/lib/supabase/admin';
 import { smsEnabled } from '@/lib/server/sms';
 import { bearerMatches } from '@/lib/server/secret';
+import type { ErrorCode } from '@/lib/errors';
 
 // Bump this in the SAME commit as any migration that bumps app_schema_version().
 // It went stale for four migrations, which left /api/health reporting
@@ -122,9 +123,24 @@ export async function GET(request: Request) {
       null,
   };
 
+  // The same codes users are shown, for whatever is actually wrong here. A
+  // deployment that fails this check produces the exact identifier its users
+  // will be reading off their screens — so "several people report SB-CONFIG-DB"
+  // and "health says SB-CONFIG-DB" are recognisably the same incident rather
+  // than two unrelated reports.
+  const problems: ErrorCode[] = [];
+  if (!checks.supabaseAdmin || !database) problems.push('SB-CONFIG-DB');
+  if (!checks.appUrl) problems.push('SB-CONFIG-ORIGIN');
+  if (!schema) problems.push('SB-CONFIG-SCHEMA');
+  if (!storage) problems.push('SB-CONFIG-STORAGE');
+  if (!checks.email) problems.push('SB-CONFIG-EMAIL');
+  if (!checks.sms) problems.push('SB-CONFIG-SMS');
+  if (!checks.push) problems.push('SB-CONFIG-PUSH');
+
   return NextResponse.json(
     {
       ok: required,
+      problems,
       database,
       schema,
       schemaVersion,
