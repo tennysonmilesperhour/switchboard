@@ -127,7 +127,7 @@ export function RoomClient({
       const result = await sendPhotoMessage(roomId, url);
       if (!result.ok) {
         setMessages((current) => current.filter((m) => m.id !== optimistic.id));
-        toast.error(result.error ?? 'Could not send the photo.');
+        toast.error(result.error ?? 'Could not send the photo.', result.code);
       } else {
         router.refresh(); // pick up the filed Photos-tab item
       }

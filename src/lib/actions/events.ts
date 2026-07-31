@@ -8,9 +8,11 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import { isEventManager } from '@/lib/server/authz';
 import {
   advanceEventCascade,
+  deliverInviteNow,
   notifyCurrentInviteWave,
   type InvitationDeliverySummary,
 } from '@/lib/server/cascade-runner';
+import { getRelationship } from '@/lib/server/relationship';
 import { notifyUsers } from '@/lib/server/notify';
 import { formatDateTime } from '@/lib/format';
 import { capture } from '@/lib/analytics/server';
@@ -21,7 +23,8 @@ import {
   nextOccurrenceAfter,
   normalizeCustomInterval,
 } from '@/lib/engine/recurrence';
-import { reportOperationalError } from '@/lib/server/observability';
+import { reportAndFail, reportOperationalError } from '@/lib/server/observability';
+import type { ActionResult, ErrorCode } from '@/lib/errors';
 import { looksLikeEmail, sendEmails } from '@/lib/server/email';
 import { looksLikePhoneNumber, sendSmsMessages } from '@/lib/server/sms';
 import { normalizePhoneNumber } from '@/lib/phone';
@@ -92,6 +95,10 @@ export interface CreateEventResult {
   ok: boolean;
   eventId?: string;
   error?: string;
+  /** Stable failure code from `@/lib/errors`, shown beside the message. */
+  code?: ErrorCode;
+  /** The next step, when the reader has one. */
+  fix?: string | null;
   delivery?: InvitationDeliverySummary;
   warning?: string;
 }
@@ -249,10 +256,13 @@ export async function createEvent(input: CreateEventInput): Promise<CreateEventR
     p_input: { ...input, title, wishlistUrl, coverUrl, invitees },
   });
   if (error || typeof eventId !== 'string') {
-    await reportOperationalError('event-create', error ?? 'Missing event id', {
-      userId: user.id,
-    });
-    return createEventError('Something went wrong publishing your plan. Nothing was saved.');
+    return reportAndFail(
+      'SB-PLAN-CREATE',
+      'event-create',
+      error ?? 'Missing event id',
+      { userId: user.id },
+      'Something went wrong publishing your plan. Nothing was saved.',
+    );
   }
 
   let delivery: InvitationDeliverySummary | undefined;
@@ -283,6 +293,10 @@ export async function createEvent(input: CreateEventInput): Promise<CreateEventR
 export interface AddPeopleResult {
   ok: boolean;
   error?: string;
+  /** Stable failure code from `@/lib/errors`, shown beside the message. */
+  code?: ErrorCode;
+  /** The next step, when the reader has one. */
+  fix?: string | null;
   /** How many new invitees were appended to the cascade. */
   added?: number;
   /** Entries that couldn't be added, each with a short reason. */
@@ -519,8 +533,16 @@ export async function addPeopleToEvent(
 
   const { error } = await admin.from('invites').insert(toInsert);
   if (error) {
-    await reportOperationalError('add-people', error, { eventId });
-    return { ok: false, error: 'Could not add people. Try again.', skipped };
+    return {
+      ...(await reportAndFail(
+        'SB-INVITE-SEND',
+        'add-people',
+        error,
+        { eventId },
+        'Could not add people. Try again.',
+      )),
+      skipped,
+    };
   }
 
   // Send immediately if the cascade is ready for them (e.g. individual mode
@@ -542,6 +564,139 @@ export async function addPeopleToEvent(
 }
 
 /**
+ * Invite one of your connections to a live plan, and send it to them now.
+ *
+ * `addPeopleToEvent` puts someone at the back of the cascade, where they wait
+ * for their turn — right for filling out a plan, wrong for the moment a host is
+ * looking at a specific person and wants to ask *them*. This sends immediately:
+ * the invite is written `sent`, and it lands in their notifications (and push,
+ * if they've allowed it) through the same delivery path the cascade uses, so a
+ * hand-sent invitation is indistinguishable from a cascaded one once it
+ * arrives.
+ *
+ * Jumping the line is safe because a live invite is not a claim on a seat:
+ * capacity is enforced when someone *accepts* (`respond_to_invite`, under the
+ * event row lock). It is refused on a full plan anyway, since the next cascade
+ * tick would cancel it straight back and leave the host wondering why nothing
+ * happened.
+ *
+ * Two gates, both server-side: the caller must manage this plan, and must
+ * already be connected to the person (docs/SECURITY.md §§4-5). The connection
+ * is read through the caller's own RLS client — `connections_select` is
+ * participants-only, so a forged profile id resolves to "not connected" rather
+ * than to somebody else's relationship.
+ */
+export async function inviteConnectionNow(
+  eventId: string,
+  profileId: string,
+): Promise<{ ok: boolean; error?: string; name?: string; warning?: string }> {
+  const auth = await requireUser();
+  if (!auth.ok) return auth;
+  const { supabase, user } = auth;
+  if (!(await isEventManager(user.id, eventId))) {
+    return { ok: false, error: 'Only the host can invite people to this plan.' };
+  }
+  if (profileId === user.id) return { ok: false, error: 'That’s you.' };
+
+  const relationship = await getRelationship(supabase, user.id, profileId);
+  if (relationship.status !== 'accepted') {
+    return {
+      ok: false,
+      error: 'You can only send a direct invite to someone you’re connected to.',
+    };
+  }
+  // A block that was placed without tearing down the connection row would
+  // otherwise slip through the check above.
+  const { data: blocked } = await supabase.rpc('are_blocked', {
+    a: user.id,
+    b: profileId,
+  });
+  if (blocked) return { ok: false, error: 'You can’t invite this person.' };
+
+  const admin = createAdminClient();
+  const { data: event } = await admin
+    .from('events')
+    .select('id, status, capacity, invite_mode, starts_at')
+    .eq('id', eventId)
+    .maybeSingle<{
+      id: string;
+      status: string;
+      capacity: number | null;
+      invite_mode: InviteMode;
+      starts_at: string | null;
+    }>();
+  if (!event) return { ok: false, error: 'Plan not found.' };
+  if (event.status !== 'inviting') {
+    return { ok: false, error: 'This plan isn’t sending invitations right now.' };
+  }
+
+  const { data: profile } = await admin
+    .from('profiles')
+    .select('display_name')
+    .eq('id', profileId)
+    .maybeSingle<{ display_name: string | null }>();
+  const name = profile?.display_name?.trim() || 'They';
+
+  const { data: existing } = await admin
+    .from('invites')
+    .select('invitee_id, position, group_stage, status')
+    .eq('event_id', eventId);
+  const rows = existing ?? [];
+  if (rows.some((row) => row.invitee_id === profileId)) {
+    return { ok: false, error: `${name} is already on this plan.` };
+  }
+
+  // Same reasoning as resendInvite: don't send into a full plan.
+  const accepted = rows.filter((row) => row.status === 'accepted').length;
+  const cap =
+    event.capacity ?? (event.invite_mode === 'individual' ? 1 : null);
+  if (cap !== null && accepted >= cap) {
+    return { ok: false, error: 'This plan is already full.' };
+  }
+
+  const position = rows.reduce((max, row) => Math.max(max, row.position), -1) + 1;
+  const groupStage =
+    event.invite_mode === 'group'
+      ? rows.reduce((max, row) => Math.max(max, row.group_stage), -1) + 1
+      : 0;
+
+  const { data: inserted, error } = await admin
+    .from('invites')
+    .insert({
+      event_id: eventId,
+      invitee_id: profileId,
+      position,
+      group_stage: groupStage,
+      // Same window rule the wizard and the add-people panel use, so a
+      // hand-sent invite expires on the plan's schedule rather than the
+      // table's 24h default.
+      window_minutes: event.starts_at
+        ? suggestWindow(new Date(event.starts_at), new Date()).windowMinutes
+        : 1440,
+      status: 'sent',
+      sent_at: new Date().toISOString(),
+    })
+    .select('id')
+    .single<{ id: string }>();
+  if (error || !inserted) {
+    await reportOperationalError('invite-connection-now', error, { eventId });
+    return { ok: false, error: 'Could not send that invite. Try again.' };
+  }
+
+  let delivery: InvitationDeliverySummary | undefined;
+  try {
+    delivery = await deliverInviteNow(eventId, inserted.id);
+  } catch (deliveryError) {
+    await reportOperationalError('invite-connection-deliver', deliveryError, {
+      eventId,
+    });
+  }
+
+  revalidatePath(`/events/${eventId}`);
+  return { ok: true, name, warning: deliveryWarning(delivery) };
+}
+
+/**
  * Withdraw a not-yet-accepted invite (queued, live, expired, declined, …).
  * Accepted attendees can't be silently dropped this way. Advances the cascade
  * so the next person goes out if a live slot just opened. Host/co-host only.
@@ -549,7 +704,7 @@ export async function addPeopleToEvent(
 export async function removeInvite(
   eventId: string,
   inviteId: string,
-): Promise<{ ok: boolean; error?: string }> {
+): Promise<ActionResult> {
   const auth = await requireUser();
   if (!auth.ok) return auth;
   const { user } = auth;
@@ -589,7 +744,7 @@ export async function removeInvite(
 export async function resendInvite(
   eventId: string,
   inviteId: string,
-): Promise<{ ok: boolean; error?: string; warning?: string }> {
+): Promise<ActionResult & { warning?: string }> {
   const auth = await requireUser();
   if (!auth.ok) return auth;
   const { user } = auth;
@@ -675,7 +830,7 @@ export async function moveQueuedInvite(
   eventId: string,
   inviteId: string,
   up: boolean,
-): Promise<{ ok: boolean; error?: string }> {
+): Promise<ActionResult> {
   const auth = await requireUser();
   if (!auth.ok) return auth;
   const { supabase, user } = auth;
@@ -698,7 +853,7 @@ export async function setInviteWindow(
   eventId: string,
   inviteId: string,
   minutes: number,
-): Promise<{ ok: boolean; error?: string }> {
+): Promise<ActionResult> {
   const auth = await requireUser();
   if (!auth.ok) return auth;
   const { supabase, user } = auth;
@@ -717,7 +872,7 @@ export async function setInviteWindow(
 export async function updateEventDetails(
   eventId: string,
   input: UpdateEventInput,
-): Promise<{ ok: boolean; error?: string }> {
+): Promise<ActionResult> {
   const auth = await requireUser();
   if (!auth.ok) return auth;
   const { user } = auth;
@@ -760,8 +915,13 @@ export async function updateEventDetails(
     })
     .eq('id', eventId);
   if (error) {
-    await reportOperationalError('event-update', error, { eventId });
-    return { ok: false, error: 'Could not save your changes. Try again.' };
+    return reportAndFail(
+      'SB-PLAN-SAVE',
+      'event-update',
+      error,
+      { eventId },
+      'Could not save your changes. Try again.',
+    );
   }
 
   // Notify accepted guests only when the logistics they'd act on actually change.
@@ -806,7 +966,7 @@ export async function updateEventDetails(
 export async function setEventInviteLink(
   eventId: string,
   enabled: boolean,
-): Promise<{ ok: boolean; error?: string }> {
+): Promise<ActionResult> {
   const auth = await requireUser();
   if (!auth.ok) return auth;
   const { user } = auth;
@@ -852,7 +1012,7 @@ export async function setEventInviteLink(
 export async function setEventShareLink(
   eventId: string,
   active: boolean,
-): Promise<{ ok: boolean; error?: string }> {
+): Promise<ActionResult> {
   const auth = await requireUser();
   if (!auth.ok) return auth;
   const { user } = auth;
@@ -866,8 +1026,13 @@ export async function setEventShareLink(
     .update({ share_link_active: active })
     .eq('id', eventId);
   if (error) {
-    await reportOperationalError('event-share-link', error, { eventId });
-    return { ok: false, error: 'Could not update the invite link. Try again.' };
+    return reportAndFail(
+      'SB-SHARE-SAVE',
+      'event-share-link',
+      error,
+      { eventId },
+      'Could not update the invite link. Try again.',
+    );
   }
 
   revalidatePath(`/events/${eventId}`);
@@ -881,7 +1046,7 @@ export async function setEventShareLink(
  */
 export async function rotateEventShareLink(
   eventId: string,
-): Promise<{ ok: boolean; error?: string }> {
+): Promise<ActionResult> {
   const auth = await requireUser();
   if (!auth.ok) return auth;
   const { user } = auth;
@@ -892,8 +1057,13 @@ export async function rotateEventShareLink(
     p_user: user.id,
   });
   if (error) {
-    await reportOperationalError('event-share-link-rotate', error, { eventId });
-    return { ok: false, error: 'Could not refresh the invite link. Try again.' };
+    return reportAndFail(
+      'SB-SHARE-SAVE',
+      'event-share-link-rotate',
+      error,
+      { eventId },
+      'Could not refresh the invite link. Try again.',
+    );
   }
 
   revalidatePath(`/events/${eventId}`);
@@ -1068,7 +1238,7 @@ export async function cancelEvent(
  */
 export async function deleteEventPermanently(
   eventId: string,
-): Promise<{ ok: boolean; error?: string }> {
+): Promise<ActionResult> {
   const auth = await requireUser();
   if (!auth.ok) return auth;
   const { supabase, user } = auth;
@@ -1322,7 +1492,7 @@ async function notifyDateSettled(
 export async function addCoHost(
   eventId: string,
   handle: string,
-): Promise<{ ok: boolean; error?: string }> {
+): Promise<ActionResult> {
   const auth = await requireUser();
   if (!auth.ok) return auth;
   const { supabase, user } = auth;

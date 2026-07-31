@@ -190,7 +190,7 @@ export function LiveShare({
         });
         setBusy(false);
         if (!result.ok) {
-          toast.error(result.error ?? 'Could not start sharing.');
+          toast.error(result.error ?? 'Could not start sharing.', result.code);
           return;
         }
         lastPoint.current = point;
@@ -220,7 +220,7 @@ export function LiveShare({
     setExpiresAt(null);
     onSelfChange(null);
     onNearbyChange([]);
-    if (!result.ok) toast.error(result.error ?? 'Could not stop sharing.');
+    if (!result.ok) toast.error(result.error ?? 'Could not stop sharing.', result.code);
   }
 
   // Re-share with a new visibility scope without interrupting the live loop.

@@ -1,5 +1,7 @@
 'use server';
 
+import type { ActionResult } from '@/lib/errors';
+
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import { createClient } from '@/lib/supabase/server';
@@ -43,7 +45,7 @@ export async function createBoard(formData: FormData): Promise<void> {
 export async function inviteToBoard(
   boardId: string,
   handle: string,
-): Promise<{ ok: boolean; error?: string }> {
+): Promise<ActionResult> {
   const auth = await requireUser();
   if (!auth.ok) return auth;
   const { supabase, user } = auth;
@@ -90,7 +92,7 @@ export async function inviteToBoard(
  */
 export async function ensureBoardInviteLink(
   boardId: string,
-): Promise<{ ok: boolean; url?: string; error?: string }> {
+): Promise<ActionResult & { url?: string }> {
   const auth = await requireUser();
   if (!auth.ok) return auth;
   const { supabase } = auth;
@@ -110,7 +112,7 @@ export async function ensureBoardInviteLink(
  */
 export async function rotateBoardInviteLink(
   boardId: string,
-): Promise<{ ok: boolean; url?: string; error?: string }> {
+): Promise<ActionResult & { url?: string }> {
   const auth = await requireUser();
   if (!auth.ok) return auth;
   const { supabase } = auth;
@@ -167,7 +169,7 @@ export async function addBoardPost(
     cadence: string;
     startsAt: string | null;
   },
-): Promise<{ ok: boolean; error?: string }> {
+): Promise<ActionResult> {
   const auth = await requireUser();
   if (!auth.ok) return auth;
   const { supabase, user } = auth;
@@ -236,7 +238,7 @@ export async function updateBoardPost(
     cadence: string;
     startsAt: string | null;
   },
-): Promise<{ ok: boolean; error?: string }> {
+): Promise<ActionResult> {
   const auth = await requireUser();
   if (!auth.ok) return auth;
   const { supabase, user } = auth;

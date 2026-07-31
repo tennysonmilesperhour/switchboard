@@ -1,10 +1,15 @@
 'use client';
 
-import { useTransition } from 'react';
+import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { Avatar } from '@/components/ui/Avatar';
 import { useToast } from '@/components/ui/Toast';
 import { useConfirm } from '@/components/ui/ConfirmDialog';
+import {
+  InviteeSheet,
+  inviteeIsTappable,
+  type InviteePerson,
+} from '@/components/events/InviteeSheet';
 import {
   moveQueuedInvite,
   removeInvite,
@@ -12,6 +17,7 @@ import {
   setInviteWindow,
 } from '@/lib/actions/events';
 import { formatRelative, formatWindow } from '@/lib/format';
+import { INVITE_STATUS_LABEL } from '@/lib/invite-status';
 import { inviteExpiresAt } from '@/lib/engine/cascade';
 import { WINDOW_CHOICES } from '@/lib/engine/windows';
 import type { Invite } from '@/lib/types';
@@ -30,20 +36,25 @@ interface CascadeProgressProps {
   /** Host/co-host view: show per-invite manage controls. */
   eventId?: string;
   editable?: boolean;
+  /**
+   * Contact cards keyed by invite id. Tapping a row opens the person's card,
+   * which is how a host reaches an invitee who has no account (see
+   * `InviteeSheet`). Absent means the rows stay read-only.
+   */
+  people?: Record<string, InviteePerson>;
 }
 
-const STATUS_META: Record<
-  Invite['status'],
-  { label: string; className: string; dot: string }
-> = {
-  queued: { label: 'Waiting in line', className: 'text-ink-faint', dot: 'bg-line' },
-  sent: { label: 'Invited - waiting', className: 'text-gold-deep', dot: 'bg-gold animate-pulse-soft' },
-  accepted: { label: 'Accepted', className: 'text-sage-deep', dot: 'bg-sage' },
-  declined: { label: 'Declined', className: 'text-ink-faint', dot: 'bg-rose-deep/50' },
-  expired: { label: 'No response', className: 'text-ink-faint', dot: 'bg-line' },
-  cancelled: { label: 'Not needed', className: 'text-ink-faint', dot: 'bg-line' },
-  waitlisted: { label: 'Waitlisted', className: 'text-gold-deep', dot: 'bg-gold' },
-  requested: { label: 'Asked to join', className: 'text-terracotta-deep', dot: 'bg-terracotta' },
+// Colour and motion per status; the wording itself comes from the shared label
+// map so this row and the contact card it opens never disagree.
+const STATUS_STYLE: Record<Invite['status'], { className: string; dot: string }> = {
+  queued: { className: 'text-ink-faint', dot: 'bg-line' },
+  sent: { className: 'text-gold-deep', dot: 'bg-gold animate-pulse-soft' },
+  accepted: { className: 'text-sage-deep', dot: 'bg-sage' },
+  declined: { className: 'text-ink-faint', dot: 'bg-rose-deep/50' },
+  expired: { className: 'text-ink-faint', dot: 'bg-line' },
+  cancelled: { className: 'text-ink-faint', dot: 'bg-line' },
+  waitlisted: { className: 'text-gold-deep', dot: 'bg-gold' },
+  requested: { className: 'text-terracotta-deep', dot: 'bg-terracotta' },
 };
 
 const REOPENABLE: ReadonlySet<Invite['status']> = new Set([
@@ -53,8 +64,15 @@ const REOPENABLE: ReadonlySet<Invite['status']> = new Set([
 ]);
 
 /** Host-only live view of how the cascade is flowing, with manage controls. */
-export function CascadeProgress({ invites, mode, eventId, editable }: CascadeProgressProps) {
+export function CascadeProgress({
+  invites,
+  mode,
+  eventId,
+  editable,
+  people,
+}: CascadeProgressProps) {
   const [pending, startTransition] = useTransition();
+  const [openPerson, setOpenPerson] = useState<InviteePerson | null>(null);
   const router = useRouter();
   const toast = useToast();
   const confirm = useConfirm();
@@ -74,7 +92,7 @@ export function CascadeProgress({ invites, mode, eventId, editable }: CascadePro
       if (!ok) return;
       const result = await removeInvite(eventId, invite.id);
       if (!result.ok) {
-        toast.error(result.error ?? 'Could not remove that invite.');
+        toast.error(result.error ?? 'Could not remove that invite.', result.code);
         return;
       }
       router.refresh();
@@ -86,7 +104,7 @@ export function CascadeProgress({ invites, mode, eventId, editable }: CascadePro
     startTransition(async () => {
       const result = await resendInvite(eventId, invite.id);
       if (!result.ok) {
-        toast.error(result.error ?? 'Could not resend that invite.');
+        toast.error(result.error ?? 'Could not resend that invite.', result.code);
         return;
       }
       if (result.warning) {
@@ -104,7 +122,7 @@ export function CascadeProgress({ invites, mode, eventId, editable }: CascadePro
     startTransition(async () => {
       const result = await moveQueuedInvite(eventId, invite.id, up);
       if (!result.ok) {
-        toast.error(result.error ?? 'Could not reorder the line.');
+        toast.error(result.error ?? 'Could not reorder the line.', result.code);
         return;
       }
       router.refresh();
@@ -116,7 +134,7 @@ export function CascadeProgress({ invites, mode, eventId, editable }: CascadePro
     startTransition(async () => {
       const result = await setInviteWindow(eventId, invite.id, minutes);
       if (!result.ok) {
-        toast.error(result.error ?? 'Could not change the window.');
+        toast.error(result.error ?? 'Could not change the window.', result.code);
         return;
       }
       router.refresh();
@@ -144,7 +162,8 @@ export function CascadeProgress({ invites, mode, eventId, editable }: CascadePro
             )}
             <ol className="space-y-1.5">
               {stageInvites.map((invite) => {
-                const meta = STATUS_META[invite.status];
+                const style = STATUS_STYLE[invite.status];
+                const statusLabel = INVITE_STATUS_LABEL[invite.status];
                 const expiresAt =
                   invite.status === 'sent'
                     ? inviteExpiresAt({
@@ -175,28 +194,27 @@ export function CascadeProgress({ invites, mode, eventId, editable }: CascadePro
                     return `${channel} failed`;
                   })
                   .join(' · ');
-                return (
-                  <li
-                    key={invite.id}
-                    className={`flex items-center gap-3 rounded-card px-3.5 py-3 ${
-                      invite.status === 'sent'
-                        ? 'bg-gold-soft shadow-lift'
-                        : invite.status === 'accepted'
-                          ? 'bg-sage-soft'
-                          : 'bg-cream'
-                    }`}
-                  >
-                    <span className={`size-2.5 rounded-full shrink-0 ${meta.dot}`} aria-hidden />
-                    <Avatar name={invite.invitee_name} seed={invite.invitee_id ?? invite.id} size="sm" />
-                    <span className="flex-1 min-w-0">
-                      <span className="text-sm font-bold block truncate">
+                // The person behind this invite, when there is something to do
+                // with them — text, email, or hand over their link.
+                const person = people?.[invite.id];
+                const tappable = person && inviteeIsTappable(person);
+                const identity = (
+                  <>
+                    <Avatar
+                      name={invite.invitee_name}
+                      seed={invite.invitee_id ?? invite.id}
+                      src={person?.avatarUrl}
+                      size="sm"
+                    />
+                    <span className="min-w-0 flex-1 text-left">
+                      <span className="block truncate text-sm font-bold">
                         {invite.invitee_name}
                         {!invite.invitee_id && (
                           <span className="ml-1.5 text-[10px] uppercase tracking-wide text-ink-faint">guest</span>
                         )}
                       </span>
-                      <span className={`text-xs ${meta.className}`}>
-                        {meta.label}
+                      <span className={`text-xs ${style.className}`}>
+                        {statusLabel}
                         {invite.status === 'sent' && expiresAt
                           ? ` · moves on ${formatRelative(expiresAt.toISOString())}`
                           : ''}
@@ -224,6 +242,32 @@ export function CascadeProgress({ invites, mode, eventId, editable }: CascadePro
                         </span>
                       )}
                     </span>
+                  </>
+                );
+                return (
+                  <li
+                    key={invite.id}
+                    className={`flex items-center gap-3 rounded-card px-3.5 py-3 ${
+                      invite.status === 'sent'
+                        ? 'bg-gold-soft shadow-lift'
+                        : invite.status === 'accepted'
+                          ? 'bg-sage-soft'
+                          : 'bg-cream'
+                    }`}
+                  >
+                    <span className={`size-2.5 rounded-full shrink-0 ${style.dot}`} aria-hidden />
+                    {tappable ? (
+                      <button
+                        type="button"
+                        onClick={() => setOpenPerson(person)}
+                        aria-label={`Contact ${invite.invitee_name}`}
+                        className="flex min-w-0 flex-1 items-center gap-3 rounded-card text-left transition-opacity hover:opacity-80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-terracotta"
+                      >
+                        {identity}
+                      </button>
+                    ) : (
+                      <span className="flex min-w-0 flex-1 items-center gap-3">{identity}</span>
+                    )}
                     {canReWindow && (
                       <select
                         value={invite.window_minutes}
@@ -297,8 +341,13 @@ export function CascadeProgress({ invites, mode, eventId, editable }: CascadePro
         );
       })}
       <p className="text-xs text-ink-faint leading-relaxed">
-        Invitees never see this view - or their place in line.
+        {people
+          ? 'Tap anyone to text or email them. Invitees never see this view - or their place in line.'
+          : 'Invitees never see this view - or their place in line.'}
       </p>
+      {openPerson && (
+        <InviteeSheet person={openPerson} onClose={() => setOpenPerson(null)} />
+      )}
     </div>
   );
 }

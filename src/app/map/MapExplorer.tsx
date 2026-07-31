@@ -100,7 +100,7 @@ export function MapExplorer({
     startTransition(async () => {
       const result = await locateMyPlaces();
       if (!result.ok) {
-        toast.error(result.error ?? 'Could not look up locations.');
+        toast.error(result.error ?? 'Could not look up locations.', result.code);
         return;
       }
       if ((result.located ?? 0) === 0) {

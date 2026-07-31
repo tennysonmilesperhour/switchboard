@@ -8,6 +8,7 @@ import { formatDateTime } from '@/lib/format';
 import { resolveEventZone } from '@/lib/server/event-zone';
 import { eventSharePath } from '@/lib/links';
 import { canReadPlan, shareLinkNotice, shareLinkState } from '@/lib/share-link';
+import { errorRef } from '@/lib/errors';
 import type { EventStatus } from '@/lib/types';
 import { Button } from '@/components/ui/Button';
 import { Icon } from '@/components/ui/Icon';
@@ -197,6 +198,11 @@ export default async function JoinPage({
               {notice?.heading ?? 'This invite link isn’t active'}
             </h1>
             <p className="text-ink-soft text-sm mt-2">{notice?.body}</p>
+            {notice && (
+              <p className="mt-4 font-mono text-[11px] uppercase tracking-wide text-ink-faint">
+                {errorRef(notice.code)}
+              </p>
+            )}
           </div>
         ) : (
           <>

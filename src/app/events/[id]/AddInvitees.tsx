@@ -2,11 +2,13 @@
 
 import { useMemo, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
+import { Avatar } from '@/components/ui/Avatar';
 import { Button } from '@/components/ui/Button';
 import { Chip } from '@/components/ui/Chip';
 import { useToast } from '@/components/ui/Toast';
-import { addPeopleToEvent } from '@/lib/actions/events';
+import { addPeopleToEvent, inviteConnectionNow } from '@/lib/actions/events';
 import { ContactImportControls } from '@/components/ContactImportControls';
+import { InviteeSheet } from '@/components/events/InviteeSheet';
 import {
   resolveContactMatches,
   type ContactCandidate,
@@ -17,6 +19,7 @@ export interface ConnectionOption {
   id: string;
   name: string;
   handle: string;
+  avatarUrl: string | null;
 }
 
 /**
@@ -38,6 +41,8 @@ export function AddInvitees({
   const [contactsBusy, setContactsBusy] = useState(false);
   const [contactMatches, setContactMatches] = useState<ContactMatch[]>([]);
   const [contactsNote, setContactsNote] = useState<string | null>(null);
+  const [openConnection, setOpenConnection] = useState<ConnectionOption | null>(null);
+  const [sendingTo, setSendingTo] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
   const router = useRouter();
   const toast = useToast();
@@ -64,6 +69,33 @@ export function AddInvitees({
     } else if (e.key === 'Backspace' && !text && entries.length > 0) {
       setEntries((current) => current.slice(0, -1));
     }
+  }
+
+  /**
+   * Ask this person now, rather than putting them at the back of the line.
+   * The invitation lands in their notifications immediately — they're already
+   * on Switchboard, so there is nothing to text and nothing to install.
+   */
+  function sendNow(connection: ConnectionOption) {
+    setSendingTo(connection.id);
+    startTransition(async () => {
+      const result = await inviteConnectionNow(eventId, connection.id);
+      setSendingTo(null);
+      if (!result.ok) {
+        toast.error(result.error ?? 'Could not send that invite.', result.code);
+        return;
+      }
+      setOpenConnection(null);
+      // They're on the plan now, so drop any staged selection of them; the
+      // refresh below re-renders the list without them either way.
+      setSelected((current) => current.filter((id) => id !== connection.id));
+      toast.success(
+        result.warning
+          ? `${result.name ?? connection.name} was invited. ${result.warning}`
+          : `Invitation sent to ${result.name ?? connection.name}.`,
+      );
+      router.refresh();
+    });
   }
 
   function toggleConnection(id: string) {
@@ -170,9 +202,9 @@ export function AddInvitees({
     <section className="border-t border-line pt-5">
       <h2 className="font-display text-xl text-ink">Add people</h2>
       <p className="text-sm text-ink-faint mt-0.5 mb-3">
-        Add anyone by <strong>@handle</strong>, email, phone, or name - or tap a
-        friend below. They join the back of the line and go out when it’s their
-        turn.
+        Add anyone by <strong>@handle</strong>, email, phone, or name - they
+        join the back of the line and go out when it’s their turn. Friends
+        already on Switchboard are below: tap one to ask them straight away.
       </p>
 
       {entries.length > 0 && (
@@ -212,21 +244,61 @@ export function AddInvitees({
 
       {availableConnections.length > 0 && (
         <div className="mt-4">
-          <p className="text-xs font-bold uppercase tracking-wide text-ink-faint mb-2">
+          <p className="text-xs font-bold uppercase tracking-wide text-ink-faint mb-1">
             From your people
           </p>
-          <div className="flex flex-wrap gap-2">
-            {availableConnections.map((connection) => (
-              <Chip
-                key={connection.id}
-                selected={selected.includes(connection.id)}
-                disabled={pending}
-                onClick={() => toggleConnection(connection.id)}
-              >
-                {connection.name}
-              </Chip>
-            ))}
-          </div>
+          <p className="mb-2 text-xs text-ink-faint leading-relaxed">
+            Tap someone to ask them right now - the invitation lands in their
+            notifications. Or queue them for their turn in the line.
+          </p>
+          <ul className="space-y-1.5">
+            {availableConnections.map((connection) => {
+              const queued = selected.includes(connection.id);
+              return (
+                <li
+                  key={connection.id}
+                  className="flex items-center gap-2 rounded-card bg-cream px-2.5 py-2"
+                >
+                  <button
+                    type="button"
+                    onClick={() => setOpenConnection(connection)}
+                    aria-label={`Open ${connection.name}’s card`}
+                    className="flex min-w-0 flex-1 items-center gap-2.5 rounded-card text-left transition-opacity hover:opacity-80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-terracotta"
+                  >
+                    <Avatar
+                      name={connection.name}
+                      seed={connection.id}
+                      src={connection.avatarUrl}
+                      size="sm"
+                    />
+                    <span className="min-w-0">
+                      <span className="block truncate text-sm font-bold text-ink">
+                        {connection.name}
+                      </span>
+                      {connection.handle && (
+                        <span className="block truncate text-xs text-ink-faint">
+                          @{connection.handle}
+                        </span>
+                      )}
+                    </span>
+                  </button>
+                  <button
+                    type="button"
+                    aria-pressed={queued}
+                    disabled={pending}
+                    onClick={() => toggleConnection(connection.id)}
+                    className={`shrink-0 rounded-pill border px-3 py-1.5 text-xs font-bold transition-colors disabled:opacity-40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-terracotta ${
+                      queued
+                        ? 'border-terracotta bg-terracotta text-white'
+                        : 'border-line bg-card text-ink-soft hover:border-terracotta hover:text-terracotta-deep'
+                    }`}
+                  >
+                    {queued ? 'In line ✓' : 'In line'}
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
         </div>
       )}
 
@@ -260,6 +332,40 @@ export function AddInvitees({
       </div>
 
       {error && <p className="text-xs text-rose-deep mt-2.5">{error}</p>}
+
+      {openConnection && (
+        <InviteeSheet
+          person={{
+            id: openConnection.id,
+            name: openConnection.name,
+            handle: openConnection.handle || null,
+            avatarUrl: openConnection.avatarUrl,
+            seed: openConnection.id,
+            isGuest: false,
+            statusLabel: 'Connected on Switchboard',
+            // Nothing off-platform here on purpose: they have an account, so
+            // the invitation goes through the app, and their own contact
+            // details are theirs to share (see the event page's card notes).
+            contact: null,
+            inviteUrl: null,
+            messages: null,
+          }}
+          onClose={() => setOpenConnection(null)}
+        >
+          <Button
+            type="button"
+            className="w-full"
+            disabled={pending}
+            onClick={() => sendNow(openConnection)}
+          >
+            {sendingTo === openConnection.id ? 'Sending…' : 'Send invite now'}
+          </Button>
+          <p className="mt-2 text-xs leading-relaxed text-ink-faint">
+            Goes straight to their notifications, ahead of the line. Everyone
+            still waiting keeps their place.
+          </p>
+        </InviteeSheet>
+      )}
     </section>
   );
 }

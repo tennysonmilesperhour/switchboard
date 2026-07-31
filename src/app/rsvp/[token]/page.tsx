@@ -3,6 +3,7 @@ import { createAdminClient, hasAdminCredentials } from '@/lib/supabase/admin';
 import { getUser } from '@/lib/supabase/server';
 import { reportOperationalError } from '@/lib/server/observability';
 import { safeHttpUrl, serializeJsonLd } from '@/lib/security';
+import { errorFor, errorRef } from '@/lib/errors';
 import { resolveEventZone } from '@/lib/server/event-zone';
 import { InvitePlanDetails } from '@/components/events/InvitePlanDetails';
 import { RsvpSignInGate } from '@/components/events/RsvpSignInGate';
@@ -160,6 +161,7 @@ export default async function GuestRsvpPage({
   // Show the plan's local time, not the server's UTC. Falls back to the host's
   // profile zone for plans created before the zone was captured on the event.
   const zone = admin ? await resolveEventZone(admin, event) : null;
+  const gone = errorFor('SB-RSVP-GONE');
 
   // schema.org/Event JSON-LD so the guest link unfurls richly and is machine
   // readable, matching the host event page.
@@ -196,9 +198,13 @@ export default async function GuestRsvpPage({
         {!invite || !event ? (
           <div className="text-center">
             <p className="text-4xl mb-3" aria-hidden>🍂</p>
-            <h1 className="font-extrabold tracking-tight text-2xl">This invitation isn’t here anymore</h1>
-            <p className="text-ink-soft text-sm mt-2">
-              It may have expired or been withdrawn.
+            <h1 className="font-extrabold tracking-tight text-2xl">{gone.message}</h1>
+            <p className="text-ink-soft text-sm mt-2">{gone.fix}</p>
+            {/* Which of "expired", "withdrawn", or "this deployment can't see
+                the invite at all" you are looking at is not knowable from the
+                sentence. The code is. */}
+            <p className="mt-4 font-mono text-[11px] uppercase tracking-wide text-ink-faint">
+              {errorRef(gone.code)}
             </p>
           </div>
         ) : (

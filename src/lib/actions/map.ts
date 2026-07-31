@@ -1,5 +1,7 @@
 'use server';
 
+import type { ErrorCode } from '@/lib/errors';
+
 import { revalidatePath } from 'next/cache';
 import { requireUser } from '@/lib/server/require-user';
 import { checkRateLimit } from '@/lib/server/rate-limit';
@@ -11,12 +13,20 @@ export interface LocateResult {
   located?: number; // rows given a coordinate this run
   remaining?: number; // rows still lacking one afterward
   error?: string;
+  /** Stable failure code from `@/lib/errors`, shown beside the message. */
+  code?: ErrorCode;
+  /** The next step, when the reader has one. */
+  fix?: string | null;
 }
 
 export interface PlaceSearchResult {
   ok: boolean;
   results?: PlaceResult[];
   error?: string;
+  /** Stable failure code from `@/lib/errors`, shown beside the message. */
+  code?: ErrorCode;
+  /** The next step, when the reader has one. */
+  fix?: string | null;
 }
 
 /**

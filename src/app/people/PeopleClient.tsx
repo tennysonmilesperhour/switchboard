@@ -109,7 +109,7 @@ export function PeopleClient({
     startTransition(async () => {
       const result = await removeConnection(friend.connectionId);
       if (!result.ok) {
-        toast.error(result.error ?? 'Could not remove that connection.');
+        toast.error(result.error ?? 'Could not remove that connection.', result.code);
         return;
       }
       router.refresh();
@@ -126,7 +126,7 @@ export function PeopleClient({
     if (!ok) return;
     startTransition(async () => {
       const result = await blockProfile(friend.id, friend.connectionId);
-      if (!result.ok) return toast.error(result.error ?? 'Could not block that person.');
+      if (!result.ok) return toast.error(result.error ?? 'Could not block that person.', result.code);
       router.refresh();
     });
   }
@@ -137,7 +137,7 @@ export function PeopleClient({
         ? await stopGivingSpace(friend.id)
         : await giveSpace(friend.id);
       if (!result.ok) {
-        toast.error(result.error ?? 'Could not update. Try again.');
+        toast.error(result.error ?? 'Could not update. Try again.', result.code);
         return;
       }
       toast.success(
@@ -154,7 +154,7 @@ export function PeopleClient({
     if (!reason) return;
     startTransition(async () => {
       const result = await reportProfile(friend.id, reason);
-      if (!result.ok) return toast.error(result.error ?? 'Could not send the report.');
+      if (!result.ok) return toast.error(result.error ?? 'Could not send the report.', result.code);
       toast.success('Report received.');
     });
   }
@@ -192,7 +192,7 @@ export function PeopleClient({
     startTransition(async () => {
       const result = await toggleCircleMember(circleId, friendId, add);
       if (!result.ok) {
-        toast.error(result.error ?? 'Could not update circle.');
+        toast.error(result.error ?? 'Could not update circle.', result.code);
         return;
       }
       router.refresh();
@@ -205,7 +205,7 @@ export function PeopleClient({
     startTransition(async () => {
       const result = await renameCircle(circle.id, name, editEmoji.trim() || undefined);
       if (!result.ok) {
-        toast.error(result.error ?? 'Could not rename the circle.');
+        toast.error(result.error ?? 'Could not rename the circle.', result.code);
         return;
       }
       router.refresh();
@@ -223,7 +223,7 @@ export function PeopleClient({
     startTransition(async () => {
       const result = await deleteCircle(circle.id);
       if (!result.ok) {
-        toast.error(result.error ?? 'Could not delete the circle.');
+        toast.error(result.error ?? 'Could not delete the circle.', result.code);
         return;
       }
       setExpandedCircle(null);
@@ -279,7 +279,7 @@ export function PeopleClient({
     startTransition(async () => {
       const result = await sendConnectionRequest(`@${profile.handle}`);
       if (!result.ok) {
-        toast.error(result.error ?? 'Could not send that request.');
+        toast.error(result.error ?? 'Could not send that request.', result.code);
         return;
       }
       toast.success(`Request sent to ${profile.name}.`);
@@ -291,7 +291,7 @@ export function PeopleClient({
     startTransition(async () => {
       const result = await resendConnectionRequest(request.connectionId);
       if (!result.ok) {
-        toast.error(result.error ?? 'Could not resend. Try again.');
+        toast.error(result.error ?? 'Could not resend. Try again.', result.code);
         return;
       }
       toast.success(`Nudged ${request.name.split(' ')[0]} again.`);
@@ -303,7 +303,7 @@ export function PeopleClient({
     startTransition(async () => {
       const result = await removeConnection(request.connectionId);
       if (!result.ok) {
-        toast.error(result.error ?? 'Could not cancel. Try again.');
+        toast.error(result.error ?? 'Could not cancel. Try again.', result.code);
         return;
       }
       router.refresh();
@@ -429,7 +429,7 @@ export function PeopleClient({
                       startTransition(async () => {
                         const result = await acceptConnection(request.connectionId);
                         if (!result.ok) {
-                          toast.error(result.error ?? 'Could not accept. Try again.');
+                          toast.error(result.error ?? 'Could not accept. Try again.', result.code);
                           return;
                         }
                         router.refresh();
@@ -446,7 +446,7 @@ export function PeopleClient({
                       startTransition(async () => {
                         const result = await removeConnection(request.connectionId);
                         if (!result.ok) {
-                          toast.error(result.error ?? 'Could not update. Try again.');
+                          toast.error(result.error ?? 'Could not update. Try again.', result.code);
                           return;
                         }
                         router.refresh();
@@ -520,7 +520,7 @@ export function PeopleClient({
                                     !inCircle,
                                   );
                                   if (!result.ok) {
-                                    toast.error(result.error ?? 'Could not update circle.');
+                                    toast.error(result.error ?? 'Could not update circle.', result.code);
                                     return;
                                   }
                                   router.refresh();
@@ -703,7 +703,7 @@ export function PeopleClient({
                   startTransition(async () => {
                     const result = await createHousehold(householdName, householdMembers);
                     if (!result.ok) {
-                      toast.error(result.error ?? 'Could not create the household.');
+                      toast.error(result.error ?? 'Could not create the household.', result.code);
                       return;
                     }
                     setHouseholdName('');
@@ -980,7 +980,7 @@ export function PeopleClient({
             startTransition(async () => {
               const result = await createCircle(name, circleEmoji);
               if (!result.ok) {
-                toast.error(result.error ?? 'Could not create the circle.');
+                toast.error(result.error ?? 'Could not create the circle.', result.code);
                 return;
               }
               setNewCircle('');

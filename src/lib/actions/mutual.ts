@@ -1,5 +1,7 @@
 'use server';
 
+import type { ErrorCode } from '@/lib/errors';
+
 import { revalidatePath } from 'next/cache';
 import { createClient } from '@/lib/supabase/server';
 import { notifyInterestReceived, notifyUsers } from '@/lib/server/notify';
@@ -11,6 +13,10 @@ export interface MutualResult {
   ok: boolean;
   matched?: boolean;
   error?: string;
+  /** Stable failure code from `@/lib/errors`, shown beside the message. */
+  code?: ErrorCode;
+  /** The next step, when the reader has one. */
+  fix?: string | null;
 }
 
 /**

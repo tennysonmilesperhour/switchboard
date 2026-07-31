@@ -1,5 +1,7 @@
 'use server';
 
+import type { ActionResult } from '@/lib/errors';
+
 import { revalidatePath } from 'next/cache';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
@@ -12,7 +14,7 @@ export async function proposeIntroduction(
   personB: string,
   activity: string,
   note: string,
-): Promise<{ ok: boolean; error?: string }> {
+): Promise<ActionResult> {
   const auth = await requireUser();
   if (!auth.ok) return auth;
   const { supabase, user } = auth;
@@ -71,7 +73,7 @@ export async function proposeIntroduction(
 export async function respondToIntroduction(
   proposalId: string,
   accept: boolean,
-): Promise<{ ok: boolean; matched: boolean; error?: string }> {
+): Promise<ActionResult & { matched: boolean }> {
   const supabase = await createClient();
   const { data, error } = await supabase.rpc('respond_to_matchmaker', {
     p_proposal: proposalId,

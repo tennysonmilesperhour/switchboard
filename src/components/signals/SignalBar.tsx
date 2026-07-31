@@ -101,7 +101,7 @@ export function SignalBar({ active, circles }: SignalBarProps) {
         ? await addSignal(preset.emoji, preset.label, audiences)
         : await removeSignal(preset.label);
       if (!result.ok) {
-        toast.error(result.error ?? 'Could not update your signal.');
+        toast.error(result.error ?? 'Could not update your signal.', result.code);
       }
     });
   }
@@ -111,7 +111,7 @@ export function SignalBar({ active, circles }: SignalBarProps) {
       applyView({ type: 'audience', audiences: circleIds });
       const result = await setSignalsAudience(circleIds);
       if (!result.ok) {
-        toast.error(result.error ?? 'Could not change who can see this.');
+        toast.error(result.error ?? 'Could not change who can see this.', result.code);
       }
     });
   }
@@ -121,7 +121,7 @@ export function SignalBar({ active, circles }: SignalBarProps) {
       applyView({ type: 'clear' });
       const result = await clearSignal();
       if (!result.ok) {
-        toast.error(result.error ?? 'Could not turn your signals off.');
+        toast.error(result.error ?? 'Could not turn your signals off.', result.code);
         return;
       }
       toast.success('Signals turned off.');
@@ -134,7 +134,7 @@ export function SignalBar({ active, circles }: SignalBarProps) {
     startTransition(async () => {
       applyView({ type: 'set', label, on: true });
       const result = await addSignal(customEmoji || '✨', label, audiences);
-      if (!result.ok) toast.error(result.error ?? 'Could not add your status.');
+      if (!result.ok) toast.error(result.error ?? 'Could not add your status.', result.code);
       else setCustomLabel('');
     });
   }

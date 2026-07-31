@@ -3,10 +3,17 @@
 import Link from 'next/link';
 import { useEffect } from 'react';
 import { Button } from '@/components/ui/Button';
+import { errorFor, errorRef } from '@/lib/errors';
 
 /**
  * Route-level error boundary. Calm, non-alarming copy that owns the problem and
  * offers a way forward, rather than a stack trace.
+ *
+ * The digest is the point of the reference line below. Next.js already computes
+ * it, already writes it into the server-side log for the crash, and until now
+ * this page threw it away — so a user reporting "it says something slipped" gave
+ * us a sentence that matches every crash in the app and nothing more. Shown
+ * beside the code, it turns any screenshot into an exact log lookup.
  */
 export default function Error({
   error,
@@ -19,6 +26,8 @@ export default function Error({
     console.error(error);
   }, [error]);
 
+  const crash = errorFor('SB-APP-CRASH');
+
   return (
     <div className="mx-auto flex min-h-dvh max-w-lg flex-col items-center justify-center gap-4 px-8 text-center">
       <span className="text-4xl" aria-hidden>
@@ -28,7 +37,10 @@ export default function Error({
         Something slipped
       </h1>
       <p className="max-w-xs text-sm leading-relaxed text-ink-faint">
-        A hiccup on our end, not yours. Give it another try in a moment.
+        {crash.message} {crash.fix}
+      </p>
+      <p className="font-mono text-[11px] uppercase tracking-wide text-ink-faint">
+        {errorRef(crash.code, error.digest)}
       </p>
       <div className="mt-2 flex items-center gap-3">
         <Button onClick={reset}>Try again</Button>

@@ -83,7 +83,7 @@ export function PeopleDiscoveryClient({
       const result = await downToConnect(person.id, context, 'discover_connect');
       setPendingId(null);
       if (!result.ok) {
-        toast.error(result.error ?? 'Could not save that quietly.');
+        toast.error(result.error ?? 'Could not save that quietly.', result.code);
         return;
       }
       if (result.matched) {
@@ -100,7 +100,7 @@ export function PeopleDiscoveryClient({
     startDiscoverTransition(async () => {
       const result = await setDiscoverable(true);
       if (!result.ok) {
-        toast.error(result.error ?? 'Could not turn on discoverability.');
+        toast.error(result.error ?? 'Could not turn on discoverability.', result.code);
         return;
       }
       toast.success('You are discoverable now.');

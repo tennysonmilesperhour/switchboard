@@ -174,6 +174,29 @@ export async function notifyCurrentInviteWave(
 }
 
 /**
+ * Deliver one specific invite that is already live.
+ *
+ * The cascade decides *when* an invitation goes out; this is for the case where
+ * the host has decided that themselves — picking a connection off the plan and
+ * sending it to them now (`inviteConnectionNow`). Delivery is the same code
+ * path either way, so a hand-sent invite arrives in-app exactly like a cascaded
+ * one, with the same `invite_delivery_attempts` record behind it. The status
+ * transition is the caller's; this only sends.
+ */
+export async function deliverInviteNow(
+  eventId: string,
+  inviteId: string,
+): Promise<InvitationDeliverySummary> {
+  const admin = createAdminClient();
+  const [{ data: event }, { data: invite }] = await Promise.all([
+    admin.from('events').select('*').eq('id', eventId).single<SwitchboardEvent>(),
+    admin.from('invites').select('*').eq('id', inviteId).maybeSingle<Invite>(),
+  ]);
+  if (!event || !invite || invite.event_id !== eventId) return emptyDeliverySummary();
+  return deliverInvitations(event, [invite], new Set([invite.id]));
+}
+
+/**
  * Server-authoritative cascade tick for one event. Called after any invite
  * response, on event page load (lazy), and from the cron sweep.
  */

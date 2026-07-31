@@ -1,5 +1,7 @@
 'use server';
 
+import type { ErrorCode } from '@/lib/errors';
+
 import { requireUser } from '@/lib/server/require-user';
 import { checkRateLimit } from '@/lib/server/rate-limit';
 import { parseEvent, isoToDateTimeParts } from '@/lib/import-event';
@@ -7,6 +9,10 @@ import { parseEvent, isoToDateTimeParts } from '@/lib/import-event';
 export interface ImportResult {
   ok: boolean;
   error?: string;
+  /** Stable failure code from `@/lib/errors`, shown beside the message. */
+  code?: ErrorCode;
+  /** The next step, when the reader has one. */
+  fix?: string | null;
   title?: string;
   description?: string;
   date?: string;
