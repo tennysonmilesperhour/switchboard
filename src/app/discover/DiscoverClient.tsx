@@ -7,12 +7,13 @@ import { Card, SectionHeader } from '@/components/ui/Card';
 import { Chip } from '@/components/ui/Chip';
 import { MultiSelectChips } from '@/components/ui/MultiSelectChips';
 import { EmptyState } from '@/components/ui/EmptyState';
+import { Switch } from '@/components/ui/Switch';
 import { runDiscovery } from '@/lib/actions/discovery';
 import type { Suggestion } from '@/lib/ai/discovery';
+import { DEFAULT_GROUP_SIZE, GROUP_SIZES, isSolo } from '@/lib/ai/discovery-options';
 
 const BUDGETS = ['Free', '$', '$$', '$$$'];
 const VIBES = ['Relaxed', 'Adventurous', 'Cozy', 'Lively', 'Quiet'];
-const GROUP_SIZES = ['Just us two', 'Small group (3-6)', 'Bigger crew (7+)'];
 
 export function DiscoverClient({ defaultInterests }: { defaultInterests: string[] }) {
   const [location, setLocation] = useState('');
@@ -20,10 +21,12 @@ export function DiscoverClient({ defaultInterests }: { defaultInterests: string[
   const [when, setWhen] = useState('');
   const [budget, setBudget] = useState('$$');
   const [vibes, setVibes] = useState<string[]>([]);
-  const [groupSize, setGroupSize] = useState(GROUP_SIZES[1]);
+  const [groupSize, setGroupSize] = useState<string>(DEFAULT_GROUP_SIZE);
+  const [openToMeeting, setOpenToMeeting] = useState(false);
   const [suggestions, setSuggestions] = useState<Suggestion[] | null>(null);
   const [error, setError] = useState('');
   const [pending, startTransition] = useTransition();
+  const solo = isSolo(groupSize);
 
   function search() {
     setError('');
@@ -34,6 +37,7 @@ export function DiscoverClient({ defaultInterests }: { defaultInterests: string[
         when,
         budget,
         groupSize,
+        openToMeeting,
         vibes,
         interests: defaultInterests,
       });
@@ -128,6 +132,28 @@ export function DiscoverClient({ defaultInterests }: { defaultInterests: string[
               </Chip>
             ))}
           </div>
+        </div>
+
+        <div className="rounded-card border border-line bg-card px-3.5 py-3">
+          <div className="flex items-center justify-between gap-3">
+            <label htmlFor="open-to-meeting" className="text-sm font-medium">
+              Open to meeting people
+            </label>
+            <Switch
+              id="open-to-meeting"
+              checked={openToMeeting}
+              onCheckedChange={setOpenToMeeting}
+            />
+          </div>
+          <p className="mt-1 text-xs text-ink-faint leading-relaxed">
+            {openToMeeting
+              ? solo
+                ? 'We’ll favour things that are easy to walk into alone - drop-ins, counter seats, classes, community nights.'
+                : 'We’ll favour places where a group naturally mixes with other people.'
+              : solo
+                ? 'Off means we keep to things that are good on your own, no socialising required.'
+                : 'Turn on if new faces are welcome, not just the people you’re bringing.'}
+          </p>
         </div>
 
         <Button type="submit" size="lg" className="w-full" disabled={pending}>
