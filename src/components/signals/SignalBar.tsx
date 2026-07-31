@@ -134,7 +134,7 @@ export function SignalBar({ active, circles }: SignalBarProps) {
     startTransition(async () => {
       applyView({ type: 'set', label, on: true });
       const result = await addSignal(customEmoji || '✨', label, audiences);
-      if (!result.ok) toast.error(result.error ?? 'Could not add your status.');
+      if (!result.ok) toast.error(result.error ?? 'Could not add your status.', result.code);
       else setCustomLabel('');
     });
   }

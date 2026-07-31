@@ -82,7 +82,7 @@ export function AddInvitees({
       const result = await inviteConnectionNow(eventId, connection.id);
       setSendingTo(null);
       if (!result.ok) {
-        toast.error(result.error ?? 'Could not send that invite.');
+        toast.error(result.error ?? 'Could not send that invite.', result.code);
         return;
       }
       setOpenConnection(null);

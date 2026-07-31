@@ -377,6 +377,8 @@ const AREA_CODES: Record<string, ErrorCode> = {
   'add-people-cascade': 'SB-INVITE-SEND',
   'remove-invite-cascade': 'SB-INVITE-SEND',
   'resend-invite-cascade': 'SB-INVITE-SEND',
+  'invite-connection-now': 'SB-INVITE-SEND',
+  'invite-connection-deliver': 'SB-INVITE-SEND',
   'event-invite-link': 'SB-SHARE-SAVE',
   'event-share-link': 'SB-SHARE-SAVE',
   'event-share-link-rotate': 'SB-SHARE-SAVE',
@@ -384,6 +386,8 @@ const AREA_CODES: Record<string, ErrorCode> = {
   // Answering
   'share-rsvp.respond': 'SB-RSVP-SAVE',
   'guest-rsvp.claim': 'SB-RSVP-SAVE',
+  'guest-rsvp.decline-note': 'SB-RSVP-SAVE',
+  'invite-decline.message': 'SB-RSVP-SAVE',
   'invite-claim.token': 'SB-RSVP-SAVE',
 
   // Profile & settings
