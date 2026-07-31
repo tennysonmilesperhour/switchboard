@@ -3,7 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import { requireUser } from '@/lib/server/require-user';
 import { createAdminClient } from '@/lib/supabase/admin';
-import { sendPushToUsers } from '@/lib/server/notify';
+import { notifyUsers } from '@/lib/server/notify';
 import { sendEmails, looksLikeEmail, appUrl } from '@/lib/server/email';
 import type { Invite, SwitchboardEvent } from '@/lib/types';
 
@@ -73,15 +73,12 @@ async function fanOutAnnouncement(
     .map((i) => i.invitee_id)
     .filter((id): id is string => Boolean(id) && id !== hostId);
   if (users.length > 0) {
-    await sendPushToUsers(
-      users,
-      {
+    await notifyUsers(users, {
+        kind: 'announcement',
         title: `Update: ${event.title}`,
         body,
         url: `/events/${event.id}`,
-      },
-      'plans',
-    );
+      });
   }
 
   const emails = accepted

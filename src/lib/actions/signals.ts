@@ -27,6 +27,9 @@ export async function addSignal(
 ): Promise<{ ok: boolean; error?: string }> {
   const { supabase, user } = await requireUser();
   if (!user) return { ok: false, error: 'Not signed in' };
+  const cleanLabel = label.trim().replace(/[\r\n]+/g, ' ').slice(0, 40);
+  const cleanEmoji = emoji.trim().slice(0, 12);
+  if (!cleanLabel || !cleanEmoji) return { ok: false, error: 'Add an emoji and a short status.' };
 
   // Signals stay quiet during a sabbatical.
   const { data: profile } = await supabase
@@ -43,15 +46,15 @@ export async function addSignal(
     .from('availability_signals')
     .delete()
     .eq('user_id', user.id)
-    .eq('label', label);
+    .eq('label', cleanLabel);
 
   const expiresAt = new Date(
     Date.now() + durationHours * 3_600_000,
   ).toISOString();
   const { error } = await supabase.from('availability_signals').insert({
     user_id: user.id,
-    emoji,
-    label,
+    emoji: cleanEmoji,
+    label: cleanLabel,
     circle_ids: circleIds,
     expires_at: expiresAt,
   });

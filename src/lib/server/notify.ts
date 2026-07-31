@@ -64,6 +64,56 @@ export async function notifyUsers(
   return { recorded: !error };
 }
 
+/** Record at most one unread room alert per recipient every 30 minutes. */
+export async function notifyRoomActivity(
+  roomId: string,
+  roomTitle: string,
+  senderId: string,
+): Promise<void> {
+  const admin = createAdminClient();
+  const { data: members } = await admin
+    .from('room_members')
+    .select('member_id')
+    .eq('room_id', roomId)
+    .neq('member_id', senderId);
+  const recipients = (members ?? []).map((member) => member.member_id);
+  const cutoff = new Date(Date.now() - 30 * 60 * 1000).toISOString();
+
+  await Promise.all(
+    recipients.map(async (recipientId) => {
+      const { data: existing } = await admin
+        .from('notifications')
+        .select('id')
+        .eq('user_id', recipientId)
+        .eq('kind', 'room_message')
+        .eq('url', `/rooms/${roomId}`)
+        .is('read_at', null)
+        .gte('created_at', cutoff)
+        .limit(1)
+        .maybeSingle();
+
+      if (existing) {
+        await admin
+          .from('notifications')
+          .update({
+            title: `New messages in ${roomTitle}`,
+            body: 'There’s new activity in this room.',
+            created_at: new Date().toISOString(),
+          })
+          .eq('id', existing.id);
+        return;
+      }
+
+      await notifyUsers([recipientId], {
+        kind: 'room_message',
+        title: `New message in ${roomTitle}`,
+        body: 'Open the room to catch up.',
+        url: `/rooms/${roomId}`,
+      });
+    }),
+  );
+}
+
 /**
  * How many accepted connections the recipient must have before we send the
  * anonymous "someone's down to connect" nudge.

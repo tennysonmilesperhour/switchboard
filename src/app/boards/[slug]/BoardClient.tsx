@@ -18,12 +18,14 @@ import {
   rotateBoardInviteLink,
   removeFromBoard,
   updateBoardPost,
+  respondToBoardPost,
+  fulfillBoardPost,
 } from '@/lib/actions/boards';
 
 export interface BoardPostRow {
   id: string;
   author_id: string;
-  kind: 'notice' | 'event';
+  kind: 'notice' | 'event' | 'offer' | 'request';
   title: string;
   body: string | null;
   location: string | null;
@@ -31,6 +33,7 @@ export interface BoardPostRow {
   starts_at: string | null;
   created_at: string;
   updated_at: string | null;
+  fulfilled_at: string | null;
 }
 
 export interface BoardMemberRow {
@@ -98,7 +101,7 @@ export function BoardClient({
   }
 
   // Composer state.
-  const [kind, setKind] = useState<'notice' | 'event'>('notice');
+  const [kind, setKind] = useState<'notice' | 'event' | 'offer' | 'request'>('notice');
   const [title, setTitle] = useState('');
   const [body, setBody] = useState('');
   const [location, setLocation] = useState('');
@@ -221,6 +224,8 @@ export function BoardClient({
                 [
                   ['notice', '📌 Notice'],
                   ['event', '🔁 Recurring announcement'],
+                  ['offer', '🤲 Offer'],
+                  ['request', '🙋 Request'],
                 ] as const
               ).map(([value, label]) => (
                 <button
@@ -247,6 +252,10 @@ export function BoardClient({
                 placeholder={
                   kind === 'event'
                     ? 'Saturday market walk'
+                    : kind === 'offer'
+                      ? 'Extra moving boxes available'
+                      : kind === 'request'
+                        ? 'Could someone lend a ladder?'
                     : 'Anyone have a ladder to lend?'
                 }
                 aria-label="Title"
@@ -336,7 +345,7 @@ export function BoardClient({
                       <div className="min-w-0">
                         <p className="font-medium">
                           <span aria-hidden className="mr-1">
-                            {post.kind === 'event' ? '🔁' : '📌'}
+                            {post.kind === 'event' ? '🔁' : post.kind === 'offer' ? '🤲' : post.kind === 'request' ? '🙋' : '📌'}
                           </span>
                           {post.title}
                         </p>
@@ -359,6 +368,11 @@ export function BoardClient({
                           {memberNames[post.author_id] ?? 'A neighbor'} ·{' '}
                           {formatRelative(post.created_at)}
                         </p>
+                        {(post.kind === 'offer' || post.kind === 'request') && (
+                          <div className="mt-2 flex items-center gap-2">
+                            {post.fulfilled_at ? <span className="rounded-pill bg-sage-soft px-2.5 py-1 text-xs font-bold text-sage-deep">✓ Complete</span> : post.author_id === currentUserId ? <button type="button" onClick={() => startTransition(async () => { const result = await fulfillBoardPost(post.id, slug); if (!result.ok) toast.error(result.error ?? 'Could not update it.'); else router.refresh(); })} className="rounded-pill border border-line px-2.5 py-1 text-xs font-bold">Mark complete</button> : <button type="button" onClick={() => startTransition(async () => { const result = await respondToBoardPost(post.id, slug); if (!result.ok) toast.error(result.error ?? 'Could not respond.'); else toast.success('The neighbor was notified.'); })} className="rounded-pill bg-terracotta px-2.5 py-1 text-xs font-bold text-white">I can help</button>}
+                          </div>
+                        )}
                       </div>
                       {canRemove && (
                         <div className="flex shrink-0 items-center gap-1">

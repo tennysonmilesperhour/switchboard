@@ -6,6 +6,7 @@ import {
   authLandingAction,
   isAuthLandingPath,
 } from '@/lib/auth-bounce';
+import { LEGAL_VERSION } from '@/lib/legal';
 
 /** Paths reachable without a session. */
 const PUBLIC_PREFIXES = [
@@ -211,12 +212,25 @@ export async function proxy(request: NextRequest) {
   ) {
     const { data: profile } = await supabase
       .from('profiles')
-      .select('onboarded')
+      .select('onboarded, legal_terms_version')
       .eq('id', user.id)
       .maybeSingle();
     if (profile && profile.onboarded === false) {
       const url = request.nextUrl.clone();
       url.pathname = '/onboarding';
+      url.search = '';
+      if (pathname !== '/') url.searchParams.set('next', pathname);
+      const res = NextResponse.redirect(url);
+      res.headers.set('content-security-policy', csp);
+      return res;
+    }
+    if (
+      profile?.onboarded === true &&
+      profile.legal_terms_version !== LEGAL_VERSION &&
+      pathname !== '/legal-update'
+    ) {
+      const url = request.nextUrl.clone();
+      url.pathname = '/legal-update';
       url.search = '';
       if (pathname !== '/') url.searchParams.set('next', pathname);
       const res = NextResponse.redirect(url);

@@ -126,6 +126,14 @@ export function SettingsSaveProvider({
           ? { kind: 'error', text: failure.error ?? 'Some changes could not be saved.' }
           : { kind: 'success', text: 'Changes saved.' },
       );
+    } catch {
+      // A transport failure or an unexpected Server Action exception does not
+      // return an ActionResult. Keep every affected section dirty and say so —
+      // otherwise Save appears to do nothing, which was the original report.
+      setNotice({
+        kind: 'error',
+        text: 'Could not reach the server. Your changes are still here — try again.',
+      });
     } finally {
       setSaving(false);
     }

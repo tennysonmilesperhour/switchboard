@@ -8,7 +8,12 @@ import { Button } from '@/components/ui/Button';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { useToast } from '@/components/ui/Toast';
 import { useConfirm } from '@/components/ui/ConfirmDialog';
-import { sendMessage, sendPhotoMessage, toggleTask } from '@/lib/actions/rooms';
+import {
+  markRoomRead,
+  sendMessage,
+  sendPhotoMessage,
+  toggleTask,
+} from '@/lib/actions/rooms';
 import { addExpense, deleteExpense } from '@/lib/actions/expenses';
 import { uploadImage } from '@/lib/client/upload-image';
 import { formatRelative } from '@/lib/format';
@@ -93,6 +98,10 @@ export function RoomClient({
   const router = useRouter();
   const toast = useToast();
   const confirm = useConfirm();
+
+  useEffect(() => {
+    markRoomRead(roomId).catch(() => undefined);
+  }, [roomId]);
 
   async function onPickPhoto(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];

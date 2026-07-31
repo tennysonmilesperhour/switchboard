@@ -223,6 +223,7 @@ export interface Invite {
   sent_at: string | null;
   responded_at: string | null;
   decline_note: DeclineNote;
+  decline_message: string | null;
   created_at: string;
 }
 

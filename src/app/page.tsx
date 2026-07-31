@@ -175,6 +175,17 @@ export default async function HomePage() {
 
         <SignalBar active={mySignals ?? []} circles={circles ?? []} />
 
+        {((friendCount ?? 0) === 0 || (upcoming?.length ?? 0) === 0 || (mySignals?.length ?? 0) === 0) && (
+          <Card tone="cream">
+            <p className="font-display text-lg">Getting started</p>
+            <div className="mt-3 space-y-2 text-sm">
+              <Link href="/people" className="flex items-center gap-2"><span aria-hidden>{(friendCount ?? 0) > 0 ? '✓' : '○'}</span><span className={(friendCount ?? 0) > 0 ? 'text-ink-faint line-through' : 'font-bold'}>Connect with someone you know</span></Link>
+              <Link href="/events/new" className="flex items-center gap-2"><span aria-hidden>{(upcoming?.length ?? 0) > 0 ? '✓' : '○'}</span><span className={(upcoming?.length ?? 0) > 0 ? 'text-ink-faint line-through' : 'font-bold'}>Create or join a plan</span></Link>
+              <span className="flex items-center gap-2"><span aria-hidden>{(mySignals?.length ?? 0) > 0 ? '✓' : '○'}</span><span className={(mySignals?.length ?? 0) > 0 ? 'text-ink-faint line-through' : 'font-bold'}>Let friends know you’re around</span></span>
+            </div>
+          </Card>
+        )}
+
         {/* First-run nudge: nothing works until you have people */}
         {(friendCount ?? 0) === 0 && (
           <Link href="/people" className="block group">
