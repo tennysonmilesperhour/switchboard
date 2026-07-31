@@ -13,12 +13,18 @@ import { expect, test, type Page, type Browser } from '@playwright/test';
  * with no cookies and no session, which is the closest thing to a phone that
  * has never heard of Switchboard.
  *
- * The contract has two halves, and both are asserted here:
+ * The contract has three parts, and all three are asserted here:
  *   - READING is open. The plan renders for a signed-out stranger. A sign-in
  *     wall, an error, or "this link isn't active" is a failed contract.
  *   - ANSWERING takes an account. Where the buttons would be, a signed-out
  *     visitor gets a sign-in step that carries them back to this same
  *     invitation to answer.
+ *   - ANY SHARE AFFORDANCE THE HOST IS OFFERED PRODUCES A READABLE LINK. This
+ *     is the one that kept failing. The host-side rule for "can this be shared"
+ *     was looser than the recipient-side rule for "can this be read", so the app
+ *     handed out links its own page rejected. Both now come from
+ *     src/lib/share-link.ts, and src/lib/share-link.test.ts proves the invariant
+ *     across every status; the tests here walk it through the real UI.
  *
  * If you add a new way to hand someone a link, add it here.
  */
@@ -48,7 +54,7 @@ async function currentWizardStep(page: Page) {
 async function createPlan(
   page: Page,
   title: string,
-  details?: { where?: string; what?: string },
+  details?: { where?: string; what?: string; groupDecides?: boolean },
 ): Promise<string> {
   await page.goto('/events/new');
   await page.getByPlaceholder(TITLE).fill(title);
@@ -68,6 +74,15 @@ async function createPlan(
     if (current === 3) {
       await page.getByRole('button', { name: /E2E Guest/ }).click();
       await expect(page.getByText('1 person selected')).toBeVisible({ timeout: 5_000 });
+    }
+    // Opt the plan into a group decision wherever the wizard offers it. This is
+    // the ordinary "let's pick a date together" plan, and it lands the event in
+    // `deciding` — the status whose share link used to read as dead.
+    if (details?.groupDecides) {
+      const decide = page
+        .locator('label', { hasText: 'Let the group decide what to do' })
+        .getByRole('checkbox');
+      if (await decide.count()) await decide.check();
     }
     const next = page.getByRole('button', { name: 'Next', exact: true });
     await expect(next).toBeEnabled({ timeout: 5_000 });
@@ -240,6 +255,81 @@ test.describe('invite link contract', () => {
         ).toBeVisible({ timeout: 15_000 });
       });
     }
+  });
+
+  test('a plan still deciding its date has a link that reads, not a dead end', async ({
+    page,
+    browser,
+  }) => {
+    // The reported failure, walked end to end. A host starts a plan the group
+    // decides together — a completely ordinary plan — and texts the link. The
+    // event sits in `deciding` until the poll closes, and for that entire window
+    // every recipient used to be told "This invite link isn't active", while the
+    // host's own screen showed a Share button that looked perfectly healthy.
+    await login(page, 'e2ehost');
+    await createPlan(page, 'Group decides plan', { groupDecides: true });
+    const link = await readShareLink(page);
+
+    await asStranger(browser, async (stranger) => {
+      await stranger.goto(link);
+
+      // Reading is open, exactly as it is for any other plan.
+      await expect(
+        stranger.getByRole('heading', { name: 'Group decides plan' }),
+      ).toBeVisible({ timeout: 15_000 });
+      await expect(stranger).not.toHaveURL(/\/(welcome|login)/);
+      await expect(stranger.getByText('isn’t active')).toHaveCount(0);
+
+      // Answering is not open yet — and the recipient is told why, in terms of
+      // the plan, rather than being sent to create an account that would not
+      // have helped.
+      await expect(stranger.getByText('Still picking a date')).toBeVisible({
+        timeout: 15_000,
+      });
+      await expect(stranger.getByRole('button', { name: /I.?m in/ })).toHaveCount(0);
+      await expect(
+        stranger.getByRole('heading', { name: 'Sign in to RSVP' }),
+      ).toHaveCount(0);
+    });
+  });
+
+  test('every share affordance the host is offered produces a readable link', async ({
+    page,
+    browser,
+  }) => {
+    // The invariant, checked through the UI rather than in isolation: if the app
+    // shows a host a way to hand this plan out, what a recipient opens must
+    // render the plan. Every past regression was a violation of exactly this —
+    // an affordance the host could reach whose link the recipient page rejected.
+    await login(page, 'e2ehost');
+    await createPlan(page, 'Affordance sweep plan');
+
+    const link = await readShareLink(page);
+    // Every Share affordance on the page, however many the layout offers.
+    const shareButtons = page.getByRole('button', { name: /Share/ });
+    expect(await shareButtons.count()).toBeGreaterThan(0);
+
+    await asStranger(browser, async (stranger) => {
+      await stranger.goto(link);
+      await expect(
+        stranger.getByRole('heading', { name: 'Affordance sweep plan' }),
+      ).toBeVisible({ timeout: 15_000 });
+    });
+
+    // Turn the link off: the host's share affordances must disappear with it,
+    // so there is no way left to send a link that now dead-ends.
+    await page.getByRole('button', { name: 'Turn off link' }).click();
+    await expect(
+      page.getByRole('button', { name: /Turn on invite link/ }),
+    ).toBeVisible({ timeout: 15_000 });
+    await expect(shareButtons).toHaveCount(0);
+    await expect(page.getByRole('link', { name: link })).toHaveCount(0);
+
+    // And the previously-sent link now says so honestly.
+    await asStranger(browser, async (stranger) => {
+      await stranger.goto(link);
+      await expect(stranger.getByText('isn’t active')).toBeVisible({ timeout: 15_000 });
+    });
   });
 
   test('a per-person guest link also opens for a signed-out recipient', async ({
