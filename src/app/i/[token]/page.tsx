@@ -5,9 +5,17 @@ import { reportOperationalError } from '@/lib/server/observability';
 import { safeHttpUrl, serializeJsonLd } from '@/lib/security';
 import { resolveEventZone } from '@/lib/server/event-zone';
 import { eventSharePath } from '@/lib/links';
+import {
+  canAnswer,
+  canReadPlan,
+  shareLinkNotice,
+  shareLinkState,
+  unfurlsPlanDetails,
+} from '@/lib/share-link';
 import { InvitePlanDetails } from '@/components/events/InvitePlanDetails';
 import { RsvpSignInGate } from '@/components/events/RsvpSignInGate';
 import { ShareLinkRsvp } from './ShareLinkRsvp';
+import type { EventStatus } from '@/lib/types';
 
 /**
  * The public share link for a plan: `/i/<share_token>`.
@@ -21,6 +29,11 @@ import { ShareLinkRsvp } from './ShareLinkRsvp';
  * Deliberately NOT reached through `/events/<id>` (RLS-gated: dead for anyone
  * not already invited) or `/join/<id>` (needs an account, host approval, and the
  * open_table flag). Those two are why shared links kept arriving broken.
+ *
+ * Whether the link is readable and whether it is answerable are two different
+ * questions, and neither is decided here — both come from `@/lib/share-link`, the
+ * one module the host-side Share affordances ask as well. That shared answer is
+ * what stops this page rejecting a link the app itself just handed out.
  */
 
 interface ShareEvent {
@@ -33,7 +46,7 @@ interface ShareEvent {
   ends_at: string | null;
   time_zone: string | null;
   host_id: string;
-  status: string;
+  status: EventStatus;
   share_link_active: boolean;
   cover_url: string | null;
   wishlist_url: string | null;
@@ -42,11 +55,6 @@ interface ShareEvent {
 const EVENT_FIELDS =
   'id, title, description, location_name, location_address, starts_at, ends_at, ' +
   'time_zone, host_id, status, share_link_active, cover_url, wishlist_url';
-
-/** Plans that can still take an answer through the link. */
-function isAccepting(event: ShareEvent): boolean {
-  return event.share_link_active && (event.status === 'inviting' || event.status === 'confirmed');
-}
 
 export async function generateMetadata({
   params,
@@ -59,17 +67,24 @@ export async function generateMetadata({
   const admin = createAdminClient();
   const { data: event } = await admin
     .from('events')
-    .select('id, title, share_link_active')
+    .select('id, title, status, share_link_active')
     .eq('share_token', token)
-    .maybeSingle<{ id: string; title: string; share_link_active: boolean }>();
+    .maybeSingle<{
+      id: string;
+      title: string;
+      status: EventStatus;
+      share_link_active: boolean;
+    }>();
 
-  const title =
-    event && event.share_link_active ? `You’re invited: ${event.title}` : 'You’re invited';
+  // Same classifier as the page body, so the unfurl a recipient sees in their
+  // messages app can never promise a plan the page then refuses to show.
+  const unfurl = unfurlsPlanDetails(shareLinkState(event));
+  const title = event && unfurl ? `You’re invited: ${event.title}` : 'You’re invited';
   return {
     title,
     openGraph: {
       title,
-      images: event && event.share_link_active ? [`/api/og/event/${event.id}`] : [],
+      images: event && unfurl ? [`/api/og/event/${event.id}`] : [],
     },
   };
 }
@@ -133,9 +148,19 @@ export default async function SharedInvitePage({
     : { data: null };
 
   const zone = admin && event ? await resolveEventZone(admin, event) : null;
-  const live = event ? isAccepting(event) : false;
 
-  const jsonLd = event && live
+  // One classification, three decisions: whether the plan renders at all,
+  // whether the answer buttons appear, and what the recipient is told alongside
+  // them. A plan whose date is still being polled (status `deciding`) is both
+  // readable and answerable — it used to fall into the same "isn't active" dead
+  // end as a switched-off link, which is how a host running a date poll had
+  // every recipient told their invitation was dead.
+  const state = shareLinkState(event);
+  const readable = canReadPlan(state);
+  const answerable = canAnswer(state);
+  const notice = shareLinkNotice(state, host?.display_name);
+
+  const jsonLd = event && readable
     ? {
         '@context': 'https://schema.org',
         '@type': 'Event',
@@ -145,6 +170,13 @@ export default async function SharedInvitePage({
         ...(event.starts_at ? { startDate: event.starts_at } : {}),
         ...(event.ends_at ? { endDate: event.ends_at } : {}),
         eventAttendanceMode: 'https://schema.org/OfflineEventAttendanceMode',
+        // The page now renders plans that are no longer taking answers, so the
+        // structured data has to agree — a cancelled plan must not unfurl to
+        // crawlers and assistants as a scheduled one.
+        eventStatus:
+          state === 'cancelled'
+            ? 'https://schema.org/EventCancelled'
+            : 'https://schema.org/EventScheduled',
         ...(event.location_name || event.location_address
           ? {
               location: {
@@ -165,16 +197,13 @@ export default async function SharedInvitePage({
         </span>
       </header>
       <main className="flex-1 flex flex-col justify-center pb-24">
-        {!event || !live ? (
+        {!event || !readable ? (
           <div className="text-center">
             <p className="text-4xl mb-3" aria-hidden>🍂</p>
             <h1 className="font-extrabold tracking-tight text-2xl">
-              This invite link isn’t active
+              {notice?.heading ?? 'This invite link isn’t active'}
             </h1>
-            <p className="text-ink-soft text-sm mt-2">
-              It may have been turned off, or the plan has wrapped up. Ask
-              whoever sent it for a fresh link.
-            </p>
+            <p className="text-ink-soft text-sm mt-2">{notice?.body}</p>
           </div>
         ) : (
           <>
@@ -199,17 +228,34 @@ export default async function SharedInvitePage({
                 dangerouslySetInnerHTML={{ __html: serializeJsonLd(jsonLd) }}
               />
             )}
-            {user ? (
-              <ShareLinkRsvp
-                shareToken={token}
-                defaultName={viewerProfile?.display_name ?? ''}
-              />
-            ) : (
-              <RsvpSignInGate
-                next={eventSharePath(token)}
-                hostName={host?.display_name ?? undefined}
-              />
+            {/* One notice, two jobs, decided by whether the plan can be
+                answered. For a plan still picking its date it sits ABOVE the
+                buttons as a caveat — "I'm in" there is a yes to the plan rather
+                than to a time, and the date arrives later. For a plan that's
+                behind us or called off it stands IN for the buttons, and there
+                is deliberately no sign-in gate: signing in wouldn't change the
+                answer, and sending someone to make an account to discover that
+                is its own kind of broken link. */}
+            {notice && (
+              <div className="mt-8 rounded-card bg-cream px-4 py-3.5">
+                <p className="text-sm font-bold text-ink">{notice.heading}</p>
+                <p className="mt-1 text-sm leading-relaxed text-ink-soft">
+                  {notice.body}
+                </p>
+              </div>
             )}
+            {answerable &&
+              (user ? (
+                <ShareLinkRsvp
+                  shareToken={token}
+                  defaultName={viewerProfile?.display_name ?? ''}
+                />
+              ) : (
+                <RsvpSignInGate
+                  next={eventSharePath(token)}
+                  hostName={host?.display_name ?? undefined}
+                />
+              ))}
             <p className="text-xs text-ink-faint mt-10 leading-relaxed">
               Switchboard makes plans without pressure - invitations flow one
               person at a time, so nobody feels like a backup. If you can’t make

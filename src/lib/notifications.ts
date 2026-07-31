@@ -88,6 +88,10 @@ const KIND_TO_CATEGORY: Record<string, NotificationCategory> = {
   join_approved: 'plans',
   event_updated: 'plans',
   event_cancelled: 'plans',
+  // A plan whose date was still being voted on now has one. Goes to everyone
+  // who already said yes through the share link, so it must honour notify_plans
+  // like every other plan update rather than falling through uncategorised.
+  event_date_set: 'plans',
   // Event reminders
   reminder: 'reminders',
   // Comments & photos

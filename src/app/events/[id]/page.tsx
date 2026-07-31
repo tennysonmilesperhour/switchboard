@@ -37,6 +37,7 @@ import { resolveEventZone } from '@/lib/server/event-zone';
 import { googleCalendarUrl } from '@/lib/calendar-links';
 import { looksLikeEmail } from '@/lib/server/email';
 import { eventShareUrl, guestRsvpUrl } from '@/lib/links';
+import { hostCanShare, shareLinkState } from '@/lib/share-link';
 import { looksLikePhoneNumber } from '@/lib/phone';
 import type {
   EventQuestion,
@@ -123,6 +124,12 @@ export default async function EventPage({
 
   const isHost = event.host_id === user.id;
   const admin = createAdminClient();
+
+  // What this plan's public link actually does right now, from the same module
+  // /i/<token> uses to decide what a recipient sees. Both share affordances
+  // below hang off this: the app must not offer a host a way to send a link its
+  // own recipient page would reject (see @/lib/share-link).
+  const shareState = shareLinkState(event);
 
   // Render the plan's time in its own zone (host-profile fallback for plans
   // created before the zone was captured), so this page agrees with the link
@@ -695,8 +702,14 @@ export default async function EventPage({
 
                 Host/co-host only. The link admits whoever holds it, so who may
                 hand it out is the host's call, not every invitee's — the same
-                boundary as the Invite link card and share_link_active. */}
-            {canManage && (
+                boundary as the Invite link card and share_link_active.
+
+                Gated on hostCanShare, not on "always". This button used to be
+                unconditional, so a host whose plan was still in a date poll — or
+                whose link was switched off — could share a URL that told every
+                recipient "this invite link isn't active". The Invite link card
+                below stays visible in those states and explains what to do. */}
+            {canManage && hostCanShare(shareState) && (
               <ShareButton
                 url={eventShareUrl(event.share_token)}
                 title={event.title}
@@ -897,17 +910,21 @@ export default async function EventPage({
         )}
 
         {/* Post-creation invite link: one link the host can share to bring more
-            people in, on top of the ordered cascade. Anyone who opens it asks to
-            join, and the host approves via the join-requests panel above. */}
-        {canManage &&
-          (event.status === 'inviting' || event.status === 'confirmed') && (
-            <InviteLink
-              eventId={event.id}
-              shareUrl={eventShareUrl(event.share_token)}
-              enabled={event.share_link_active}
-              eventTitle={event.title}
-            />
-          )}
+            people in, on top of the ordered cascade.
+
+            Shown for every state the host can still act on — including a plan
+            still in its date poll, and a link the host switched off. Hiding the
+            card in those states is what left a host with no way to see that the
+            link they had already texted around was dead. The card itself says
+            what a recipient sees right now. */}
+        {canManage && shareState !== 'past' && shareState !== 'cancelled' && (
+          <InviteLink
+            eventId={event.id}
+            shareUrl={eventShareUrl(event.share_token)}
+            state={shareState}
+            eventTitle={event.title}
+          />
+        )}
 
         {canManage && event.status === 'inviting' && (
           <AddInvitees eventId={event.id} connections={addableConnections} />

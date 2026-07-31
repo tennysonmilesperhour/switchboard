@@ -26,3 +26,31 @@ and follow its precedents.** In short:
 
 Security invariants are covered by unit tests (`npm test`) and pgTAP
 (`supabase test db`) — keep them green and add coverage for new surfaces.
+
+# Invite links
+
+Shared invite links broke for recipients repeatedly, always the same way: the
+condition for "the host may share this" was decided separately from, and more
+loosely than, the condition for "the recipient may read this", so the app handed
+out links its own pages rejected. Every localised fix held until the next plan
+deviated slightly and landed on a pair of surfaces still out of step.
+
+There is now one answer, and nothing may re-derive it:
+
+- **`src/lib/links.ts` builds the URL.** One validated origin, no fallbacks.
+- **`src/lib/share-link.ts` decides what that URL does** — readable, answerable,
+  offerable to the host, safe to unfurl. Every surface (`/i/<token>`,
+  `/join/<id>`, the event page's Share button and Invite link card, the OG
+  route, and the RSVP action) asks this module. Do not write
+  `status === 'inviting' || ...` at a call site.
+- **The invariant:** if the app offers a host any way to send a link, what the
+  recipient opens must render the plan. `hostCanShare ⊆ canReadPlan`.
+- A plan whose date is still being polled (`deciding`) is both readable **and**
+  answerable — the unsettled date is a caveat shown above the buttons, not a
+  refusal. `ANSWERABLE_EVENT_STATUSES` and the tuple in `rsvp_via_share_token`
+  are the same set, in two languages, and the test proves it.
+- Adding an `EventStatus`, or changing who may answer, fails
+  `src/lib/share-link.test.ts` until you decide what a recipient sees — it walks
+  every status × kill-switch combination and cross-checks the status tuple
+  inside `rsvp_via_share_token`. `e2e/invite-links.spec.ts` then walks the real
+  journey: a link taken out of the host UI, opened on a device with no session.
