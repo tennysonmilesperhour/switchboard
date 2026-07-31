@@ -196,7 +196,7 @@ export async function addBoardPost(
 export async function respondToBoardPost(
   postId: string,
   slug: string,
-): Promise<{ ok: boolean; error?: string }> {
+): Promise<ActionResult> {
   const auth = await requireUser();
   if (!auth.ok) return auth;
   const { error } = await auth.supabase.from('board_post_responses').insert({
@@ -219,7 +219,7 @@ export async function respondToBoardPost(
   return { ok: true };
 }
 
-export async function fulfillBoardPost(postId: string, slug: string): Promise<{ ok: boolean; error?: string }> {
+export async function fulfillBoardPost(postId: string, slug: string): Promise<ActionResult> {
   const auth = await requireUser();
   if (!auth.ok) return auth;
   const { data, error } = await auth.supabase.from('board_posts').update({ fulfilled_at: new Date().toISOString(), fulfilled_by: auth.user.id }).eq('id', postId).eq('author_id', auth.user.id).select('id').maybeSingle();
