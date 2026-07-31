@@ -1,5 +1,7 @@
 'use server';
 
+import type { ActionResult, ErrorCode } from '@/lib/errors';
+
 import { revalidatePath } from 'next/cache';
 import { requireUser } from '@/lib/server/require-user';
 import { checkRateLimit } from '@/lib/server/rate-limit';
@@ -9,12 +11,20 @@ import type { LiveLocation, LocationVisibility, NearbyPerson } from '@/lib/types
 export interface ShareResult {
   ok: boolean;
   error?: string;
+  /** Stable failure code from `@/lib/errors`, shown beside the message. */
+  code?: ErrorCode;
+  /** The next step, when the reader has one. */
+  fix?: string | null;
   expiresAt?: string;
 }
 
 export interface NearbyResult {
   ok: boolean;
   error?: string;
+  /** Stable failure code from `@/lib/errors`, shown beside the message. */
+  code?: ErrorCode;
+  /** The next step, when the reader has one. */
+  fix?: string | null;
   people?: NearbyPerson[];
 }
 
@@ -133,7 +143,7 @@ export async function refreshLocationPoint(
 }
 
 /** Turn live location off — deletes the caller's row so nobody can discover it. */
-export async function stopSharingLocation(): Promise<{ ok: boolean; error?: string }> {
+export async function stopSharingLocation(): Promise<ActionResult> {
   const auth = await requireUser();
   if (!auth.ok) return { ok: false, error: auth.error };
   const { supabase, user } = auth;

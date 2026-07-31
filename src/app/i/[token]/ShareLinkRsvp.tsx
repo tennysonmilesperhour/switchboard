@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/Button';
 import { Icon } from '@/components/ui/Icon';
 import { respondViaShareLink } from '@/lib/actions/invites';
+import { errorRef, type ErrorCode } from '@/lib/errors';
 
 interface ShareLinkRsvpProps {
   shareToken: string;
@@ -29,6 +30,10 @@ interface ShareLinkRsvpProps {
 export function ShareLinkRsvp({ shareToken, defaultName }: ShareLinkRsvpProps) {
   const [name, setName] = useState(defaultName);
   const [error, setError] = useState('');
+  // Shown beside the message when the answer fails. A recipient who says "it
+  // won't let me RSVP" is describing five different causes; SB-RSVP-CLOSED and
+  // SB-LINK-OFF are two of them, and only the code tells them apart.
+  const [code, setCode] = useState<ErrorCode | null>(null);
   const [signInNeeded, setSignInNeeded] = useState(false);
   const [pending, startTransition] = useTransition();
   const router = useRouter();
@@ -37,10 +42,14 @@ export function ShareLinkRsvp({ shareToken, defaultName }: ShareLinkRsvpProps) {
   function respond(accept: boolean) {
     const trimmed = name.trim();
     if (needsName && !trimmed) {
+      // Pure validation — the sentence already says exactly what to change, so
+      // no code (see @/lib/errors on where the boundary sits).
       setError('Please add your name so the host knows who’s coming.');
+      setCode(null);
       return;
     }
     setError('');
+    setCode(null);
     startTransition(async () => {
       const result = await respondViaShareLink(shareToken, accept, trimmed);
       if (!result.ok || !result.token) {
@@ -48,6 +57,7 @@ export function ShareLinkRsvp({ shareToken, defaultName }: ShareLinkRsvpProps) {
         // offer the way back, rather than a dead-end "something went wrong".
         setSignInNeeded(result.outcome === 'auth_required');
         setError(result.error ?? 'Something went wrong. Try again.');
+        setCode(result.code ?? 'SB-UNKNOWN');
         return;
       }
       // Their own RSVP page shows the outcome (in, waitlisted, or declined) and
@@ -76,6 +86,11 @@ export function ShareLinkRsvp({ shareToken, defaultName }: ShareLinkRsvpProps) {
       {error && (
         <p role="alert" className="text-sm text-rose-deep mb-3">
           {error}
+          {code && (
+            <span className="ml-1.5 font-mono text-[11px] uppercase tracking-wide text-ink-faint">
+              {errorRef(code)}
+            </span>
+          )}
           {signInNeeded && (
             <>
               {' '}

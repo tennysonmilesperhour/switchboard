@@ -1,5 +1,7 @@
 'use server';
 
+import type { ActionResult } from '@/lib/errors';
+
 import { revalidatePath } from 'next/cache';
 import { createClient } from '@/lib/supabase/server';
 import { notifyUsers } from '@/lib/server/notify';
@@ -10,7 +12,7 @@ export async function proposeRitual(
   partnerId: string,
   activity: string,
   cadenceDays: number,
-): Promise<{ ok: boolean; error?: string }> {
+): Promise<ActionResult> {
   const auth = await requireUser();
   if (!auth.ok) return auth;
   const { supabase, user } = auth;

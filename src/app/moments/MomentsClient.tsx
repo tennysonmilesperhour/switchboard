@@ -327,7 +327,7 @@ export function MomentsClient({
                             startTransition(async () => {
                               const result = await acceptMoment(myMoment.id, candidate.id);
                               if (!result.ok) {
-                                toast.error(result.error ?? 'Could not respond. Try again.');
+                                toast.error(result.error ?? 'Could not respond. Try again.', result.code);
                                 return;
                               }
                               if (result.stage === 'matched' && result.roomId) {
@@ -396,7 +396,7 @@ export function MomentsClient({
                             startTransition(async () => {
                               const result = await expressCuriosity(myMoment.id, candidate.id);
                               if (!result.ok) {
-                                toast.error(result.error ?? 'Could not respond. Try again.');
+                                toast.error(result.error ?? 'Could not respond. Try again.', result.code);
                                 return;
                               }
                               router.refresh();

@@ -56,7 +56,7 @@ function VenueClaimCard({ venue }: { venue: PendingVenue }) {
     startTransition(async () => {
       const result = await reviewVenue(venue.id, decision, note);
       if (!result.ok) {
-        toast.error(result.error ?? 'Could not update the claim.');
+        toast.error(result.error ?? 'Could not update the claim.', result.code);
         return;
       }
       router.refresh();

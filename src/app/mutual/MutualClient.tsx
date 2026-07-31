@@ -119,7 +119,7 @@ export function MutualClient({
         for (const activity of activities) {
           const result = await downToConnect(personId, activity);
           if (!result.ok) {
-            toast.error(result.error ?? 'Could not save that quietly. Try again.');
+            toast.error(result.error ?? 'Could not save that quietly. Try again.', result.code);
             return;
           }
           if (result.matched) anyMatch = true;
@@ -386,7 +386,7 @@ export function MutualClient({
                       ritualCadence,
                     );
                     if (!result.ok) {
-                      toast.error(result.error ?? 'Could not propose the ritual.');
+                      toast.error(result.error ?? 'Could not propose the ritual.', result.code);
                       return;
                     }
                     setRitualPartner('');
@@ -432,7 +432,7 @@ export function MutualClient({
                     startTransition(async () => {
                       const result = await withdrawIntent(intent.id);
                       if (!result.ok) {
-                        toast.error(result.error ?? 'Could not withdraw. Try again.');
+                        toast.error(result.error ?? 'Could not withdraw. Try again.', result.code);
                         return;
                       }
                       router.refresh();
