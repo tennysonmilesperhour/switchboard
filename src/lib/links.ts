@@ -86,6 +86,13 @@ export function absoluteUrl(path = ''): string {
 // Every link here is *readable* signed out: that is the contract, and it is what
 // keeps a texted link from arriving as a sign-in wall. Answering an invitation is
 // the one action that requires an account (src/lib/actions/invites.ts).
+//
+// This module builds the URL. WHETHER a given plan's link is readable, whether
+// it can be answered, and whether the app should offer the host a way to send it
+// are all decided in `src/lib/share-link.ts` — one classifier, asked by both the
+// host-side share affordances and the recipient page. Do not re-derive those
+// conditions at a call site: a sender-side rule looser than the recipient-side
+// rule is exactly how shared links kept arriving dead.
 
 /** App-relative path for a plan's public share link. */
 export function eventSharePath(shareToken: string): string {

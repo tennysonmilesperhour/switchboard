@@ -12,6 +12,7 @@ import {
   type InvitationDeliverySummary,
 } from '@/lib/server/cascade-runner';
 import { notifyUsers } from '@/lib/server/notify';
+import { formatDateTime } from '@/lib/format';
 import { capture } from '@/lib/analytics/server';
 import { ANALYTICS_EVENTS } from '@/lib/analytics/events';
 import { isValidMediaRef } from '@/lib/server/media';
@@ -1260,9 +1261,57 @@ export async function startInviting(eventId: string): Promise<void> {
     .update({ status: 'inviting' })
     .eq('id', eventId);
   if (!error) {
+    // People can now say "I'm in" through the share link while the date is
+    // still being decided (rsvp_via_share_token accepts `deciding`). The
+    // cascade below only speaks to invites it is sending, so it would never
+    // reach them — and a yes given to a dateless plan has to be answered with
+    // the date when it lands, or the promise the link made goes unkept.
+    await notifyDateSettled(admin, eventId);
     await advanceEventCascade(eventId);
   }
   revalidatePath(`/events/${eventId}`);
+}
+
+/** Tell everyone who already accepted that the plan now has a date. */
+async function notifyDateSettled(
+  admin: ReturnType<typeof createAdminClient>,
+  eventId: string,
+): Promise<void> {
+  const { data: event } = await admin
+    .from('events')
+    .select('id, title, starts_at, time_zone')
+    .eq('id', eventId)
+    .maybeSingle<{
+      id: string;
+      title: string;
+      starts_at: string | null;
+      time_zone: string | null;
+    }>();
+  if (!event) return;
+
+  const { data: accepted } = await admin
+    .from('invites')
+    .select('invitee_id')
+    .eq('event_id', eventId)
+    .eq('status', 'accepted')
+    .not('invitee_id', 'is', null);
+
+  const recipients = (accepted ?? [])
+    .map((row) => row.invitee_id as string | null)
+    .filter((id): id is string => Boolean(id));
+  if (recipients.length === 0) return;
+
+  // In the plan's own zone — a notification has no viewer zone, so without this
+  // it would announce the server's UTC.
+  const when = event.starts_at ? formatDateTime(event.starts_at, event.time_zone) : null;
+  await notifyUsers(recipients, {
+    kind: 'event_date_set',
+    title: 'The date is set 📅',
+    body: when
+      ? `${event.title} is happening ${when}.`
+      : `${event.title} is moving ahead - the host has closed the vote.`,
+    url: `/events/${event.id}`,
+  });
 }
 
 /**

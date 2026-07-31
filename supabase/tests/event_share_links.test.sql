@@ -8,7 +8,7 @@
 -- the token to a value someone else can guess.
 
 begin;
-select plan(22);
+select plan(24);
 
 insert into auth.users (id, email) values
   ('30000000-0000-0000-0000-000000000001', 'share-host@example.com'),
@@ -37,7 +37,9 @@ on conflict (id) do update
 insert into public.events (id, host_id, title, status, capacity) values
   ('30000000-0000-0000-0000-000000000021', '30000000-0000-0000-0000-000000000001', 'Open plan', 'inviting', null),
   ('30000000-0000-0000-0000-000000000022', '30000000-0000-0000-0000-000000000001', 'Full plan', 'inviting', 1),
-  ('30000000-0000-0000-0000-000000000023', '30000000-0000-0000-0000-000000000001', 'Wrapped plan', 'past', null);
+  ('30000000-0000-0000-0000-000000000023', '30000000-0000-0000-0000-000000000001', 'Wrapped plan', 'past', null),
+  ('30000000-0000-0000-0000-000000000024', '30000000-0000-0000-0000-000000000001', 'Undated plan', 'deciding', null),
+  ('30000000-0000-0000-0000-000000000025', '30000000-0000-0000-0000-000000000001', 'Unpublished plan', 'draft', null);
 
 -- ————————————————————————— defaults —————————————————————————
 -- Every plan gets a live link the moment it exists, whatever route created it.
@@ -134,6 +136,30 @@ select is(
   )),
   'not_accepting',
   'a wrapped-up plan refuses link RSVPs'
+);
+
+-- A plan whose date is still being voted on DOES take an answer. The yes is to
+-- the plan, not to a time; the date follows when the host closes the poll. This
+-- is the case a host hits every time they run a date poll and text the link, and
+-- refusing it is what recipients experienced as a dead invitation.
+select is(
+  (select outcome from public.rsvp_via_share_token(
+    (select share_token from public.events where id = '30000000-0000-0000-0000-000000000024'),
+    '30000000-0000-0000-0000-000000000005', 'Eli', null, true
+  )),
+  'accepted',
+  'a plan still picking its date accepts a link RSVP'
+);
+
+-- A draft is not the same thing: nothing about it is waiting on a decision the
+-- recipient can be part of, so it stays refused.
+select is(
+  (select outcome from public.rsvp_via_share_token(
+    (select share_token from public.events where id = '30000000-0000-0000-0000-000000000025'),
+    '30000000-0000-0000-0000-000000000005', 'Eli', null, true
+  )),
+  'not_accepting',
+  'an unpublished draft still refuses link RSVPs'
 );
 
 update public.events set share_link_active = false

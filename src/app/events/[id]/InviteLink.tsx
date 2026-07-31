@@ -8,13 +8,14 @@ import { CopyButton } from '@/components/ui/CopyButton';
 import { ShareButton } from '@/components/ui/ShareButton';
 import { useToast } from '@/components/ui/Toast';
 import { rotateEventShareLink, setEventShareLink } from '@/lib/actions/events';
+import { hostCanShare, hostShareGuidance, type ShareLinkState } from '@/lib/share-link';
 
 interface InviteLinkProps {
   eventId: string;
   /** Absolute URL of the plan's public share link (computed server-side). */
   shareUrl: string;
-  /** Whether the link is currently live (event.share_link_active). */
-  enabled: boolean;
+  /** What the link does right now, from `@/lib/share-link`. */
+  state: ShareLinkState;
   eventTitle: string;
 }
 
@@ -26,8 +27,14 @@ interface InviteLinkProps {
  * sign-in. The controls here are the safety valves:
  * turn it off if it travelled further than intended, or rotate it to invalidate
  * what was already shared while keeping the plan open.
+ *
+ * The card takes the link's *state*, not a boolean, so what it tells the host
+ * and what a recipient actually sees come from the same classifier. A host
+ * whose plan is still in a date poll gets a working link plus a plain note that
+ * answers open up once the date is set — instead of the old silence, which
+ * ended with recipients reporting a dead link the host had no way to see.
  */
-export function InviteLink({ eventId, shareUrl, enabled, eventTitle }: InviteLinkProps) {
+export function InviteLink({ eventId, shareUrl, state, eventTitle }: InviteLinkProps) {
   const [pending, startTransition] = useTransition();
   const router = useRouter();
   const toast = useToast();
@@ -56,19 +63,27 @@ export function InviteLink({ eventId, shareUrl, enabled, eventTitle }: InviteLin
     });
   }
 
+  const shareable = hostCanShare(state);
+  const guidance = hostShareGuidance(state);
+
   return (
     <section>
       <SectionHeader
         title="Invite link"
         hint="One link that works for anyone you send it to"
       />
-      {enabled ? (
+      {shareable ? (
         <Card tone="cream" className="space-y-3">
           <p className="text-sm text-ink-soft leading-relaxed">
             Send this to anyone - text, email, a group chat. Anyone who opens it
             sees the plan right away; to say yes or no they sign in, and then
             you’ll see them on the list by name.
           </p>
+          {guidance && (
+            <p className="rounded-card bg-paper px-3.5 py-3 text-sm leading-relaxed text-ink">
+              {guidance}
+            </p>
+          )}
           <div className="flex items-center gap-2 rounded-card border border-line bg-paper px-3 py-2.5">
             <a
               href={shareUrl}
@@ -110,20 +125,20 @@ export function InviteLink({ eventId, shareUrl, enabled, eventTitle }: InviteLin
         </Card>
       ) : (
         <Card tone="cream" className="space-y-3">
-          <p className="text-sm text-ink-soft leading-relaxed">
-            The invite link for this plan is off, so anyone who already has it
-            sees “this link isn’t active”. Turn it back on to share the plan
-            again.
-          </p>
-          <Button
-            type="button"
-            variant="secondary"
-            size="sm"
-            disabled={pending}
-            onClick={() => toggle(true)}
-          >
-            {pending ? 'Turning on…' : 'Turn on invite link 🔗'}
-          </Button>
+          <p className="text-sm text-ink-soft leading-relaxed">{guidance}</p>
+          {/* Only `off` is something the host can undo from here. A draft needs
+              publishing, which lives in the wizard. */}
+          {state === 'off' && (
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              disabled={pending}
+              onClick={() => toggle(true)}
+            >
+              {pending ? 'Turning on…' : 'Turn on invite link 🔗'}
+            </Button>
+          )}
         </Card>
       )}
     </section>

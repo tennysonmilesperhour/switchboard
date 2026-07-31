@@ -7,6 +7,8 @@ import { reportOperationalError } from '@/lib/server/observability';
 import { formatDateTime } from '@/lib/format';
 import { resolveEventZone } from '@/lib/server/event-zone';
 import { eventSharePath } from '@/lib/links';
+import { canReadPlan, shareLinkNotice, shareLinkState } from '@/lib/share-link';
+import type { EventStatus } from '@/lib/types';
 import { Button } from '@/components/ui/Button';
 import { Icon } from '@/components/ui/Icon';
 import { JoinViaLinkClient } from './JoinViaLinkClient';
@@ -83,7 +85,7 @@ export default async function JoinPage({
           starts_at: string | null;
           time_zone: string | null;
           host_id: string;
-          status: string;
+          status: EventStatus;
           open_table: boolean;
           share_token: string;
           share_link_active: boolean;
@@ -100,7 +102,14 @@ export default async function JoinPage({
   // then host approval, then open_table, and dead-ended if any of the three was
   // missing. Forwarding resurrects them rather than stranding the people who
   // were already sent one.
-  if (event && event.share_link_active && !user) {
+  //
+  // Forward on canReadPlan, not on share_link_active alone: the share page is
+  // only a better destination than this one when it will actually render the
+  // plan there. When it won't, this page keeps the visitor and explains why,
+  // using the same classifier so the two pages cannot contradict each other.
+  const shareState = shareLinkState(event);
+  const shareReadable = canReadPlan(shareState);
+  if (event && shareReadable && !user) {
     redirect(eventSharePath(event.share_token));
   }
 
@@ -139,7 +148,7 @@ export default async function JoinPage({
     // A signed-in visitor with no connection to the plan is in the same
     // position as a stranger: send them to the share link, where they can
     // actually respond, instead of an ask-to-join button that waits on the host.
-    if (!alreadyInvolved && event.share_link_active) {
+    if (!alreadyInvolved && shareReadable) {
       redirect(eventSharePath(event.share_token));
     }
   }
@@ -157,6 +166,13 @@ export default async function JoinPage({
 
   const shareable = Boolean(event?.open_table);
   const accepting = event?.status === 'inviting' || event?.status === 'confirmed';
+  // Why this page has nothing to show, in the plan's own terms rather than one
+  // catch-all sentence. Anyone reaching the dead-end branch got here because the
+  // canonical share link couldn't take them, so its reason is the right one.
+  // `live` is unreachable in the dead-end branch (a readable link redirects
+  // above), so fall back to the off/missing copy rather than an empty card.
+  const notice =
+    shareLinkNotice(shareState, host?.display_name) ?? shareLinkNotice('off');
   // Render the plan in its own zone, not the server's UTC.
   const zone = admin ? await resolveEventZone(admin, event) : null;
 
@@ -168,15 +184,19 @@ export default async function JoinPage({
         </span>
       </header>
       <main className="flex-1 flex flex-col justify-center pb-24">
-        {!event || !shareable ? (
+        {/* `alreadyInvolved` keeps the plan visible for someone who is on it but
+            can't see the event page yet (a queued invitee, a co-host without an
+            invite). Telling them their invite link "isn't active" while they are
+            literally on the guest list is the same misleading dead end this page
+            exists to undo — open_table governs who may ASK to join, not who may
+            read a plan they are already part of. */}
+        {!event || (!shareable && !alreadyInvolved) ? (
           <div className="text-center">
             <p className="text-4xl mb-3" aria-hidden>🍂</p>
             <h1 className="font-extrabold tracking-tight text-2xl">
-              This invite link isn’t active
+              {notice?.heading ?? 'This invite link isn’t active'}
             </h1>
-            <p className="text-ink-soft text-sm mt-2">
-              It may have been turned off, or the plan has wrapped up.
-            </p>
+            <p className="text-ink-soft text-sm mt-2">{notice?.body}</p>
           </div>
         ) : (
           <>

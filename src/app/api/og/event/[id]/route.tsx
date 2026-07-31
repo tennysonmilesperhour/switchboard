@@ -1,6 +1,8 @@
 import { ImageResponse } from 'next/og';
 import { createAdminClient, hasAdminCredentials } from '@/lib/supabase/admin';
 import { resolveEventZone } from '@/lib/server/event-zone';
+import { shareLinkState, unfurlsPlanDetails } from '@/lib/share-link';
+import type { EventStatus } from '@/lib/types';
 
 export const runtime = 'nodejs';
 
@@ -20,14 +22,25 @@ export async function GET(
   const admin = createAdminClient();
   const { data: event } = await admin
     .from('events')
-    .select('title, starts_at, location_name, status, time_zone, host_id')
+    .select('title, starts_at, location_name, status, share_link_active, time_zone, host_id')
     .eq('id', id)
-    .maybeSingle();
+    .maybeSingle<{
+      title: string | null;
+      starts_at: string | null;
+      location_name: string | null;
+      status: EventStatus;
+      share_link_active: boolean;
+      time_zone: string | null;
+      host_id: string;
+    }>();
 
-  // Only unfurl details for a shareable plan. Drafts and cancelled events must
-  // never leak their title/time/location to anyone holding the UUID, so they
-  // fall back to the generic card.
-  const shareable = event ? !['draft', 'cancelled'].includes(event.status) : false;
+  // Only unfurl details for a plan that is actually being shared, decided by the
+  // same classifier as /i/<token> rather than a status list maintained here.
+  // This route is keyed by event *id* — far more guessable than a share token —
+  // so `unfurlsPlanDetails` is deliberately stricter than "can a token holder
+  // read this": a draft, a cancelled plan, a past plan, or one whose link the
+  // host switched off falls back to the generic card and leaks nothing.
+  const shareable = unfurlsPlanDetails(shareLinkState(event));
   const title = shareable && event?.title ? event.title : 'You’re invited';
   // Render in the plan's own zone so the unfurl shows the host's intended local
   // time instead of the server's UTC (a 6pm plan was showing as "12:00 AM").
