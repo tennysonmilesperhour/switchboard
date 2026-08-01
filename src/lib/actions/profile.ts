@@ -395,6 +395,7 @@ export async function updateNotificationPrefs(
     .from('profiles')
     .update({
       notify_plans: Boolean(prefs.plans),
+      notify_suggestions: Boolean(prefs.suggestions),
       notify_reminders: Boolean(prefs.reminders),
       notify_messages: Boolean(prefs.messages),
       notify_social: Boolean(prefs.social),

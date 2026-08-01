@@ -115,6 +115,142 @@ export async function notifyRoomActivity(
 }
 
 /**
+ * How long a burst of new ideas collapses into a single alert.
+ *
+ * Suggestions do not arrive one an hour; they arrive five in two minutes while
+ * a group brainstorms. One push per idea is exactly the flood that makes people
+ * mute a category forever, so within this window we rewrite the standing unread
+ * alert in place — the feed row stays accurate and the phone buzzes once. Same
+ * device as notifyRoomActivity, for the same reason.
+ */
+export const SUGGESTION_COALESCE_WINDOW_MS = 30 * 60 * 1000;
+
+/**
+ * The copy for a "new idea" alert, given how many ideas it stands for. Pure so
+ * the singular/plural split is testable without a database.
+ *
+ * It never names who suggested the idea. `poll_options` doesn't record an
+ * author and the poll UI doesn't show one, so putting a name in the push would
+ * make the notification the only place that reveals who proposed what — a leak
+ * out the side door of a deliberately anonymous surface.
+ */
+export function suggestionNotice(
+  eventTitle: string,
+  label: string,
+  count: number,
+): PushPayload {
+  if (count > 1) {
+    return {
+      title: `${count} new ideas · ${eventTitle}`,
+      body: `Latest: “${label}”. Open the plan to rank them.`,
+    };
+  }
+  return {
+    title: `New idea · ${eventTitle}`,
+    body: `“${label}” — open the plan to rank it.`,
+  };
+}
+
+/**
+ * Tell the people already invested in a poll that there's something new to rank.
+ *
+ * Recipients are the ones for whom this is news they can act on: everyone who
+ * has already cast a vote (they ranked a list that just changed under them),
+ * plus the host and co-hosts. Never the person who just suggested it. Guests who
+ * haven't voted yet aren't chased — they'll see the full list whenever they
+ * first open the plan, and pushing at them turns a poll into a pestering.
+ *
+ * Reading `poll_votes` here is a membership read, never a ballot read: only
+ * `voter_id` is selected, never `option_id` or `weight`, and the result decides
+ * who to notify rather than being shown to anyone. The anonymity invariant
+ * (aggregates only, never raw votes) is untouched — no recipient learns anything
+ * about anyone else's vote, including that they voted.
+ *
+ * Best-effort throughout; a failure here must never cost the suggestion itself.
+ */
+export async function notifySuggestionAdded(
+  pollId: string,
+  eventId: string,
+  label: string,
+  suggesterId: string,
+): Promise<void> {
+  const admin = createAdminClient();
+
+  const { data: event } = await admin
+    .from('events')
+    .select('id, title, host_id')
+    .eq('id', eventId)
+    .maybeSingle<{ id: string; title: string; host_id: string }>();
+  if (!event) return;
+
+  const [{ data: cohosts }, { data: voters }] = await Promise.all([
+    admin.from('event_cohosts').select('cohost_id').eq('event_id', eventId),
+    admin.from('poll_votes').select('voter_id').eq('poll_id', pollId),
+  ]);
+
+  const recipients = new Set<string>([event.host_id]);
+  for (const row of cohosts ?? []) {
+    if (row.cohost_id) recipients.add(row.cohost_id as string);
+  }
+  for (const row of voters ?? []) {
+    if (row.voter_id) recipients.add(row.voter_id as string);
+  }
+  recipients.delete(suggesterId);
+  if (recipients.size === 0) return;
+
+  const cutoff = new Date(Date.now() - SUGGESTION_COALESCE_WINDOW_MS);
+  const url = `/events/${event.id}`;
+
+  // How many ideas the window now covers — used only when folding into a
+  // standing alert, so the digest counts every idea that alert stands for.
+  const { count: recentCount } = await admin
+    .from('poll_options')
+    .select('id', { count: 'exact', head: true })
+    .eq('poll_id', pollId)
+    .gte('created_at', cutoff.toISOString());
+
+  await Promise.all(
+    [...recipients].map(async (recipientId) => {
+      const { data: standing } = await admin
+        .from('notifications')
+        .select('id')
+        .eq('user_id', recipientId)
+        .eq('kind', 'poll_suggestion')
+        .eq('url', url)
+        .is('read_at', null)
+        .gte('created_at', cutoff.toISOString())
+        .limit(1)
+        .maybeSingle();
+
+      if (standing) {
+        // Fold in: refresh the wording and float it back to the top of the
+        // feed, but deliberately do NOT push again — one buzz per burst.
+        const notice = suggestionNotice(event.title, label, recentCount ?? 2);
+        await admin
+          .from('notifications')
+          .update({
+            title: notice.title,
+            body: notice.body,
+            created_at: new Date().toISOString(),
+          })
+          .eq('id', standing.id);
+        return;
+      }
+
+      // Nothing standing — this idea is news on its own terms, so describe it
+      // alone rather than as part of a digest the reader never saw.
+      const notice = suggestionNotice(event.title, label, 1);
+      await notifyUsers([recipientId], {
+        kind: 'poll_suggestion',
+        title: notice.title,
+        body: notice.body,
+        url,
+      });
+    }),
+  );
+}
+
+/**
  * How many accepted connections the recipient must have before we send the
  * anonymous "someone's down to connect" nudge.
  *
@@ -246,7 +382,7 @@ export async function sendPushToUsers(
   const { data: profiles } = await admin
     .from('profiles')
     .select(
-      'id, quiet_hours_start, quiet_hours_end, timezone, notify_plans, notify_reminders, notify_messages, notify_social',
+      'id, quiet_hours_start, quiet_hours_end, timezone, notify_plans, notify_suggestions, notify_reminders, notify_messages, notify_social',
     )
     .in('id', userIds);
 
