@@ -2,7 +2,9 @@ import { describe, expect, it } from 'vitest';
 import {
   isQuietTime,
   shouldSendInterestNudge,
+  suggestionNotice,
   MIN_CONNECTIONS_FOR_INTEREST_NUDGE,
+  SUGGESTION_COALESCE_WINDOW_MS,
 } from './notify';
 
 /** Build a Date at a fixed UTC hour so assertions are deterministic. */
@@ -72,5 +74,31 @@ describe('shouldSendInterestNudge', () => {
     // re-submit of the same intent from re-buzzing the target.
     expect(shouldSendInterestNudge(10, 1)).toBe(false);
     expect(shouldSendInterestNudge(10, 3)).toBe(false);
+  });
+});
+
+describe('suggestionNotice', () => {
+  it('describes a single idea by name, so the reader can judge it from the push', () => {
+    const notice = suggestionNotice('Sunday roast', 'Tapas at 8', 1);
+    expect(notice.title).toBe('New idea · Sunday roast');
+    expect(notice.body).toContain('Tapas at 8');
+  });
+
+  it('folds a burst into one counted alert instead of one buzz per idea', () => {
+    const notice = suggestionNotice('Sunday roast', 'Tapas at 8', 4);
+    expect(notice.title).toBe('4 new ideas · Sunday roast');
+    expect(notice.body).toContain('Tapas at 8');
+  });
+
+  it('never names who suggested it — the poll UI does not, so the push must not', () => {
+    // poll_options records no author; a name here would make the notification
+    // the one place a suggestion stops being anonymous.
+    const notice = suggestionNotice('Sunday roast', 'Tapas at 8', 1);
+    expect(`${notice.title} ${notice.body}`).not.toMatch(/suggested by|added by/i);
+  });
+
+  it('collapses a brainstorm-length burst, not an hours-apart afterthought', () => {
+    expect(SUGGESTION_COALESCE_WINDOW_MS).toBeGreaterThanOrEqual(5 * 60 * 1000);
+    expect(SUGGESTION_COALESCE_WINDOW_MS).toBeLessThanOrEqual(60 * 60 * 1000);
   });
 });

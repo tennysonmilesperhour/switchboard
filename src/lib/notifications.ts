@@ -13,11 +13,17 @@
  * history.
  */
 
-export type NotificationCategory = 'plans' | 'reminders' | 'messages' | 'social';
+export type NotificationCategory =
+  | 'plans'
+  | 'suggestions'
+  | 'reminders'
+  | 'messages'
+  | 'social';
 
 /** The `profiles` boolean column backing each category. */
 export type NotificationColumn =
   | 'notify_plans'
+  | 'notify_suggestions'
   | 'notify_reminders'
   | 'notify_messages'
   | 'notify_social';
@@ -39,6 +45,14 @@ export const NOTIFICATION_CATEGORIES: NotificationCategoryMeta[] = [
     label: 'Invitations & plans',
     description:
       'New invitations, RSVPs, join requests, plan changes, and host updates.',
+  },
+  {
+    key: 'suggestions',
+    column: 'notify_suggestions',
+    emoji: '🗳',
+    label: 'New ideas to vote on',
+    description:
+      'Someone adds an idea to a plan you’re voting on, so you can rank it.',
   },
   {
     key: 'reminders',
@@ -69,6 +83,7 @@ export type NotificationPrefs = Record<NotificationCategory, boolean>;
 /** Every category on — the default for a brand-new account and the "all on" state. */
 export const DEFAULT_NOTIFICATION_PREFS: NotificationPrefs = {
   plans: true,
+  suggestions: true,
   reminders: true,
   messages: true,
   social: true,
@@ -95,6 +110,10 @@ const KIND_TO_CATEGORY: Record<string, NotificationCategory> = {
   // who already said yes through the share link, so it must honour notify_plans
   // like every other plan update rather than falling through uncategorised.
   event_date_set: 'plans',
+  // New ideas to vote on. Deliberately NOT 'plans': a brainstorm arrives in
+  // bursts, and someone who wants to escape that must be able to do it without
+  // also muting invitations and cancellations.
+  poll_suggestion: 'suggestions',
   // Event reminders
   reminder: 'reminders',
   // Comments & photos

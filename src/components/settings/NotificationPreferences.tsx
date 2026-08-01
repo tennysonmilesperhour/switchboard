@@ -77,7 +77,13 @@ export function NotificationPreferences({
   const allOn = NOTIFICATION_CATEGORIES.every((c) => prefs[c.key]);
 
   function setAll(value: boolean) {
-    update({ plans: value, reminders: value, messages: value, social: value });
+    // Derived from the category list, never a hand-written literal — a new
+    // category must be swept by the master switch the day it ships.
+    update(
+      Object.fromEntries(
+        NOTIFICATION_CATEGORIES.map((c) => [c.key, value]),
+      ) as NotificationPrefs,
+    );
   }
 
   return (

@@ -7,6 +7,7 @@ import { createClient } from '@/lib/supabase/server';
 import { requireUser } from '@/lib/server/require-user';
 import { isEventManager } from '@/lib/server/authz';
 import { resolvePoll } from '@/lib/server/poll-runner';
+import { notifySuggestionAdded } from '@/lib/server/notify';
 import { capture } from '@/lib/analytics/server';
 import { ANALYTICS_EVENTS } from '@/lib/analytics/events';
 import type { Weight } from '@/lib/engine/scoring';
@@ -45,6 +46,15 @@ export async function addSuggestion(
     source: isHost ? 'host' : 'guests',
   });
   if (error) return { ok: false, error: error.message };
+
+  // Tell the people who already ranked this poll that the list they ranked has
+  // changed. Best-effort: the idea is saved either way.
+  try {
+    await notifySuggestionAdded(pollId, poll.event_id, trimmed, user.id);
+  } catch (notifyError) {
+    console.error('Suggestion notify failed', notifyError);
+  }
+
   revalidatePath(`/events/${eventId}`);
   return { ok: true };
 }

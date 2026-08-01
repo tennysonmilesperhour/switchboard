@@ -46,7 +46,7 @@ export default async function SettingsPage({
   const { data: profile } = await supabase
     .from('profiles')
     .select(
-      'display_name, handle, interests, down_to, sabbatical, sabbatical_message, quiet_hours_start, quiet_hours_end, discoverable, discovery_geography, discovery_demographics, discovery_interests, discovery_involvements, discovery_mutuals, discovery_contexts, notify_plans, notify_reminders, notify_messages, notify_social',
+      'display_name, handle, interests, down_to, sabbatical, sabbatical_message, quiet_hours_start, quiet_hours_end, discoverable, discovery_geography, discovery_demographics, discovery_interests, discovery_involvements, discovery_mutuals, discovery_contexts, notify_plans, notify_suggestions, notify_reminders, notify_messages, notify_social',
     )
     .eq('id', user.id)
     .single();
@@ -81,6 +81,7 @@ export default async function SettingsPage({
   // Notification categories default on; a null (pre-migration) reads as enabled.
   const notificationPrefs = {
     plans: profile?.notify_plans ?? true,
+    suggestions: profile?.notify_suggestions ?? true,
     reminders: profile?.notify_reminders ?? true,
     messages: profile?.notify_messages ?? true,
     social: profile?.notify_social ?? true,
