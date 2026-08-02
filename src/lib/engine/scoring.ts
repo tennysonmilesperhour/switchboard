@@ -15,6 +15,21 @@ export interface Vote {
   weight: Weight;
 }
 
+/**
+ * The weight a rating button should produce: tapping the weight you already
+ * hold clears it back to neutral, tapping any other one moves you to it.
+ *
+ * Pulled out of the button handler because `current` is the part that goes
+ * wrong. It has to be what the voter can *see* — the optimistic weight — and
+ * not the server prop, which still holds the pre-tap value for as long as the
+ * round trip takes. Computing the toggle from the prop meant a second tap
+ * during that window re-sent the weight already on screen instead of clearing
+ * it, so the button appeared to ignore the press.
+ */
+export function nextWeight(current: Weight, tapped: Weight): Weight {
+  return current === tapped ? 0 : tapped;
+}
+
 export interface OptionScore {
   optionId: string;
   score: number;

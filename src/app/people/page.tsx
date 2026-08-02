@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
+import { appInviteUrl } from '@/lib/links';
 import { AppShell } from '@/components/shell/AppShell';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { PeopleClient, type FriendRow, type RequestRow, type CircleRow } from './PeopleClient';
@@ -86,6 +87,11 @@ export default async function PeoplePage() {
     memberCount: (row.household_members ?? []).length,
   }));
 
+  // Built here, not in the client: the origin is a deployment fact, and
+  // appInviteUrl() throws on a misconfigured one so the failure lands on the
+  // server where someone can fix it (see src/lib/links.ts).
+  const inviteUrl = appInviteUrl();
+
   return (
     <AppShell title="People">
       {friends.length === 0 && incoming.length === 0 && outgoing.length === 0 ? (
@@ -101,6 +107,7 @@ export default async function PeoplePage() {
             outgoing={outgoing}
             circles={circleRows}
             households={households}
+            inviteUrl={inviteUrl}
           />
         </div>
       ) : (
@@ -110,6 +117,7 @@ export default async function PeoplePage() {
           outgoing={outgoing}
           circles={circleRows}
           households={households}
+          inviteUrl={inviteUrl}
         />
       )}
     </AppShell>

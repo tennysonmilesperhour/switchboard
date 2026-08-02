@@ -2,8 +2,10 @@ import { describe, expect, test } from 'vitest';
 import {
   finalists,
   groupConsensus,
+  nextWeight,
   scoreOptions,
   type Vote,
+  type Weight,
 } from './scoring';
 
 function vote(voterId: string, optionId: string, weight: Vote['weight']): Vote {
@@ -73,6 +75,46 @@ describe('groupConsensus', () => {
 
   test('returns 0 with no options', () => {
     expect(groupConsensus([], [])).toBe(0);
+  });
+});
+
+describe('nextWeight', () => {
+  const RATING_BUTTONS: Weight[] = [2, 1, -1];
+
+  test('an untouched option takes the weight tapped', () => {
+    for (const tapped of RATING_BUTTONS) {
+      expect(nextWeight(0, tapped)).toBe(tapped);
+    }
+  });
+
+  test('tapping the weight you already hold clears it', () => {
+    for (const tapped of RATING_BUTTONS) {
+      expect(nextWeight(tapped, tapped)).toBe(0);
+    }
+  });
+
+  test('tapping a different weight moves straight to it', () => {
+    for (const current of RATING_BUTTONS) {
+      for (const tapped of RATING_BUTTONS) {
+        if (current === tapped) continue;
+        expect(nextWeight(current, tapped)).toBe(tapped);
+      }
+    }
+  });
+
+  test('a repeated tap alternates instead of sticking', () => {
+    // The reported symptom was a button that would not stay pressed. Feeding
+    // each result back in is the check that matters: as long as the caller
+    // passes the weight now on screen, every tap changes something. Passing a
+    // stale weight is what made two taps in a row both send the same value and
+    // leave the button looking dead.
+    let current: Weight = 0;
+    const seen: Weight[] = [];
+    for (let i = 0; i < 4; i += 1) {
+      current = nextWeight(current, 2);
+      seen.push(current);
+    }
+    expect(seen).toEqual([2, 0, 2, 0]);
   });
 });
 

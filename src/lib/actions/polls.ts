@@ -3,6 +3,7 @@
 import type { ActionResult } from '@/lib/errors';
 
 import { revalidatePath } from 'next/cache';
+import { after } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { requireUser } from '@/lib/server/require-user';
 import { isEventManager } from '@/lib/server/authz';
@@ -75,19 +76,18 @@ export async function castVote(
   // `votingOpen`) lets members weigh options during `suggesting` and `runoff`
   // as well as `voting`, so accept a ballot in any of those; only a `decided`
   // poll is closed.
-  const { data: option } = await supabase
-    .from('poll_options')
-    .select('poll_id')
-    .eq('id', optionId)
-    .maybeSingle();
+  //
+  // Both checks gate the same write and neither feeds the other, so they go out
+  // together. They used to run back to back, which put three sequential round
+  // trips between a tap and the button changing — voting is the one action
+  // people fire off in bursts, so that latency is the whole experience.
+  const [{ data: option }, { data: pollRow }] = await Promise.all([
+    supabase.from('poll_options').select('poll_id').eq('id', optionId).maybeSingle(),
+    supabase.from('polls').select('phase').eq('id', pollId).maybeSingle(),
+  ]);
   if (!option || option.poll_id !== pollId) {
     return { ok: false, error: 'That option is not on this poll.' };
   }
-  const { data: pollRow } = await supabase
-    .from('polls')
-    .select('phase')
-    .eq('id', pollId)
-    .maybeSingle();
   const OPEN_PHASES = ['suggesting', 'voting', 'runoff'];
   if (!pollRow || !OPEN_PHASES.includes(pollRow.phase)) {
     return { ok: false, error: 'Voting is not open on this poll.' };
@@ -102,7 +102,12 @@ export async function castVote(
   });
   if (error) return { ok: false, error: error.message };
   // The event only, never the weight or option — individual votes stay private.
-  await capture(user.id, ANALYTICS_EVENTS.pollVoted, { event_id: eventId });
+  //
+  // Scheduled after the response rather than awaited: capture() allows itself up
+  // to two seconds before giving up, and awaiting that on a button people tap
+  // repeatedly handed the whole of it to the person voting. Analytics is a
+  // bonus, never a blocker, so it must not sit on this path.
+  after(() => capture(user.id, ANALYTICS_EVENTS.pollVoted, { event_id: eventId }));
   revalidatePath(`/events/${eventId}`);
   return { ok: true };
 }

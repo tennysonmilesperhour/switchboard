@@ -116,3 +116,26 @@ export function guestRsvpUrl(guestToken: string): string {
 export function boardJoinUrl(code: string): string {
   return absoluteUrl(`/boards/join/${encodeURIComponent(code)}`);
 }
+
+/**
+ * The link for "here's Switchboard" — the app itself, with no plan attached.
+ *
+ * Every other link above hands over one specific plan, and for a while that was
+ * the only kind the app could produce. So the answer to "how do I send someone
+ * Switchboard?" was to invent a plan, invite them to it, and send them that —
+ * which is an invitation to something, from someone, and reads as one. People
+ * asked for this and there was nothing to give them.
+ *
+ * Unlike the links above, this one carries no token and grants nothing: it is
+ * the public front door, so it is not a share link in the `share-link.ts` sense
+ * and that module has no say over it. There is no state in which it should be
+ * withheld — the sender is not exposing a plan, they are naming an app. Signed
+ * out it lands on the pitch and the sign-up button; signed in, on the
+ * recipient's own home.
+ *
+ * Bare origin on purpose. It is the shortest, most legible thing to drop into a
+ * text message, and it is the URL someone would have typed anyway.
+ */
+export function appInviteUrl(): string {
+  return absoluteUrl();
+}
