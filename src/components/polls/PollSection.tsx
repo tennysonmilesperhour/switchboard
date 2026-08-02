@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useTransition } from 'react';
+import { useEffect, useOptimistic, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { Button } from '@/components/ui/Button';
@@ -12,7 +12,7 @@ import {
   openVoting,
   pickWinner,
 } from '@/lib/actions/polls';
-import type { Weight } from '@/lib/engine/scoring';
+import { nextWeight, type Weight } from '@/lib/engine/scoring';
 import type { Poll, PollOption } from '@/lib/types';
 
 export interface OptionResult {
@@ -43,6 +43,15 @@ function consensusOf(result: OptionResult | undefined): number {
   return Math.round(((result.score / result.voters + 1) / 3) * 100);
 }
 
+/**
+ * How long to sit on a tally bump before re-fetching aggregates.
+ *
+ * The bump trigger fires for every vote on the poll, including the ones this
+ * device just cast, and a group ranking a list together produces them in
+ * bursts. Coalescing turns a burst into one re-render.
+ */
+const TALLY_REFRESH_MS = 600;
+
 export function PollSection({
   poll,
   options,
@@ -56,11 +65,36 @@ export function PollSection({
   const [pending, startTransition] = useTransition();
   const router = useRouter();
 
+  // What the rating buttons show.
+  //
+  // `myVotes` is server state: it only changes when an RSC render delivers new
+  // props. Reading the buttons straight off it meant a tap showed nothing at
+  // all until the round trip landed, so a press read as ignored — and pressing
+  // again made it worse, because the toggle below recomputed from the same
+  // stale prop. The optimistic overlay holds the tapped weight until the
+  // action's own re-render replaces it, and drops automatically if the write
+  // fails.
+  const [shownVotes, showVote] = useOptimistic(
+    myVotes,
+    (current, cast: { optionId: string; weight: Weight }) => ({
+      ...current,
+      [cast.optionId]: cast.weight,
+    }),
+  );
+
   // Live consensus: a DB trigger bumps polls.tally_version on every vote change.
   // Subscribe to this poll's row and re-fetch aggregates so the meter moves as
   // others vote, without ever exposing an individual vote.
+  //
+  // Coalesced, because that trigger is noisier than it looks: it fires for this
+  // device's own votes too, each of which already brought a freshly rendered
+  // page back with the action's response. Refreshing on every bump meant a
+  // second full re-render per vote and a pile-up of them whenever a group
+  // ranked a list at the same time — the page busy re-rendering is what made
+  // the buttons feel unresponsive.
   useEffect(() => {
     const supabase = createClient();
+    let timer: ReturnType<typeof setTimeout> | undefined;
     const channel = supabase
       .channel(`poll-${poll.id}`)
       .on(
@@ -71,10 +105,14 @@ export function PollSection({
           table: 'polls',
           filter: `id=eq.${poll.id}`,
         },
-        () => router.refresh(),
+        () => {
+          clearTimeout(timer);
+          timer = setTimeout(() => router.refresh(), TALLY_REFRESH_MS);
+        },
       )
       .subscribe();
     return () => {
+      clearTimeout(timer);
       supabase.removeChannel(channel);
     };
   }, [poll.id, router]);
@@ -99,6 +137,13 @@ export function PollSection({
     : null;
   const votingOpen = poll.phase === 'suggesting' || poll.phase === 'voting' || poll.phase === 'runoff';
 
+  // Every action below revalidates this path, and Next.js ships the re-rendered
+  // page in the same response as the action's return value. A router.refresh()
+  // afterwards is therefore a second round trip fetching data we were already
+  // handed — it used to sit between a tap and the button changing colour. Only
+  // the realtime subscription above refreshes, because someone else's vote is
+  // the one case where nothing has been handed to us.
+
   function submitSuggestion(e: React.FormEvent) {
     e.preventDefault();
     const label = suggestion;
@@ -106,17 +151,18 @@ export function PollSection({
     startTransition(async () => {
       const result = await addSuggestion(poll.id, eventId, label);
       if (!result.ok) setError(result.error ?? 'Could not add that');
-      else router.refresh();
     });
   }
 
   function vote(optionId: string, weight: Weight) {
+    // From the optimistic view, never `myVotes` — see nextWeight's note on why
+    // the starting point has to be the weight the voter can actually see.
+    const next = nextWeight(shownVotes[optionId] ?? 0, weight);
+    setError('');
     startTransition(async () => {
-      // Tapping the same weight again clears it back to neutral.
-      const next: Weight = myVotes[optionId] === weight ? 0 : weight;
+      showVote({ optionId, weight: next });
       const result = await castVote(poll.id, eventId, optionId, next);
       if (!result.ok) setError(result.error ?? 'Vote failed');
-      else router.refresh();
     });
   }
 
@@ -168,7 +214,7 @@ export function PollSection({
       <ul className="space-y-2.5">
         {ranked.map((option) => {
           const result = resultFor(option.id);
-          const mine = myVotes[option.id] ?? 0;
+          const mine = shownVotes[option.id] ?? 0;
           const consensus = consensusOf(result);
           const isWinner = poll.winning_option_id === option.id;
           return (
@@ -201,9 +247,17 @@ export function PollSection({
                   <div className="flex gap-2 mt-3" role="group" aria-label={`Rate ${option.label}`}>
                     {WEIGHT_BUTTONS.map((button) => (
                       <button
+                        // Deliberately never disabled. `pending` is one flag for
+                        // the whole section, so disabling on it took every
+                        // rating button on every option out of service while any
+                        // single vote was in flight — the taps people described
+                        // as doing nothing were landing on dead buttons. Nothing
+                        // is lost by leaving them live: Next.js dispatches server
+                        // actions one at a time per client, so a flurry of taps
+                        // queues in order and the last one wins, while the
+                        // optimistic overlay keeps the screen honest throughout.
                         key={button.weight}
                         type="button"
-                        disabled={pending}
                         aria-pressed={mine === button.weight}
                         aria-label={button.label}
                         title={button.label}
@@ -231,7 +285,6 @@ export function PollSection({
                     onClick={() =>
                       startTransition(async () => {
                         await pickWinner(poll.id, eventId, option.id);
-                        router.refresh();
                       })
                     }
                   >
@@ -269,7 +322,6 @@ export function PollSection({
               onClick={() =>
                 startTransition(async () => {
                   await openVoting(poll.id, eventId);
-                  router.refresh();
                 })
               }
             >
@@ -282,7 +334,6 @@ export function PollSection({
             onClick={() =>
               startTransition(async () => {
                 await closeVoting(poll.id, eventId);
-                router.refresh();
               })
             }
           >

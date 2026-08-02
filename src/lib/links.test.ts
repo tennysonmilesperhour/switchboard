@@ -1,5 +1,6 @@
 import { describe, test, expect, afterEach, vi } from 'vitest';
 import {
+  appInviteUrl,
   appOrigin,
   absoluteUrl,
   eventSharePath,
@@ -122,5 +123,28 @@ describe('link builders', () => {
     expect(boardJoinUrl('a b/c')).toBe(
       'https://switchboardsocial.me/boards/join/a%20b%2Fc',
     );
+  });
+});
+
+describe('appInviteUrl', () => {
+  test('is the bare origin, with nothing appended', () => {
+    setEnv('https://switchboardsocial.me', 'production');
+    expect(appInviteUrl()).toBe('https://switchboardsocial.me');
+  });
+
+  test('carries no plan, token, or query', () => {
+    setEnv('https://switchboardsocial.me', 'production');
+    const url = new URL(appInviteUrl());
+    // The point of this link is that it is *not* an invitation to anything. A
+    // token or a plan id creeping in would turn "here's the app" back into
+    // "here's my event", which is the dead end it exists to remove.
+    expect(url.pathname).toBe('/');
+    expect(url.search).toBe('');
+    expect(url.hash).toBe('');
+  });
+
+  test('fails loudly in production rather than emitting a bare path', () => {
+    setEnv(undefined, 'production');
+    expect(() => appInviteUrl()).toThrow(/NEXT_PUBLIC_APP_URL/);
   });
 });

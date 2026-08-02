@@ -1,6 +1,5 @@
 'use client';
 
-import Link from 'next/link';
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/Button';
@@ -9,6 +8,7 @@ import { Avatar } from '@/components/ui/Avatar';
 import { Chip } from '@/components/ui/Chip';
 import { Icon } from '@/components/ui/Icon';
 import { EmptyState } from '@/components/ui/EmptyState';
+import { ShareButton } from '@/components/ui/ShareButton';
 import { useToast } from '@/components/ui/Toast';
 import { useConfirm } from '@/components/ui/ConfirmDialog';
 import {
@@ -69,12 +69,15 @@ export function PeopleClient({
   outgoing,
   circles,
   households = [],
+  inviteUrl,
 }: {
   friends: FriendRow[];
   incoming: RequestRow[];
   outgoing: RequestRow[];
   circles: CircleRow[];
   households?: HouseholdRow[];
+  /** Absolute link to Switchboard itself, from `appInviteUrl()` on the server. */
+  inviteUrl: string;
 }) {
   const [identifier, setIdentifier] = useState('');
   const [message, setMessage] = useState<{ tone: 'ok' | 'error'; text: string } | null>(null);
@@ -350,6 +353,29 @@ export function PeopleClient({
             {message.text}
           </p>
         )}
+
+        {/*
+          Sits here permanently rather than appearing only after a failed
+          lookup. Searching for someone who turns out not to have an account is
+          the moment people hit this — "No Switchboard account matched" lands
+          directly above it — but wanting to send a friend the app is a perfectly
+          ordinary thing to want before searching for them at all, and the only
+          answer the app used to have was to invent a plan and invite them to it.
+        */}
+        <div className="mt-3 flex flex-wrap items-center justify-between gap-3 rounded-card bg-cream px-3.5 py-3">
+          <p className="min-w-0 flex-1 text-sm text-ink-soft">
+            <span className="block font-bold text-ink">Not on Switchboard yet?</span>
+            Send them the app itself. It’s just a link — no plan attached, nothing
+            to RSVP to.
+          </p>
+          <ShareButton
+            url={inviteUrl}
+            title="Switchboard"
+            text="Come find me on Switchboard - it's how I'm making plans with people now."
+            label="Share the app"
+            className="shrink-0"
+          />
+        </div>
         {contactMatches.length > 0 && (
           <div className="mt-3 space-y-2">
             {contactMatches.map((match) => (
@@ -394,13 +420,21 @@ export function PeopleClient({
                         : 'Sent'}
                   </span>
                 )}
-                {!match.profile && match.smsTarget && (
-                  <Link
-                    href="/events/new"
-                    className="rounded-pill bg-cream px-2.5 py-1 text-xs font-bold text-ink-soft hover:text-terracotta"
-                  >
-                    Invite
-                  </Link>
+                {/*
+                  This used to be a link to /events/new: "invite" a contact who
+                  isn't on Switchboard and the app sent you off to build a plan
+                  first, because a plan invite was the only link it could make.
+                  Hand over the app instead — the share sheet opens on the same
+                  contact they were just looking at.
+                */}
+                {!match.profile && (
+                  <ShareButton
+                    url={inviteUrl}
+                    title="Switchboard"
+                    text="Come find me on Switchboard - it's how I'm making plans with people now."
+                    label="Invite"
+                    className="shrink-0 !px-2.5 !py-1 !shadow-none"
+                  />
                 )}
               </div>
             ))}
