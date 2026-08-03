@@ -2,8 +2,38 @@ import Link from 'next/link';
 import type { Metadata } from 'next';
 import { safeNextPath } from '@/lib/security';
 
+/**
+ * This is where `appInviteUrl()` lands (src/lib/links.ts): the bare origin
+ * redirects a signed-out visitor here, so this page's metadata *is* the preview
+ * that renders when someone texts a friend the app.
+ *
+ * `title.absolute` because the root layout's template is `'%s · Switchboard'`,
+ * and a plain string here went through it — the link preview and the browser tab
+ * both read "Switchboard - plans without pressure · Switchboard".
+ *
+ * The `openGraph` block is what makes the link arrive as a card rather than a
+ * bare URL. `/welcome/opengraph-image.tsx` supplies the image; Next resolves it
+ * against `metadataBase` in the root layout.
+ */
+const PITCH =
+  'Reaching out is hard. Switchboard handles the awkward parts, the asking, ' +
+  'the waiting, the deciding, so more of your moments actually happen.';
+
 export const metadata: Metadata = {
-  title: 'Switchboard - plans without pressure',
+  title: { absolute: 'Switchboard - plans without pressure' },
+  description: PITCH,
+  openGraph: {
+    type: 'website',
+    siteName: 'Switchboard',
+    title: 'Switchboard - plans without pressure',
+    description: PITCH,
+    url: '/welcome',
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: 'Switchboard - plans without pressure',
+    description: PITCH,
+  },
 };
 
 const FEATURES = [

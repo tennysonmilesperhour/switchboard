@@ -19,6 +19,40 @@ test.describe('public surface', () => {
     await expect(page).toHaveURL(/\/welcome/);
   });
 
+  /*
+    The app invite link — `appInviteUrl()` in src/lib/links.ts, the bare origin
+    with no plan and no token. It joined the link contract without joining this
+    file, and the contract's own instruction is that every link in it is opened
+    here signed out. These are that: what the recipient of a texted app link
+    gets, on a device with no session.
+  */
+  test('the app invite link opens the pitch for someone with no account', async ({
+    page,
+  }) => {
+    // Exactly what a recipient taps: the origin, nothing appended.
+    await page.goto('/');
+    await expect(page).toHaveURL(/\/welcome/);
+    await expect(page.locator('h1')).toContainText('Make plans.');
+    // It has to offer a way in, or the link is a leaflet.
+    await expect(page.getByRole('link', { name: 'Create account' }).first()).toBeVisible();
+  });
+
+  test('the app invite link unfurls as a card, not a bare URL', async ({ page }) => {
+    await page.goto('/');
+    // A link built to be dropped into a text message is only working if the
+    // messaging app can render it. Every other link in the contract sets these.
+    const og = (property: string) =>
+      page.locator(`meta[property="og:${property}"]`).first();
+    await expect(og('title')).toHaveAttribute('content', /Switchboard/);
+    await expect(og('description')).toHaveAttribute('content', /.{40,}/);
+    await expect(og('image')).toHaveAttribute('content', /^https?:\/\/.+/);
+
+    // The page's plain-string title went through the root layout's
+    // '%s · Switchboard' template, so the preview headline and the browser tab
+    // both read "Switchboard - plans without pressure · Switchboard".
+    await expect(page).toHaveTitle('Switchboard - plans without pressure');
+  });
+
   test('unknown guest RSVP token shows a graceful message', async ({ page }) => {
     await page.goto('/rsvp/00000000-0000-0000-0000-000000000000');
     await expect(page.getByText('isn’t here anymore')).toBeVisible();
