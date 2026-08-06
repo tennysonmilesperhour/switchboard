@@ -23,6 +23,8 @@ import {
   usernameToAuthEmail,
 } from '@/lib/auth-identity';
 import { LEGAL_VERSION } from '@/lib/legal';
+import { capture } from '@/lib/analytics/server';
+import { ANALYTICS_EVENTS } from '@/lib/analytics/events';
 import { safeNextPath } from '@/lib/security';
 
 export interface AuthActionResult {
@@ -301,6 +303,12 @@ export async function createPasswordAccount(
         return authError('The confirmation email could not be sent. No account was created.');
       }
     }
+
+    // The account now definitively exists (every failure path above deletes
+    // it), so this is the single funnel point for both identifier flows.
+    await capture(userId, ANALYTICS_EVENTS.signupCompleted, {
+      method: usesRealEmail ? 'email' : 'username',
+    });
 
     // Username accounts are confirmed on creation (`email_confirm: true`), so
     // sign them in right here — creating the account *is* the first sign-in, no

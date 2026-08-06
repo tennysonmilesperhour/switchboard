@@ -105,12 +105,18 @@ export async function respondToInvite(
     .single();
 
   if (invite) {
-    const message = !accept ? cleanDeclineMessage(declineMessage) : null;
-    if (!accept) {
-      const { error: messageError } = await supabase
+    const message = data === 'declined' ? cleanDeclineMessage(declineMessage) : null;
+    if (message) {
+      // `invites` has no invitee UPDATE policy (status only moves through the
+      // RPC), so a user-client write here is a silent zero-row no-op. Persist
+      // the note with the admin client, re-scoped to the exact row the RPC
+      // just declined for this caller.
+      const { error: messageError } = await createAdminClient()
         .from('invites')
         .update({ decline_message: message })
-        .eq('id', inviteId);
+        .eq('id', inviteId)
+        .eq('invitee_id', user.id)
+        .eq('status', 'declined');
       if (messageError) {
         await reportOperationalError('invite-decline.message', messageError, {
           eventId: invite.event_id,
@@ -163,6 +169,9 @@ export async function respondToInvite(
     await capture(user.id, ANALYTICS_EVENTS.inviteResponded, {
       accepted: data === 'accepted',
       outcome: typeof data === 'string' ? data : null,
+      // Reason category and whether words were attached — never the words.
+      decline_note: data === 'declined' ? note : null,
+      has_message: Boolean(message),
     });
     revalidatePath(`/events/${invite.event_id}`);
   }

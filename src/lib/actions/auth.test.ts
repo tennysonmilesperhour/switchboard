@@ -149,6 +149,11 @@ vi.mock('@/lib/server/rate-limit', () => ({
   checkRateLimit: mocks.checkRateLimit,
 }));
 
+// Keeps the real module's `server-only` import out of the test runtime.
+vi.mock('@/lib/analytics/server', () => ({
+  capture: vi.fn().mockResolvedValue(undefined),
+}));
+
 vi.mock('@/lib/server/email', async (importActual) => {
   const actual = await importActual<typeof import('@/lib/server/email')>();
   return { ...actual, sendEmailWithResult: mocks.sendEmailWithResult };

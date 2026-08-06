@@ -17,6 +17,16 @@ export const ANALYTICS_EVENTS = {
   pollVoted: 'poll_voted',
   /** Sean Ellis product-market-fit survey response. */
   pmfResponse: 'pmf_survey_response',
+  /** A password account was created (top of the activation funnel). */
+  signupCompleted: 'signup_completed',
+  /** Onboarding finished; the profile is live. Powers signup→active conversion. */
+  onboardingCompleted: 'onboarding_completed',
+  /** A board post was created (kind only, never title or body). */
+  boardPostCreated: 'board_post_created',
+  /** A neighbor tapped "I can help" on an offer/request. */
+  boardPostResponse: 'board_post_response',
+  /** An offer/request was marked complete by its author. */
+  boardPostFulfilled: 'board_post_fulfilled',
 } as const;
 
 export type AnalyticsEvent = (typeof ANALYTICS_EVENTS)[keyof typeof ANALYTICS_EVENTS];

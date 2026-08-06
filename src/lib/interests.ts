@@ -145,5 +145,6 @@ export const DOWN_TO_GROUP: InterestGroup = {
     'Coffee', 'Lunch', 'Dinner', 'Drinks', 'Walk or hike', 'Workout',
     'Co-working', 'Movie night', 'Live music', 'Games', 'Just hang out',
     'Bike ride', 'Explore the city', 'Grab a call', 'Study session',
+    'Playdate', 'Park day with kids',
   ],
 };

@@ -14,6 +14,8 @@ import { normalizePhoneNumber } from '@/lib/phone';
 import { safeNextPath } from '@/lib/security';
 import { reportOperationalError } from '@/lib/server/observability';
 import { LEGAL_VERSION } from '@/lib/legal';
+import { capture } from '@/lib/analytics/server';
+import { ANALYTICS_EVENTS } from '@/lib/analytics/events';
 import { sanitizeUrl } from '@/lib/url';
 import type { ProfileLink, ProfileSocial } from '@/lib/types';
 import type { NotificationPrefs } from '@/lib/notifications';
@@ -257,6 +259,12 @@ export async function completeOnboarding(formData: FormData): Promise<void> {
       area: 'onboarding',
     });
   }
+
+  // Counts only — never the interest strings themselves.
+  await capture(user.id, ANALYTICS_EVENTS.onboardingCompleted, {
+    interest_count: interests.length,
+    down_to_count: downTo.length,
+  });
 
   // Return to the destination the user was originally headed for (e.g. an invite
   // deep link that funnelled them through onboarding), validated to same-site.

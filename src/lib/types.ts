@@ -395,6 +395,8 @@ export const ACTIVITY_PRESETS = [
   { emoji: '🎲', label: 'Games' },
   { emoji: '🛋️', label: 'Just hang out' },
   { emoji: '🚴', label: 'Bike ride' },
+  { emoji: '🧸', label: 'Playdate' },
+  { emoji: '🛝', label: 'Park day with kids' },
 ] as const;
 
 export const SIGNAL_PRESETS = [
