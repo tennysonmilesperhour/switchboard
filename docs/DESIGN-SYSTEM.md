@@ -61,6 +61,9 @@ and sliders.
   primary/secondary/ghost/accept/danger), `Card` + `SectionHeader`, `Chip`,
   `Avatar`/`AvatarCluster`, `PlanCard`, `EmptyState`, `Icon`, `Skeleton`,
   `Toast` (`useToast`), `ConfirmDialog` (`useConfirm`).
+- Wall-clock times use `TimeSelect` (five-minute steps), never
+  `<input type="time">`: iOS ignores `step` on a time input and offers a
+  minute-by-minute wheel, so hosts aiming for 5:20 landed on 5:19.
 - Interactive controls carry a visible focus ring:
   `focus-visible:ring-2 focus-visible:ring-terracotta`, and a ~44px tap target.
 - Native `accent-color` controls (checkboxes, range sliders) use

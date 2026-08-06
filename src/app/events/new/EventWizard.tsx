@@ -7,6 +7,7 @@ import { Avatar } from '@/components/ui/Avatar';
 import { Card } from '@/components/ui/Card';
 import { Icon } from '@/components/ui/Icon';
 import { ImageInput } from '@/components/ui/ImageInput';
+import { TimeSelect } from '@/components/ui/TimeSelect';
 import { suggestWindow, WINDOW_CHOICES, type WindowPace } from '@/lib/engine/windows';
 import { isEmail } from '@/lib/auth-identity';
 import {
@@ -137,6 +138,12 @@ const FIELD =
   'w-full rounded-card border border-line bg-card px-4 py-3 text-[15px] text-ink outline-none transition-colors focus:border-terracotta focus:ring-2 focus:ring-terracotta-soft';
 const FIELD_LABEL = 'text-sm font-semibold text-ink';
 
+// Where the start-time picker opens when the host hasn't said otherwise. It was
+// always 6pm — the field looked blank but a plan created from it started at
+// 18:00 — so showing it is the honest version of what already happened, and it
+// saves an evening plan (most of them) a long scroll from midnight.
+const DEFAULT_START_TIME = '18:00';
+
 // Custom response-window support: a window is any positive number of minutes,
 // but we let the host enter it in whichever unit reads naturally.
 type WindowUnit = 'minutes' | 'hours' | 'days';
@@ -202,7 +209,7 @@ export function EventWizard({
   // server still best-effort geocodes it on create).
   const [locationPoint, setLocationPoint] = useState<{ lat: number; lng: number } | null>(null);
   const [date, setDate] = useState('');
-  const [time, setTime] = useState('');
+  const [time, setTime] = useState(DEFAULT_START_TIME);
   const [endTime, setEndTime] = useState('');
   const [recurrence, setRecurrence] = useState<RecurrenceKind>('none');
   const [customDays, setCustomDays] = useState('14');
@@ -263,7 +270,7 @@ export function EventWizard({
 
   const startsAt = useMemo(() => {
     if (!date) return null;
-    return new Date(`${date}T${time || '18:00'}`).toISOString();
+    return new Date(`${date}T${time || DEFAULT_START_TIME}`).toISOString();
   }, [date, time]);
 
   const endsAt = useMemo(() => {
@@ -790,22 +797,23 @@ export function EventWizard({
             </div>
             <div className="space-y-1.5 min-w-0">
               <label htmlFor="time" className={FIELD_LABEL}>Start</label>
-              <input
-                id="time" type="time" value={time}
-                step={300}
-                onChange={(e) => setTime(e.target.value)}
-                className={`${FIELD} min-w-0 appearance-none [color-scheme:light]`}
+              <TimeSelect
+                id="time"
+                value={time}
+                onChange={setTime}
+                className={`${FIELD} min-w-0 [color-scheme:light]`}
               />
             </div>
             <div className="space-y-1.5 min-w-0 sm:col-span-2">
               <label htmlFor="endTime" className={FIELD_LABEL}>
                 Ends <span className="font-normal text-ink-faint">(optional)</span>
               </label>
-              <input
-                id="endTime" type="time" value={endTime}
-                step={300}
-                onChange={(e) => setEndTime(e.target.value)}
-                className={`${FIELD} min-w-0 appearance-none [color-scheme:light]`}
+              <TimeSelect
+                id="endTime"
+                value={endTime}
+                onChange={setEndTime}
+                emptyLabel="No end time"
+                className={`${FIELD} min-w-0 [color-scheme:light]`}
               />
             </div>
           </div>
