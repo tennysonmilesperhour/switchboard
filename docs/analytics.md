@@ -43,9 +43,14 @@ product succeeds at its mission.
 |---|---|---|---|
 | `plan_created` | `createEvent` | `invite_mode`, `has_poll` | Habit + the top of the activation funnel. |
 | `plan_happened` | `markHappened` | `event_id`, `attendee_count` | **North Star.** A host affirmed the plan occurred. |
-| `invite_responded` | `respondToInvite` | `accepted`, `outcome` | Invitation health and acceptance rate. |
+| `invite_responded` | `respondToInvite` | `accepted`, `outcome`, `decline_note`, `has_message` | Invitation health, acceptance rate, and whether graceful declines are used (reason category and a boolean only — never the note's text). |
 | `poll_voted` | `castVote` | `event_id` only | Habit + time-to-decision. |
 | `pmf_survey_response` | `submitPmf` | `choice` | Sean Ellis product-market-fit signal. |
+| `signup_completed` | `createPasswordAccount` | `method` (`email`/`username`) | Top of the funnel. (Google OAuth signups are not captured here.) |
+| `onboarding_completed` | `completeOnboarding` | `interest_count`, `down_to_count` | Signup→active conversion; counts only, never the interest strings. |
+| `board_post_created` | `addBoardPost` | `kind` | Do offers/requests get used at all? Kind only, never title/body. |
+| `board_post_response` | `respondToBoardPost` | `kind` | Requests receiving a response — the loop-closure rate. |
+| `board_post_fulfilled` | `fulfillBoardPost` | `kind` | Offers/requests that actually resolved. |
 
 Derive activation (first `plan_happened` within 14 days of signup), habit
 (created or responded in a rolling 30 days), and time-to-plan from these.

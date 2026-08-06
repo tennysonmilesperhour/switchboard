@@ -10,6 +10,8 @@ import { normalizeUsername } from '@/lib/auth-identity';
 import { boardJoinUrl } from '@/lib/links';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { notifyUsers } from '@/lib/server/notify';
+import { capture } from '@/lib/analytics/server';
+import { ANALYTICS_EVENTS } from '@/lib/analytics/events';
 
 function slugify(name: string): string {
   return name
@@ -168,6 +170,7 @@ export async function addBoardPost(
     location: string;
     cadence: string;
     startsAt: string | null;
+    expiresAt?: string | null;
   },
 ): Promise<ActionResult> {
   const auth = await requireUser();
@@ -176,6 +179,18 @@ export async function addBoardPost(
 
   const title = input.title.trim();
   if (!title) return { ok: false, error: 'Give it a title.' };
+
+  // "Listed until" applies only to offers/requests, and stays within a
+  // sensible window so a typo can't pin a stale ask to the board for years.
+  let expiresAt: string | null = null;
+  if (input.expiresAt && (input.kind === 'offer' || input.kind === 'request')) {
+    const parsed = new Date(input.expiresAt);
+    const fromNowMs = parsed.getTime() - Date.now();
+    if (Number.isNaN(parsed.getTime()) || fromNowMs <= 0 || fromNowMs > 90 * 86_400_000) {
+      return { ok: false, error: 'Pick a listing window within the next 90 days.' };
+    }
+    expiresAt = parsed.toISOString();
+  }
 
   const { error } = await supabase.from('board_posts').insert({
     board_id: boardId,
@@ -186,9 +201,11 @@ export async function addBoardPost(
     location: input.location.trim() || null,
     cadence: input.cadence.trim() || null,
     starts_at: input.startsAt,
+    expires_at: expiresAt,
   });
   if (error) return { ok: false, error: error.message };
 
+  await capture(user.id, ANALYTICS_EVENTS.boardPostCreated, { kind: input.kind });
   revalidatePath('/boards');
   return { ok: true };
 }
@@ -206,15 +223,21 @@ export async function respondToBoardPost(
   if (error?.code === '23505') return { ok: true };
   if (error) return { ok: false, error: error.message };
   const admin = createAdminClient();
-  const { data: post } = await admin.from('board_posts').select('author_id, title').eq('id', postId).maybeSingle();
+  const [{ data: post }, { data: responder }] = await Promise.all([
+    admin.from('board_posts').select('author_id, title, kind').eq('id', postId).maybeSingle(),
+    auth.supabase.from('profiles').select('display_name').eq('id', auth.user.id).maybeSingle(),
+  ]);
   if (post && post.author_id !== auth.user.id) {
+    // Name the neighbor — an anonymous "someone can help" leaves the author
+    // with no way to close the loop.
     await notifyUsers([post.author_id], {
       kind: 'board_response',
       title: 'A neighbor can help',
-      body: `Someone responded to “${post.title}”.`,
+      body: `${responder?.display_name ?? 'A neighbor'} responded to “${post.title}”.`,
       url: `/boards/${slug}`,
     });
   }
+  await capture(auth.user.id, ANALYTICS_EVENTS.boardPostResponse, { kind: post?.kind ?? null });
   revalidatePath(`/boards/${slug}`);
   return { ok: true };
 }
@@ -222,8 +245,9 @@ export async function respondToBoardPost(
 export async function fulfillBoardPost(postId: string, slug: string): Promise<ActionResult> {
   const auth = await requireUser();
   if (!auth.ok) return auth;
-  const { data, error } = await auth.supabase.from('board_posts').update({ fulfilled_at: new Date().toISOString(), fulfilled_by: auth.user.id }).eq('id', postId).eq('author_id', auth.user.id).select('id').maybeSingle();
+  const { data, error } = await auth.supabase.from('board_posts').update({ fulfilled_at: new Date().toISOString(), fulfilled_by: auth.user.id }).eq('id', postId).eq('author_id', auth.user.id).select('id, kind').maybeSingle();
   if (error || !data) return { ok: false, error: 'Only the author can mark this complete.' };
+  await capture(auth.user.id, ANALYTICS_EVENTS.boardPostFulfilled, { kind: data.kind });
   revalidatePath(`/boards/${slug}`);
   return { ok: true };
 }

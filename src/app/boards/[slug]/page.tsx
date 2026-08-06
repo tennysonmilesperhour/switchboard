@@ -23,11 +23,15 @@ export default async function BoardPage({
     .maybeSingle();
   if (!board) notFound();
 
+  // Expired offers/requests drop out at read time (the signals/moments
+  // precedent) — no sweep needed; the rows stay until the author removes them.
+  const nowIso = new Date().toISOString();
   const [{ data: postRows }, { data: memberRows }] = await Promise.all([
     supabase
       .from('board_posts')
-      .select('*')
+      .select('*, responses:board_post_responses(responder_id)')
       .eq('board_id', board.id)
+      .or(`expires_at.is.null,expires_at.gt.${nowIso}`)
       .order('created_at', { ascending: false })
       .limit(50),
     supabase

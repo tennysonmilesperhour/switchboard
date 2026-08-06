@@ -34,6 +34,8 @@ export interface BoardPostRow {
   created_at: string;
   updated_at: string | null;
   fulfilled_at: string | null;
+  expires_at: string | null;
+  responses?: { responder_id: string }[] | null;
 }
 
 export interface BoardMemberRow {
@@ -107,6 +109,7 @@ export function BoardClient({
   const [location, setLocation] = useState('');
   const [cadence, setCadence] = useState('');
   const [date, setDate] = useState('');
+  const [listedDays, setListedDays] = useState<number | null>(null);
   const [postError, setPostError] = useState<string | null>(null);
   const [editingPostId, setEditingPostId] = useState<string | null>(null);
 
@@ -138,6 +141,10 @@ export function BoardClient({
             location,
             cadence,
             startsAt,
+            expiresAt:
+              listedDays && (kind === 'offer' || kind === 'request')
+                ? new Date(Date.now() + listedDays * 86_400_000).toISOString()
+                : null,
           });
       if (result.ok) {
         setTitle('');
@@ -145,6 +152,7 @@ export function BoardClient({
         setLocation('');
         setCadence('');
         setDate('');
+        setListedDays(null);
         setEditingPostId(null);
         setKind('notice');
         toast.success(editingPostId ? 'Board post updated.' : 'Posted to the board.');
@@ -175,6 +183,7 @@ export function BoardClient({
     setLocation('');
     setCadence('');
     setDate('');
+    setListedDays(null);
     setPostError(null);
   }
 
@@ -294,6 +303,40 @@ export function BoardClient({
                   />
                 </div>
               )}
+              {(kind === 'offer' || kind === 'request') && !editingPostId && (
+                <>
+                  <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label="Listed until">
+                    <span className="text-xs text-ink-faint mr-0.5">Listed for</span>
+                    {(
+                      [
+                        [null, 'No limit'],
+                        [3, '3 days'],
+                        [7, '1 week'],
+                        [14, '2 weeks'],
+                        [30, '1 month'],
+                      ] as const
+                    ).map(([days, label]) => (
+                      <button
+                        key={label}
+                        type="button"
+                        onClick={() => setListedDays(days)}
+                        aria-pressed={listedDays === days}
+                        className={`rounded-pill px-2.5 py-1 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-terracotta ${
+                          listedDays === days
+                            ? 'bg-ink text-paper'
+                            : 'bg-cream text-ink-soft hover:bg-line'
+                        }`}
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                  <p className="text-[11px] text-ink-faint leading-relaxed">
+                    Lending and giving are arranged between neighbors — Switchboard
+                    doesn’t hold deposits or guarantee returns.
+                  </p>
+                </>
+              )}
               {postError && <p className="text-xs text-rose-deep">{postError}</p>}
               <Button
                 type="submit"
@@ -368,11 +411,72 @@ export function BoardClient({
                           {memberNames[post.author_id] ?? 'A neighbor'} ·{' '}
                           {formatRelative(post.created_at)}
                         </p>
-                        {(post.kind === 'offer' || post.kind === 'request') && (
-                          <div className="mt-2 flex items-center gap-2">
-                            {post.fulfilled_at ? <span className="rounded-pill bg-sage-soft px-2.5 py-1 text-xs font-bold text-sage-deep">✓ Complete</span> : post.author_id === currentUserId ? <button type="button" onClick={() => startTransition(async () => { const result = await fulfillBoardPost(post.id, slug); if (!result.ok) toast.error(result.error ?? 'Could not update it.', result.code); else router.refresh(); })} className="rounded-pill border border-line px-2.5 py-1 text-xs font-bold">Mark complete</button> : <button type="button" onClick={() => startTransition(async () => { const result = await respondToBoardPost(post.id, slug); if (!result.ok) toast.error(result.error ?? 'Could not respond.', result.code); else toast.success('The neighbor was notified.'); })} className="rounded-pill bg-terracotta px-2.5 py-1 text-xs font-bold text-white">I can help</button>}
-                          </div>
-                        )}
+                        {(post.kind === 'offer' || post.kind === 'request') && (() => {
+                          const isAuthor = post.author_id === currentUserId;
+                          const responders = post.responses ?? [];
+                          const iResponded = responders.some(
+                            (r) => r.responder_id === currentUserId,
+                          );
+                          const responderNames = responders.map(
+                            (r) => memberNames[r.responder_id] ?? 'A neighbor',
+                          );
+                          return (
+                            <div className="mt-2 space-y-1.5">
+                              {post.expires_at && !post.fulfilled_at && (
+                                <p className="text-xs text-ink-faint">
+                                  Listed until {formatDate(post.expires_at)}
+                                </p>
+                              )}
+                              {isAuthor && responderNames.length > 0 && (
+                                <p className="text-xs font-bold text-sage-deep">
+                                  🙋 Can help: {responderNames.join(', ')}
+                                </p>
+                              )}
+                              <div className="flex items-center gap-2">
+                                {post.fulfilled_at ? (
+                                  <span className="rounded-pill bg-sage-soft px-2.5 py-1 text-xs font-bold text-sage-deep">
+                                    ✓ Complete
+                                  </span>
+                                ) : isAuthor ? (
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      startTransition(async () => {
+                                        const result = await fulfillBoardPost(post.id, slug);
+                                        if (!result.ok) toast.error(result.error ?? 'Could not update it.', result.code);
+                                        else router.refresh();
+                                      })
+                                    }
+                                    className="rounded-pill border border-line px-2.5 py-1 text-xs font-bold"
+                                  >
+                                    Mark complete
+                                  </button>
+                                ) : iResponded ? (
+                                  <span className="rounded-pill bg-cream px-2.5 py-1 text-xs font-bold text-ink-soft">
+                                    ✓ You offered to help
+                                  </span>
+                                ) : (
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      startTransition(async () => {
+                                        const result = await respondToBoardPost(post.id, slug);
+                                        if (!result.ok) toast.error(result.error ?? 'Could not respond.', result.code);
+                                        else {
+                                          toast.success('The neighbor was notified.');
+                                          router.refresh();
+                                        }
+                                      })
+                                    }
+                                    className="rounded-pill bg-terracotta px-2.5 py-1 text-xs font-bold text-white"
+                                  >
+                                    I can help
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })()}
                       </div>
                       {canRemove && (
                         <div className="flex shrink-0 items-center gap-1">

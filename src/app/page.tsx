@@ -7,6 +7,7 @@ import { Avatar } from '@/components/ui/Avatar';
 import { Icon } from '@/components/ui/Icon';
 import { PlanCard, planColor } from '@/components/ui/PlanCard';
 import { SignalBar } from '@/components/signals/SignalBar';
+import { GettingStarted } from '@/components/home/GettingStarted';
 import {
   EnergyPrompt,
   MatchmakerCard,
@@ -175,33 +176,12 @@ export default async function HomePage() {
 
         <SignalBar active={mySignals ?? []} circles={circles ?? []} />
 
-        {((friendCount ?? 0) === 0 || (upcoming?.length ?? 0) === 0 || (mySignals?.length ?? 0) === 0) && (
-          <Card tone="cream">
-            <p className="font-display text-lg">Getting started</p>
-            <div className="mt-3 space-y-2 text-sm">
-              <Link href="/people" className="flex items-center gap-2"><span aria-hidden>{(friendCount ?? 0) > 0 ? '✓' : '○'}</span><span className={(friendCount ?? 0) > 0 ? 'text-ink-faint line-through' : 'font-bold'}>Connect with someone you know</span></Link>
-              <Link href="/events/new" className="flex items-center gap-2"><span aria-hidden>{(upcoming?.length ?? 0) > 0 ? '✓' : '○'}</span><span className={(upcoming?.length ?? 0) > 0 ? 'text-ink-faint line-through' : 'font-bold'}>Create or join a plan</span></Link>
-              <span className="flex items-center gap-2"><span aria-hidden>{(mySignals?.length ?? 0) > 0 ? '✓' : '○'}</span><span className={(mySignals?.length ?? 0) > 0 ? 'text-ink-faint line-through' : 'font-bold'}>Let friends know you’re around</span></span>
-            </div>
-          </Card>
-        )}
-
-        {/* First-run nudge: nothing works until you have people */}
-        {(friendCount ?? 0) === 0 && (
-          <Link href="/people" className="block group">
-            <Card tone="gold" lifted className="group-hover:shadow-lift transition-shadow">
-              <p className="font-display text-lg text-ink">Find your people</p>
-              <p className="text-sm text-ink-soft mt-1">
-                Add friends by handle, email, phone, or your contacts - then signals,
-                circles, and Mutual Mode all come alive.
-              </p>
-              <span className="mt-3 inline-flex items-center gap-1 text-sm font-bold text-terracotta-deep">
-                Add friends
-                <Icon name="back" size={16} className="rotate-180" />
-              </span>
-            </Card>
-          </Link>
-        )}
+        {/* The single first-run guidance card — checks itself off live. */}
+        <GettingStarted
+          friendDone={(friendCount ?? 0) > 0}
+          planDone={(upcoming?.length ?? 0) > 0}
+          signalDone={(mySignals?.length ?? 0) > 0}
+        />
 
         {/* Plan feed - the heart of Home */}
         {(upcoming?.length ?? 0) > 0 ? (

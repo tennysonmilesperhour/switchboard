@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/Button';
 import Link from 'next/link';
 import { PushManager } from '@/components/push/PushManager';
 import { NotificationPreferences } from '@/components/settings/NotificationPreferences';
+import { ShowTipsAgain } from '@/components/settings/ShowTipsAgain';
 import { InterestPicker } from '@/components/profile/InterestPicker';
 import { SettingsForm, SettingsSaveProvider } from './SettingsSaveBar';
 import { AccountControls } from './AccountControls';
@@ -324,6 +325,16 @@ export default async function SettingsPage({
                   </SettingsForm>
                 </div>
               </div>
+            </Card>
+          </section>
+
+          <section>
+            <SectionHeader
+              title="Getting started"
+              hint="Bring back the first-steps checklist on Home"
+            />
+            <Card>
+              <ShowTipsAgain />
             </Card>
           </section>
 
