@@ -31,15 +31,39 @@ async function login(page: Page, identifier: string) {
   const cached = sessionCookies.get(identifier);
   if (cached) {
     await page.context().addCookies(cached);
-    await page.goto('/');
-    // A cookie set the proxy won't accept lands us back on /welcome. Drop it
-    // and sign in properly rather than failing three steps later.
-    if (!page.url().includes('/welcome')) return;
+    if (await signedInAs(page, identifier)) return;
+    // Whatever that session was, it isn't this person — expired, rejected, or
+    // the wrong account entirely. Say so and sign in properly, rather than
+    // running a journey as someone else and failing somewhere unrelated.
+    console.log(`[e2e] reused session for ${identifier} did not hold; signing in again`);
     sessionCookies.delete(identifier);
   }
 
   await signIn(page, identifier);
   sessionCookies.set(identifier, await page.context().cookies());
+
+  // The browser must be holding the person we asked for. Every journey below
+  // assumes it, and nothing downstream says so when it isn't true.
+  expect(
+    await signedInAs(page, identifier),
+    `signed in as "${identifier}" but the app does not show that account`,
+  ).toBe(true);
+}
+
+/** Does the app itself agree this browser is @identifier? */
+async function signedInAs(page: Page, identifier: string): Promise<boolean> {
+  await page.goto('/profile');
+  try {
+    // `expect` rather than `isVisible()`, which does not wait — a signed-out
+    // browser is redirected to /welcome, and this has to tell that apart from
+    // a page that simply hasn't painted yet.
+    await expect(
+      page.getByText(`@${identifier}`, { exact: true }).first(),
+    ).toBeVisible({ timeout: 10_000 });
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 async function signIn(page: Page, identifier: string) {
