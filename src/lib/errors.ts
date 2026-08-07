@@ -181,6 +181,23 @@ const REGISTRY = {
     fix: 'Sign in again — you’ll come back to where you were.',
     actor: 'reader',
   },
+  /**
+   * The credentials were right and the account exists — it just never had its
+   * email confirmed, so Supabase refuses the session. This used to render as
+   * "That email, username, or password did not work.", which is the one thing
+   * it definitively was not: the reader had just chosen that password, so the
+   * message sent them to re-check credentials that were already correct.
+   */
+  'SB-AUTH-UNCONFIRMED': {
+    message: 'This account’s email address hasn’t been confirmed yet.',
+    fix: 'Open the confirmation link we emailed you — check spam and promotions. You can send a fresh one below.',
+    actor: 'reader',
+  },
+  'SB-AUTH-RESEND': {
+    message: 'Switchboard couldn’t send that confirmation email.',
+    fix: 'Try again in a few minutes, or use “Forgot password?” — that link confirms the address too.',
+    actor: 'reader',
+  },
   'SB-PERM-HOST': {
     message: 'Only the plan’s host can do that.',
     fix: 'Ask the host, or ask them to make you a co-host.',
@@ -398,6 +415,9 @@ const AREA_CODES: Record<string, ErrorCode> = {
   'settings.discoverability': 'SB-SETTINGS-SAVE',
   'settings.sabbatical': 'SB-SETTINGS-SAVE',
   'settings.quiet-hours': 'SB-SETTINGS-SAVE',
+
+  // Getting into an account
+  'auth.resend-confirmation': 'SB-AUTH-RESEND',
 
   // Uploads
   'audio-upload': 'SB-UPLOAD-FAILED',

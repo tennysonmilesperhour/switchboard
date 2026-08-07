@@ -2,6 +2,9 @@
 
 import type { ErrorCode } from '@/lib/errors';
 
+import { failure } from '@/lib/errors';
+import { reportAndFail } from '@/lib/server/observability';
+
 import { createAdminClient, hasAdminCredentials } from '@/lib/supabase/admin';
 import { createClient } from '@/lib/supabase/server';
 import { checkRateLimit } from '@/lib/server/rate-limit';
@@ -37,6 +40,12 @@ export interface AuthActionResult {
   username?: string;
   identifier?: string;
   requiresEmailVerification?: boolean;
+  /**
+   * The account exists and the password was right, but its email was never
+   * confirmed. The sign-in card uses this to offer a resend instead of telling
+   * the reader to re-check credentials that already work.
+   */
+  needsEmailConfirmation?: boolean;
   /** True when account creation also established a session (username signups). */
   signedIn?: boolean;
   /** Where the client should navigate once auto-signed-in. */
@@ -131,14 +140,37 @@ export async function signInWithPasswordIdentifier({
 
     const emails = await resolveIdentifierEmails(normalized);
     const supabase = await createClient();
+    let unconfirmedEmail: string | null = null;
+    let lastReason = 'unknown';
     for (const email of emails) {
       const { error } = await supabase.auth.signInWithPassword({
         email,
         password,
       });
       if (!error) return { ok: true };
+      lastReason = error.code ?? `status_${error.status ?? 'none'}`;
+      // GoTrue verifies the password *before* it checks confirmation, so this
+      // code only ever comes back when the credentials were correct. That is
+      // what makes it safe to say so out loud: it reveals nothing to someone
+      // who doesn't already hold the password (docs/SECURITY.md §9).
+      if (error.code === 'email_not_confirmed') unconfirmedEmail = email;
     }
 
+    if (unconfirmedEmail) {
+      return {
+        ...failure('SB-AUTH-UNCONFIRMED'),
+        identifier: unconfirmedEmail,
+        needsEmailConfirmation: true,
+      };
+    }
+
+    // A rejected sign-in left no trace at all before this, so "she typed the
+    // right password and it didn't work" was unanswerable from the logs. The
+    // reason code is enough to tell a wrong password from an unconfirmed or
+    // banned account; the identifier stays out of it.
+    console.info(
+      JSON.stringify({ level: 'info', area: 'auth.signin', outcome: 'rejected', reason: lastReason }),
+    );
     return authError('That email, username, or password did not work.');
   } catch (error) {
     console.error('[auth:signin:error]', error);
@@ -390,6 +422,100 @@ async function resolveResetUserId(
     .eq('handle', normalized)
     .maybeSingle();
   return profile?.id ?? null;
+}
+
+/**
+ * Send a fresh confirmation link to an email sign-up that never confirmed.
+ *
+ * Before this existed, a confirmation email that was spam-foldered or dropped
+ * by the recipient's provider left the account permanently unreachable: the
+ * password was right, sign-in refused it, and nothing in the app would send a
+ * second link. (`Forgot password?` happens to confirm the address too, but only
+ * if the reader guesses that a password they know is fine needs "resetting".)
+ *
+ * Enumeration-safe in the same shape as `requestPasswordReset`: every outcome
+ * that isn't a server fault returns the same generic ok, so a caller learns
+ * nothing about whether the address has an account (docs/SECURITY.md §9).
+ */
+export async function resendEmailConfirmation(
+  identifier: string,
+): Promise<AuthActionResult> {
+  const normalized = normalizeIdentifier(identifier);
+  const generic: AuthActionResult = { ok: true, identifier: normalized };
+  if (!isEmailIdentifier(normalized)) {
+    return authError('Enter the email address you signed up with.');
+  }
+  if (!hasAdminCredentials() || !emailEnabled()) {
+    return failure('SB-CONFIG-EMAIL');
+  }
+
+  try {
+    if (!(await checkRateLimit(`resend-confirm:${normalized}`, 3, 60 * 60))) {
+      return generic;
+    }
+
+    const admin = createAdminClient();
+    // Resolve through the same path a reset uses, so this can only ever act on
+    // an account that already claims this address — never mint a user as a side
+    // effect of asking for a link.
+    const userId = await resolveResetUserId(admin, normalized);
+    if (!userId) return generic;
+
+    const { data: authUser } = await admin.auth.admin.getUserById(userId);
+    const user = authUser.user;
+    // Already confirmed, or a username account whose login email is synthetic
+    // and undeliverable: nothing to re-send, and nowhere to send it.
+    if (
+      !user?.email ||
+      user.email_confirmed_at ||
+      !looksLikeEmail(user.email) ||
+      user.email.endsWith(`@${USERNAME_EMAIL_DOMAIN}`)
+    ) {
+      return generic;
+    }
+
+    // A magic link is the one link type that both proves control of the address
+    // and confirms it on the way through, so this lands them signed in rather
+    // than back at a form. `/auth/confirm` records the ownership proof.
+    const { data: link, error: linkError } = await admin.auth.admin.generateLink({
+      type: 'magiclink',
+      email: user.email,
+      options: { redirectTo: appUrl('/auth/confirm?next=/onboarding') },
+    });
+    if (linkError) {
+      return reportAndFail('SB-AUTH-RESEND', 'auth.resend-confirmation', linkError);
+    }
+
+    const hashed = link.properties?.hashed_token;
+    const confirmUrl = hashed
+      ? appUrl(
+          `/auth/confirm?token_hash=${encodeURIComponent(hashed)}&type=magiclink&next=${encodeURIComponent('/onboarding')}`,
+        )
+      : link.properties?.action_link;
+    if (!confirmUrl) {
+      return reportAndFail('SB-AUTH-RESEND', 'auth.resend-confirmation', {
+        message: 'missing_confirmation_url',
+      });
+    }
+
+    const delivery = await sendEmailWithResult({
+      to: user.email,
+      subject: 'Confirm your Switchboard account',
+      text:
+        `Confirm your Switchboard email and finish signing in:\n\n${confirmUrl}\n\n` +
+        `If you did not create this account, ignore this message.`,
+    });
+    if (delivery.status !== 'sent') {
+      return reportAndFail('SB-AUTH-RESEND', 'auth.resend-confirmation', {
+        message: `delivery_${delivery.status}`,
+        code: delivery.errorCode,
+      });
+    }
+
+    return generic;
+  } catch (error) {
+    return reportAndFail('SB-AUTH-RESEND', 'auth.resend-confirmation', error);
+  }
 }
 
 export async function requestPasswordReset(
