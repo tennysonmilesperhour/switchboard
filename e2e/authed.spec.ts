@@ -1,4 +1,4 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type BrowserContext, type Page } from '@playwright/test';
 
 /**
  * Authenticated journeys. These need a running app pointed at a Supabase that
@@ -11,16 +11,121 @@ const DB = !!process.env.E2E_DB;
 const PASSWORD = process.env.E2E_TEST_PASSWORD ?? 'testpassword123';
 const TITLE = 'Coffee downtown, Game night, Saturday hike…';
 
+type Cookies = Awaited<ReturnType<BrowserContext['cookies']>>;
+
+/**
+ * Sign-in is rate-limited at 8 attempts per identifier per 10 minutes
+ * (`signin:<identifier>`, src/lib/actions/auth.ts) — a real protection this
+ * suite was walking straight into. Nine journeys sign in as e2ehost, so the
+ * ninth got SB-RATE-LIMIT instead of a session, and the tests were spending
+ * a user-facing budget on setup.
+ *
+ * The form is therefore driven once per identifier and the session cookies are
+ * reused for the rest of the run. "a seeded user can sign in" is still a real
+ * sign-in — it runs first and fills this cache — and every other journey starts
+ * already signed in, which is all any of them ever wanted.
+ */
+const sessionCookies = new Map<string, Cookies>();
+
 async function login(page: Page, identifier: string) {
+  const cached = sessionCookies.get(identifier);
+  if (cached) {
+    await page.context().addCookies(cached);
+    if (await signedInAs(page, identifier)) return;
+    // Whatever that session was, it isn't this person — expired, rejected, or
+    // the wrong account entirely. Say so and sign in properly, rather than
+    // running a journey as someone else and failing somewhere unrelated.
+    console.log(`[e2e] reused session for ${identifier} did not hold; signing in again`);
+    sessionCookies.delete(identifier);
+  }
+
+  await signIn(page, identifier);
+  sessionCookies.set(identifier, await page.context().cookies());
+
+  // The browser must be holding the person we asked for. Every journey below
+  // assumes it, and nothing downstream says so when it isn't true.
+  expect(
+    await signedInAs(page, identifier),
+    `signed in as "${identifier}" but the app does not show that account`,
+  ).toBe(true);
+}
+
+/** Does the app itself agree this browser is @identifier? */
+async function signedInAs(page: Page, identifier: string): Promise<boolean> {
+  await page.goto('/profile');
+  try {
+    // `expect` rather than `isVisible()`, which does not wait — a signed-out
+    // browser is redirected to /welcome, and this has to tell that apart from
+    // a page that simply hasn't painted yet.
+    await expect(
+      page.getByText(`@${identifier}`, { exact: true }).first(),
+    ).toBeVisible({ timeout: 10_000 });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function signIn(page: Page, identifier: string) {
   await page.goto('/login');
   await page.getByPlaceholder('email or username').fill(identifier);
   await page.getByPlaceholder('Password', { exact: true }).fill(PASSWORD);
   // The page has a "Sign in" mode-toggle tab as well as the form's submit
   // button, both named "Sign in" — scope to the form to click the submit.
   await page.locator('form').getByRole('button', { name: 'Sign in' }).click();
-  await page.waitForURL((url) => !url.pathname.startsWith('/login'), {
-    timeout: 30_000,
-  });
+  try {
+    await page.waitForURL((url) => !url.pathname.startsWith('/login'), {
+      timeout: 30_000,
+    });
+  } catch {
+    // Still on /login means the form refused and said why — wrong credentials,
+    // an unconfirmed account, a rate limit — each with its own SB- code (see
+    // docs/AUTH.md). Quote it. "Navigation timeout" describes the symptom and
+    // names nothing; the code on screen names the cause.
+    throw new Error(
+      `Sign-in as "${identifier}" never left /login. The page said: ${
+        (await pageComplaints(page)) || 'nothing — no error was shown'
+      }`,
+    );
+  }
+}
+
+/** Visible alert text, normalised — what the app is objecting to right now. */
+async function pageComplaints(page: Page): Promise<string> {
+  const alerts = (await page.getByRole('alert').allInnerTexts())
+    .map((text) => text.replace(/\s+/g, ' ').trim())
+    .filter(Boolean);
+  return alerts.join(' | ');
+}
+
+/**
+ * Open the wizard with everything the product requires before a plan may leave
+ * the Basics step: a title, **and** at least a location or a detail
+ * (`hasInviteDetails`, src/lib/event-details.ts — the "require context before
+ * sending invitations" rule).
+ *
+ * A fixture that fills only the title doesn't fail where the rule lives. Next
+ * simply stays disabled, and the suite reports five unrelated-looking
+ * "expected enabled, received disabled" failures on a helper three frames away
+ * from the cause. That is exactly how these tests went red and stayed red.
+ *
+ * The detail is filled rather than the location because the location field runs
+ * a debounced place search on every keystroke: same gate, no moving parts.
+ */
+async function startPlan(page: Page, title: string) {
+  await page.goto('/events/new');
+  await page.getByPlaceholder(TITLE).fill(title);
+  await page
+    .getByLabel('Details', { exact: true })
+    .fill('Seeded by the authenticated e2e suite.');
+
+  // Assert the gate here, where it can name itself. If Basics ever grows
+  // another requirement, this line fails saying the fixture is short of what
+  // the wizard now asks for — instead of every journey timing out downstream.
+  await expect(
+    page.getByRole('button', { name: 'Next', exact: true }),
+    'The wizard would not leave Basics with a title and a detail — it has a new requirement this fixture does not satisfy',
+  ).toBeEnabled({ timeout: 5_000 });
 }
 
 async function currentWizardStep(page: Page) {
@@ -33,7 +138,15 @@ async function currentWizardStep(page: Page) {
 async function clickWizardNext(page: Page) {
   const { current, total } = await currentWizardStep(page);
   const next = page.getByRole('button', { name: 'Next', exact: true });
-  await expect(next).toBeEnabled({ timeout: 5_000 });
+  // A disabled Next means this step's requirements aren't met. Name the step
+  // and quote whatever the wizard is objecting to, so the report reads as
+  // "the plan is missing something" rather than "a button was disabled".
+  await expect(
+    next,
+    `Wizard step ${current} of ${total} would not advance. On screen: ${
+      (await pageComplaints(page)) || 'no validation message shown'
+    }`,
+  ).toBeEnabled({ timeout: 5_000 });
   await next.click();
   await expect(page.getByText(`Step ${current + 1} of ${total}`)).toBeVisible({
     timeout: 5_000,
@@ -70,7 +183,12 @@ test.describe('authenticated surface', () => {
   }) => {
     await login(page, 'e2ehost');
     await page.goto('/features');
-    await expect(page.getByRole('heading', { name: 'Everything' })).toBeVisible();
+    // `exact` matters here: accessible-name matching is substring by default,
+    // and the index itself lists "Everything you’re part of" and "Everything
+    // updates live", so the loose name resolves to three headings.
+    await expect(
+      page.getByRole('heading', { name: 'Everything', exact: true }),
+    ).toBeVisible();
 
     // Searching by what a feature does, not what it's called — the whole point
     // of indexing the blurbs — narrows to the one card.
@@ -93,8 +211,7 @@ test.describe('authenticated surface', () => {
 
   test('a host can create a plan with a guest and land on the event page', async ({ page }) => {
     await login(page, 'e2ehost');
-    await page.goto('/events/new');
-    await page.getByPlaceholder(TITLE).fill('E2E guest plan');
+    await startPlan(page, 'E2E guest plan');
 
     // Walk the wizard: add a token guest when that step appears, otherwise
     // advance, until the final submit button shows, then send.
@@ -122,8 +239,7 @@ test.describe('authenticated surface', () => {
     const hostCtx = await browser.newContext();
     const host = await hostCtx.newPage();
     await login(host, 'e2ehost');
-    await host.goto('/events/new');
-    await host.getByPlaceholder(TITLE).fill('Cascade journey plan');
+    await startPlan(host, 'Cascade journey plan');
 
     const submit = host.getByRole('button', {
       name: /Send invitations|Create & start deciding/,
@@ -156,8 +272,7 @@ test.describe('authenticated surface', () => {
   // ——— Golden journey 2: create a poll → suggest → vote ———
   test('a host opens a group decision, suggests, and votes', async ({ page }) => {
     await login(page, 'e2ehost');
-    await page.goto('/events/new');
-    await page.getByPlaceholder(TITLE).fill('Poll journey plan');
+    await startPlan(page, 'Poll journey plan');
 
     const submit = page.getByRole('button', {
       name: /Create & start deciding|Send invitations/,
@@ -189,8 +304,7 @@ test.describe('authenticated surface', () => {
 
   test('a host can email a guest invitee straight from the plan', async ({ page }) => {
     await login(page, 'e2ehost');
-    await page.goto('/events/new');
-    await page.getByPlaceholder(TITLE).fill('Guest contact plan');
+    await startPlan(page, 'Guest contact plan');
 
     const submit = page.getByRole('button', {
       name: /Send invitations|Create & start deciding/,
@@ -229,8 +343,7 @@ test.describe('authenticated surface', () => {
     const hostCtx = await browser.newContext();
     const host = await hostCtx.newPage();
     await login(host, 'e2ehost');
-    await host.goto('/events/new');
-    await host.getByPlaceholder(TITLE).fill('Direct invite plan');
+    await startPlan(host, 'Direct invite plan');
 
     // Start the plan with a guest, so the seeded friend is still un-invited and
     // therefore offered in the add-people panel.
@@ -253,9 +366,16 @@ test.describe('authenticated surface', () => {
     // Tap the friend in "From your people" and ask them now, ahead of the line.
     await host.getByRole('button', { name: /Open E2E Guest/ }).click();
     await host.getByRole('button', { name: 'Send invite now' }).click();
-    await expect(host.getByText(/Invitation sent to E2E Guest/)).toBeVisible({
-      timeout: 15_000,
-    });
+    // The toast is the app's own account of what happened, and it auto-dismisses
+    // — so read it once it lands and assert on the captured text. A refusal
+    // ("…is already on this plan", "This plan is already full") then reports
+    // what the app said instead of "element not found".
+    const toasts = host.getByRole('status', { name: 'Notifications' });
+    await expect(toasts).not.toBeEmpty({ timeout: 15_000 });
+    const said = (await toasts.innerText()).replace(/\s+/g, ' ').trim();
+    expect(said, 'the app reported something else after "Send invite now"').toContain(
+      'Invitation sent to E2E Guest',
+    );
 
     // It is a real, live invite: the friend can answer it without any link
     // being sent to them.

@@ -67,10 +67,14 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
   return (
     <ToastContext.Provider value={api}>
       {children}
+      {/* Named, because it isn't the only status region on a page — the event
+          page alone has three — and an unlabelled live region is one more
+          anonymous "status" to anyone navigating by landmark. */}
       <div
         className="fixed inset-x-0 bottom-24 z-50 flex flex-col items-center gap-2 px-4"
         aria-live="polite"
         role="status"
+        aria-label="Notifications"
       >
         {toasts.map((toast) => (
           <ToastItem key={toast.id} toast={toast} onDone={() => remove(toast.id)} />
