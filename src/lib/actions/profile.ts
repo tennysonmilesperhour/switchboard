@@ -222,11 +222,17 @@ export async function completeOnboarding(formData: FormData): Promise<void> {
   // The authenticated user has already been verified by requireUserOrRedirect.
   // Scope the service-role write to that exact id so grant drift cannot strand
   // a new account halfway through onboarding.
+  //
+  // Upsert, not update, for the same reason `createPasswordAccount` does it:
+  // an account whose `handle_new_user` trigger never ran has no profile row, so
+  // an update matches zero rows, `.single()` errors, and this redirects to
+  // /onboarding?error=save. Onboarding is the only route out of onboarding, so
+  // that is not a failed save — it is an account locked out of the app forever,
+  // with no message that admits it.
   const profileWriter = hasAdminCredentials() ? createAdminClient() : supabase;
   const { data: savedProfile, error: profileError } = await profileWriter
     .from('profiles')
-    .update(profileUpdate)
-    .eq('id', user.id)
+    .upsert({ id: user.id, ...profileUpdate }, { onConflict: 'id' })
     .select('onboarded')
     .single<{ onboarded: boolean }>();
 

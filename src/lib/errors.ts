@@ -193,6 +193,16 @@ const REGISTRY = {
     fix: 'Open the confirmation link we emailed you — check spam and promotions. You can send a fresh one below.',
     actor: 'reader',
   },
+  /**
+   * The credentials were right and the account is suspended. Moderation is not
+   * something the reader can undo from the sign-in form, and pretending their
+   * password was wrong sends them round a loop that cannot end.
+   */
+  'SB-AUTH-SUSPENDED': {
+    message: 'This account is suspended, so it can’t be signed into.',
+    fix: null,
+    actor: 'operator',
+  },
   'SB-AUTH-RESEND': {
     message: 'Switchboard couldn’t send that confirmation email.',
     fix: 'Try again in a few minutes, or use “Forgot password?” — that link confirms the address too.',

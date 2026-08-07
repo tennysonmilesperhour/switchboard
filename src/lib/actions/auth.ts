@@ -52,9 +52,27 @@ export interface AuthActionResult {
   redirectTo?: string;
 }
 
+/** How long the per-account sign-in bucket takes to refill, in minutes. */
+const SIGNIN_WINDOW_MINUTES = 10;
+
 function authError(message: string): AuthActionResult {
   return { ok: false, error: message };
 }
+
+/**
+ * Why Supabase refused a sign-in whose password may well have been right.
+ *
+ * GoTrue verifies the password *before* it checks any of these, so each one
+ * describes an account the reader legitimately owns and cannot get into. They
+ * used to share a sentence with a mistyped password, which is the shape that
+ * makes a report unanswerable: four causes, one screenshot, no diagnosis.
+ */
+const BLOCKED_ACCOUNT_CODES: Record<string, ErrorCode> = {
+  email_not_confirmed: 'SB-AUTH-UNCONFIRMED',
+  user_banned: 'SB-AUTH-SUSPENDED',
+  // Supabase's own limiter, distinct from ours above.
+  over_request_rate_limit: 'SB-RATE-LIMIT',
+};
 
 async function uniqueHandle(baseHandle: string): Promise<string | null> {
   const admin = createAdminClient();
@@ -133,14 +151,20 @@ export async function signInWithPasswordIdentifier({
   }
 
   try {
-    const allowed = await checkRateLimit(`signin:${normalized}`, 8, 10 * 60);
+    const allowed = await checkRateLimit(`signin:${normalized}`, 8, SIGNIN_WINDOW_MINUTES * 60);
     if (!allowed) {
-      return authError('Too many sign-in attempts. Wait a few minutes and try again.');
+      // Carries the code so a screenshot of this is distinguishable from a
+      // wrong password — they read almost identically to someone who is simply
+      // being told "no" for the fourth time.
+      return failure(
+        'SB-RATE-LIMIT',
+        `Too many sign-in attempts for this account. Wait ${SIGNIN_WINDOW_MINUTES} minutes and try again.`,
+      );
     }
 
     const emails = await resolveIdentifierEmails(normalized);
     const supabase = await createClient();
-    let unconfirmedEmail: string | null = null;
+    let blocked: { code: ErrorCode; email: string } | null = null;
     let lastReason = 'unknown';
     for (const email of emails) {
       const { error } = await supabase.auth.signInWithPassword({
@@ -149,18 +173,21 @@ export async function signInWithPasswordIdentifier({
       });
       if (!error) return { ok: true };
       lastReason = error.code ?? `status_${error.status ?? 'none'}`;
-      // GoTrue verifies the password *before* it checks confirmation, so this
-      // code only ever comes back when the credentials were correct. That is
-      // what makes it safe to say so out loud: it reveals nothing to someone
-      // who doesn't already hold the password (docs/SECURITY.md §9).
-      if (error.code === 'email_not_confirmed') unconfirmedEmail = email;
+      // GoTrue verifies the password *before* it checks any of these, so they
+      // only ever come back when the credentials were correct. That is what
+      // makes it safe to say so out loud: none of it reveals anything to
+      // someone who doesn't already hold the password (docs/SECURITY.md §9).
+      const code = error.code ? BLOCKED_ACCOUNT_CODES[error.code] : undefined;
+      if (code && !blocked) blocked = { code, email };
     }
 
-    if (unconfirmedEmail) {
+    if (blocked) {
       return {
-        ...failure('SB-AUTH-UNCONFIRMED'),
-        identifier: unconfirmedEmail,
-        needsEmailConfirmation: true,
+        ...failure(blocked.code),
+        identifier: blocked.email,
+        // Only the unconfirmed case has a link we can re-send; a suspension or
+        // a rate limit has nothing for the reader to press.
+        needsEmailConfirmation: blocked.code === 'SB-AUTH-UNCONFIRMED',
       };
     }
 

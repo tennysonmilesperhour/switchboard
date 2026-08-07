@@ -251,6 +251,73 @@ describe('signInWithPasswordIdentifier', () => {
     expect(result.error).not.toMatch(/did not work/);
   });
 
+  /**
+   * The invariant, stated as a table: GoTrue checks the password before any of
+   * these, so every one of them describes an account whose credentials were
+   * RIGHT and which still cannot get in. Each must name itself. If a new reason
+   * to refuse a valid password appears and is left to fall through, it lands in
+   * "That email, username, or password did not work." — which is how the
+   * original report reached us, and adding a row here is what stops the next
+   * one being unanswerable.
+   */
+  const BLOCKED: Array<{ supabaseCode: string; code: string }> = [
+    { supabaseCode: 'email_not_confirmed', code: 'SB-AUTH-UNCONFIRMED' },
+    { supabaseCode: 'user_banned', code: 'SB-AUTH-SUSPENDED' },
+    { supabaseCode: 'over_request_rate_limit', code: 'SB-RATE-LIMIT' },
+  ];
+
+  for (const { supabaseCode, code } of BLOCKED) {
+    it(`names ${supabaseCode} rather than blaming the password`, async () => {
+      seed(account);
+      mocks.signInWithPassword.mockResolvedValue({
+        data: {},
+        error: { code: supabaseCode, status: 400, message: supabaseCode },
+      });
+
+      const result = await signInWithPasswordIdentifier({
+        identifier: 'alice@example.com',
+        password: 'correct-horse',
+      });
+
+      expect(result.ok).toBe(false);
+      expect(result.code, supabaseCode).toBe(code);
+      expect(result.error, supabaseCode).not.toMatch(/did not work/);
+    });
+  }
+
+  it('offers the resend only for the one cause that has a link to re-send', async () => {
+    // A suspension has nothing for the reader to press, so the button must not
+    // appear promising a way out that doesn't exist.
+    seed(account);
+    mocks.signInWithPassword.mockResolvedValue({
+      data: {},
+      error: { code: 'user_banned', status: 400, message: 'User banned' },
+    });
+
+    const result = await signInWithPasswordIdentifier({
+      identifier: 'alice@example.com',
+      password: 'correct-horse',
+    });
+
+    expect(result.needsEmailConfirmation).toBe(false);
+  });
+
+  it('names our own rate limit, and says how long', async () => {
+    seed(account);
+    mocks.checkRateLimit.mockResolvedValue(false);
+
+    const result = await signInWithPasswordIdentifier({
+      identifier: 'alice@example.com',
+      password: 'correct-horse',
+    });
+
+    expect(result.ok).toBe(false);
+    expect(result.code).toBe('SB-RATE-LIMIT');
+    expect(result.error).toMatch(/\d+ minutes/);
+    // Blocked before any credential check — the limiter is the whole point.
+    expect(mocks.signInWithPassword).not.toHaveBeenCalled();
+  });
+
   it('still blames the credentials when the password is actually wrong', async () => {
     seed(account);
 

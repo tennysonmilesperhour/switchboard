@@ -27,6 +27,26 @@ and follow its precedents.** In short:
 Security invariants are covered by unit tests (`npm test`) and pgTAP
 (`supabase test db`) — keep them green and add coverage for new surfaces.
 
+# Getting into an account
+
+Five separate releases have shipped a bug where someone holding valid
+credentials could not sign in, create an account, or recover one — each found by
+a user, not by us. **Before touching sign-in, sign-up, confirmation, recovery,
+onboarding, or the proxy's redirect rules, read
+[`docs/AUTH.md`](docs/AUTH.md).** The invariant:
+
+- **No state an account can be in is a dead end.** For every combination of
+  identifier kind × confirmation state × profile state × moderation state, the
+  person either gets in or is told what is true and what to do next.
+- **"That email, username, or password did not work." is only ever correct when
+  the credentials really were wrong.** GoTrue verifies the password *before* it
+  checks confirmation, suspension, or rate limits, so every one of those codes
+  describes an account whose password was right — each gets its own error code.
+- **A blocked state needs a route out the reader can reach from where they are
+  standing.** A link they never received is not a route out.
+- Adding a new reason to refuse a valid password fails the blocked-account table
+  in `src/lib/actions/auth.test.ts` until you decide what the person sees.
+
 # Error messages
 
 Every failure a human sees carries a code from **`src/lib/errors.ts`** —
