@@ -33,11 +33,26 @@ Two tiers:
    E2E_DB=1 npm run e2e     # Playwright starts `npm run dev` itself
    ```
 
-## Wiring into CI (next step)
+## In CI
 
-To run these on every PR, add a job that runs `supabase start` + `supabase db
-reset` + `node e2e/seed.mjs`, sets the three env vars above plus `E2E_DB=1`, and
-then `npm run e2e`. Keep it a **separate, non-required** check until it's proven
-stable, so it can't block merges while selectors settle. The specs were authored
-against the current UI but not executed in the authoring environment (no Docker),
-so the first real run may need minor selector adjustments in `authed.spec.ts`.
+The **Authenticated E2E** job in `.github/workflows/ci.yml` does all of the
+above on every PR: `supabase start`, `node e2e/seed.mjs`, build, then
+`npx playwright test e2e/authed.spec.ts` with `E2E_DB=1`.
+
+## Fixtures owe the product its rules
+
+These journeys drive the real app, so a product rule the fixture doesn't satisfy
+takes the whole suite down — and never at the rule. Twice now:
+
+- **Legal version.** `src/proxy.ts` funnels an onboarded user whose accepted
+  terms version is stale to `/legal-update`, which renders with no app shell.
+  Every authenticated journey then failed on "element not found". `seed.mjs`
+  now parses `LEGAL_VERSION` out of the source so a bump can't strand it again.
+- **Invite context.** A plan may not leave the wizard's Basics step without a
+  location or a detail (`hasInviteDetails`). A fixture that filled only the
+  title left Next disabled, and five journeys failed inside a shared helper
+  with "expected enabled, received disabled". `startPlan()` now fills the
+  context and asserts the gate by name where it's set.
+
+When you add a requirement to a flow these tests walk, add it to the fixture in
+the same change — and assert it where it can say what it is.

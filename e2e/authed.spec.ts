@@ -18,9 +18,59 @@ async function login(page: Page, identifier: string) {
   // The page has a "Sign in" mode-toggle tab as well as the form's submit
   // button, both named "Sign in" — scope to the form to click the submit.
   await page.locator('form').getByRole('button', { name: 'Sign in' }).click();
-  await page.waitForURL((url) => !url.pathname.startsWith('/login'), {
-    timeout: 30_000,
-  });
+  try {
+    await page.waitForURL((url) => !url.pathname.startsWith('/login'), {
+      timeout: 30_000,
+    });
+  } catch {
+    // Still on /login means the form refused and said why — wrong credentials,
+    // an unconfirmed account, a rate limit — each with its own SB- code (see
+    // docs/AUTH.md). Quote it. "Navigation timeout" describes the symptom and
+    // names nothing; the code on screen names the cause.
+    throw new Error(
+      `Sign-in as "${identifier}" never left /login. The page said: ${
+        (await pageComplaints(page)) || 'nothing — no error was shown'
+      }`,
+    );
+  }
+}
+
+/** Visible alert text, normalised — what the app is objecting to right now. */
+async function pageComplaints(page: Page): Promise<string> {
+  const alerts = (await page.getByRole('alert').allInnerTexts())
+    .map((text) => text.replace(/\s+/g, ' ').trim())
+    .filter(Boolean);
+  return alerts.join(' | ');
+}
+
+/**
+ * Open the wizard with everything the product requires before a plan may leave
+ * the Basics step: a title, **and** at least a location or a detail
+ * (`hasInviteDetails`, src/lib/event-details.ts — the "require context before
+ * sending invitations" rule).
+ *
+ * A fixture that fills only the title doesn't fail where the rule lives. Next
+ * simply stays disabled, and the suite reports five unrelated-looking
+ * "expected enabled, received disabled" failures on a helper three frames away
+ * from the cause. That is exactly how these tests went red and stayed red.
+ *
+ * The detail is filled rather than the location because the location field runs
+ * a debounced place search on every keystroke: same gate, no moving parts.
+ */
+async function startPlan(page: Page, title: string) {
+  await page.goto('/events/new');
+  await page.getByPlaceholder(TITLE).fill(title);
+  await page
+    .getByLabel('Details', { exact: true })
+    .fill('Seeded by the authenticated e2e suite.');
+
+  // Assert the gate here, where it can name itself. If Basics ever grows
+  // another requirement, this line fails saying the fixture is short of what
+  // the wizard now asks for — instead of every journey timing out downstream.
+  await expect(
+    page.getByRole('button', { name: 'Next', exact: true }),
+    'The wizard would not leave Basics with a title and a detail — it has a new requirement this fixture does not satisfy',
+  ).toBeEnabled({ timeout: 5_000 });
 }
 
 async function currentWizardStep(page: Page) {
@@ -33,7 +83,15 @@ async function currentWizardStep(page: Page) {
 async function clickWizardNext(page: Page) {
   const { current, total } = await currentWizardStep(page);
   const next = page.getByRole('button', { name: 'Next', exact: true });
-  await expect(next).toBeEnabled({ timeout: 5_000 });
+  // A disabled Next means this step's requirements aren't met. Name the step
+  // and quote whatever the wizard is objecting to, so the report reads as
+  // "the plan is missing something" rather than "a button was disabled".
+  await expect(
+    next,
+    `Wizard step ${current} of ${total} would not advance. On screen: ${
+      (await pageComplaints(page)) || 'no validation message shown'
+    }`,
+  ).toBeEnabled({ timeout: 5_000 });
   await next.click();
   await expect(page.getByText(`Step ${current + 1} of ${total}`)).toBeVisible({
     timeout: 5_000,
@@ -70,7 +128,12 @@ test.describe('authenticated surface', () => {
   }) => {
     await login(page, 'e2ehost');
     await page.goto('/features');
-    await expect(page.getByRole('heading', { name: 'Everything' })).toBeVisible();
+    // `exact` matters here: accessible-name matching is substring by default,
+    // and the index itself lists "Everything you’re part of" and "Everything
+    // updates live", so the loose name resolves to three headings.
+    await expect(
+      page.getByRole('heading', { name: 'Everything', exact: true }),
+    ).toBeVisible();
 
     // Searching by what a feature does, not what it's called — the whole point
     // of indexing the blurbs — narrows to the one card.
@@ -93,8 +156,7 @@ test.describe('authenticated surface', () => {
 
   test('a host can create a plan with a guest and land on the event page', async ({ page }) => {
     await login(page, 'e2ehost');
-    await page.goto('/events/new');
-    await page.getByPlaceholder(TITLE).fill('E2E guest plan');
+    await startPlan(page, 'E2E guest plan');
 
     // Walk the wizard: add a token guest when that step appears, otherwise
     // advance, until the final submit button shows, then send.
@@ -122,8 +184,7 @@ test.describe('authenticated surface', () => {
     const hostCtx = await browser.newContext();
     const host = await hostCtx.newPage();
     await login(host, 'e2ehost');
-    await host.goto('/events/new');
-    await host.getByPlaceholder(TITLE).fill('Cascade journey plan');
+    await startPlan(host, 'Cascade journey plan');
 
     const submit = host.getByRole('button', {
       name: /Send invitations|Create & start deciding/,
@@ -156,8 +217,7 @@ test.describe('authenticated surface', () => {
   // ——— Golden journey 2: create a poll → suggest → vote ———
   test('a host opens a group decision, suggests, and votes', async ({ page }) => {
     await login(page, 'e2ehost');
-    await page.goto('/events/new');
-    await page.getByPlaceholder(TITLE).fill('Poll journey plan');
+    await startPlan(page, 'Poll journey plan');
 
     const submit = page.getByRole('button', {
       name: /Create & start deciding|Send invitations/,
@@ -189,8 +249,7 @@ test.describe('authenticated surface', () => {
 
   test('a host can email a guest invitee straight from the plan', async ({ page }) => {
     await login(page, 'e2ehost');
-    await page.goto('/events/new');
-    await page.getByPlaceholder(TITLE).fill('Guest contact plan');
+    await startPlan(page, 'Guest contact plan');
 
     const submit = page.getByRole('button', {
       name: /Send invitations|Create & start deciding/,
@@ -229,8 +288,7 @@ test.describe('authenticated surface', () => {
     const hostCtx = await browser.newContext();
     const host = await hostCtx.newPage();
     await login(host, 'e2ehost');
-    await host.goto('/events/new');
-    await host.getByPlaceholder(TITLE).fill('Direct invite plan');
+    await startPlan(host, 'Direct invite plan');
 
     // Start the plan with a guest, so the seeded friend is still un-invited and
     // therefore offered in the add-people panel.
