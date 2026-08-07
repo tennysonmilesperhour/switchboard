@@ -2,7 +2,9 @@ import { defineConfig, devices } from '@playwright/test';
 
 export default defineConfig({
   testDir: './e2e',
-  timeout: 30_000,
+  // The authenticated journeys walk a multi-step wizard, so a genuine failure
+  // needs room to report itself rather than being cut off as a timeout.
+  timeout: 60_000,
   use: {
     baseURL: process.env.PLAYWRIGHT_BASE_URL ?? 'http://localhost:3000',
     trace: 'on-first-retry',
@@ -11,12 +13,28 @@ export default defineConfig({
     { name: 'mobile', use: { ...devices['iPhone 13'] } },
     { name: 'desktop', use: { ...devices['Desktop Chrome'] } },
   ],
+  /**
+   * Assertions wait longer than Playwright's 5s default because the very first
+   * hit of a route pays for a cold start. Five seconds was tuned against a warm
+   * local dev server and was the reason CI failures read as "element not found"
+   * — a missing heading and a slow one are indistinguishable at the timeout,
+   * which sent every investigation looking for a UI bug that wasn't there.
+   */
+  expect: { timeout: 15_000 },
   webServer: process.env.PLAYWRIGHT_BASE_URL
     ? undefined
     : {
-        command: 'npm run dev',
+        /**
+         * Local runs default to the dev server — it's already running, and
+         * `reuseExistingServer` picks it up. CI sets this to `npm run start`
+         * and builds first: `next dev` compiles each route on demand, on the
+         * first request, so in CI the test suite was effectively timing the
+         * compiler. Under a loaded runner that made every authenticated
+         * journey fail at once, for no reason a diff could explain.
+         */
+        command: process.env.PLAYWRIGHT_WEB_SERVER ?? 'npm run dev',
         url: 'http://localhost:3000/welcome',
         reuseExistingServer: true,
-        timeout: 60_000,
+        timeout: 120_000,
       },
 });
