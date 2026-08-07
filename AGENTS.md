@@ -76,3 +76,24 @@ There is now one answer, and nothing may re-derive it:
   every status × kill-switch combination and cross-checks the status tuple
   inside `rsvp_via_share_token`. `e2e/invite-links.spec.ts` then walks the real
   journey: a link taken out of the host UI, opened on a device with no session.
+
+# Feature index
+
+Switchboard reveals itself one surface at a time, which keeps it calm and means
+most of what was built is never met by the people it was built for.
+**`src/lib/features.ts`** is the catalogue that answers "what can this do, and
+where is it?", rendered at `/features` and linked from the More sheet, Settings,
+and the getting-started card.
+
+- **Shipping a user-facing surface means adding its entry.** `features.test.ts`
+  reads `src/app` and fails when a top-level page has neither an index entry nor
+  a documented reason in `NOT_INDEXED` (auth plumbing, token-addressed links,
+  operator screens).
+- **`href` is a route that exists** — the test resolves every one against
+  `src/app`, dynamic segments and all. A feature reached *through* something (a
+  host control, a wizard step, a room tab) carries `where` directions and no
+  `href`; never guess a URL for it.
+- **Only what ships.** Roadmap entries belong in `docs/INNOVATIONS.md`. An index
+  that promises a feature is worse than no index.
+- Renaming a nav destination fails the test until the index agrees, so the index
+  can never know less than the navigation it explains.

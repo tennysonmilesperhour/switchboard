@@ -29,6 +29,7 @@ export default function robots(): MetadataRoute.Robots {
         '/notifications',
         '/onboarding',
         '/moderation',
+        '/features',
       ],
     },
     sitemap: `${appUrl}/sitemap.xml`,

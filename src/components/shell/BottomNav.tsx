@@ -26,6 +26,7 @@ const MORE: Array<Tab & { desc: string }> = [
   { href: '/zones', label: 'Zones', icon: 'globe', desc: 'Places & gatherings to check into' },
   { href: '/profile', label: 'Profile', icon: 'account', desc: 'Your card, socials, and links' },
   { href: '/settings', label: 'Settings', icon: 'settings', desc: 'Notifications, quiet hours, sabbatical' },
+  { href: '/features', label: 'Everything', icon: 'grid', desc: 'Every feature, and where to find it' },
 ];
 
 const MORE_HREFS = MORE.map((t) => t.href);

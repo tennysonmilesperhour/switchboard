@@ -111,6 +111,14 @@ export function GettingStarted({ friendDone, planDone, signalDone }: GettingStar
           );
         })}
       </div>
+      {/* The three steps are the start; this is the rest of the map, for anyone
+          who'd rather see what's here than be shown it a piece at a time. */}
+      <Link
+        href="/features"
+        className="mt-3 inline-flex min-h-11 items-center text-sm font-bold text-terracotta"
+      >
+        See everything Switchboard does →
+      </Link>
     </Card>
   );
 }

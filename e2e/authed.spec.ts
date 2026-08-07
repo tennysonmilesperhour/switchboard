@@ -65,6 +65,26 @@ test.describe('authenticated surface', () => {
     await expect(page.getByRole('navigation', { name: 'Main navigation' })).toBeVisible();
   });
 
+  test('the feature index is reachable, searchable, and its links work', async ({
+    page,
+  }) => {
+    await login(page, 'e2ehost');
+    await page.goto('/features');
+    await expect(page.getByRole('heading', { name: 'Everything' })).toBeVisible();
+
+    // Searching by what a feature does, not what it's called — the whole point
+    // of indexing the blurbs — narrows to the one card.
+    await page.getByLabel('Search features').fill('who owes what');
+    await expect(page.getByRole('link', { name: /Split the bill/ })).toBeVisible();
+    await expect(page.getByRole('link', { name: /Cascading invites/ })).toBeHidden();
+
+    // And an indexed destination actually goes there (src/lib/features.test.ts
+    // proves every href resolves; this proves the rendered card navigates).
+    await page.getByLabel('Clear search').click();
+    await page.getByRole('link', { name: /Your people/ }).click();
+    await expect(page).toHaveURL(/\/people/);
+  });
+
   test('a signed-in user can open the new-plan wizard', async ({ page }) => {
     await login(page, 'e2ehost');
     await page.goto('/events/new');
