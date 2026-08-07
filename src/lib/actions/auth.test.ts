@@ -1,7 +1,16 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 /**
- * Focused coverage for `requestPasswordReset`. The recovery email is delivered
+ * Focused coverage for the ways back into an account.
+ *
+ * `signInWithPasswordIdentifier` and `resendEmailConfirmation` are here because
+ * of a real report: an account was created with a real email, the confirmation
+ * mail never arrived, and sign-in with the just-saved credentials answered
+ * "That email, username, or password did not work." — the one explanation that
+ * was false. These pin that an unconfirmed account says so, and that the resend
+ * can only ever mail an address the account already claims.
+ *
+ * `requestPasswordReset`: the recovery email is delivered
  * through the app's own Resend integration (`sendEmailWithResult`) using an admin-minted
  * recovery link — Supabase SMTP is only a fallback when service-role access is
  * absent. These tests pin the two things that matter: a real reset link
@@ -21,7 +30,10 @@ const mocks = vi.hoisted(() => {
   const db: {
     profiles: Profile[];
     contacts: Contact[];
-    authUsers: Record<string, { email: string } | null>;
+    authUsers: Record<
+      string,
+      { email: string; email_confirmed_at?: string | null } | null
+    >;
   } = { profiles: [], contacts: [], authUsers: {} };
 
   function query(
@@ -114,6 +126,17 @@ const mocks = vi.hoisted(() => {
     }),
   );
   const resetPasswordForEmail = vi.fn(async () => ({ data: {}, error: null }));
+  /**
+   * Stands in for GoTrue's password grant. Defaults to rejecting, so each test
+   * says explicitly which outcome it is exercising. `code` is what the action
+   * branches on, exactly as `AuthError.code` does in production.
+   */
+  const signInWithPassword = vi.fn(async () => ({
+    data: {},
+    error: { code: 'invalid_credentials', status: 400, message: 'Invalid login credentials' } as
+      | { code: string; status: number; message: string }
+      | null,
+  }));
   const checkRateLimit = vi.fn(async () => true);
   const hasAdminCredentials = vi.fn(() => true);
 
@@ -124,6 +147,7 @@ const mocks = vi.hoisted(() => {
     generateLink,
     sendEmailWithResult,
     resetPasswordForEmail,
+    signInWithPassword,
     checkRateLimit,
     hasAdminCredentials,
   };
@@ -141,7 +165,10 @@ vi.mock('@/lib/supabase/admin', () => ({
 
 vi.mock('@/lib/supabase/server', () => ({
   createClient: async () => ({
-    auth: { resetPasswordForEmail: mocks.resetPasswordForEmail },
+    auth: {
+      resetPasswordForEmail: mocks.resetPasswordForEmail,
+      signInWithPassword: mocks.signInWithPassword,
+    },
   }),
 }));
 
@@ -156,10 +183,20 @@ vi.mock('@/lib/analytics/server', () => ({
 
 vi.mock('@/lib/server/email', async (importActual) => {
   const actual = await importActual<typeof import('@/lib/server/email')>();
-  return { ...actual, sendEmailWithResult: mocks.sendEmailWithResult };
+  return {
+    ...actual,
+    sendEmailWithResult: mocks.sendEmailWithResult,
+    // A configured provider is the precondition these tests are about; without
+    // this they'd all short-circuit on the operator failure instead.
+    emailEnabled: () => true,
+  };
 });
 
-import { requestPasswordReset } from './auth';
+import {
+  requestPasswordReset,
+  resendEmailConfirmation,
+  signInWithPasswordIdentifier,
+} from './auth';
 
 function seed(state: {
   profiles?: (typeof mocks.db.profiles);
@@ -175,7 +212,206 @@ afterEach(() => {
   vi.clearAllMocks();
   mocks.hasAdminCredentials.mockReturnValue(true);
   mocks.checkRateLimit.mockResolvedValue(true);
+  mocks.signInWithPassword.mockResolvedValue({
+    data: {},
+    error: { code: 'invalid_credentials', status: 400, message: 'Invalid login credentials' },
+  });
   seed({});
+});
+
+describe('signInWithPasswordIdentifier', () => {
+  const account = {
+    profiles: [{ id: 'u1', handle: 'alice', contact_email: 'alice@example.com' }],
+    contacts: [
+      { user_id: 'u1', kind: 'email', normalized_value: 'alice@example.com', verified: false },
+    ],
+    authUsers: { u1: { email: 'alice@example.com' } },
+  };
+
+  it('names an unconfirmed email instead of blaming the credentials', async () => {
+    // The reported bug. GoTrue checks the password before it checks
+    // confirmation, so `email_not_confirmed` means the credentials were right —
+    // telling someone they were wrong sends them to reset a working password.
+    seed(account);
+    mocks.signInWithPassword.mockResolvedValue({
+      data: {},
+      error: { code: 'email_not_confirmed', status: 400, message: 'Email not confirmed' },
+    });
+
+    const result = await signInWithPasswordIdentifier({
+      identifier: 'Alice@Example.com',
+      password: 'correct-horse',
+    });
+
+    expect(result.ok).toBe(false);
+    expect(result.code).toBe('SB-AUTH-UNCONFIRMED');
+    expect(result.needsEmailConfirmation).toBe(true);
+    expect(result.identifier).toBe('alice@example.com');
+    expect(result.fix).toBeTruthy();
+    expect(result.error).not.toMatch(/did not work/);
+  });
+
+  /**
+   * The invariant, stated as a table: GoTrue checks the password before any of
+   * these, so every one of them describes an account whose credentials were
+   * RIGHT and which still cannot get in. Each must name itself. If a new reason
+   * to refuse a valid password appears and is left to fall through, it lands in
+   * "That email, username, or password did not work." — which is how the
+   * original report reached us, and adding a row here is what stops the next
+   * one being unanswerable.
+   */
+  const BLOCKED: Array<{ supabaseCode: string; code: string }> = [
+    { supabaseCode: 'email_not_confirmed', code: 'SB-AUTH-UNCONFIRMED' },
+    { supabaseCode: 'user_banned', code: 'SB-AUTH-SUSPENDED' },
+    { supabaseCode: 'over_request_rate_limit', code: 'SB-RATE-LIMIT' },
+  ];
+
+  for (const { supabaseCode, code } of BLOCKED) {
+    it(`names ${supabaseCode} rather than blaming the password`, async () => {
+      seed(account);
+      mocks.signInWithPassword.mockResolvedValue({
+        data: {},
+        error: { code: supabaseCode, status: 400, message: supabaseCode },
+      });
+
+      const result = await signInWithPasswordIdentifier({
+        identifier: 'alice@example.com',
+        password: 'correct-horse',
+      });
+
+      expect(result.ok).toBe(false);
+      expect(result.code, supabaseCode).toBe(code);
+      expect(result.error, supabaseCode).not.toMatch(/did not work/);
+    });
+  }
+
+  it('offers the resend only for the one cause that has a link to re-send', async () => {
+    // A suspension has nothing for the reader to press, so the button must not
+    // appear promising a way out that doesn't exist.
+    seed(account);
+    mocks.signInWithPassword.mockResolvedValue({
+      data: {},
+      error: { code: 'user_banned', status: 400, message: 'User banned' },
+    });
+
+    const result = await signInWithPasswordIdentifier({
+      identifier: 'alice@example.com',
+      password: 'correct-horse',
+    });
+
+    expect(result.needsEmailConfirmation).toBe(false);
+  });
+
+  it('names our own rate limit, and says how long', async () => {
+    seed(account);
+    mocks.checkRateLimit.mockResolvedValue(false);
+
+    const result = await signInWithPasswordIdentifier({
+      identifier: 'alice@example.com',
+      password: 'correct-horse',
+    });
+
+    expect(result.ok).toBe(false);
+    expect(result.code).toBe('SB-RATE-LIMIT');
+    expect(result.error).toMatch(/\d+ minutes/);
+    // Blocked before any credential check — the limiter is the whole point.
+    expect(mocks.signInWithPassword).not.toHaveBeenCalled();
+  });
+
+  it('still blames the credentials when the password is actually wrong', async () => {
+    seed(account);
+
+    const result = await signInWithPasswordIdentifier({
+      identifier: 'alice@example.com',
+      password: 'nope',
+    });
+
+    expect(result.ok).toBe(false);
+    expect(result.needsEmailConfirmation).toBeUndefined();
+    expect(result.code).toBeUndefined();
+    expect(result.error).toMatch(/did not work/);
+  });
+
+  it('signs in when the grant succeeds', async () => {
+    seed(account);
+    mocks.signInWithPassword.mockResolvedValue({ data: {}, error: null });
+
+    const result = await signInWithPasswordIdentifier({
+      identifier: 'alice@example.com',
+      password: 'correct-horse',
+    });
+
+    expect(result).toEqual({ ok: true });
+  });
+});
+
+describe('resendEmailConfirmation', () => {
+  it('mails a fresh confirmation link to an unconfirmed email account', async () => {
+    seed({
+      profiles: [{ id: 'u1', handle: 'alice', contact_email: 'alice@example.com' }],
+      contacts: [
+        { user_id: 'u1', kind: 'email', normalized_value: 'alice@example.com', verified: false },
+      ],
+      authUsers: { u1: { email: 'alice@example.com', email_confirmed_at: null } },
+    });
+
+    const result = await resendEmailConfirmation('Alice@Example.com');
+
+    expect(result.ok).toBe(true);
+    // A magic link both proves control of the address and confirms it, so the
+    // reader lands signed in rather than back at the form.
+    expect(mocks.generateLink).toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'magiclink', email: 'alice@example.com' }),
+    );
+    expect(mocks.sendEmailWithResult).toHaveBeenCalledTimes(1);
+    const message = mocks.sendEmailWithResult.mock.calls[0][0];
+    expect(message.to).toBe('alice@example.com');
+    expect(message.text).toContain('/auth/confirm?token_hash=HASH&type=magiclink');
+  });
+
+  it('sends nothing for an account that is already confirmed', async () => {
+    seed({
+      profiles: [{ id: 'u1', handle: 'alice', contact_email: 'alice@example.com' }],
+      contacts: [
+        { user_id: 'u1', kind: 'email', normalized_value: 'alice@example.com', verified: true },
+      ],
+      authUsers: { u1: { email: 'alice@example.com', email_confirmed_at: '2026-01-01T00:00:00Z' } },
+    });
+
+    const result = await resendEmailConfirmation('alice@example.com');
+
+    expect(result.ok).toBe(true);
+    expect(mocks.generateLink).not.toHaveBeenCalled();
+    expect(mocks.sendEmailWithResult).not.toHaveBeenCalled();
+  });
+
+  it('answers the same way for an address with no account, revealing nothing', async () => {
+    seed({});
+
+    const result = await resendEmailConfirmation('stranger@example.com');
+
+    expect(result.ok).toBe(true);
+    expect(mocks.generateLink).not.toHaveBeenCalled();
+    expect(mocks.sendEmailWithResult).not.toHaveBeenCalled();
+  });
+
+  it('never mails a username account’s merely-typed contact address', async () => {
+    // The §9 invariant, restated for this surface: Carol typed someone else's
+    // address and never proved she controls it. A resend must not become a way
+    // to mail a sign-in link to a stranger.
+    seed({
+      profiles: [{ id: 'u3', handle: 'carol', contact_email: 'victim@example.com' }],
+      contacts: [
+        { user_id: 'u3', kind: 'email', normalized_value: 'victim@example.com', verified: false },
+      ],
+      authUsers: { u3: { email: 'carol@users.switchboard.local', email_confirmed_at: null } },
+    });
+
+    const result = await resendEmailConfirmation('victim@example.com');
+
+    expect(result.ok).toBe(true);
+    expect(mocks.sendEmailWithResult).not.toHaveBeenCalled();
+  });
 });
 
 describe('requestPasswordReset', () => {

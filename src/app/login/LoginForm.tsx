@@ -6,9 +6,11 @@ import { Button } from '@/components/ui/Button';
 import { PasswordInput } from '@/components/ui/PasswordInput';
 import {
   createPasswordAccount,
+  resendEmailConfirmation,
   signInWithPasswordIdentifier,
   type AuthActionResult,
 } from '@/lib/actions/auth';
+import { errorRef, type ErrorCode } from '@/lib/errors';
 import {
   PASSWORD_MIN_LENGTH,
   normalizeIdentifier,
@@ -34,6 +36,14 @@ export function LoginForm({ next = '/', initialMode = 'signin' }: LoginFormProps
   const [password, setPassword] = useState('');
   const [status, setStatus] = useState<Status>('idle');
   const [message, setMessage] = useState('');
+  // The next step and the code that go with `message`, when the failure carried
+  // them. Rendered together so a screenshot of this card is the whole diagnosis.
+  const [fix, setFix] = useState<string | null>(null);
+  const [code, setCode] = useState<ErrorCode | null>(null);
+  // Set when sign-in failed *only* because the address was never confirmed.
+  // Holds the address the link goes to, so the resend can't be retargeted.
+  const [unconfirmedEmail, setUnconfirmedEmail] = useState<string | null>(null);
+  const [resending, setResending] = useState(false);
   const [ready, setReady] = useState(false);
   // OAuth kicks off a full-page redirect, so it needs its own feedback that
   // lives outside the sign-in/create forms (the button sits below both).
@@ -63,6 +73,9 @@ export function LoginForm({ next = '/', initialMode = 'signin' }: LoginFormProps
     e.preventDefault();
     setStatus('submitting');
     setMessage('Checking your account...');
+    setFix(null);
+    setCode(null);
+    setUnconfirmedEmail(null);
 
     try {
       const result = await Promise.race([
@@ -80,6 +93,11 @@ export function LoginForm({ next = '/', initialMode = 'signin' }: LoginFormProps
 
       if (!result.ok) {
         setMessage(result.error ?? 'That email, username, or password did not work.');
+        setFix(result.fix ?? null);
+        setCode(result.code ?? null);
+        if (result.needsEmailConfirmation) {
+          setUnconfirmedEmail(result.identifier ?? normalizeIdentifier(identifier));
+        }
         setStatus('error');
         return;
       }
@@ -97,6 +115,33 @@ export function LoginForm({ next = '/', initialMode = 'signin' }: LoginFormProps
     } catch {
       setMessage('Sign-in could not connect. Check your connection and try again.');
       setStatus('error');
+    }
+  }
+
+  async function resendConfirmation() {
+    if (!unconfirmedEmail) return;
+    setResending(true);
+    try {
+      const result = await resendEmailConfirmation(unconfirmedEmail);
+      if (result.ok) {
+        setUnconfirmedEmail(null);
+        setFix(null);
+        setCode(null);
+        setStatus('idle');
+        setMessage(
+          `A fresh confirmation link is on its way to ${unconfirmedEmail}. Open it and you’ll be signed in — check spam if it isn’t there in a few minutes.`,
+        );
+        return;
+      }
+      setMessage(result.error ?? 'That link could not be sent.');
+      setFix(result.fix ?? null);
+      setCode(result.code ?? null);
+      setStatus('error');
+    } catch {
+      setMessage('That link could not be sent. Check your connection and try again.');
+      setStatus('error');
+    } finally {
+      setResending(false);
     }
   }
 
@@ -125,6 +170,9 @@ export function LoginForm({ next = '/', initialMode = 'signin' }: LoginFormProps
   function switchMode(nextMode: Mode) {
     setMode(nextMode);
     setMessage('');
+    setFix(null);
+    setCode(null);
+    setUnconfirmedEmail(null);
     setStatus('idle');
   }
 
@@ -181,14 +229,31 @@ export function LoginForm({ next = '/', initialMode = 'signin' }: LoginFormProps
           />
 
           {message ? (
-            <p
+            <div
               role={status === 'error' ? 'alert' : 'status'}
               className={`text-sm ${
                 status === 'error' ? 'text-rose-deep' : 'text-sage-deep'
               }`}
             >
-              {message}
-            </p>
+              <p>{message}</p>
+              {fix ? <p className="mt-1 text-ink-soft">{fix}</p> : null}
+              {code ? (
+                <p className="mt-1 text-xs text-ink-faint">{errorRef(code)}</p>
+              ) : null}
+              {unconfirmedEmail ? (
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="lg"
+                  className="mt-3 w-full"
+                  disabled={resending}
+                  aria-busy={resending}
+                  onClick={resendConfirmation}
+                >
+                  {resending ? 'Sending…' : 'Resend confirmation email'}
+                </Button>
+              ) : null}
+            </div>
           ) : null}
 
           <Button
@@ -214,8 +279,9 @@ export function LoginForm({ next = '/', initialMode = 'signin' }: LoginFormProps
               <>Signing you in…</>
             ) : createState.requiresEmailVerification ? (
               <>
-                Check <strong>{createState.identifier}</strong> for a confirmation link. The account
-                cannot sign in until that email is verified.
+                Check <strong>{createState.identifier}</strong> for a confirmation link — look in
+                spam and promotions too. The account cannot sign in until that email is
+                confirmed; if the link never arrives, try signing in and use the resend button.
               </>
             ) : (
               <>

@@ -28,8 +28,12 @@ export async function GET(request: Request) {
     if (!error) {
       // A signup confirmation proves control of the real auth email. Mirror
       // that proof into contact matching; synthetic username emails are never
-      // contact identifiers.
-      if ((type === 'signup' || type === 'email') && hasAdminCredentials()) {
+      // contact identifiers. A magic link is the same proof by a different
+      // route — it's what a re-sent confirmation uses — so it counts too.
+      if (
+        (type === 'signup' || type === 'email' || type === 'magiclink') &&
+        hasAdminCredentials()
+      ) {
         const { data: { user } } = await supabase.auth.getUser();
         if (user?.email && !user.email.endsWith('@users.switchboard.local')) {
           await createAdminClient()
