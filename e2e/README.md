@@ -54,5 +54,11 @@ takes the whole suite down — and never at the rule. Twice now:
   with "expected enabled, received disabled". `startPlan()` now fills the
   context and asserts the gate by name where it's set.
 
+- **Sign-in rate limit.** Sign-in allows 8 attempts per identifier per 10
+  minutes. Nine journeys signing in as `e2ehost` through the form meant the
+  ninth got `SB-RATE-LIMIT` instead of a session. `login()` now drives the form
+  once per identifier and reuses the cookies, so the suite stops spending a
+  protection that belongs to real people.
+
 When you add a requirement to a flow these tests walk, add it to the fixture in
 the same change — and assert it where it can say what it is.

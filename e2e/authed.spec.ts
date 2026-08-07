@@ -1,4 +1,4 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type BrowserContext, type Page } from '@playwright/test';
 
 /**
  * Authenticated journeys. These need a running app pointed at a Supabase that
@@ -11,7 +11,38 @@ const DB = !!process.env.E2E_DB;
 const PASSWORD = process.env.E2E_TEST_PASSWORD ?? 'testpassword123';
 const TITLE = 'Coffee downtown, Game night, Saturday hike…';
 
+type Cookies = Awaited<ReturnType<BrowserContext['cookies']>>;
+
+/**
+ * Sign-in is rate-limited at 8 attempts per identifier per 10 minutes
+ * (`signin:<identifier>`, src/lib/actions/auth.ts) — a real protection this
+ * suite was walking straight into. Nine journeys sign in as e2ehost, so the
+ * ninth got SB-RATE-LIMIT instead of a session, and the tests were spending
+ * a user-facing budget on setup.
+ *
+ * The form is therefore driven once per identifier and the session cookies are
+ * reused for the rest of the run. "a seeded user can sign in" is still a real
+ * sign-in — it runs first and fills this cache — and every other journey starts
+ * already signed in, which is all any of them ever wanted.
+ */
+const sessionCookies = new Map<string, Cookies>();
+
 async function login(page: Page, identifier: string) {
+  const cached = sessionCookies.get(identifier);
+  if (cached) {
+    await page.context().addCookies(cached);
+    await page.goto('/');
+    // A cookie set the proxy won't accept lands us back on /welcome. Drop it
+    // and sign in properly rather than failing three steps later.
+    if (!page.url().includes('/welcome')) return;
+    sessionCookies.delete(identifier);
+  }
+
+  await signIn(page, identifier);
+  sessionCookies.set(identifier, await page.context().cookies());
+}
+
+async function signIn(page: Page, identifier: string) {
   await page.goto('/login');
   await page.getByPlaceholder('email or username').fill(identifier);
   await page.getByPlaceholder('Password', { exact: true }).fill(PASSWORD);
@@ -311,9 +342,16 @@ test.describe('authenticated surface', () => {
     // Tap the friend in "From your people" and ask them now, ahead of the line.
     await host.getByRole('button', { name: /Open E2E Guest/ }).click();
     await host.getByRole('button', { name: 'Send invite now' }).click();
-    await expect(host.getByText(/Invitation sent to E2E Guest/)).toBeVisible({
-      timeout: 15_000,
-    });
+    // The toast is the app's own account of what happened, and it auto-dismisses
+    // — so read it once it lands and assert on the captured text. A refusal
+    // ("…is already on this plan", "This plan is already full") then reports
+    // what the app said instead of "element not found".
+    const toasts = host.getByRole('status', { name: 'Notifications' });
+    await expect(toasts).not.toBeEmpty({ timeout: 15_000 });
+    const said = (await toasts.innerText()).replace(/\s+/g, ' ').trim();
+    expect(said, 'the app reported something else after "Send invite now"').toContain(
+      'Invitation sent to E2E Guest',
+    );
 
     // It is a real, live invite: the friend can answer it without any link
     // being sent to them.
