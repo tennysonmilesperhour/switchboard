@@ -108,17 +108,34 @@ also live in the proxy.
 6. **A rejected sign-in logged nothing at all**, which is why the original report
    could not be diagnosed from the logs. The reason code is now logged (never the
    identifier).
-7. **CI could not verify that sign-in works.** Both suites ran Playwright
-   against `next dev`, compiling routes on demand, so the 5s assertion default
-   was timing the compiler; `GET /welcome` takes 4.8s cold. Every authenticated
-   journey failed at once, main had been red for a week, and no login regression
-   would have been caught. The authenticated job now runs a production build.
+7. **CI could not verify that sign-in works.** Two independent causes, and the
+   first one masked the second:
+   - Both suites ran Playwright against `next dev`, compiling routes on demand,
+     so the 5s assertion default was timing the compiler (`GET /welcome` takes
+     4.8s cold). The authenticated job now runs a production build.
+   - **The E2E seed never accepted the current legal version.** `e2e/seed.mjs`
+     set `onboarded: true` but left `legal_terms_version` null, and `src/proxy.ts`
+     funnels any onboarded user whose accepted version isn't current to
+     `/legal-update` — which renders without the app shell. So every
+     authenticated journey landed on a page with no navigation and failed on a
+     missing element. Eight tests, one cause, none of them looking like it.
+     The seed now derives `LEGAL_VERSION` from `src/lib/legal.ts` rather than
+     copying it, so the next bump cannot silently do this again.
+
+   Main had been red since July 31 — the bump that introduced this — so no login
+   regression would have been caught in that window. Including this one.
+8. **Accepting updated terms could loop forever.** `acceptLatestTerms` used
+   `update` and never checked the write landed. The proxy sends every protected
+   route to `/legal-update` until that column matches, so an update matching zero
+   rows (no profile row) or filtered by RLS bounced the reader between the two
+   pages indefinitely while the form reported success each time. Now upserts and
+   reads the version back — the same fix as finding 3, for the same reason.
 
 ### Open decisions — not changed here
 
 These need a product or security call rather than a unilateral fix.
 
-8. **The per-account sign-in limit is a remotely triggerable lockout.**
+9. **The per-account sign-in limit is a remotely triggerable lockout.**
    `checkRateLimit('signin:<identifier>', 8, 10min)` is keyed only on the
    identifier and is consumed *before* credentials are checked. Anyone who knows
    a user's email can burn all 8 every 10 minutes and keep them out
@@ -127,15 +144,15 @@ These need a product or security call rather than a unilateral fix.
    *Recommendation:* add a per-IP bucket as the primary brute-force defence and
    loosen the per-account one. Raising the per-account limit alone trades one
    risk for the other; the two buckets are what resolve it.
-9. **Username sign-in silently breaks without service-role credentials.**
+10. **Username sign-in silently breaks without service-role credentials.**
    `resolveIdentifierEmails` resolves a handle to its real login email via the
    admin client. Without it, it falls back to the synthetic
    `<handle>@users.switchboard.local`, which is wrong for anyone who signed up
    with an email — so their username stops working. Production has the
    credentials; a misconfigured deployment fails silently.
-10. **Username-only accounts have no recovery path** (see §2 above). Consider
+11. **Username-only accounts have no recovery path** (see §2 above). Consider
     prompting for a recovery email during onboarding.
-11. **`/auth/confirm` drops `next` when a link fails**, so an expired link taken
+12. **`/auth/confirm` drops `next` when a link fails**, so an expired link taken
     from a deep link loses the destination. Cosmetic next to the rest.
 
 ## Guards (keep them green)
@@ -147,7 +164,10 @@ These need a product or security call rather than a unilateral fix.
 - `src/lib/errors.test.ts` — every reader-facing failure carries a code, and
   every reader-actionable code carries a real next step.
 - `e2e/authed.spec.ts` — the real journey: sign in, land inside the app. This is
-  the test that must never be allowed to sit red again.
+  the test that must never be allowed to sit red again. Its fixtures
+  (`e2e/seed.mjs`) derive `LEGAL_VERSION` from source, because a fixture that
+  drifts out of the proxy's funnels fails as eight unrelated-looking UI errors
+  rather than as "the fixture is stale".
 
 ## When you touch this
 

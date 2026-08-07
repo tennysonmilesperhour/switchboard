@@ -8,7 +8,40 @@
  *
  * Run:  node e2e/seed.mjs
  */
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { createClient } from '@supabase/supabase-js';
+
+/**
+ * The current legal version, read from source rather than copied.
+ *
+ * `src/proxy.ts` funnels any onboarded user whose accepted version isn't the
+ * current one to /legal-update, which renders without the app shell. A fixture
+ * that omits this doesn't fail loudly — it strands every authenticated journey
+ * on a page with no navigation, and the suite reports eight unrelated-looking
+ * "element not found" failures. That is exactly what happened when the version
+ * was last bumped: the authenticated tests went red and stayed red.
+ *
+ * Parsed, not hardcoded, so bumping LEGAL_VERSION can never silently do it
+ * again.
+ */
+const LEGAL_VERSION = (() => {
+  const legalSource = join(
+    dirname(fileURLToPath(import.meta.url)),
+    '..',
+    'src',
+    'lib',
+    'legal.ts',
+  );
+  const match = readFileSync(legalSource, 'utf8').match(
+    /LEGAL_VERSION\s*=\s*'([^']+)'/,
+  );
+  if (!match) {
+    throw new Error(`Could not read LEGAL_VERSION from ${legalSource}`);
+  }
+  return match[1];
+})();
 
 const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -76,6 +109,11 @@ async function upsertUser({ username, name }) {
       handle: username,
       onboarded: true,
       discoverable: true,
+      // Without these the proxy sends the user to /legal-update instead of the
+      // app, and every journey below fails on a missing app shell.
+      legal_terms_version: LEGAL_VERSION,
+      legal_terms_accepted_at: new Date().toISOString(),
+      community_covenant_accepted_at: new Date().toISOString(),
     },
     { onConflict: 'id' },
   );

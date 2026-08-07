@@ -41,14 +41,25 @@ export async function acceptLatestTerms(formData: FormData): Promise<void> {
     redirect(`/legal-update?error=agreement&next=${encodeURIComponent(nextPath)}`);
   }
 
-  const { error } = await supabase
+  // Upsert, and read the version back, because a silent no-op here is a loop:
+  // the proxy sends every protected route to /legal-update until this column
+  // matches, so an update that matches zero rows (no profile row yet) or is
+  // filtered by RLS bounces the reader between the two forever, with the form
+  // reporting success each time. Same failure the onboarding save had.
+  const writer = hasAdminCredentials() ? createAdminClient() : supabase;
+  const { data: saved, error } = await writer
     .from('profiles')
-    .update({
-      legal_terms_version: LEGAL_VERSION,
-      legal_terms_accepted_at: new Date().toISOString(),
-    })
-    .eq('id', user.id);
-  if (error) {
+    .upsert(
+      {
+        id: user.id,
+        legal_terms_version: LEGAL_VERSION,
+        legal_terms_accepted_at: new Date().toISOString(),
+      },
+      { onConflict: 'id' },
+    )
+    .select('legal_terms_version')
+    .maybeSingle<{ legal_terms_version: string | null }>();
+  if (error || saved?.legal_terms_version !== LEGAL_VERSION) {
     redirect(`/legal-update?error=save&next=${encodeURIComponent(nextPath)}`);
   }
   redirect(nextPath);
