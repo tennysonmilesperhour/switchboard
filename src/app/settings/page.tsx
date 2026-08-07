@@ -340,6 +340,18 @@ export default async function SettingsPage({
 
           <section>
             <SectionHeader
+              title="Everything Switchboard does"
+              hint="Every feature and where to find it"
+            />
+            <Card>
+              <Link href="/features" className="font-medium text-terracotta">
+                Open the feature index
+              </Link>
+            </Card>
+          </section>
+
+          <section>
+            <SectionHeader
               title="Sabbatical"
               hint="Pause signals, radar, and matchmaking for a while"
             />
