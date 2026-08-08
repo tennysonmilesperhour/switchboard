@@ -262,8 +262,16 @@ export const FEATURE_GROUPS: readonly FeatureGroup[] = [
         id: 'add-someone',
         title: 'Add someone',
         blurb:
-          'Find people by handle, email, or phone — or pull from your contacts, with a typed fallback when the browser won’t share them.',
+          'Connect by @handle, or straight from your contacts. Email and phone work too, but only reach someone who verified them — a handle always finds them.',
         where: 'People → Add someone',
+        href: '/people',
+      },
+      {
+        id: 'invite-to-switchboard',
+        title: 'Invite someone who isn’t here yet',
+        blurb:
+          'Send a friend the app itself — just a link, with no plan attached and nothing to RSVP to. Contacts who aren’t on Switchboard get their own invite button.',
+        where: 'People → Not on Switchboard yet?',
         href: '/people',
       },
       {

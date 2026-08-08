@@ -260,7 +260,10 @@ export function PeopleClient({
         tone: 'ok',
         text:
           matchCount === 0
-            ? 'No Switchboard accounts matched those contacts yet.'
+            ? // Same caveat as a single lookup: a contact only matches on an
+              // email or phone its owner verified, so "no matches" is not the
+              // same as "none of these people are here".
+              'No contacts matched — that only finds people who verified that email or phone. Add them by @handle, or invite them below.'
             : `${matchCount} ${matchCount === 1 ? 'contact is' : 'contacts are'} on Switchboard.`,
       });
     } catch (error) {

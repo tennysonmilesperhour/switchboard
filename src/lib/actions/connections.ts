@@ -124,7 +124,19 @@ export async function sendConnectionRequest(identifier: string): Promise<Connect
   const cleaned = identifier.trim();
   if (!cleaned) return { ok: false, error: 'Enter a handle, email, or phone number.' };
   const target = await resolveProfile(supabase, cleaned);
-  if (!target) return { ok: false, error: 'No Switchboard account matched that handle, email, or phone.' };
+  if (!target) {
+    // Not "no such person". A handle always matches; an email or phone only
+    // matches once its owner has verified it (resolve_profile_contact), which
+    // most accounts never get around to. "No account matched" full stop reads
+    // as "your friend isn't on Switchboard" — and the invite card directly
+    // below then confirms it — when they may be one search away under their
+    // handle. Name both routes out, in the order the reader can act on them.
+    return {
+      ok: false,
+      error:
+        'No account matched. An email or phone only finds someone who verified it — ask for their @handle, or send them the app just below.',
+    };
+  }
   if (target.id === user.id) return { ok: false, error: 'That is you.' };
 
   const { error } = await supabase.from('connections').insert({
