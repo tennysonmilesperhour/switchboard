@@ -98,7 +98,7 @@ export function ShareLinkRsvp({ shareToken, defaultName }: ShareLinkRsvpProps) {
         <p className="font-bold text-gold-deep">Almost there &mdash; guardian approval needed</p>
         <p className="text-sm text-ink-soft mt-2">
           This plan requires a parent or guardian to approve attendance.
-          Enter their email and we'll send them a link.
+          Enter their email and we&rsquo;ll send them a link.
         </p>
         <label className="block mt-4">
           <span className="block text-sm font-bold text-ink mb-1">Guardian&rsquo;s email</span>
