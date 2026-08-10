@@ -169,6 +169,11 @@ const REGISTRY = {
     fix: 'Try again — if it keeps failing, the host can still add you by hand.',
     actor: 'reader',
   },
+  'SB-RSVP-APPROVAL': {
+    message: 'This RSVP is waiting on a parent or guardian.',
+    fix: 'Ask the guardian to check their email for the approval link.',
+    actor: 'reader',
+  },
 
   // ————————————————————————— identity & permission —————————————————————————
   'SB-AUTH-REQUIRED': {
@@ -416,6 +421,9 @@ const AREA_CODES: Record<string, ErrorCode> = {
   'guest-rsvp.decline-note': 'SB-RSVP-SAVE',
   'invite-decline.message': 'SB-RSVP-SAVE',
   'invite-claim.token': 'SB-RSVP-SAVE',
+  'parental-approval.create': 'SB-RSVP-SAVE',
+  'parental-approval.resolve': 'SB-RSVP-SAVE',
+  'parental-approval.email': 'SB-RSVP-SAVE',
 
   // Profile & settings
   'onboarding': 'SB-PROFILE-SAVE',

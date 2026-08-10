@@ -137,6 +137,13 @@ export const FEATURE_GROUPS: readonly FeatureGroup[] = [
         where: 'Plan wizard → Visibility (on by default)',
       },
       {
+        id: 'parental-approval',
+        title: 'Parental approval',
+        blurb:
+          'Require a parent or guardian to approve before someone can RSVP yes — for plans that need an adult in the loop.',
+        where: 'Plan wizard → Visibility',
+      },
+      {
         id: 'cover-image',
         title: 'Cover image',
         blurb:

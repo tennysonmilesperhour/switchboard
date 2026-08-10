@@ -85,6 +85,8 @@ export interface CreateEventInput {
     kind?: 'text' | 'choice';
     options?: string[];
   }>;
+  /** Require guardian/parental approval for every RSVP (youth events). */
+  parentalApproval?: boolean;
   /** Standing ritual this plan fulfills, if any. */
   ritualId?: string | null;
   /** Already in host-preferred order. */
@@ -253,7 +255,7 @@ export async function createEvent(input: CreateEventInput): Promise<CreateEventR
   const coverUrl = safeHttpUrl(input.coverUrl);
 
   const { data: eventId, error } = await supabase.rpc('create_event_atomic', {
-    p_input: { ...input, title, wishlistUrl, coverUrl, invitees },
+    p_input: { ...input, title, wishlistUrl, coverUrl, invitees, parentalApproval: input.parentalApproval ?? false },
   });
   if (error || typeof eventId !== 'string') {
     return reportAndFail(
