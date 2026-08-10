@@ -8,6 +8,7 @@ import { Icon } from '@/components/ui/Icon';
 import { PlanCard, planColor } from '@/components/ui/PlanCard';
 import { SignalBar } from '@/components/signals/SignalBar';
 import { GettingStarted } from '@/components/home/GettingStarted';
+import { Greeting } from '@/components/home/Greeting';
 import {
   EnergyPrompt,
   MatchmakerCard,
@@ -17,6 +18,7 @@ import {
 } from '@/components/home/HomeCards';
 import { getReconnectionSuggestions } from '@/lib/server/radar';
 import { formatDateTime, formatRelative } from '@/lib/format';
+import { greetingFor } from '@/lib/greeting';
 import type { SwitchboardEvent } from '@/lib/types';
 
 export default async function HomePage() {
@@ -28,7 +30,7 @@ export default async function HomePage() {
 
   const { data: profile } = await supabase
     .from('profiles')
-    .select('display_name, onboarded')
+    .select('display_name, onboarded, timezone')
     .eq('id', user.id)
     .single();
   if (!profile?.onboarded) redirect('/onboarding');
@@ -159,16 +161,16 @@ export default async function HomePage() {
   const energyPrompts = (recentPast ?? []).filter((event) => !loggedIds.has(event.id));
 
   const firstName = profile.display_name.split(' ')[0];
-  const hour = new Date().getHours();
-  const greeting = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
+  // Timed by the reader's clock, never the server's — `new Date().getHours()`
+  // here reads UTC on Vercel and told a 9am Pacific tester "Good afternoon".
+  // The stored zone renders first; <Greeting> corrects it from the browser.
+  const greeting = greetingFor(new Date(), profile.timezone);
 
   return (
     <AppShell>
       <div className="space-y-8">
         <div>
-          <h1 className="text-3xl font-extrabold tracking-tight text-ink">
-            {greeting}, {firstName}.
-          </h1>
+          <Greeting name={firstName} initial={greeting} />
           <p className="text-sm text-ink-faint mt-1">
             Feeling social? Let people know.
           </p>
