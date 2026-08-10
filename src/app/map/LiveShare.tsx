@@ -5,7 +5,7 @@ import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { useToast } from '@/components/ui/Toast';
 import { formatRelative } from '@/lib/format';
-import { coarsenCoordinate, formatDistance, type MapMarker, type MapPoint } from '@/lib/geo';
+import { coarsenCoordinate, type MapMarker, type MapPoint } from '@/lib/geo';
 import {
   getNearbyPeople,
   refreshLocationPoint,
@@ -43,16 +43,20 @@ function geoErrorMessage(error: GeolocationPositionError): string {
   }
 }
 
+/**
+ * How far away someone is now comes from the directory under the map, measured
+ * against the coarsened point we were given — deliberately not from the RPC's
+ * `distance_m`, which is computed between the two *exact* positions. Showing an
+ * exact radius around a ~110 m point would let a viewer refine the very fix the
+ * coarsening exists to blur, and it would disagree with the number every other
+ * layer shows. One distance, from one source.
+ */
 function peopleToMarkers(people: NearbyPerson[]): MapMarker[] {
   return people.map((person) => ({
     id: person.user_id,
     layer: 'live' as const,
     label: person.emoji ? `${person.emoji} ${person.display_name}` : person.display_name,
-    sub: [
-      formatDistance(person.distance_m),
-      person.headline ?? undefined,
-      person.interests.slice(0, 3).join(' · ') || undefined,
-    ]
+    sub: [person.headline ?? undefined, person.interests.slice(0, 3).join(' · ') || undefined]
       .filter(Boolean)
       .join(' · '),
     lat: person.latitude,
@@ -72,10 +76,16 @@ export function LiveShare({
   mySharing,
   onSelfChange,
   onNearbyChange,
+  onShareStart,
 }: {
   mySharing: LiveLocation | null;
+  /** Where the viewer's own pin is now — including every position tick. */
   onSelfChange: (point: MapPoint | null) => void;
   onNearbyChange: (markers: MapMarker[]) => void;
+  /** Fired once, when the viewer turns sharing on here. Separate from
+   *  `onSelfChange` so the map can move for the deliberate act and stay put for
+   *  the position updates that follow. */
+  onShareStart: (point: MapPoint) => void;
 }) {
   const toast = useToast();
   const [supported, setSupported] = useState(true);
@@ -199,6 +209,7 @@ export function LiveShare({
         setVisibility(nextVisibility);
         setExpiresAt(result.expiresAt ?? null);
         onSelfChange(point);
+        onShareStart(point);
         startWatch();
         startPoll();
       },

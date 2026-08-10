@@ -59,32 +59,32 @@ select set_config(
   '{"sub":"00000000-0000-0000-0000-00000000c102","role":"authenticated"}',
   true
 );
-select is(
-  (with changed as (
-    update public.board_posts
-       set title = 'Moderator rewrite'
-     where id = '00000000-0000-0000-0000-00000000d101'
-     returning id
-  ) select count(*)::int from changed),
-  0,
-  'board moderator cannot rewrite another member post'
-);
+-- The data-modifying CTE has to sit at the top level of the statement:
+-- Postgres rejects one nested inside a scalar subquery ("WITH clause containing
+-- a data-modifying statement must be at the top level"), which aborts the whole
+-- file before the plan is met rather than failing a single assertion.
+with changed as (
+  update public.board_posts
+     set title = 'Moderator rewrite'
+   where id = '00000000-0000-0000-0000-00000000d101'
+  returning id
+)
+select is(count(*)::int, 0, 'board moderator cannot rewrite another member post')
+from changed;
 
 select set_config(
   'request.jwt.claims',
   '{"sub":"00000000-0000-0000-0000-00000000c103","role":"authenticated"}',
   true
 );
-select is(
-  (with changed as (
-    update public.board_posts
-       set title = 'Member rewrite'
-     where id = '00000000-0000-0000-0000-00000000d101'
-     returning id
-  ) select count(*)::int from changed),
-  0,
-  'ordinary board member cannot rewrite another member post'
-);
+with changed as (
+  update public.board_posts
+     set title = 'Member rewrite'
+   where id = '00000000-0000-0000-0000-00000000d101'
+  returning id
+)
+select is(count(*)::int, 0, 'ordinary board member cannot rewrite another member post')
+from changed;
 
 select * from finish();
 rollback;

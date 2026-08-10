@@ -14,7 +14,15 @@ export const metadata: Metadata = { title: 'Map' };
  * (moments). Only rows carrying valid coordinates are plotted; the "Locate my
  * plans" control (see MapExplorer) fills those in from existing address text.
  */
-export default async function MapPage() {
+export default async function MapPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ focus?: string }>;
+}) {
+  // `?focus=<layer>:<id>` opens the map already centred on one pin — how the
+  // zone, plan, and place surfaces answer "where is this?" without each of them
+  // growing a map of its own.
+  const { focus } = await searchParams;
   const supabase = await createClient();
   const {
     data: { user },
@@ -89,7 +97,7 @@ export default async function MapPage() {
 
   return (
     <AppShell title="Map">
-      <MapExplorer markers={markers} mySharing={mySharing} />
+      <MapExplorer markers={markers} mySharing={mySharing} initialFocus={focus ?? null} />
     </AppShell>
   );
 }

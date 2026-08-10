@@ -61,16 +61,22 @@ select set_config('request.jwt.claims',
 -- The invitee has no UPDATE path on invites: a direct write is a zero-row
 -- no-op. (The app persists the note through the admin client, re-scoped to
 -- the caller's own just-declined row.)
+-- The data-modifying CTE has to sit at the top level of the statement:
+-- Postgres rejects one nested inside a scalar subquery ("WITH clause containing
+-- a data-modifying statement must be at the top level"), which aborts the whole
+-- file before the plan is met rather than failing a single assertion.
+with changed as (
+  update public.invites
+     set decline_message = 'writing straight to the table'
+   where id = '00000000-0000-0000-0000-0000000a0201'
+  returning id
+)
 select is(
-  (with changed as (
-    update public.invites
-       set decline_message = 'writing straight to the table'
-     where id = '00000000-0000-0000-0000-0000000a0201'
-     returning id
-  ) select count(*)::int from changed),
+  count(*)::int,
   0,
   'invitee cannot update their invite row directly (no invitee UPDATE policy)'
-);
+)
+from changed;
 
 -- ————————————————————————— board responses —————————————————————————
 select set_config('request.jwt.claims',
@@ -134,16 +140,14 @@ select is(
 
 select set_config('request.jwt.claims',
   '{"sub":"00000000-0000-0000-0000-00000000f203","role":"authenticated"}', true);
-select is(
-  (with removed as (
-    delete from public.board_post_responses
-     where post_id = '00000000-0000-0000-0000-00000000d201'
-       and responder_id = '00000000-0000-0000-0000-00000000f203'
-     returning post_id
-  ) select count(*)::int from removed),
-  1,
-  'a responder can withdraw their own response'
-);
+with removed as (
+  delete from public.board_post_responses
+   where post_id = '00000000-0000-0000-0000-00000000d201'
+     and responder_id = '00000000-0000-0000-0000-00000000f203'
+  returning post_id
+)
+select is(count(*)::int, 1, 'a responder can withdraw their own response')
+from removed;
 
 -- ————————————————————————— constraint: note length —————————————————————————
 reset role;

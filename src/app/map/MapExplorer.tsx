@@ -1,11 +1,14 @@
 'use client';
 
-import { useCallback, useMemo, useState, useTransition } from 'react';
+import { useCallback, useMemo, useRef, useState, useTransition } from 'react';
 import dynamic from 'next/dynamic';
 import { useToast } from '@/components/ui/Toast';
 import { locateMyPlaces } from '@/lib/actions/map';
 import type { MapLayerKey, MapMarker, MapPoint } from '@/lib/geo';
+import { buildDirectory, LAYER_META, MAP_LAYERS, markerKey } from '@/lib/map-directory';
 import type { LiveLocation } from '@/lib/types';
+import type { MapFocus } from './LeafletCanvas';
+import { MapDirectory } from './MapDirectory';
 import { LiveShare } from './LiveShare';
 
 // The Leaflet canvas touches `window`, so it must load client-only. `ssr: false`
@@ -20,13 +23,6 @@ const LeafletCanvas = dynamic(
   },
 );
 
-const LAYERS: { key: MapLayerKey; label: string; emoji: string }[] = [
-  { key: 'live', label: 'Live', emoji: '🟢' },
-  { key: 'plans', label: 'Plans', emoji: '📅' },
-  { key: 'zones', label: 'Zones', emoji: '✨' },
-  { key: 'places', label: 'Shared places', emoji: '📍' },
-];
-
 // `you` is never a toggle (you always see your own pin while sharing); it just
 // needs a default so the visibility filter lets it through.
 const ALL_ON: Record<MapLayerKey, boolean> = {
@@ -37,19 +33,36 @@ const ALL_ON: Record<MapLayerKey, boolean> = {
   you: true,
 };
 
-/** Layer toggles + the geographic canvas + live location sharing. */
+const CONTROL_CLASS =
+  'shrink-0 rounded-pill border border-line bg-card px-3 py-1.5 text-xs font-bold text-ink-soft transition-colors hover:border-terracotta hover:text-terracotta-deep focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-terracotta disabled:opacity-60';
+
+/** Layer toggles + the geographic canvas + the directory + live location sharing. */
 export function MapExplorer({
   markers,
   mySharing,
+  initialFocus,
 }: {
   markers: MapMarker[];
   mySharing: LiveLocation | null;
+  /** A `<layer>:<id>` key from `/map?focus=…`, so another surface can send the
+   *  reader to a specific pin rather than to the map in general. */
+  initialFocus?: string | null;
 }) {
   const [enabled, setEnabled] = useState<Record<MapLayerKey, boolean>>(ALL_ON);
   const [liveMarkers, setLiveMarkers] = useState<MapMarker[]>([]);
   const [selfPoint, setSelfPoint] = useState<MapPoint | null>(
     mySharing ? { lat: mySharing.latitude, lng: mySharing.longitude } : null,
   );
+  // Deliberate camera moves. `focus` flies to one pin, `fitNonce` re-frames
+  // everything; both carry a counter so asking twice still moves the map.
+  const [focus, setFocus] = useState<MapFocus | null>(() => {
+    const hit = initialFocus
+      ? markers.find((marker) => markerKey(marker) === initialFocus)
+      : undefined;
+    return hit ? { markerId: hit.id, lat: hit.lat, lng: hit.lng, nonce: 1 } : null;
+  });
+  const [fitNonce, setFitNonce] = useState(0);
+  const focusSeq = useRef(1);
   const [pending, startTransition] = useTransition();
   const toast = useToast();
 
@@ -89,12 +102,36 @@ export function MapExplorer({
     [allMarkers, enabled],
   );
 
+  // Distances are measured from the viewer's own live point, so they only appear
+  // while they're sharing — the one moment the app knows where they are.
+  const sections = useMemo(() => buildDirectory(visible, selfPoint), [visible, selfPoint]);
+  const emptyLayers = useMemo(
+    () => MAP_LAYERS.filter((key) => enabled[key] && counts[key] === 0),
+    [enabled, counts],
+  );
+
   function toggle(key: MapLayerKey) {
     setEnabled((prev) => ({ ...prev, [key]: !prev[key] }));
   }
 
+  const focusOn = useCallback((id: string, point: MapPoint) => {
+    focusSeq.current += 1;
+    setFocus({ markerId: id, lat: point.lat, lng: point.lng, nonce: focusSeq.current });
+  }, []);
+
+  const showMarker = useCallback(
+    (marker: MapMarker) => focusOn(marker.id, { lat: marker.lat, lng: marker.lng }),
+    [focusOn],
+  );
+
   const handleNearby = useCallback((next: MapMarker[]) => setLiveMarkers(next), []);
   const handleSelf = useCallback((point: MapPoint | null) => setSelfPoint(point), []);
+  // Turning sharing on is a request to be shown where you are; a position tick
+  // from the watch that follows is not, so only this moves the map.
+  const handleShareStart = useCallback(
+    (point: MapPoint) => focusOn('self', point),
+    [focusOn],
+  );
 
   function locate() {
     startTransition(async () => {
@@ -121,42 +158,57 @@ export function MapExplorer({
     <div className="space-y-3">
       <p className="-mt-1 text-sm leading-relaxed text-ink-soft">
         Your plans, zones, and shared places on one map — plus who’s sharing their
-        location live right now. Tap a layer to show or hide it.
+        location live right now. Tap a layer to show or hide it, and tap anything
+        in the list below the map to fly straight to it.
       </p>
 
       <LiveShare
         mySharing={mySharing}
         onNearbyChange={handleNearby}
         onSelfChange={handleSelf}
+        onShareStart={handleShareStart}
       />
 
       <div className="flex flex-wrap gap-2" role="group" aria-label="Map layers">
-        {LAYERS.map((layer) => (
+        {MAP_LAYERS.map((key) => (
           <button
-            key={layer.key}
+            key={key}
             type="button"
-            onClick={() => toggle(layer.key)}
-            aria-pressed={enabled[layer.key]}
+            onClick={() => toggle(key)}
+            aria-pressed={enabled[key]}
             className={`inline-flex items-center gap-1.5 rounded-pill border px-3 py-1.5 text-xs font-bold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-terracotta ${
-              enabled[layer.key]
+              enabled[key]
                 ? 'border-terracotta bg-terracotta-soft text-terracotta-deep'
                 : 'border-line bg-card text-ink-faint hover:text-ink-soft'
             }`}
           >
-            <span aria-hidden>{layer.emoji}</span>
-            {layer.label}
-            <span className="tabular-nums opacity-70">{counts[layer.key]}</span>
+            <span aria-hidden>{LAYER_META[key].emoji}</span>
+            {LAYER_META[key].label}
+            <span className="tabular-nums opacity-70">{counts[key]}</span>
           </button>
         ))}
       </div>
 
-      <LeafletCanvas markers={visible} center={selfPoint} />
+      <LeafletCanvas markers={visible} focus={focus} fitNonce={fitNonce} />
 
-      <div className="flex items-center justify-between gap-3">
-        <p className="text-xs leading-relaxed text-ink-faint">
-          Missing something? “Locate my plans” places the ones that already have
-          an address.
-        </p>
+      <div className="flex flex-wrap items-center gap-2">
+        <button
+          type="button"
+          onClick={() => setFitNonce((n) => n + 1)}
+          disabled={visible.length === 0}
+          className={CONTROL_CLASS}
+        >
+          Fit everything showing
+        </button>
+        {selfPoint && (
+          <button
+            type="button"
+            onClick={() => focusOn('self', selfPoint)}
+            className={CONTROL_CLASS}
+          >
+            Center on me
+          </button>
+        )}
         <button
           type="button"
           onClick={locate}
@@ -166,6 +218,19 @@ export function MapExplorer({
           {pending ? 'Locating…' : 'Locate my plans'}
         </button>
       </div>
+
+      <MapDirectory
+        sections={sections}
+        emptyLayers={emptyLayers}
+        sharing={Boolean(selfPoint)}
+        focusedId={focus?.markerId ?? null}
+        onShow={showMarker}
+      />
+
+      <p className="text-xs leading-relaxed text-ink-faint">
+        “Locate my plans” places the ones that already have an address. Distances
+        are measured from your own pin, so they appear once you’re sharing.
+      </p>
     </div>
   );
 }
