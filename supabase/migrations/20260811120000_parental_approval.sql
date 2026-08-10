@@ -122,9 +122,12 @@ end $$;
 revoke all on function public.resolve_parental_approval(text, boolean) from public, anon;
 grant execute on function public.resolve_parental_approval(text, boolean) to anon, authenticated;
 
--- 4. Update create_event_atomic to persist the new flag -----------------------
+-- 4. Update private.create_event_atomic to persist the new flag ---------------
+-- The public wrapper (security invoker) delegates to private; only the private
+-- body needs the new column. Copied from 20260717220000 with parental_approval
+-- added to the INSERT.
 
-create or replace function public.create_event_atomic(p_input jsonb)
+create or replace function private.create_event_atomic(p_input jsonb)
 returns uuid
 language plpgsql
 security definer
@@ -194,14 +197,37 @@ begin
     coalesce((p_input->>'parentalApproval')::boolean, false)
   );
 
-  insert into public.event_questions (event_id, prompt, required, position)
+  insert into public.event_questions (event_id, prompt, required, position, kind, options)
   select
     v_event,
     left(btrim(q.value->>'prompt'), 240),
     coalesce((q.value->>'required')::boolean, false),
-    q.ordinality - 1
+    q.ordinality - 1,
+    case
+      when q.value->>'kind' = 'choice' and cardinality(opts.arr) >= 2
+        then 'choice'
+      else 'text'
+    end,
+    case
+      when q.value->>'kind' = 'choice' and cardinality(opts.arr) >= 2
+        then opts.arr[1:10]
+      else '{}'::text[]
+    end
   from jsonb_array_elements(coalesce(p_input->'questions', '[]'::jsonb))
     with ordinality as q(value, ordinality)
+  cross join lateral (
+    select coalesce(
+      array_agg(left(btrim(o.opt), 120) order by o.ord),
+      '{}'::text[]
+    ) as arr
+    from jsonb_array_elements_text(
+      case when jsonb_typeof(q.value->'options') = 'array'
+        then q.value->'options'
+        else '[]'::jsonb
+      end
+    ) with ordinality as o(opt, ord)
+    where char_length(btrim(o.opt)) > 0
+  ) opts
   where char_length(btrim(q.value->>'prompt')) > 0;
 
   insert into public.invites (
@@ -258,6 +284,3 @@ begin
 
   return v_event;
 end $$;
-
-revoke all on function public.create_event_atomic(jsonb) from public, anon;
-grant execute on function public.create_event_atomic(jsonb) to authenticated;

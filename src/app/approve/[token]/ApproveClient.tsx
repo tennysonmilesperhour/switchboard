@@ -28,7 +28,7 @@ export function ApproveClient({ token, eventTitle, guardianName }: ApproveClient
         <div className="rounded-card bg-sage-soft p-6">
           <p className="text-lg font-bold text-sage-deep">Approved</p>
           <p className="text-sm text-ink-soft mt-2">
-            You've approved attendance for <strong>{eventTitle}</strong>. The host has been notified.
+            You&rsquo;ve approved attendance for <strong>{eventTitle}</strong>. The host has been notified.
           </p>
         </div>
       </div>
@@ -41,7 +41,7 @@ export function ApproveClient({ token, eventTitle, guardianName }: ApproveClient
         <div className="rounded-card bg-cream p-6">
           <p className="text-lg font-bold">Denied</p>
           <p className="text-sm text-ink-soft mt-2">
-            You've denied attendance for <strong>{eventTitle}</strong>. The host has been notified.
+            You&rsquo;ve denied attendance for <strong>{eventTitle}</strong>. The host has been notified.
           </p>
         </div>
       </div>
@@ -75,7 +75,7 @@ export function ApproveClient({ token, eventTitle, guardianName }: ApproveClient
       <div className="rounded-card bg-card p-6 shadow-lift text-center">
         <p className="text-lg font-bold">Guardian Approval</p>
         <p className="text-sm text-ink-soft mt-2">
-          {guardianName ? `Hi ${guardianName}, s` : 'S'}omeone has RSVP'd to{' '}
+          {guardianName ? `Hi ${guardianName}, s` : 'S'}omeone has RSVP&rsquo;d to{' '}
           <strong>{eventTitle}</strong> and the host has asked that a parent or
           guardian approve their attendance.
         </p>

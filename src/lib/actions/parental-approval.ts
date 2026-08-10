@@ -1,7 +1,6 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
-import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { requireUser } from '@/lib/server/require-user';
 import { isEventManager } from '@/lib/server/authz';
@@ -154,7 +153,6 @@ export async function resolveParentalApproval(
   }
 
   if (outcome === 'approved') {
-    const inviteStatus = (row as Record<string, unknown>).invite_status as string | undefined;
     const eventId = await eventIdForApprovalToken(admin, token);
     if (eventId) {
       await advanceEventCascade(eventId);

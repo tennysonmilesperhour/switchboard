@@ -28,7 +28,7 @@ export default async function ApprovalPage({
   if (!approval) {
     return (
       <div className="mx-auto max-w-md px-4 py-16 text-center">
-        <p className="text-lg font-bold">This link isn't valid</p>
+        <p className="text-lg font-bold">This link isn&rsquo;t valid</p>
       </div>
     );
   }
