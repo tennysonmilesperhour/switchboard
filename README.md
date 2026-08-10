@@ -41,8 +41,10 @@ npm run seed:test-profiles
 ```
 
 To populate every public-discovery surface (map, zones, moments, discover,
-people, boards, mutual) with mock data geo-tagged around Salt Lake City and
-wired to your own account so RLS lets you see it:
+people, boards, mutual, matchmaker) with mock data geo-tagged around Salt Lake
+City and wired to your own account so RLS lets you see it — 20 mock people, 9
+anchored zones with people checked into them, plans across the valley, and live
+location sharing:
 
 ```bash
 # Targets the project your account lives in — confirm with SEED_ALLOW_NONLOCAL=1.
@@ -51,6 +53,15 @@ SEED_ALLOW_NONLOCAL=1 SEED_VIEWER_EMAIL=you@example.com npm run seed:discovery-d
 
 The viewer must have signed into the app once (so the profile exists). Re-runs
 are idempotent — the script owns only its fixed set of demo rows.
+
+Live presence is time-boxed the same way the product is (`SEED_LIVE_HOURS`, 1–8,
+default 8), so **re-run the script to bring the Live layer back** once it has
+expired. Two RLS facts explain the map's layer counts, and neither is a bug:
+seeing other sharers is mutual (the seed shares on your behalf so the layer
+isn't empty), and **Shared places plots your own check-ins only** — the app
+allows one open check-in at a time, so that layer is 1. Everyone else's
+check-ins show up as zone presence and as anonymized "someone's here too"
+candidates instead.
 
 ## Architecture notes
 

@@ -5,6 +5,7 @@ import { createClient } from '@/lib/supabase/server';
 import { AppShell } from '@/components/shell/AppShell';
 import { Card, SectionHeader } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
+import { toMapPoint } from '@/lib/geo';
 import { createZone } from '@/lib/actions/zones';
 import { EXPERIENCE_PRESETS } from '@/lib/types';
 import { ZoneLocationField } from './ZoneLocationField';
@@ -31,7 +32,7 @@ export default async function ZonesPage({
 
   const { data: zones } = await supabase
     .from('zones')
-    .select('id, slug, name, description, organizer_id')
+    .select('id, slug, name, description, organizer_id, latitude, longitude')
     .order('created_at', { ascending: false })
     .limit(20);
 
@@ -69,6 +70,14 @@ export default async function ZonesPage({
                     {zone.description && (
                       <p className="text-sm text-ink-soft mt-0.5">{zone.description}</p>
                     )}
+                    {/* Whether a zone is anchored decides whether it can ever be
+                        found on the map, so say it here rather than leaving the
+                        map's Zones count to be reverse-engineered. */}
+                    <p className="text-xs text-ink-faint mt-1">
+                      {toMapPoint(zone.latitude, zone.longitude)
+                        ? '📍 On the map'
+                        : 'No location yet — not on the map'}
+                    </p>
                   </Card>
                 </Link>
               ))}

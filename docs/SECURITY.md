@@ -206,6 +206,8 @@ integrations a deployment has wired up is reconnaissance, not public data.
   functions and durable rate limiting.
 - `supabase/tests/live_location.test.sql` — live-location owner-only RLS and the
   `find_nearby_people` mutual/block/visibility/radius/coarsening invariants.
+- `supabase/tests/zone_presence.test.sql` — `moments` stays owner-only and
+  `zone_presence` counts only other, live, unblocked people in its own zone.
 
 ## Media privacy (gated content)
 
@@ -289,6 +291,33 @@ security-definer function that encodes the privacy contract.
 Litmus test: *can a caller who is not sharing — or is blocked, or outside the
 target's visibility scope — learn another user's location, or read a precise
 coordinate straight off the table?*
+
+## Zone presence (a count, and only a count)
+
+`moments` is owner-only under RLS, so the zone page could never truthfully say
+how many people were in a zone — it was counting the reader's own check-ins and
+calling them "people". `zone_presence` (`20260810120000_zone_presence.sql`) is
+the one thing that crosses that boundary, and it is fenced the same way as
+`find_nearby_people`:
+
+- **A `SECURITY DEFINER` body in `private`, behind a thin public invoker
+  wrapper**, `revoke`d from `public`/`anon` on both sides.
+- **It returns an integer.** No id, name, headline, coordinate, or experience
+  list — nothing that says *who*. Identities at a place still need mutual
+  exposure through `find_shared_moments`, which is unchanged.
+- **It excludes the caller**, so a zone can never describe you to yourself in the
+  third person, and **honours `are_blocked`** relative to whoever is asking.
+- **Avoids are deliberately not filtered.** Give Space is "warn, never remove";
+  silently shrinking a count is removal, and the surface returns an integer so it
+  cannot annotate an avoid either (see the invariant below).
+
+The exposure this accepts: checking into a world-readable zone
+(`zones_select using (true)`) tells everyone else in that zone that *someone* is
+there. That is the entire purpose of a serendipity zone, and it is opt-in per
+check-in. Covered by `supabase/tests/zone_presence.test.sql`.
+
+Litmus test: *does a zone surface ever return something that identifies who is
+there, to someone who has not themselves checked in?*
 
 ## Known residual risks / follow-ups
 
