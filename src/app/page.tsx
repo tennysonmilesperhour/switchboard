@@ -54,7 +54,7 @@ export default async function HomePage() {
     supabase.from('circles').select('id, name, emoji').eq('owner_id', user.id),
     supabase
       .from('availability_signals')
-      .select('id, emoji, label, expires_at, user_id, profile:profiles(display_name)')
+      .select('id, emoji, label, expires_at, user_id, profile:profiles(display_name, handle)')
       .neq('user_id', user.id)
       .gt('expires_at', nowIso)
       .limit(12),
@@ -325,8 +325,10 @@ export default async function HomePage() {
                   ? signal.profile[0]
                   : signal.profile;
                 const name = profileRow?.display_name ?? 'Friend';
+                const handle = profileRow?.handle;
+                const href = handle ? `/u/${handle}?from=/` : '/mutual';
                 return (
-                  <Link key={signal.id} href="/mutual" className="block group">
+                  <Link key={signal.id} href={href} className="block group">
                     <Card tone="sage" className="group-hover:shadow-lift transition-shadow">
                       <div className="flex items-center gap-3">
                         <Avatar name={name} seed={signal.user_id} size="sm" />
