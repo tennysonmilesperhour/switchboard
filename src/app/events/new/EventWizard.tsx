@@ -1675,7 +1675,7 @@ export function EventWizard({
               },
               {
                 label: 'Require parental approval',
-                hint: 'Every RSVP needs a parent or guardian's approval before it counts.',
+                hint: "Every RSVP needs a parent or guardian's approval before it counts.",
                 value: parentalApproval,
                 set: setParentalApproval,
               },

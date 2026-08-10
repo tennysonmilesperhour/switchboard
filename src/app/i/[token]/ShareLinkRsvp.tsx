@@ -86,7 +86,7 @@ export function ShareLinkRsvp({ shareToken, defaultName }: ShareLinkRsvpProps) {
       <div className="mt-8 rounded-card bg-sage-soft p-5 animate-rise">
         <p className="font-bold text-sage-deep">Approval request sent</p>
         <p className="text-sm text-ink-soft mt-2">
-          We've emailed the guardian. Once they approve, the RSVP will count.
+          We&rsquo;ve emailed the guardian. Once they approve, the RSVP will count.
         </p>
       </div>
     );
@@ -95,13 +95,13 @@ export function ShareLinkRsvp({ shareToken, defaultName }: ShareLinkRsvpProps) {
   if (needsApproval) {
     return (
       <div className="mt-8 rounded-card bg-gold-soft p-5 animate-rise">
-        <p className="font-bold text-gold-deep">Almost there — guardian approval needed</p>
+        <p className="font-bold text-gold-deep">Almost there &mdash; guardian approval needed</p>
         <p className="text-sm text-ink-soft mt-2">
           This plan requires a parent or guardian to approve attendance.
           Enter their email and we'll send them a link.
         </p>
         <label className="block mt-4">
-          <span className="block text-sm font-bold text-ink mb-1">Guardian's email</span>
+          <span className="block text-sm font-bold text-ink mb-1">Guardian&rsquo;s email</span>
           <input
             type="email"
             value={guardianEmail}
@@ -112,7 +112,7 @@ export function ShareLinkRsvp({ shareToken, defaultName }: ShareLinkRsvpProps) {
           />
         </label>
         <label className="block mt-3">
-          <span className="block text-sm font-bold text-ink mb-1">Guardian's name (optional)</span>
+          <span className="block text-sm font-bold text-ink mb-1">Guardian&rsquo;s name (optional)</span>
           <input
             type="text"
             value={guardianName}
