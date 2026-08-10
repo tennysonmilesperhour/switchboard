@@ -141,6 +141,13 @@ export function LeafletCanvas({
       const map = mapRef.current;
       const group = layerRef.current;
       if (cancelled || !map || !group) return;
+      let openPopupId: string | null = null;
+      for (const [id, pin] of pinsRef.current) {
+        if (pin.getPopup()?.isOpen()) {
+          openPopupId = id;
+          break;
+        }
+      }
       group.clearLayers();
       pinsRef.current.clear();
       const bounds: [number, number][] = [];
@@ -165,9 +172,10 @@ export function LeafletCanvas({
         map.fitBounds(bounds, { padding: [40, 40], maxZoom: 14 });
         didFitRef.current = true;
       }
-      // The pins these markers needed now exist. Anything still queued has had
-      // its chance — dropped here so a focus whose marker is gone (its layer
-      // switched off, say) can't keep hijacking every later refresh.
+      if (openPopupId) {
+        const restored = pinsRef.current.get(openPopupId);
+        if (restored) restored.openPopup();
+      }
       drainFocus();
       pendingFocusRef.current = null;
     })();
