@@ -368,6 +368,13 @@ test.describe('authenticated surface', () => {
     await host.waitForURL(/\/events\/[0-9a-f-]{36}/, { timeout: 15_000 });
     const eventUrl = host.url();
 
+    // Reload so the server action runs against the same session the page sees.
+    // Without this, the cookies the browser sends on the POST can carry a stale
+    // access token from before the createEvent action rotated them — and the
+    // server action's getUser() then resolves to a different (or no) session.
+    await host.reload();
+    await host.waitForLoadState('networkidle');
+
     // Tap the friend in "From your people" and ask them now, ahead of the line.
     await host.getByRole('button', { name: /Open E2E Guest/ }).click();
     await host.getByRole('button', { name: 'Send invite now' }).click();
