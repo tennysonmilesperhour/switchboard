@@ -31,7 +31,12 @@ async function login(page: Page, identifier: string) {
   const cached = sessionCookies.get(identifier);
   if (cached) {
     await page.context().addCookies(cached);
-    if (await signedInAs(page, identifier)) return;
+    if (await signedInAs(page, identifier)) {
+      // A silent token refresh during signedInAs may have rotated the cookies.
+      // Re-capture so later contexts get the current tokens, not the stale ones.
+      sessionCookies.set(identifier, await page.context().cookies());
+      return;
+    }
     // Whatever that session was, it isn't this person — expired, rejected, or
     // the wrong account entirely. Say so and sign in properly, rather than
     // running a journey as someone else and failing somewhere unrelated.
