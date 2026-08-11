@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient, hasAdminCredentials } from '@/lib/supabase/admin';
@@ -13,6 +14,7 @@ import {
   describeMutuals,
 } from '@/lib/server/relationship';
 import { loadSharedFacets, loadCompatibility } from '@/lib/server/identity';
+import { safeNextPath } from '@/lib/security';
 import type { ProfileLink, ProfileSocial } from '@/lib/types';
 
 // Confidence → dot color for a shared read (mirrors the owner's /you view).
@@ -79,10 +81,13 @@ export async function generateMetadata({
 
 export default async function PublicProfilePage({
   params,
+  searchParams,
 }: {
   params: Promise<{ handle: string }>;
+  searchParams: Promise<{ from?: string }>;
 }) {
   const { handle } = await params;
+  const { from } = await searchParams;
   const supabase = await createClient();
   const {
     data: { user },
@@ -127,9 +132,10 @@ export default async function PublicProfilePage({
   const tags = [...downTo, ...interests].slice(0, 8);
   const mutualLine =
     relationship.status === 'accepted' ? "You're friends" : describeMutuals(mutuals);
+  const backHref = safeNextPath(from, '/people');
 
   return (
-    <AppShell title={displayName} back="/people">
+    <AppShell title={displayName} back={backHref}>
       <div className="space-y-7">
         {/* Cover + identity */}
         <div>
@@ -178,13 +184,24 @@ export default async function PublicProfilePage({
 
             {/* Connect + relationship context */}
             <div className="mt-4 flex flex-col items-center gap-2">
-              <ConnectButton
-                targetId={profile.id}
-                name={displayName}
-                status={relationship.status}
-                connectionId={relationship.connectionId}
-                size="md"
-              />
+              <div className="flex items-center gap-2">
+                <ConnectButton
+                  targetId={profile.id}
+                  name={displayName}
+                  status={relationship.status}
+                  connectionId={relationship.connectionId}
+                  size="md"
+                />
+                {relationship.status === 'accepted' && (
+                  <Link
+                    href={`/mutual?person=${profile.id}`}
+                    className="inline-flex items-center gap-1.5 rounded-pill border border-line bg-card px-4 py-2 text-sm font-bold text-ink shadow-sm transition-colors hover:bg-cream"
+                  >
+                    <Icon name="chat" size={16} />
+                    Message
+                  </Link>
+                )}
+              </div>
               {mutualLine ? (
                 <p className="flex items-center gap-1.5 text-xs font-semibold text-ink-soft">
                   <Icon name="users" size={14} className="text-ink-faint" />

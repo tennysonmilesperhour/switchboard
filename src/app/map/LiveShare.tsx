@@ -61,7 +61,7 @@ function peopleToMarkers(people: NearbyPerson[]): MapMarker[] {
       .join(' · '),
     lat: person.latitude,
     lng: person.longitude,
-    href: `/u/${person.handle}`,
+    href: `/u/${person.handle}?from=/map`,
   }));
 }
 
