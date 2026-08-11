@@ -28,6 +28,20 @@ export const metadata: Metadata = {
   },
   description:
     'Cascading invites, anonymous group decisions, and mutual-interest matching. Switchboard removes the social friction from making plans.',
+  // Emit `og:type` (and siteName/title/description) as a default on every page.
+  // Auth and app pages that don't set their own Open Graph metadata previously
+  // shipped with no `og:*` tags at all, so in-app browsers (Facebook, Instagram,
+  // etc.) that read `meta[property="og:type"]` on open hit `null` and threw
+  // "null is not an object (evaluating '...og:type...').content" — which showed
+  // up in error tracking as a TypeError on /login. Pages with their own
+  // openGraph (event/invite unfurls) still override this.
+  openGraph: {
+    type: 'website',
+    siteName: 'Switchboard',
+    title: 'Switchboard - plans without pressure',
+    description:
+      'Cascading invites, anonymous group decisions, and mutual-interest matching. Switchboard removes the social friction from making plans.',
+  },
   applicationName: 'Switchboard',
   manifest: '/manifest.webmanifest',
   // iOS home-screen icon (Add to Home Screen). Without this iOS uses a page

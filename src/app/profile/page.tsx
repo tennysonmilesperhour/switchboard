@@ -29,6 +29,7 @@ function toProfileEvent(event: SwitchboardEvent): ProfileEvent {
     id: event.id,
     title: event.title,
     starts_at: event.starts_at,
+    time_zone: event.time_zone,
     location_name: event.location_name,
     status: event.status,
   };

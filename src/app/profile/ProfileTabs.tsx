@@ -9,6 +9,10 @@ export interface ProfileEvent {
   id: string;
   title: string;
   starts_at: string | null;
+  /** IANA zone the plan was created in; passed to `formatDateTime` so the
+   * server (UTC) and client (viewer's zone) render the same text and don't
+   * trip a hydration mismatch (React #418). */
+  time_zone: string | null;
   location_name: string | null;
   status: string;
 }
@@ -109,7 +113,7 @@ function ActivityFeed({
             </Link>
             {event.starts_at && (
               <span className="block text-xs text-ink-faint">
-                {formatDateTime(event.starts_at)}
+                {formatDateTime(event.starts_at, event.time_zone)}
               </span>
             )}
           </span>
@@ -132,7 +136,7 @@ function EventList({ events, empty }: { events: ProfileEvent[]; empty: string })
           href={`/events/${event.id}`}
           title={event.title}
           color={planColor(i)}
-          when={event.starts_at ? formatDateTime(event.starts_at) : undefined}
+          when={event.starts_at ? formatDateTime(event.starts_at, event.time_zone) : undefined}
           where={event.location_name ?? undefined}
         />
       ))}
