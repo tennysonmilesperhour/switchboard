@@ -1,3 +1,8 @@
+> **Archived 2026-08-11.** Executed: settings persistence contract, board post
+> editing, permanent plan deletion, the clickable host invite link, and the 18+
+> terms acceptance all shipped. Phone-verification production config remains an
+> ops item, carried forward in [`../DOCKET.md`](../DOCKET.md).
+
 # Client Feedback Round 3 — Review & Plan
 
 *Product, reliability, privacy, and safety review of six pieces of client

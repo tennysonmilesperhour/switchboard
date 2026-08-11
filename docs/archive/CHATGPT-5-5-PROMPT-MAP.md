@@ -1,3 +1,7 @@
+> **Archived 2026-08-11.** Execution map for taking commit `ef77d94` to a pilot;
+> the release-blocking prompts were executed in July 2026. Kept for the session
+> preamble and prompt patterns; open ops items live in [`../DOCKET.md`](../DOCKET.md).
+
 # Switchboard ChatGPT 5.5 Prompt Map
 
 This is an execution map for taking Switchboard from commit `ef77d94` to a controlled user pilot. It is intentionally sequenced: finish a prompt, review its evidence, and commit it before moving to the next prompt.

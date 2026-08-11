@@ -3,7 +3,75 @@
 A living backlog of shipped work, queued builds, and design threads captured
 from working sessions. Newest thinking lives here so nothing evaporates.
 
-> Legend: ✅ shipped · 🛠️ queued to build · 🎨 in design / workshop · 💭 idea
+> Legend: ✅ shipped · 🛠️ queued to build · 🎨 in design / workshop · 💭 idea ·
+> 🔧 ops (needs the owner or a dashboard, not code)
+
+---
+
+## 🧹 2026-08-11 consolidation — what moved, what shipped, what's still open
+
+The point-in-time plans and audits were archived to `docs/archive/` (they had
+drifted badly — all three client-feedback plans still said "nothing implemented
+yet" while their features were live in the app). This docket and
+`docs/WEEKLY-PLAN-2026-08-11.md` are now the only places describing work not
+yet done. This section carries forward every still-open item found in the
+archived docs so nothing evaporates with them.
+
+### ✅ Verified shipped since the sections below were written
+
+Client-feedback rounds 1–3 (archived plans) are implemented: decline-with-a-note
++ guest parity, Family & Kids interests, welcome/onboarding trim, the
+getting-started checklist, board offers/requests with responses and editing,
+rooms inbox (activity sort, unread `last_read_at`, sections, filter),
+room-message notifications, settings save contract (typed success/failure),
+permanent plan deletion, clickable host invite link, 18+ terms acceptance,
+verified contact records, and per-event themes with a wizard picker. The
+feature index (`/features`, `src/lib/features.ts`) plus its test now guard the
+catalogue of what exists.
+
+### 🛠️ Still open, carried from the client-feedback plans
+
+- **Give Space invariant + mutual muting.** The "avoid lists filter, never
+  reveal" invariant was *never written into `docs/SECURITY.md`* (round 2, item
+  4a — cheapest durable safeguard, do first), and `profile_avoids` still isn't
+  consulted by nearby discovery / signals / moments / mutual candidates in
+  either direction (4b). A "who can see me right now" screen (4c) remains open.
+- **Signal rings on avatars** (round 2, 6a) — `Avatar` still has only the plain
+  white `ring` prop; the ambient status tier stays unbuilt.
+- **Daily digest** (6b), **custom emoji + label signals** (6c), **message
+  full-text search** (5c stage 2, RLS-scoped, never the admin client).
+- **Availability Heatmap → AWI poll** (2a; `INNOVATIONS.md` #8) and, only after
+  it proves out, **read-only Google Calendar free/busy** (2b).
+- **Post-level reporting** into the moderation queue (round 1, Phase 3).
+- **Board announcement → a real scoped plan** ("Make this a plan", round 3 /
+  demo checklist N14).
+- **Kids-welcome event attribute + host checklist** (round 3, slice 3) — only
+  alongside public event discovery.
+
+### 🔧 Ops residuals, carried from the audits and ship checklists
+
+Code can't close these; they need the owner or a dashboard:
+
+- Enable **leaked-password protection** in Supabase (last open security
+  advisor).
+- **Provider config**: Resend email (`RESEND_API_KEY`/`EMAIL_FROM`), Twilio
+  phone verification (all four vars), or set pilot expectations without them.
+- **Cron plan**: Vercel Pro for the every-minute sweep, or an external
+  scheduler with the `CRON_SECRET` bearer.
+- **Preview environment isolation** (own Supabase project, complete config) and
+  confirming the **authed-E2E GitHub job is a required check**.
+- Legal copy sign-off; run `supabase test db` + the `E2E_DB=1` suite once
+  against a disposable project before any release.
+
+### 💭 Deferred epics still parked (from the archived strategy docs)
+
+Interop wave 2+ (import-from-link shipped; PSI contact matching, Discord bot,
+two-way calendar write remain), OAuth/passkeys, i18n, businesses in Explore
+(N13), the adventure game (N12 — the 2026-08-11 weekly plan's feature passport
+is its first intrinsic step), collaborative playlist / shared album / weather
+embeds / plus-ones (Partiful-gaps leftovers), and `polls.suggest_deadline` is
+vestigial — drop it in the next poll migration (the poll-tree work is the
+natural moment).
 
 ---
 

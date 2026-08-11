@@ -1,3 +1,9 @@
+> **Archived 2026-08-11.** This plan was executed: the decline note, Family &
+> Kids interests, welcome trim, getting-started checklist, and board
+> offers/requests all shipped. The "nothing here is implemented yet" line below
+> is preserved as written but no longer true. Still-open Phase 3 items are
+> carried forward in [`../DOCKET.md`](../DOCKET.md).
+
 # Client Feedback Review & Implementation Plan
 
 *Product / UX / architecture review of five pieces of client feedback, grounded in

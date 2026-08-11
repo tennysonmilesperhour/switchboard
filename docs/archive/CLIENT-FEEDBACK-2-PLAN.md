@@ -1,3 +1,9 @@
+> **Archived 2026-08-11.** Phase 1 largely shipped (room-message notifications,
+> the rooms inbox with unread state and sections, announcement doctrine fix).
+> Not built: signal rings on avatars, the Give Space invariant in SECURITY.md,
+> mutual muting, the daily digest, custom signals, message search, and the
+> availability heatmap — all carried forward in [`../DOCKET.md`](../DOCKET.md).
+
 # Client Feedback Round 2 — Review & Plan
 
 *Product / UX / safety review of six pieces of client feedback, grounded in the

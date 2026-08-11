@@ -2,9 +2,9 @@
 
 *This is the true source of truth for how the app actually looks. It documents
 the tokens and conventions in `src/app/globals.css` and the shared components in
-`src/components/ui/`. The five candidate art directions in `DESIGN-DIRECTIONS.md`
-are historical exploration — none of them was adopted; the app ships the
-"bold, bright, social" system described here.*
+`src/components/ui/`. The five candidate art directions in
+`archive/DESIGN-DIRECTIONS.md` are historical exploration — none of them was
+adopted; the app ships the "bold, bright, social" system described here.*
 
 Ground rules that still hold from the exploration: no italics in headers, no
 emdashes in copy, and copy never hedges.
@@ -79,6 +79,6 @@ and sliders.
 The whole look is driven by the `@theme` tokens in `globals.css`. Changing the
 accent, neutrals, or type there restyles the app, because components reference
 tokens (`bg-terracotta`, `text-ink`, `bg-brand-gradient`, `plan-*`) rather than
-raw hex. If a future direction from `DESIGN-DIRECTIONS.md` (e.g. Transit Board or
-Dusk Lounge) is adopted, port it by rewriting this token layer and the `.plan-*`
-/ `--brand-gradient` rules, then update this document.
+raw hex. If a future direction from `archive/DESIGN-DIRECTIONS.md` (e.g. Transit
+Board or Dusk Lounge) is adopted, port it by rewriting this token layer and the
+`.plan-*` / `--brand-gradient` rules, then update this document.
