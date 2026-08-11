@@ -60,6 +60,13 @@ Code can't close these; they need the owner or a dashboard:
   scheduler with the `CRON_SECRET` bearer.
 - **Preview environment isolation** (own Supabase project, complete config) and
   confirming the **authed-E2E GitHub job is a required check**.
+- **CI on `main` is red** (as of 2026-08-11, every push since ~Aug 7): the
+  Authenticated E2E job fails on `e2e/authed.spec.ts` › "a host invites a
+  connection directly" — the app toasts "Only the host can invite people to
+  this plan." where the test expects "Invitation sent to E2E Guest" (a second
+  test, the group-decision one, fails intermittently). Diagnose whether it's a
+  fixture/authorization regression or a stale test before making the job a
+  required check.
 - Legal copy sign-off; run `supabase test db` + the `E2E_DB=1` suite once
   against a disposable project before any release.
 
