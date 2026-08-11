@@ -33,6 +33,10 @@ export interface RespondResult {
   eventId?: string;
   /** Nonfatal follow-up when the RSVP saved but account attachment did not. */
   warning?: string;
+  /** When true, the RSVP was recorded but needs parental approval to take effect. */
+  needsApproval?: boolean;
+  /** The invite row id, when the client needs it for a follow-up action. */
+  inviteId?: string;
 }
 
 function cleanDeclineMessage(value: string): string | null {
@@ -429,6 +433,26 @@ export async function respondViaShareLink(
     revalidatePath(`/events/${eventId}`);
   }
 
+  // If the plan requires parental approval, flag the response so the UI
+  // can collect the guardian's email in a follow-up step.
+  if (outcome === 'accepted' && eventId) {
+    const { data: evt } = await admin
+      .from('events')
+      .select('parental_approval')
+      .eq('id', eventId)
+      .maybeSingle<{ parental_approval: boolean }>();
+    if (evt?.parental_approval) {
+      return {
+        ok: true,
+        outcome: 'accepted',
+        token: typeof row?.token === 'string' ? row.token : undefined,
+        needsApproval: true,
+        inviteId: typeof row?.invite_id === 'string' ? row.invite_id : undefined,
+        eventId,
+      };
+    }
+  }
+
   return {
     ok: true,
     outcome,
@@ -589,6 +613,23 @@ export async function respondToGuestInvite(
     revalidatePath('/');
     revalidatePath('/plans');
     revalidatePath(`/events/${invite.event_id}`);
+  }
+
+  if (outcome === 'accepted') {
+    const { data: evt } = await admin
+      .from('events')
+      .select('parental_approval')
+      .eq('id', invite.event_id)
+      .maybeSingle<{ parental_approval: boolean }>();
+    if (evt?.parental_approval) {
+      return {
+        ok: true,
+        outcome: 'accepted',
+        needsApproval: true,
+        inviteId: invite.id,
+        eventId: claimedEventId ?? invite.event_id,
+      };
+    }
   }
 
   return {

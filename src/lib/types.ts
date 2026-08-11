@@ -165,6 +165,22 @@ export interface SwitchboardEvent {
   cancel_voice_url: string | null;
   /** Set when a host marks the plan as having actually happened. */
   happened_at: string | null;
+  /** When true, every RSVP requires guardian approval before it counts. */
+  parental_approval: boolean;
+  created_at: string;
+}
+
+export type ParentalApprovalStatus = 'pending' | 'approved' | 'denied';
+
+export interface ParentalApproval {
+  id: string;
+  invite_id: string;
+  event_id: string;
+  guardian_email: string;
+  guardian_name: string | null;
+  token: string;
+  status: ParentalApprovalStatus;
+  responded_at: string | null;
   created_at: string;
 }
 

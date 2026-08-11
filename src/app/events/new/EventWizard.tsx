@@ -267,6 +267,7 @@ export function EventWizard({
   const [showExpired, setShowExpired] = useState(false);
   const [openTable, setOpenTable] = useState(true);
   const [remindersEnabled, setRemindersEnabled] = useState(true);
+  const [parentalApproval, setParentalApproval] = useState(false);
 
   const startsAt = useMemo(() => {
     if (!date) return null;
@@ -679,6 +680,7 @@ export function EventWizard({
         suggestDeadline: enablePoll ? localDateTimeToIso(suggestDeadline) : null,
         voteDeadline: enablePoll ? localDateTimeToIso(voteDeadline) : null,
         remindersEnabled,
+        parentalApproval,
         coverUrl: coverUrl.trim() || null,
         wishlistUrl: wishlistUrl.trim() || null,
         theme,
@@ -1670,6 +1672,12 @@ export function EventWizard({
                 hint: 'Switchboard can nudge invited people before the plan starts.',
                 value: remindersEnabled,
                 set: setRemindersEnabled,
+              },
+              {
+                label: 'Require parental approval',
+                hint: "Every RSVP needs a parent or guardian's approval before it counts.",
+                value: parentalApproval,
+                set: setParentalApproval,
               },
             ] as const
           ).map((option) => (

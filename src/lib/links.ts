@@ -112,6 +112,11 @@ export function guestRsvpUrl(guestToken: string): string {
   return absoluteUrl(`/rsvp/${guestToken}`);
 }
 
+/** Guardian approval link for a youth-event RSVP (`/approve/<token>`). */
+export function approvalUrl(token: string): string {
+  return absoluteUrl(`/approve/${token}`);
+}
+
 /** A board's shareable join link. */
 export function boardJoinUrl(code: string): string {
   return absoluteUrl(`/boards/join/${encodeURIComponent(code)}`);

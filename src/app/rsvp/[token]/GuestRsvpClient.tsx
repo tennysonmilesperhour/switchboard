@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { Button } from '@/components/ui/Button';
 import { Icon } from '@/components/ui/Icon';
 import { claimGuestInvite, respondToGuestInvite } from '@/lib/actions/invites';
+import { requestParentalApproval } from '@/lib/actions/parental-approval';
 import {
   googleCalendarUrl,
   outlookCalendarUrl,
@@ -73,6 +74,11 @@ export function GuestRsvpClient({
   const [error, setError] = useState('');
   const [signInNeeded, setSignInNeeded] = useState(false);
   const [answers, setAnswers] = useState<Record<string, string>>({});
+  const [needsApproval, setNeedsApproval] = useState(false);
+  const [guardianEmail, setGuardianEmail] = useState('');
+  const [guardianNameInput, setGuardianNameInput] = useState('');
+  const [approvalSent, setApprovalSent] = useState(false);
+  const [inviteId, setInviteId] = useState('');
   const [pending, startTransition] = useTransition();
 
   // If an invited guest has since created an account (or signed in) and reopened
@@ -112,10 +118,86 @@ export function GuestRsvpClient({
         if (result.outcome && result.outcome !== 'auth_required') setStatus(result.outcome);
         return;
       }
+      if (result.needsApproval && result.inviteId) {
+        setNeedsApproval(true);
+        setInviteId(result.inviteId);
+        if (result.eventId) setPlanId(result.eventId);
+        setStatus('accepted');
+        return;
+      }
       if (result.eventId) setPlanId(result.eventId);
       if (result.warning) setError(result.warning);
       setStatus(result.outcome ?? (accept ? 'accepted' : 'declined'));
     });
+  }
+
+  if (needsApproval && status === 'accepted') {
+    if (approvalSent) {
+      return (
+        <div className="mt-8 rounded-card bg-sage-soft p-5 animate-rise">
+          <p className="font-bold text-sage-deep">Approval request sent</p>
+          <p className="text-sm text-ink-soft mt-2">
+            We&rsquo;ve emailed the guardian. Once they approve, the RSVP will count.
+          </p>
+          {authed && planId && <OpenThePlan eventId={planId} tone="sage" />}
+        </div>
+      );
+    }
+    return (
+      <div className="mt-8 rounded-card bg-gold-soft p-5 animate-rise">
+        <p className="font-bold text-gold-deep">Almost there — guardian approval needed</p>
+        <p className="text-sm text-ink-soft mt-2">
+          This plan requires a parent or guardian to approve attendance.
+        </p>
+        <label className="block mt-4">
+          <span className="block text-sm font-bold text-ink mb-1">Guardian&rsquo;s email</span>
+          <input
+            type="email"
+            value={guardianEmail}
+            onChange={(e) => setGuardianEmail(e.target.value)}
+            disabled={pending}
+            placeholder="parent@example.com"
+            className="w-full rounded-card border border-line bg-paper px-3.5 py-2.5 text-base text-ink placeholder:text-ink-faint focus:border-terracotta focus:outline-none focus:ring-2 focus:ring-terracotta/30"
+          />
+        </label>
+        <label className="block mt-3">
+          <span className="block text-sm font-bold text-ink mb-1">Guardian&rsquo;s name (optional)</span>
+          <input
+            type="text"
+            value={guardianNameInput}
+            onChange={(e) => setGuardianNameInput(e.target.value)}
+            disabled={pending}
+            placeholder="First name"
+            className="w-full rounded-card border border-line bg-paper px-3.5 py-2.5 text-base text-ink placeholder:text-ink-faint focus:border-terracotta focus:outline-none focus:ring-2 focus:ring-terracotta/30"
+          />
+        </label>
+        {error && <p role="alert" className="text-sm text-rose-deep mt-3">{error}</p>}
+        <Button
+          variant="accept"
+          size="lg"
+          className="w-full mt-4"
+          disabled={pending || !guardianEmail.trim()}
+          onClick={() => {
+            setError('');
+            startTransition(async () => {
+              const res = await requestParentalApproval({
+                inviteId,
+                eventId: planId ?? '',
+                guardianEmail: guardianEmail.trim(),
+                guardianName: guardianNameInput.trim() || undefined,
+              });
+              if (!res.ok) {
+                setError(res.error ?? 'Could not send the approval request.');
+                return;
+              }
+              setApprovalSent(true);
+            });
+          }}
+        >
+          Send approval request
+        </Button>
+      </div>
+    );
   }
 
   if (status === 'accepted') {

@@ -151,6 +151,7 @@ export function PollSection({
     startTransition(async () => {
       const result = await addSuggestion(poll.id, eventId, label);
       if (!result.ok) setError(result.error ?? 'Could not add that');
+      else router.refresh();
     });
   }
 

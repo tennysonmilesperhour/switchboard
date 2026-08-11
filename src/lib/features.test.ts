@@ -71,6 +71,7 @@ const NOT_INDEXED: Record<string, string> = {
   i: 'per-plan share link; you arrive with a token, you don’t browse here',
   join: 'shareable plan link; token-addressed',
   rsvp: 'guest RSVP link; token-addressed',
+  approve: 'guardian approval link; token-addressed',
   u: 'someone else’s public profile; reached by handle',
   terms: 'covered by the “Privacy, terms, and copyright” entry',
   copyright: 'covered by the “Privacy, terms, and copyright” entry',
