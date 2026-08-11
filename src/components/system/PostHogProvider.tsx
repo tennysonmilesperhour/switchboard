@@ -3,6 +3,7 @@
 import posthog from 'posthog-js';
 import { PostHogProvider as PHProvider } from 'posthog-js/react';
 import { useEffect } from 'react';
+import { beforeSend } from '@/lib/analytics/before-send';
 
 /**
  * Client-side PostHog: web/performance analytics and error (exception) tracking.
@@ -43,14 +44,10 @@ export function PostHogProvider({ children }: { children: React.ReactNode }) {
       // Session replay is out of scope for this pass; keeping it off also avoids
       // blob:-worker CSP concerns.
       disable_session_recording: true,
-      // Tag every client event so Switchboard's data stays cleanly separable
-      // from the other product that shares this PostHog project.
-      before_send: (event) => {
-        if (event) {
-          event.properties = { ...event.properties, app: 'switchboard' };
-        }
-        return event;
-      },
+      // Tag every client event with the app name and drop Next.js control-flow
+      // signals (NEXT_REDIRECT / NEXT_NOT_FOUND) that aren't real errors. See
+      // src/lib/analytics/before-send.ts.
+      before_send: beforeSend,
     });
   }, []);
 
