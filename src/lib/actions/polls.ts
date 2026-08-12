@@ -14,14 +14,27 @@ import { reportAndFail } from '@/lib/server/observability';
 import { capture } from '@/lib/analytics/server';
 import { ANALYTICS_EVENTS } from '@/lib/analytics/events';
 import type { Weight } from '@/lib/engine/scoring';
-import type { PollTopic } from '@/lib/types';
+import type { PollOption, PollTopic } from '@/lib/types';
+
+/**
+ * The saved row comes back with the result.
+ *
+ * The client cannot learn about its own write from a re-render it does not
+ * control. `revalidatePath` + `router.refresh()` were both firing and the RSC
+ * refetches were returning 200 without the new option, while a full page load
+ * showed it immediately — so the idea sat invisible until something else
+ * happened to reload the page. Handing the row back closes that gap with the
+ * one fact the server already has, and it carries the real id, so the option
+ * can be voted on the moment it appears.
+ */
+export type SuggestionResult = ActionResult & { option?: PollOption };
 
 export async function addSuggestion(
   pollId: string,
   eventId: string,
   label: string,
   detail?: string,
-): Promise<ActionResult> {
+): Promise<SuggestionResult> {
   const trimmed = label.trim();
   if (!trimmed) return { ok: false, error: 'Suggestion is empty' };
 
@@ -43,12 +56,16 @@ export async function addSuggestion(
     return { ok: false, error: 'Only the host can add options' };
   }
 
-  const { error } = await supabase.from('poll_options').insert({
-    poll_id: pollId,
-    label: trimmed,
-    detail: detail?.trim() || null,
-    source: isHost ? 'host' : 'guests',
-  });
+  const { data: option, error } = await supabase
+    .from('poll_options')
+    .insert({
+      poll_id: pollId,
+      label: trimmed,
+      detail: detail?.trim() || null,
+      source: isHost ? 'host' : 'guests',
+    })
+    .select('*')
+    .single<PollOption>();
   if (error) return { ok: false, error: error.message };
 
   // Tell the people who already ranked this poll that the list they ranked has
@@ -60,7 +77,7 @@ export async function addSuggestion(
   }
 
   revalidatePath(`/events/${eventId}`);
-  return { ok: true };
+  return { ok: true, option: option ?? undefined };
 }
 
 export async function castVote(
