@@ -137,6 +137,30 @@ jobs:
         env:
           PLAYWRIGHT_WEB_SERVER: npm run start
 
+      # Playwright writes an accessibility snapshot of the page it gave up on,
+      # and then mentions only its *path* — so the one artifact that says what
+      # was actually on screen is readable exclusively by someone who can
+      # download the zip. Egress policy, an expired link, or simply reading the
+      # run from a phone all defeat that. Print it, so the log alone answers
+      # "what did the app show?".
+      #
+      # Only the snapshot: Playwright also writes the failing spec's source into
+      # this file, and printing the whole thing pushed the assertion message —
+      # the part that says what went wrong — off the end of a `tail`. Evidence
+      # that buries the verdict is not evidence.
+      - name: Show what was on the screen
+        if: failure()
+        run: |
+          shopt -s nullglob
+          found=0
+          for context in test-results/*/error-context.md; do
+            found=1
+            echo "::group::$context"
+            awk '/^# Page snapshot/,0' "$context" | head -c 20000
+            echo "::endgroup::"
+          done
+          [ "$found" = 1 ] || echo "No error-context.md was written — the failure was not a page assertion."
+
       # A failing browser journey with nothing kept is a failure nobody can
       # diagnose: this suite stayed red for two weeks because the only evidence
       # was one assertion message, and answering "what did the app actually

@@ -288,6 +288,15 @@ const REGISTRY = {
     fix: null,
     actor: 'operator',
   },
+  // The suggestion box clears the moment you submit, so an idea that fails to
+  // save leaves a screen identical to one that saved nothing at all: empty box,
+  // unchanged list, no explanation. Anyone would read that as "the app ignored
+  // me" and retype it.
+  'SB-POLL-SUGGEST': {
+    message: 'Your idea didn’t reach the group.',
+    fix: 'It’s still in the box — try again. Reload first if this page has been open a while.',
+    actor: 'reader',
+  },
   'SB-INVITE-SEND': {
     message: 'Those invitations didn’t go out.',
     fix: 'Try again — anyone already invited keeps their invitation.',

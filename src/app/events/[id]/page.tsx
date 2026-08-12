@@ -362,11 +362,19 @@ export default async function EventPage({
   // The active poll is the earliest-created one still open. Everything decided
   // is history, and everything `pending` is waiting on a parent, so neither is
   // what the group should be looking at right now.
+  //
+  // `id` breaks the tie because `created_at` does not: `resolve_poll_children`
+  // opens every unblocked follow-up in one statement, and they all take that
+  // statement's `now()`. Ordering on the timestamp alone leaves their relative
+  // order up to the planner, so "the question we're on" could differ between
+  // two renders of the same page — including the render before a suggestion and
+  // the one after it.
   const { data: pollRows } = await supabase
     .from('polls')
     .select('*')
     .eq('event_id', id)
     .order('created_at')
+    .order('id')
     .returns<Poll[]>();
 
   const allPolls = pollRows ?? [];
