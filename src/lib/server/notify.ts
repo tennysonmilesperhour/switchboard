@@ -71,12 +71,15 @@ export async function notifyRoomActivity(
   senderId: string,
 ): Promise<void> {
   const admin = createAdminClient();
+  const activeThreshold = new Date(Date.now() - 90_000).toISOString();
   const { data: members } = await admin
     .from('room_members')
-    .select('member_id')
+    .select('member_id, last_read_at')
     .eq('room_id', roomId)
     .neq('member_id', senderId);
-  const recipients = (members ?? []).map((member) => member.member_id);
+  const recipients = (members ?? [])
+    .filter((m) => !m.last_read_at || m.last_read_at < activeThreshold)
+    .map((m) => m.member_id);
   const cutoff = new Date(Date.now() - 30 * 60 * 1000).toISOString();
 
   await Promise.all(
