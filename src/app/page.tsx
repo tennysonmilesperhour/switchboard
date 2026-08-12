@@ -9,6 +9,7 @@ import { PlanCard, planColor } from '@/components/ui/PlanCard';
 import { SignalBar } from '@/components/signals/SignalBar';
 import { GettingStarted } from '@/components/home/GettingStarted';
 import { Greeting } from '@/components/home/Greeting';
+import { PillarRow } from '@/components/home/PillarRow';
 import {
   EnergyPrompt,
   MatchmakerCard,
@@ -176,7 +177,12 @@ export default async function HomePage() {
           </p>
         </div>
 
-        <SignalBar active={mySignals ?? []} circles={circles ?? []} />
+        {/* The four pillars, equal weight, above anything conditional. */}
+        <PillarRow />
+
+        <div id="signals" className="scroll-mt-20">
+          <SignalBar active={mySignals ?? []} circles={circles ?? []} />
+        </div>
 
         {/* The single first-run guidance card — checks itself off live. */}
         <GettingStarted
@@ -424,11 +430,12 @@ export default async function HomePage() {
                 </div>
               </Card>
             </Link>
+            {/* The four pillars moved to the top of the page as an
+                equal-weight row; what remains here are the two surfaces that
+                answer "I don't know who or what yet". */}
             <div className="grid grid-cols-2 gap-3">
               {[
-                { href: '/create', emoji: '🪜', title: 'New plan', body: 'Cascading invites' },
                 { href: '/discover', emoji: '🧭', title: 'Discover', body: 'What should we do?' },
-                { href: '/mutual', emoji: '◐', title: 'Mutual', body: 'Down to connect?' },
                 { href: '/moments', emoji: '✨', title: 'Moments', body: 'Who’s nearby' },
               ].map((action) => (
                 <Link key={action.href} href={action.href} className="group">
