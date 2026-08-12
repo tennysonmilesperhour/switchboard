@@ -40,5 +40,16 @@ export default defineConfig({
         url: 'http://localhost:3000/welcome',
         reuseExistingServer: true,
         timeout: 120_000,
+        /**
+         * Show the server's own account of the run. Playwright swallows the web
+         * server's output by default, which meant every server-side cause —
+         * a `reportOperationalError` line, an action that threw, a failed query
+         * — was thrown away at the exact moment a red suite needed it. The
+         * `permission denied for function is_event_host` that had this suite red
+         * for two weeks was found by reading these lines; they should not have
+         * needed a one-off workflow edit to see.
+         */
+        stdout: 'pipe',
+        stderr: 'pipe',
       },
 });

@@ -104,6 +104,54 @@ async function pageComplaints(page: Page): Promise<string> {
 }
 
 /**
+ * Start recording what the browser itself complains about.
+ *
+ * An action that *throws* rather than returning `{ ok: false }` never reaches
+ * the `setError` that renders a `role="alert"`, so the screen stays silent and
+ * `pageComplaints` has nothing to quote. The rejection still surfaces here.
+ * Call before the interaction; read the returned function afterwards.
+ */
+function browserNoise(page: Page): () => string {
+  const lines: string[] = [];
+  page.on('pageerror', (error) => lines.push(`uncaught: ${error.message}`));
+  page.on('console', (message) => {
+    if (message.type() === 'error') lines.push(`console.error: ${message.text()}`);
+  });
+  return () => lines.join(' | ');
+}
+
+/**
+ * What the group-decision screen is showing, in the terms that tell apart the
+ * ways an idea can fail to land.
+ *
+ * The discriminator is the suggestion box. `PollSection.submitSuggestion`
+ * clears it **synchronously**, before it awaits anything — so a box still
+ * holding what was typed means the submit handler never ran at all (the click
+ * missed, the form never submitted, the button re-rendered out from under it),
+ * while an empty box means the handler ran and whatever went wrong went wrong
+ * after that. Without this, both report the same "it isn't on the page".
+ */
+async function pollScreen(page: Page) {
+  const box = page.getByRole('textbox', { name: 'Suggest an idea' });
+  const add = page.getByRole('button', { name: 'Add', exact: true }).first();
+  const boxes = await box.count();
+  return {
+    suggestBoxPresent: boxes > 0,
+    stillTyped: boxes > 0 ? await box.inputValue() : null,
+    addButtons: await page.getByRole('button', { name: 'Add', exact: true }).count(),
+    addEnabled: (await add.count()) > 0 ? await add.isEnabled() : false,
+    // Every option renders its rating buttons inside `aria-label="Rate <label>"`,
+    // so this is the list the group can actually see and vote on.
+    options: await page
+      .locator('[aria-label^="Rate "]')
+      .evaluateAll((nodes) =>
+        nodes.map((node) => node.getAttribute('aria-label')?.replace(/^Rate /, '') ?? ''),
+      ),
+    url: page.url(),
+  };
+}
+
+/**
  * Open the wizard with everything the product requires before a plan may leave
  * the Basics step: a title, **and** at least a location or a detail
  * (`hasInviteDetails`, src/lib/event-details.ts — the "require context before
@@ -276,6 +324,7 @@ test.describe('authenticated surface', () => {
 
   // ——— Golden journey 2: create a poll → suggest → vote ———
   test('a host opens a group decision, suggests, and votes', async ({ page }) => {
+    const noise = browserNoise(page);
     await login(page, 'e2ehost');
     await startPlan(page, 'Poll journey plan');
 
@@ -298,20 +347,35 @@ test.describe('authenticated surface', () => {
     await page.getByRole('textbox', { name: 'Suggest an idea' }).fill('Tacos');
     await page.getByRole('button', { name: 'Add', exact: true }).first().click();
 
-    // Quote the app's own objection when the idea doesn't land. PollSection
-    // renders a `role="alert"` when addSuggestion refuses ("Voting has closed",
-    // "Only the host can add options"), and without reading it this assertion
-    // can only ever say "element(s) not found" — which is what left this
-    // failure unexplained while the suite sat red. If the option really is
-    // missing and the app said nothing, that is worth distinguishing too.
+    // Report what the screen is doing, not just that a string is absent.
+    //
+    // "the suggestion never appeared" is true of every way this can break and
+    // names none of them, which is how this failure survived a round trip of
+    // its own. The four facts below separate them: whether the app objected,
+    // whether the submit handler ran at all (the box clears synchronously),
+    // what the group can actually see, and whether the browser threw. An
+    // action that throws instead of returning `{ ok: false }` renders no alert,
+    // so the silent-screen case needs the browser's own log to be readable.
     await expect(async () => {
+      if (await page.getByText('Tacos').first().isVisible()) return;
+      const screen = await pollScreen(page);
       const complaint = await pageComplaints(page);
-      expect(
-        await page.getByText('Tacos').isVisible(),
-        complaint
-          ? `the app refused the suggestion: ${complaint}`
-          : 'the suggestion never appeared and the app raised no objection',
-      ).toBe(true);
+      const browser = noise();
+      throw new Error(
+        [
+          '"Tacos" is not on the group-decision screen.',
+          complaint ? `The app objected: ${complaint}` : 'The app objected to nothing.',
+          !screen.suggestBoxPresent
+            ? `There is no suggestion box — either no poll rendered, or it is not open to suggestions. URL: ${screen.url}`
+            : screen.stillTyped
+              ? `The box still holds "${screen.stillTyped}". PollSection clears it synchronously on submit, so the submit handler never ran — the click did not reach it. (Add buttons on page: ${screen.addButtons}, first one enabled: ${screen.addEnabled}.)`
+              : 'The box is empty, so the submit handler did run. The idea was lost after that — in the action, or in the re-render that should have shown it.',
+          `Options the group can see: ${
+            screen.options.length ? screen.options.join(', ') : 'none'
+          }`,
+          browser ? `The browser logged: ${browser}` : 'The browser logged nothing.',
+        ].join('\n'),
+      );
     }).toPass({ timeout: 15_000 });
     await page.getByRole('button', { name: 'Absolutely love this' }).first().click();
   });
