@@ -7,6 +7,7 @@ import { AppShell } from '@/components/shell/AppShell';
 import { Avatar } from '@/components/ui/Avatar';
 import { Icon } from '@/components/ui/Icon';
 import { ConnectButton } from '@/components/profile/ConnectButton';
+import { GiveSpaceButton } from '@/components/profile/GiveSpaceButton';
 import { SOCIAL_BY_ID, hrefFor, displayHandle } from '@/lib/socials';
 import {
   getRelationship,
@@ -104,11 +105,21 @@ export default async function PublicProfilePage({
   // Your own handle → your editable profile, not this read-only view.
   if (profile.id === user.id) redirect('/profile');
 
-  const [relationship, mutuals] = await Promise.all([
+  // Whether the viewer already gives this person space. Read through the
+  // viewer's own client: `profile_avoids` is RLS-scoped to the avoider, so this
+  // can only ever return the viewer's own row — the avoided person cannot learn
+  // they are on it, which is the invariant the whole feature rests on.
+  const [relationship, mutuals, avoid] = await Promise.all([
     getRelationship(supabase, user.id, profile.id),
     hasAdminCredentials()
       ? getMutualConnections(createAdminClient(), user.id, profile.id)
       : Promise.resolve({ count: 0, names: [] }),
+    supabase
+      .from('profile_avoids')
+      .select('avoided_id')
+      .eq('avoider_id', user.id)
+      .eq('avoided_id', profile.id)
+      .maybeSingle(),
   ]);
 
   // Revealed-preference facets this person opted into sharing. The RPC itself
@@ -202,6 +213,14 @@ export default async function PublicProfilePage({
                   </Link>
                 )}
               </div>
+
+              {/* Give space: reachable for anyone, not just people you are
+                  connected to. Warn, never remove — see GiveSpaceButton. */}
+              <GiveSpaceButton
+                targetId={profile.id}
+                name={displayName}
+                avoided={Boolean(avoid.data)}
+              />
               {mutualLine ? (
                 <p className="flex items-center gap-1.5 text-xs font-semibold text-ink-soft">
                   <Icon name="users" size={14} className="text-ink-faint" />
