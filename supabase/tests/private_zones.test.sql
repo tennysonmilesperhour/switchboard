@@ -82,11 +82,16 @@ select throws_ok(
   'a stranger cannot check into a private zone'
 );
 
--- Membership is never self-writable.
+-- Membership is never self-writable. This one is refused by RLS rather than by
+-- a raise, so it is asserted on the SQLSTATE (42501, insufficient_privilege)
+-- like the other policy denials in this suite's siblings — the message text
+-- belongs to Postgres and naming it here would make the test brittle.
 select throws_ok(
   $$ insert into public.zone_members (zone_id, member_id, role)
      values ('00000000-0000-0000-0000-0000000f0002'::uuid,
              '00000000-0000-0000-0000-00000000203c', 'moderator') $$,
+  '42501',
+  null,
   'a stranger cannot add themselves to a private zone'
 );
 
