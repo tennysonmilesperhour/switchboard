@@ -634,6 +634,14 @@ export const FEATURE_GROUPS: readonly FeatureGroup[] = [
         href: '/settings',
       },
       {
+        id: 'passport',
+        title: 'What you’ve tried',
+        blurb:
+          'A private record of which parts of Switchboard you’ve actually used, and a nudge toward one you haven’t. Yours only, and it never pings you.',
+        where: 'More → Everything, at the top',
+        href: '/features',
+      },
+      {
         id: 'tips-reset',
         title: 'Bring the tips back',
         blurb: 'Dismissed the getting-started card too early? Restore it.',

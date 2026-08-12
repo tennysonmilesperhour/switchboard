@@ -10,6 +10,9 @@ import { SignalBar } from '@/components/signals/SignalBar';
 import { GettingStarted } from '@/components/home/GettingStarted';
 import { Greeting } from '@/components/home/Greeting';
 import { PillarRow } from '@/components/home/PillarRow';
+import { PassportCard } from '@/components/home/PassportCard';
+import { loadPassport } from '@/lib/server/passport';
+import { passportProgress } from '@/lib/passport';
 import {
   EnergyPrompt,
   MatchmakerCard,
@@ -161,6 +164,17 @@ export default async function HomePage() {
   const loggedIds = new Set((energyLogged ?? []).map((log) => log.event_id));
   const energyPrompts = (recentPast ?? []).filter((event) => !loggedIds.has(event.id));
 
+  // The getting-started card owns the first run; the passport only appears
+  // after its three steps are behind you, so a new user is never shown two
+  // progress cards at once.
+  const gettingStartedDone =
+    (friendCount ?? 0) > 0 &&
+    (upcoming?.length ?? 0) > 0 &&
+    (mySignals?.length ?? 0) > 0;
+  const passportSummary = gettingStartedDone
+    ? passportProgress(await loadPassport(user.id))
+    : { earned: 0, total: 0, done: false, next: null };
+
   const firstName = profile.display_name.split(' ')[0];
   // Timed by the reader's clock, never the server's — `new Date().getHours()`
   // here reads UTC on Vercel and told a 9am Pacific tester "Good afternoon".
@@ -184,12 +198,22 @@ export default async function HomePage() {
           <SignalBar active={mySignals ?? []} circles={circles ?? []} />
         </div>
 
-        {/* The single first-run guidance card — checks itself off live. */}
-        <GettingStarted
-          friendDone={(friendCount ?? 0) > 0}
-          planDone={(upcoming?.length ?? 0) > 0}
-          signalDone={(mySignals?.length ?? 0) > 0}
-        />
+        {/* The single first-run guidance card — checks itself off live. Once
+            it retires, the passport takes over as the quiet way to find the
+            parts of the app you haven't met. Never both at once. */}
+        {gettingStartedDone ? (
+          <PassportCard
+            earned={passportSummary.earned}
+            total={passportSummary.total}
+            nextLabel={passportSummary.next?.label ?? null}
+          />
+        ) : (
+          <GettingStarted
+            friendDone={(friendCount ?? 0) > 0}
+            planDone={(upcoming?.length ?? 0) > 0}
+            signalDone={(mySignals?.length ?? 0) > 0}
+          />
+        )}
 
         {/* Plan feed - the heart of Home */}
         {(upcoming?.length ?? 0) > 0 ? (

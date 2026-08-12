@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { Card } from '@/components/ui/Card';
 import { Icon } from '@/components/ui/Icon';
 import { EmptyState } from '@/components/ui/EmptyState';
+import { GroupProgress } from '@/components/features/Passport';
 import {
   FEATURES,
   FEATURE_GROUPS,
@@ -21,7 +22,12 @@ import {
  * Result counts are spoken in text (`role="status"`), not implied by the list
  * getting shorter, so the filter reports itself to a screen reader too.
  */
-export function FeatureIndexClient() {
+export function FeatureIndexClient({
+  groupProgress = null,
+}: {
+  /** Per-group passport tallies, or null when there's no session. */
+  groupProgress?: Record<string, { earned: number; total: number }> | null;
+}) {
   const [query, setQuery] = useState('');
   const groups = useMemo(() => filterFeatureGroups(query), [query]);
   const searching = query.trim().length > 0;
@@ -88,14 +94,24 @@ export function FeatureIndexClient() {
       ) : (
         groups.map((group) => (
           <section key={group.id} id={group.id} className="scroll-mt-20">
-            <div className="mb-3">
-              <h2 className="font-display text-xl text-ink">
-                <span aria-hidden className="mr-1.5">
-                  {group.emoji}
-                </span>
-                {group.title}
-              </h2>
-              <p className="mt-0.5 text-sm text-ink-faint">{group.hint}</p>
+            <div className="mb-3 flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <h2 className="font-display text-xl text-ink">
+                  <span aria-hidden className="mr-1.5">
+                    {group.emoji}
+                  </span>
+                  {group.title}
+                </h2>
+                <p className="mt-0.5 text-sm text-ink-faint">{group.hint}</p>
+              </div>
+              {/* Only for the sections the passport actually covers; the rest
+                  of the index is reference material, not a checklist. */}
+              {groupProgress?.[group.id] && (
+                <GroupProgress
+                  earned={groupProgress[group.id].earned}
+                  total={groupProgress[group.id].total}
+                />
+              )}
             </div>
             <div className="space-y-2.5">
               {group.features.map((feature) => (
