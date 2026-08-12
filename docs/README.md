@@ -14,6 +14,7 @@ banner saying what happened to it.
 | [`AUTH.md`](AUTH.md) | The account-access invariants. Read before touching sign-in, sign-up, recovery, or onboarding. |
 | [`DEPLOYMENT.md`](DEPLOYMENT.md) | How the app and database ship; env vars, cron, moderators. |
 | [`DESIGN-SYSTEM.md`](DESIGN-SYSTEM.md) | The design system as shipped — tokens, type, component conventions. |
+| [`NAMING.md`](NAMING.md) | What things are called, where each name appears, and the decision behind it. |
 | [`analytics.md`](analytics.md) | Every tracked event and why; the anonymity guardrail. |
 | [`DOCKET.md`](DOCKET.md) | The living backlog: strategy, queued builds, design threads, and residuals carried forward from archived docs. |
 | [`INNOVATIONS.md`](INNOVATIONS.md) | The idea list. Roadmap entries live here, never in the feature index. |

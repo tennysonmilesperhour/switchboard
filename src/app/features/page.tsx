@@ -1,5 +1,9 @@
 import type { Metadata } from 'next';
+import { createClient } from '@/lib/supabase/server';
 import { AppShell } from '@/components/shell/AppShell';
+import { Passport } from '@/components/features/Passport';
+import { loadPassport } from '@/lib/server/passport';
+import { passportByGroup } from '@/lib/passport';
 import { FeatureIndexClient } from './FeatureIndexClient';
 
 export const metadata: Metadata = {
@@ -13,12 +17,20 @@ export const metadata: Metadata = {
  * keeps it calm and means most people never meet half of it; this page is the
  * one place that lays it all out, with directions.
  *
- * There's no `getUser()` here because there's nothing personal on the page —
- * it's the same catalogue for everyone, and the proxy already keeps signed-out
- * visitors off `/features` (see `src/proxy.ts`). Rendering it without a session
- * read keeps it instant.
+ * The catalogue itself is the same for everyone. What is personal is the
+ * passport — which of these you've actually tried — derived from what already
+ * happened, read through the viewer's own client, and shown to nobody else.
  */
-export default function FeaturesPage() {
+export default async function FeaturesPage() {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  // The proxy keeps signed-out visitors off /features, but the page shouldn't
+  // fall over if that ever changes: no session simply means no passport.
+  const passport = user ? await loadPassport(user.id) : null;
+
   return (
     <AppShell title="Everything" back="/">
       <div className="space-y-6">
@@ -26,7 +38,10 @@ export default function FeaturesPage() {
           Switchboard shows you one thing at a time on purpose. Here’s the whole
           of it — what each part does, and where to find it.
         </p>
-        <FeatureIndexClient />
+        {passport && <Passport state={passport} />}
+        <FeatureIndexClient
+          groupProgress={passport ? passportByGroup(passport) : null}
+        />
       </div>
     </AppShell>
   );

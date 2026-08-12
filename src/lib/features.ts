@@ -165,6 +165,13 @@ export const FEATURE_GROUPS: readonly FeatureGroup[] = [
         href: '/discover',
       },
       {
+        id: 'privacy-access',
+        title: 'Privacy and access',
+        blurb:
+          'Change what guests can see about each other — who’s in, the whole invite list, expired invitations — at any point, not just when you set the plan up.',
+        where: 'Your plan’s page → Privacy and access',
+      },
+      {
         id: 'co-hosts',
         title: 'Co-hosts',
         blurb:
@@ -241,6 +248,13 @@ export const FEATURE_GROUPS: readonly FeatureGroup[] = [
         blurb:
           'Set a deadline and let a poll resolve on its own, pick the winner yourself, or run a runoff between the top options.',
         where: 'Plan wizard → Style, then the plan page',
+      },
+      {
+        id: 'poll-chain',
+        title: 'One decision unlocks the next',
+        blurb:
+          'Queue the questions that only make sense later — where, once the date lands; what to eat, once the place does. Each opens by itself when the one before it is settled.',
+        where: 'Any plan with a poll → Decide something after this',
       },
       {
         id: 'undecided-plans',
@@ -398,6 +412,14 @@ export const FEATURE_GROUPS: readonly FeatureGroup[] = [
         blurb:
           'Named places you check into — a conference, a cruise, a campus, a festival — so “who else is here?” has an answer.',
         where: 'More → Zones',
+        href: '/zones',
+      },
+      {
+        id: 'private-zones',
+        title: 'Private zones',
+        blurb:
+          'Make a zone visible only to people you let in, by link or by request, and remove anyone later. Public zones still work exactly as before.',
+        where: 'Zones → create one, or a zone you organize → Who can be here',
         href: '/zones',
       },
       {
@@ -610,6 +632,22 @@ export const FEATURE_GROUPS: readonly FeatureGroup[] = [
           'Verify an email or phone so invitations sent to it reach your account, and so people who have it can find you.',
         where: 'Settings → Verified contact details',
         href: '/settings',
+      },
+      {
+        id: 'appearance',
+        title: 'How the app looks',
+        blurb:
+          'Pick a look — cream and ink, warm dark, or the bright default — and it follows your account to every device you sign in on.',
+        where: 'Settings → Appearance',
+        href: '/settings',
+      },
+      {
+        id: 'passport',
+        title: 'What you’ve tried',
+        blurb:
+          'A private record of which parts of Switchboard you’ve actually used, and a nudge toward one you haven’t. Yours only, and it never pings you.',
+        where: 'More → Everything, at the top',
+        href: '/features',
       },
       {
         id: 'tips-reset',

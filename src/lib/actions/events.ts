@@ -25,6 +25,7 @@ import {
 } from '@/lib/engine/recurrence';
 import { reportAndFail, reportOperationalError } from '@/lib/server/observability';
 import type { ActionResult, ErrorCode } from '@/lib/errors';
+import { failure } from '@/lib/errors';
 import { looksLikeEmail, sendEmails } from '@/lib/server/email';
 import { looksLikePhoneNumber, sendSmsMessages } from '@/lib/server/sms';
 import { normalizePhoneNumber } from '@/lib/phone';
@@ -957,6 +958,45 @@ export async function updateEventDetails(
 
   revalidatePath(`/events/${eventId}`);
   revalidatePath('/plans');
+  return { ok: true };
+}
+
+/**
+ * Change what attendees can see about each other after the plan exists.
+ *
+ * These three flags were settable exactly once, on the wizard's Visibility
+ * step, and then frozen forever — so a host who ticked "show who's accepted"
+ * while setting up a surprise, or left the invite list hidden and later wanted
+ * people to see who else was coming, had no way back. Nothing about them is
+ * creation-time by nature.
+ *
+ * Host/co-host only, through the same `isEventManager` gate every other
+ * management action uses. None of these is authority state: they widen or
+ * narrow what an already-authorized attendee sees on a page they can already
+ * open, and the guest-list query itself re-checks `show_accepted` server-side.
+ */
+export async function setEventVisibility(
+  eventId: string,
+  field: 'show_invite_list' | 'show_accepted' | 'show_expired',
+  enabled: boolean,
+): Promise<ActionResult> {
+  const auth = await requireUser();
+  if (!auth.ok) return auth;
+  const { user } = auth;
+  if (!(await isEventManager(user.id, eventId))) {
+    return failure('SB-PLAN-ACCESS');
+  }
+
+  const admin = createAdminClient();
+  const { error } = await admin
+    .from('events')
+    .update({ [field]: enabled })
+    .eq('id', eventId);
+  if (error) {
+    return reportAndFail('SB-PLAN-SAVE', 'event-visibility', error, { eventId });
+  }
+
+  revalidatePath(`/events/${eventId}`);
   return { ok: true };
 }
 

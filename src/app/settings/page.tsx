@@ -14,6 +14,10 @@ import { SettingsForm, SettingsSaveProvider } from './SettingsSaveBar';
 import { AccountControls } from './AccountControls';
 import { CalendarSubscribe } from './CalendarSubscribe';
 import { ContactVerification } from './ContactVerification';
+import { AppearanceSection } from './AppearancePicker';
+import { resolveTheme } from '@/lib/themes-app';
+import { loadPassport } from '@/lib/server/passport';
+import { passportProgress } from '@/lib/passport';
 import { INTEREST_CATEGORIES, DOWN_TO_GROUP } from '@/lib/interests';
 import {
   signOut,
@@ -47,7 +51,7 @@ export default async function SettingsPage({
   const { data: profile } = await supabase
     .from('profiles')
     .select(
-      'display_name, handle, interests, down_to, sabbatical, sabbatical_message, quiet_hours_start, quiet_hours_end, discoverable, discovery_geography, discovery_demographics, discovery_interests, discovery_involvements, discovery_mutuals, discovery_contexts, notify_plans, notify_suggestions, notify_reminders, notify_messages, notify_social',
+      'display_name, handle, interests, down_to, sabbatical, sabbatical_message, quiet_hours_start, quiet_hours_end, discoverable, discovery_geography, discovery_demographics, discovery_interests, discovery_involvements, discovery_mutuals, discovery_contexts, notify_plans, notify_suggestions, notify_reminders, notify_messages, notify_social, appearance_theme',
     )
     .eq('id', user.id)
     .single();
@@ -58,6 +62,10 @@ export default async function SettingsPage({
     .rpc('my_private_profile')
     .maybeSingle<{ calendar_token: string; contact_email: string | null; contact_phone: string | null }>();
   const calendarToken = privateProfile?.calendar_token ?? null;
+  // Only to decide whether the earned preset shows as available; the action
+  // re-checks it server-side before saving.
+  const passportComplete = passportProgress(await loadPassport(user.id)).done;
+
   const { data: contacts } = await supabase
     .from('profile_contacts')
     .select('kind, verified_at');
@@ -115,6 +123,17 @@ export default async function SettingsPage({
               </div>
             )}
           </Card>
+
+          <section>
+            <SectionHeader
+              title="Appearance"
+              hint="How Switchboard looks, on every device you sign in on"
+            />
+            <AppearanceSection
+              current={resolveTheme(profile?.appearance_theme)}
+              passportComplete={passportComplete}
+            />
+          </section>
 
           <section>
             <SectionHeader
