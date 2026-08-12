@@ -7,6 +7,7 @@ import {
   isAuthLandingPath,
 } from '@/lib/auth-bounce';
 import { LEGAL_VERSION } from '@/lib/legal';
+import { buildCsp } from '@/lib/csp';
 
 /** Paths reachable without a session. */
 const PUBLIC_PREFIXES = [
@@ -37,37 +38,6 @@ function isPublicPath(pathname: string): boolean {
   return PUBLIC_PREFIXES.some(
     (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`),
   );
-}
-
-/**
- * Per-request Content-Security-Policy. `script-src` uses a fresh nonce for
- * inline framework scripts and same-origin bundles, with NO `'unsafe-inline'`
- * in production. We intentionally avoid `strict-dynamic`: Next/Turbopack can
- * request follow-up chunks without a nonce, and strict-dynamic causes browsers
- * to ignore the `'self'` allow-list for those scripts.
- *
- * `'unsafe-eval'` is allowed only in dev, where React uses eval for overlays.
- *
- * `style-src` intentionally keeps `'unsafe-inline'`: inline `style={{…}}`
- * attributes are pervasive in the UI and a CSP nonce does not cover inline
- * style *attributes* (only `<style>` elements). Style injection is far lower
- * risk than script injection, so this is an accepted allowance.
- */
-function buildCsp(nonce: string): string {
-  const isDev = process.env.NODE_ENV === 'development';
-  return [
-    "default-src 'self'",
-    `script-src 'self' 'nonce-${nonce}'${isDev ? " 'unsafe-eval'" : ''}`,
-    "style-src 'self' 'unsafe-inline'",
-    "img-src 'self' data: blob: https:",
-    "font-src 'self' data:",
-    "connect-src 'self' https://*.supabase.co wss://*.supabase.co",
-    "frame-src 'none'",
-    "object-src 'none'",
-    "base-uri 'self'",
-    "form-action 'self'",
-    "frame-ancestors 'none'",
-  ].join('; ');
 }
 
 export async function proxy(request: NextRequest) {

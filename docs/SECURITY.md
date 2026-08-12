@@ -397,10 +397,21 @@ surprises:
   definer flows). A legitimate event host can still add a member to their own
   event's Living Room; fully consent-gating that needs a product change.
 - **`style-src 'unsafe-inline'`.** `script-src` is nonce-locked with no
-  `'unsafe-inline'`/`'unsafe-eval'` in production (`src/proxy.ts`), but
+  `'unsafe-inline'`/`'unsafe-eval'` in production (`src/lib/csp.ts`), but
   `style-src` keeps `'unsafe-inline'` because inline `style={{…}}` attributes
   are pervasive and CSP nonces don't cover style attributes. Style injection is
   far lower risk than script injection.
+
+**`connect-src` names the project, not the platform.** It is derived from
+`NEXT_PUBLIC_SUPABASE_URL` in `src/lib/csp.ts`, never hardcoded. The
+`https://*.supabase.co` wildcard it replaced authorised every Supabase project
+on the internet, and simultaneously blocked the local stack and CI, which serve
+the database from `127.0.0.1:54321` — so the realtime socket was refused on
+every page that opens one, everywhere except a deployment. Nothing reported it:
+**a CSP violation throws nothing, fails no request, and writes no server log**,
+which is why `src/lib/csp.test.ts` exists and why the policy lives in a module a
+test can import (Next's proxy file may export only its one function). Adding a
+host to any directive means adding the case there.
 - **OG image route** renders public event metadata (title/time/location) for any
   event id without auth by design (link unfurling). Keep it to non-sensitive
   fields only.

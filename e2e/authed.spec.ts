@@ -356,27 +356,49 @@ test.describe('authenticated surface', () => {
     // what the group can actually see, and whether the browser threw. An
     // action that throws instead of returning `{ ok: false }` renders no alert,
     // so the silent-screen case needs the browser's own log to be readable.
-    await expect(async () => {
-      if (await page.getByText('Tacos').first().isVisible()) return;
-      const screen = await pollScreen(page);
-      const complaint = await pageComplaints(page);
-      const browser = noise();
+    try {
+      await expect(async () => {
+        if (await page.getByText('Tacos').first().isVisible()) return;
+        const screen = await pollScreen(page);
+        const complaint = await pageComplaints(page);
+        const browser = noise();
+        throw new Error(
+          [
+            `"Tacos" is not on the group-decision screen (${screen.url}).`,
+            complaint ? `The app objected: ${complaint}` : 'The app objected to nothing.',
+            !screen.suggestBoxPresent
+              ? 'There is no suggestion box — either no poll rendered, or it is not open to suggestions.'
+              : screen.stillTyped
+                ? `The box still holds "${screen.stillTyped}". PollSection clears it synchronously on submit, so the submit handler never ran — the click did not reach it. (Add buttons on page: ${screen.addButtons}, first one enabled: ${screen.addEnabled}.)`
+                : 'The box is empty, so the submit handler did run. The idea was lost after that — in the action, or in the re-render that should have shown it.',
+            `Options the group can see: ${
+              screen.options.length ? screen.options.join(', ') : 'none'
+            }`,
+            browser ? `The browser logged: ${browser}` : 'The browser logged nothing.',
+          ].join('\n'),
+        );
+      }).toPass({ timeout: 15_000 });
+    } catch (failure) {
+      // Ask the server the one question the screen cannot answer: was the row
+      // ever written? A reload re-renders the plan from the database with no
+      // client state involved, which splits the two remaining causes cleanly —
+      // a write that never happened, or a write that happened and never made
+      // it back onto the page.
+      await page.reload();
+      const written = await page
+        .getByText('Tacos')
+        .first()
+        .waitFor({ state: 'visible', timeout: 10_000 })
+        .then(() => true)
+        .catch(() => false);
       throw new Error(
-        [
-          '"Tacos" is not on the group-decision screen.',
-          complaint ? `The app objected: ${complaint}` : 'The app objected to nothing.',
-          !screen.suggestBoxPresent
-            ? `There is no suggestion box — either no poll rendered, or it is not open to suggestions. URL: ${screen.url}`
-            : screen.stillTyped
-              ? `The box still holds "${screen.stillTyped}". PollSection clears it synchronously on submit, so the submit handler never ran — the click did not reach it. (Add buttons on page: ${screen.addButtons}, first one enabled: ${screen.addEnabled}.)`
-              : 'The box is empty, so the submit handler did run. The idea was lost after that — in the action, or in the re-render that should have shown it.',
-          `Options the group can see: ${
-            screen.options.length ? screen.options.join(', ') : 'none'
-          }`,
-          browser ? `The browser logged: ${browser}` : 'The browser logged nothing.',
-        ].join('\n'),
+        `${(failure as Error).message}\nAfter a full reload: ${
+          written
+            ? 'it IS there. The suggestion was saved and the page never re-rendered to show it.'
+            : 'still absent. The suggestion was never saved, even though the action reported no error.'
+        }`,
       );
-    }).toPass({ timeout: 15_000 });
+    }
     await page.getByRole('button', { name: 'Absolutely love this' }).first().click();
   });
 
