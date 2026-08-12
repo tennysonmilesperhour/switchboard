@@ -110,8 +110,28 @@ When calling a definer helper with the admin client, pass the authenticated id
 explicitly (`is_event_host(p_event, userId)`) — `auth.uid()` is `null` under the
 service role.
 
+**And grant it to `service_role` explicitly.** Since
+`20260713151000_function_grant_hardening.sql` ran
+`alter default privileges in schema public revoke execute on functions from
+public`, a new `public` function is executable by *nobody* until it is granted.
+The service role's EXECUTE used to arrive via that implicit PUBLIC grant, so
+anything called through `createAdminClient()` now needs:
+
+```sql
+grant execute on function public.<fn>(<args>) to service_role;
+```
+
+This is not hypothetical. Omitting it took down every host-only action for two
+weeks (`is_event_host` — hosts were told *"Only the host can invite people to
+this plan."*) and shipped guardian approval broken on day one
+(`resolve_parental_approval`). Neither failed at migration time, because
+migrations do not run as `service_role`; both failed for real people.
+`supabase/tests/service_role_grants.test.sql` asserts the grant for every
+admin-called function — add yours to that list when you add the RPC.
+
 Litmus test: *does this admin-client line trust an id/field from the request
-without proving the caller owns it?*
+without proving the caller owns it — and can `service_role` actually execute
+what it calls?*
 
 ## 6. Encode untrusted data for its destination
 

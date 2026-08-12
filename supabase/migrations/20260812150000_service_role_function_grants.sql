@@ -1,0 +1,47 @@
+-- Give the service role back the functions the server calls with it.
+--
+-- `20260713151000_function_grant_hardening.sql` did two correct things and one
+-- thing with a consequence nobody saw:
+--
+--   revoke execute on function ... from public, anon;   -- per function
+--   alter default privileges in schema public revoke execute on functions from public;
+--
+-- In Supabase, `service_role`'s EXECUTE on a `public` function comes from the
+-- implicit PUBLIC grant. Revoking PUBLIC therefore revoked it from the service
+-- role too — silently, because nothing calls these functions as service_role
+-- during a migration. Tables were unaffected (Supabase grants those to the API
+-- roles explicitly), so the app looked fine everywhere except the few paths
+-- that go through `createAdminClient()`.
+--
+-- What that broke, and for how long:
+--
+--   `is_event_host`  — every host-only action routed through isEventManager:
+--                      inviting someone directly, editing the cascade, closing
+--                      a poll, posting an announcement. The host was told
+--                      "Only the host can invite people to this plan." The
+--                      authenticated E2E suite has been red on this since
+--                      2026-07-31 and the message sent everyone looking at
+--                      permissions rather than at grants.
+--   `resolve_parental_approval` — shipped 2026-08-11 with grants to `anon` and
+--                      `authenticated` but not `service_role`, and it is only
+--                      ever called with the admin client. A guardian following
+--                      an approval link could not approve.
+--
+-- Proven, not guessed: the CI server log now carries
+--   {"area":"authz.event-manager","userCode":"SB-PLAN-AUTHZ",
+--    "message":"permission denied for function is_event_host","code":"42501"}
+--
+-- Least privilege is preserved. This grants EXECUTE to `service_role` only —
+-- `public` and `anon` stay revoked, and no client-facing role gains anything.
+-- These two functions are already reachable by `authenticated` (is_event_host)
+-- and by the guardian's token flow (resolve_parental_approval); the service
+-- role is simply how the server asks on their behalf.
+--
+-- The standing rule this leaves behind: because default privileges no longer
+-- grant EXECUTE to PUBLIC, **any function invoked through `createAdminClient()`
+-- must carry an explicit `grant execute ... to service_role`.**
+-- `supabase/tests/service_role_grants.test.sql` asserts exactly that, for every
+-- such function, so the next one cannot be missed silently.
+
+grant execute on function public.is_event_host(uuid, uuid) to service_role;
+grant execute on function public.resolve_parental_approval(text, boolean) to service_role;

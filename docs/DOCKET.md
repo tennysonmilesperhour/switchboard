@@ -75,37 +75,52 @@ Code can't close these; they need the owner or a dashboard:
   scheduler with the `CRON_SECRET` bearer.
 - **Preview environment isolation** (own Supabase project, complete config) and
   confirming the **authed-E2E GitHub job is a required check**.
-- **CI on `main` is red** — the Authenticated E2E job, on every push since
-  **2026-07-31** (not Aug 7 as first recorded; run 281 shows it red on the very
-  commit that added the invite test, so that test has never passed). Two fail:
-  `authed.spec.ts:345` "a host invites a connection directly" and
-  `authed.spec.ts:278` "a host opens a group decision, suggests, and votes".
+- ~~**CI on `main` is red**~~ — **root cause found and fixed 2026-08-12.**
 
-  **What's established** (2026-08-12):
-  - Not a database problem. Applying every migration to a clean Postgres shows
-    `is_event_host` correct (true for the host, false for others) and
-    executable by `service_role` — the grant-hardening migration did not lock
-    it out, which was the first hypothesis.
-  - Both failures reduce to the *same* shape: a server action taken
-    **immediately after** plan creation is refused. Creating a plan passes;
-    only the follow-up action fails, in both tests. A non-host can neither
-    invite nor add poll options, which is exactly the pair of symptoms.
-  - The likeliest cause is the one `authed.spec.ts` already documents in a
-    comment: the cookies sent on the second action carry an access token from
-    before `createEvent` rotated it, so `getUser()` resolves to a stale or
-    different session. The `await host.reload()` added as a workaround is
-    evidently not sufficient. If real, this is a **user-facing** race, not a
-    test artifact — worth confirming before dismissing.
-  - Fixed on the way past: a failed authz check used to be reported as
-    "Only the host can invite people to this plan" with no log line, so the
-    screen accused the host of not being the host and left no evidence. It now
-    separates "not permitted" from "could not check" (`SB-PLAN-AUTHZ`).
-  - CI now retains Playwright traces, screenshots, and the report on failure.
-    The absence of any artifact is why this stayed unexplained for two weeks.
+  The Authenticated E2E job had been red on every push since **2026-07-31**
+  (not Aug 7 as first recorded — run 281 shows it red on the very commit that
+  added the invite test, so that test never passed once).
 
-  **Next step:** read the artifacts from the first red run after this change —
-  the trace shows whose session the page held at the moment of the refusal,
-  which confirms or kills the session-rotation theory outright.
+  **The cause was a missing grant, not a session bug.**
+  `20260713151000_function_grant_hardening.sql` ran
+  `alter default privileges in schema public revoke execute on functions from
+  public` plus per-function `revoke ... from public, anon`. In Supabase, the
+  **service role's EXECUTE on a `public` function comes from that implicit
+  PUBLIC grant** — so the hardening silently revoked it from `service_role`
+  too. Nothing failed at migration time, because migrations don't run as
+  `service_role`. Only the handful of paths that go through
+  `createAdminClient()` broke, and they broke for real people:
+
+  - `is_event_host` — every host-only action routed through `isEventManager`:
+    inviting directly, cascade edits, closing a poll, announcements. Hosts were
+    told *"Only the host can invite people to this plan."*
+  - `resolve_parental_approval` — shipped 2026-08-11 granting `anon` and
+    `authenticated` but never `service_role`, and only ever called as admin, so
+    a guardian following an approval link could not approve. Same hole, found
+    while fixing the first.
+
+  Proven from the CI server log, not inferred:
+  `{"area":"authz.event-manager","userCode":"SB-PLAN-AUTHZ","message":"permission
+  denied for function is_event_host","code":"42501"}`.
+
+  **Two false starts worth remembering.** A local Postgres replica said
+  `service_role` *could* execute `is_event_host` — the replica's default
+  privileges were more generous than real Supabase, so it exonerated the true
+  cause. And the shared shape of the two failures pointed convincingly at the
+  session-rotation race the spec file documents. Both were resolved only once
+  the app was made to *say* what it hit.
+
+  **Fixed by:** `20260812150000_service_role_function_grants.sql` (grants to
+  `service_role` only; `public`/`anon` stay revoked), a three-way authz result
+  so a check that cannot run is `SB-PLAN-AUTHZ` rather than a false accusation,
+  and retained Playwright traces/screenshots on failure — the absence of any
+  artifact is why this went two weeks unexplained.
+
+  **The rule it leaves behind:** default privileges no longer grant EXECUTE to
+  PUBLIC, so **any function called through `createAdminClient()` needs an
+  explicit `grant execute ... to service_role`**.
+  `supabase/tests/service_role_grants.test.sql` asserts that for every such
+  function, against real Supabase in CI.
 - Legal copy sign-off; run `supabase test db` + the `E2E_DB=1` suite once
   against a disposable project before any release.
 
