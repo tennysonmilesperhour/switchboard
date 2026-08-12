@@ -75,13 +75,64 @@ Code can't close these; they need the owner or a dashboard:
   scheduler with the `CRON_SECRET` bearer.
 - **Preview environment isolation** (own Supabase project, complete config) and
   confirming the **authed-E2E GitHub job is a required check**.
-- **CI on `main` is red** (as of 2026-08-11, every push since ~Aug 7): the
-  Authenticated E2E job fails on `e2e/authed.spec.ts` › "a host invites a
-  connection directly" — the app toasts "Only the host can invite people to
-  this plan." where the test expects "Invitation sent to E2E Guest" (a second
-  test, the group-decision one, fails intermittently). Diagnose whether it's a
-  fixture/authorization regression or a stale test before making the job a
-  required check.
+- ~~**CI on `main` is red**~~ — **root cause found and fixed 2026-08-12.**
+
+  The Authenticated E2E job had been red on every push since **2026-07-31**
+  (not Aug 7 as first recorded — run 281 shows it red on the very commit that
+  added the invite test, so that test never passed once).
+
+  **The cause was a missing grant on the *private* function bodies.**
+  `20260717192758_move_definer_bodies_private.sql` moved every authenticated
+  `SECURITY DEFINER` body out of `public` into `private` and left a thin
+  `SECURITY INVOKER` wrapper behind. `alter function ... set schema private`
+  **carries the function's ACL with it**, so each body kept its `authenticated`
+  grant and never gained one for `service_role` — only the five *trigger*
+  functions got an explicit grant, because only that branch of the loop said so.
+
+  An invoker wrapper runs as its caller, so the caller needs EXECUTE on the body:
+
+      authenticated → wrapper runs as authenticated → body allows → works
+      service_role  → wrapper runs as service_role  → body denies → 42501
+
+  32 private bodies were in that state. Nothing failed at migration time
+  (migrations don't run as `service_role`), so only the handful of paths that go
+  through `createAdminClient()` broke — and they broke for real people:
+
+  - `is_event_host` — every host-only action routed through `isEventManager`:
+    inviting directly, cascade edits, closing a poll, announcements. Hosts were
+    told *"Only the host can invite people to this plan."*
+  - `resolve_parental_approval` — shipped 2026-08-11 granting `anon` and
+    `authenticated` but never `service_role`, and only ever called as admin, so
+    a guardian following an approval link could not approve. Same hole, found
+    while fixing the first.
+
+  Proven from the CI server log, not inferred:
+  `{"area":"authz.event-manager","userCode":"SB-PLAN-AUTHZ","message":"permission
+  denied for function is_event_host","code":"42501"}`.
+
+  **Three false starts worth remembering**, all corrected by evidence:
+  a local Postgres replica twice said `service_role` *could* execute the
+  function — its default privileges were more generous than real Supabase, so
+  the replica exonerated the true cause until it was rebuilt to rely on the
+  implicit PUBLIC grant the way Supabase does. The shared shape of the two
+  failures pointed convincingly at the session-rotation race the spec file
+  documents. And the first fix granted the *public wrapper*, which made pgTAP
+  pass while the app still got 42501 — the wrapper was never the problem.
+
+  **Fixed by:** `20260812150000_service_role_function_grants.sql` (grants the
+  private bodies to `service_role` only; `private` stays unreachable from the
+  browser and `public`/`anon` stay revoked), a three-way authz result
+  so a check that cannot run is `SB-PLAN-AUTHZ` rather than a false accusation,
+  and retained Playwright traces/screenshots on failure — the absence of any
+  artifact is why this went two weeks unexplained.
+
+  **The rule it leaves behind:** default privileges no longer grant EXECUTE to
+  PUBLIC, so **any function called through `createAdminClient()` needs an
+  explicit `grant execute ... to service_role`**.
+  `supabase/tests/service_role_grants.test.sql` asserts that for every such
+  function — *including the private body behind an invoker wrapper*, and as a
+  general rule over the whole `private` schema, so the next function moved
+  cannot repeat this.
 - Legal copy sign-off; run `supabase test db` + the `E2E_DB=1` suite once
   against a disposable project before any release.
 
