@@ -250,6 +250,13 @@ export const FEATURE_GROUPS: readonly FeatureGroup[] = [
         where: 'Plan wizard → Style, then the plan page',
       },
       {
+        id: 'poll-chain',
+        title: 'One decision unlocks the next',
+        blurb:
+          'Queue the questions that only make sense later — where, once the date lands; what to eat, once the place does. Each opens by itself when the one before it is settled.',
+        where: 'Any plan with a poll → Decide something after this',
+      },
+      {
         id: 'undecided-plans',
         title: 'Share it before the date is settled',
         blurb:

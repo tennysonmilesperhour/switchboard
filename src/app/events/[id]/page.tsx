@@ -25,6 +25,8 @@ import { VoiceNote } from '@/components/ui/VoiceNote';
 import { RunItBackButton } from '@/components/events/RunItBackButton';
 import { ScheduleNextButton } from '@/components/events/ScheduleNextButton';
 import { PollSection, type OptionResult } from '@/components/polls/PollSection';
+import { PollChain } from '@/components/polls/PollChain';
+import { FollowUpComposer } from '@/components/polls/FollowUpComposer';
 import { recurrenceLabel } from '@/lib/engine/recurrence';
 import { HostControls } from './HostControls';
 import { CoHostManager } from './CoHostManager';
@@ -52,6 +54,7 @@ import type {
   PollOption,
   SwitchboardEvent,
 } from '@/lib/types';
+import { pollQuestion } from '@/lib/types';
 import type { Weight } from '@/lib/engine/scoring';
 
 /** Rich unfurl card for directly-shared event links (iMessage/WhatsApp/Slack). */
@@ -351,12 +354,48 @@ export default async function EventPage({
       .map((attendee) => attendee.name);
   }
 
-  // Poll (Anonymous Weighted Input)
-  const { data: poll } = await supabase
+  // Polls (Anonymous Weighted Input). A plan can now carry a chain of them —
+  // the date, then where, then what we're eating — so this reads the whole set
+  // and surfaces one at a time. `.maybeSingle()` here used to throw the moment
+  // a second poll existed.
+  //
+  // The active poll is the earliest-created one still open. Everything decided
+  // is history, and everything `pending` is waiting on a parent, so neither is
+  // what the group should be looking at right now.
+  const { data: pollRows } = await supabase
     .from('polls')
     .select('*')
     .eq('event_id', id)
-    .maybeSingle<Poll>();
+    .order('created_at')
+    .returns<Poll[]>();
+
+  const allPolls = pollRows ?? [];
+  const poll =
+    allPolls.find((row) => row.phase !== 'decided' && row.phase !== 'pending') ??
+    // Nothing open: show the most recent decision, so the answer stays on the
+    // page rather than vanishing the moment it lands.
+    [...allPolls].reverse().find((row) => row.phase === 'decided') ??
+    null;
+  const decidedPolls = allPolls.filter(
+    (row) => row.phase === 'decided' && row.id !== poll?.id,
+  );
+  const pendingPolls = allPolls.filter((row) => row.phase === 'pending');
+
+  // What each already-settled question landed on, so the chain can show the
+  // answer rather than just "decided".
+  const allDecidedWinners: Record<string, string> = {};
+  const winnerIds = decidedPolls
+    .map((row) => row.winning_option_id)
+    .filter((optionId): optionId is string => Boolean(optionId));
+  if (winnerIds.length > 0) {
+    const { data: winnerRows } = await supabase
+      .from('poll_options')
+      .select('id, label, poll_id')
+      .in('id', winnerIds);
+    for (const row of winnerRows ?? []) {
+      allDecidedWinners[row.poll_id] = row.label;
+    }
+  }
 
   let options: PollOption[] = [];
   let results: OptionResult[] = [];
@@ -950,16 +989,43 @@ export default async function EventPage({
           </Card>
         )}
 
-        {/* Poll */}
+        {/* Poll, plus whatever this plan has already settled and whatever is
+            queued behind the current question. */}
         {poll && (
-          <PollSection
-            poll={poll}
-            options={options}
-            results={results}
-            myVotes={myVotes}
-            isHost={isHost}
-            eventId={event.id}
-          />
+          <>
+            <PollChain
+              decided={decidedPolls.map((row) => ({
+                id: row.id,
+                question: pollQuestion(row),
+                winner:
+                  allDecidedWinners[row.id] ?? null,
+              }))}
+              pending={pendingPolls.map((row) => ({
+                id: row.id,
+                question: pollQuestion(row),
+              }))}
+              activeQuestion={pollQuestion(poll)}
+              activeDecided={poll.phase === 'decided'}
+              eventId={event.id}
+              isHost={canManage}
+            />
+            <PollSection
+              poll={poll}
+              options={options}
+              results={results}
+              myVotes={myVotes}
+              isHost={isHost}
+              eventId={event.id}
+            />
+            {canManage && (
+              <FollowUpComposer
+                parentPollId={poll.id}
+                eventId={event.id}
+                parentTopic={poll.topic}
+                hasPending={pendingPolls.length > 0}
+              />
+            )}
+          </>
         )}
 
         {/* Host broadcasts */}

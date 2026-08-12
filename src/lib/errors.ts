@@ -427,6 +427,8 @@ const AREA_CODES: Record<string, ErrorCode> = {
   'event-create': 'SB-PLAN-CREATE',
   'event-update': 'SB-PLAN-SAVE',
   'event-visibility': 'SB-PLAN-SAVE',
+  'poll.follow-up': 'SB-PLAN-SAVE',
+  'poll.follow-up-remove': 'SB-PLAN-SAVE',
   'event-locate': 'SB-PLAN-SAVE',
   'event.delete': 'SB-PLAN-DELETE',
   'event.delete-room': 'SB-PLAN-DELETE',

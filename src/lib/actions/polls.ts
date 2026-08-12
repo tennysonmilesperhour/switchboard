@@ -7,11 +7,14 @@ import { after } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { requireUser } from '@/lib/server/require-user';
 import { isEventManager } from '@/lib/server/authz';
-import { resolvePoll } from '@/lib/server/poll-runner';
+import { openFollowUpPolls, resolvePoll } from '@/lib/server/poll-runner';
 import { notifySuggestionAdded } from '@/lib/server/notify';
+import { failure } from '@/lib/errors';
+import { reportAndFail } from '@/lib/server/observability';
 import { capture } from '@/lib/analytics/server';
 import { ANALYTICS_EVENTS } from '@/lib/analytics/events';
 import type { Weight } from '@/lib/engine/scoring';
+import type { PollTopic } from '@/lib/types';
 
 export async function addSuggestion(
   pollId: string,
@@ -163,5 +166,82 @@ export async function pickWinner(
     .from('polls')
     .update({ phase: 'decided', winning_option_id: optionId })
     .eq('id', pollId);
+  // A host picking the winner decides the poll just as much as the runner
+  // does, so the follow-ups have to open from here too — otherwise a chain
+  // stalls silently for every host who uses the pick-the-winner path.
+  await openFollowUpPolls(pollId);
   revalidatePath(`/events/${eventId}`);
+}
+
+/**
+ * Add a follow-up poll: the question that only becomes answerable once this
+ * one lands.
+ *
+ * Created `pending`, so it is set up but not yet asked. The database opens it
+ * when the parent is decided; nothing here or in the client advances a phase.
+ */
+export async function addFollowUpPoll(
+  parentPollId: string,
+  eventId: string,
+  topic: PollTopic,
+  title?: string,
+): Promise<ActionResult> {
+  const auth = await requireUser();
+  if (!auth.ok) return auth;
+  const { supabase, user } = auth;
+
+  if (!(await isEventManager(user.id, eventId))) {
+    return failure('SB-PLAN-ACCESS');
+  }
+
+  const { data: parent } = await supabase
+    .from('polls')
+    .select('id, event_id, resolution, allow_suggestions')
+    .eq('id', parentPollId)
+    .maybeSingle();
+  if (!parent || parent.event_id !== eventId) {
+    return { ok: false, error: 'That decision is not on this plan.' };
+  }
+
+  const { error } = await supabase.from('polls').insert({
+    event_id: eventId,
+    parent_poll_id: parentPollId,
+    topic,
+    title: title?.trim() ? title.trim().slice(0, 120) : null,
+    // A follow-up inherits how the parent decides things: a host who set the
+    // first question to resolve itself doesn't want to be asked again.
+    resolution: parent.resolution,
+    allow_suggestions: parent.allow_suggestions,
+    phase: 'pending',
+  });
+  if (error) return reportAndFail('SB-PLAN-SAVE', 'poll.follow-up', error);
+
+  revalidatePath(`/events/${eventId}`);
+  return { ok: true };
+}
+
+/** Remove a follow-up that hasn't opened yet. Host/co-host only. */
+export async function removeFollowUpPoll(
+  pollId: string,
+  eventId: string,
+): Promise<ActionResult> {
+  const auth = await requireUser();
+  if (!auth.ok) return auth;
+  const { supabase, user } = auth;
+
+  if (!(await isEventManager(user.id, eventId))) {
+    return failure('SB-PLAN-ACCESS');
+  }
+
+  // Only while still pending: once a poll has opened, people may have answered
+  // it, and deleting it would take their input with it.
+  const { error } = await supabase
+    .from('polls')
+    .delete()
+    .eq('id', pollId)
+    .eq('phase', 'pending');
+  if (error) return reportAndFail('SB-PLAN-SAVE', 'poll.follow-up-remove', error);
+
+  revalidatePath(`/events/${eventId}`);
+  return { ok: true };
 }

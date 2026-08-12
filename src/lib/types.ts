@@ -243,7 +243,11 @@ export interface Invite {
   created_at: string;
 }
 
-export type PollPhase = 'suggesting' | 'voting' | 'runoff' | 'decided';
+/**
+ * `pending` is a follow-up poll waiting on the one before it: it exists, the
+ * host has set it up, and it opens by itself the moment its parent is decided.
+ */
+export type PollPhase = 'pending' | 'suggesting' | 'voting' | 'runoff' | 'decided';
 export type PollResolution = 'host_pick' | 'auto' | 'runoff';
 export type PollSource = 'guests' | 'host' | 'ai';
 
@@ -253,10 +257,54 @@ export interface Poll {
   phase: PollPhase;
   resolution: PollResolution;
   allow_suggestions: boolean;
-  suggest_deadline: string | null;
   vote_deadline: string | null;
   winning_option_id: string | null;
+  /** The poll that has to land before this one opens, when it's a follow-up. */
+  parent_poll_id: string | null;
+  topic: PollTopic;
+  /** The host's own wording, when the topic preset isn't what they meant. */
+  title: string | null;
   created_at: string;
+}
+
+/** What a poll is about. Drives its label and the suggested follow-up chain. */
+export type PollTopic = 'date' | 'place' | 'food' | 'activity' | 'custom';
+
+export const POLL_TOPICS: Array<{
+  topic: PollTopic;
+  label: string;
+  emoji: string;
+  /** The question, as the group reads it. */
+  question: string;
+}> = [
+  { topic: 'date', label: 'When', emoji: '📅', question: 'When should this be?' },
+  { topic: 'place', label: 'Where', emoji: '📍', question: 'Where should we go?' },
+  { topic: 'food', label: 'Food', emoji: '🍜', question: 'What are we eating?' },
+  { topic: 'activity', label: 'What', emoji: '🎲', question: 'What should we do?' },
+  { topic: 'custom', label: 'Something else', emoji: '💬', question: 'One more thing' },
+];
+
+/**
+ * What usually needs deciding next, once a given topic is settled.
+ *
+ * Only a suggestion — the host picks, and can always add a custom follow-up.
+ * The order mirrors how plans actually get made: the date gates everything,
+ * then the place, then the details inside it.
+ */
+export const SUGGESTED_FOLLOW_UPS: Record<PollTopic, PollTopic[]> = {
+  date: ['place', 'activity'],
+  place: ['food', 'activity'],
+  food: ['custom'],
+  activity: ['place', 'food'],
+  custom: ['custom'],
+};
+
+export function pollQuestion(poll: Pick<Poll, 'topic' | 'title'>): string {
+  if (poll.title?.trim()) return poll.title.trim();
+  return (
+    POLL_TOPICS.find((entry) => entry.topic === poll.topic)?.question ??
+    'What should we do?'
+  );
 }
 
 export interface PollOption {

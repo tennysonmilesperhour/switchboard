@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { sweepCascades } from '@/lib/server/cascade-runner';
-import { sweepDuePolls } from '@/lib/server/poll-runner';
+import { sweepDuePolls, sweepSuggestionDeadlines } from '@/lib/server/poll-runner';
 import { sweepReminders } from '@/lib/server/reminders';
 import { sweepExpired } from '@/lib/server/cleanup';
 import { checkRateLimit } from '@/lib/server/rate-limit';
@@ -31,6 +31,10 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: 'Too many requests' }, { status: 429 });
   }
 
+  // Suggestions close before voting resolves: a poll whose suggest deadline
+  // just passed should be in `voting` before the resolver looks at it, not
+  // resolved out of `suggesting` in the same tick.
+  const suggestionsClosed = await sweepSuggestionDeadlines();
   const [eventsAdvanced, pollsResolved, remindersSent, cleaned] = await Promise.all([
     sweepCascades(),
     sweepDuePolls(),
@@ -40,6 +44,7 @@ export async function GET(request: Request) {
   return NextResponse.json({
     ok: true,
     eventsAdvanced,
+    suggestionsClosed,
     pollsResolved,
     remindersSent,
     signalsDeleted: cleaned.signalsDeleted,

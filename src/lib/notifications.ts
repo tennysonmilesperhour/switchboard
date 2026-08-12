@@ -114,6 +114,10 @@ const KIND_TO_CATEGORY: Record<string, NotificationCategory> = {
   // bursts, and someone who wants to escape that must be able to do it without
   // also muting invitations and cancellations.
   poll_suggestion: 'suggestions',
+  // A follow-up decision just became answerable because the one before it
+  // landed. This is a plan update, not a brainstorm: it happens once per
+  // decision, and missing it means missing your say on the next question.
+  poll_opened: 'plans',
   // Event reminders
   reminder: 'reminders',
   // Comments & photos
