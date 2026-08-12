@@ -143,7 +143,7 @@ create policy zones_delete on public.zones for delete to authenticated
   using (organizer_id = auth.uid());
 
 create or replace function public.freeze_zone_owner()
-returns trigger language plpgsql as $$
+returns trigger language plpgsql set search_path = public as $$
 begin
   if new.organizer_id is distinct from old.organizer_id then
     raise exception 'zone organizer is immutable';
@@ -172,7 +172,7 @@ create policy zone_members_delete on public.zone_members for delete to authentic
   using (member_id = auth.uid() or public.is_zone_moderator(zone_id, auth.uid()));
 
 create or replace function public.freeze_zone_membership()
-returns trigger language plpgsql as $$
+returns trigger language plpgsql set search_path = public as $$
 begin
   if new.zone_id is distinct from old.zone_id
      or new.member_id is distinct from old.member_id then
@@ -376,6 +376,12 @@ revoke all on function public.ensure_zone_invite_code(uuid) from public, anon;
 revoke all on function public.rotate_zone_invite_code(uuid) from public, anon;
 revoke all on function public.join_zone_via_code(text) from public, anon;
 revoke all on function public.resolve_zone_join_request(uuid, boolean) from public, anon;
+revoke all on function public.is_zone_member(uuid, uuid) from public, anon;
+revoke all on function public.is_zone_moderator(uuid, uuid) from public, anon;
+revoke all on function public.can_view_zone(uuid, uuid) from public, anon;
+revoke all on function public.freeze_zone_owner() from public, anon, authenticated;
+revoke all on function public.freeze_zone_membership() from public, anon, authenticated;
+revoke all on function public.enforce_zone_checkin_access() from public, anon, authenticated;
 
 grant execute on function public.is_zone_member(uuid, uuid) to authenticated;
 grant execute on function public.is_zone_moderator(uuid, uuid) to authenticated;

@@ -63,7 +63,7 @@ create index if not exists polls_parent_idx on public.polls (parent_poll_id)
 -- construction: a child is always created after its parent, and
 -- `parent_poll_id` is never rewritten (frozen below).
 create or replace function public.check_poll_parent()
-returns trigger language plpgsql as $$
+returns trigger language plpgsql set search_path = public as $$
 begin
   if new.parent_poll_id = new.id then
     raise exception 'a poll cannot follow itself';
@@ -108,4 +108,5 @@ begin
 end $$;
 
 revoke all on function public.resolve_poll_children(uuid) from public, anon, authenticated;
+revoke all on function public.check_poll_parent() from public, anon, authenticated;
 grant execute on function public.resolve_poll_children(uuid) to service_role;
