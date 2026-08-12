@@ -1,0 +1,573 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Switchboard — Scope of Work Verification</title>
+<style>
+  :root {
+    --bg: #f0f2f6;
+    --surface: #ffffff;
+    --surface-2: #e8ebf0;
+    --ink: #141720;
+    --ink-soft: #4a5060;
+    --ink-faint: #6b7585;
+    --line: #dfe2e8;
+    --line-strong: #c8cdd6;
+    --teal: #0c6e72;
+    --teal-soft: rgba(12,110,114,0.10);
+    --teal-mid: rgba(12,110,114,0.22);
+    --green: #1d7a47;
+    --green-soft: rgba(29,122,71,0.10);
+    --amber: #b8720d;
+    --amber-soft: rgba(184,114,13,0.12);
+    --slate: #5c6370;
+    --slate-soft: rgba(92,99,112,0.10);
+    --shadow: 0 1px 3px rgba(20,23,32,0.06), 0 6px 20px -8px rgba(20,23,32,0.10);
+    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, Roboto, sans-serif;
+    --serif: Georgia, "Iowan Old Style", "Times New Roman", serif;
+    --mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace;
+    --radius: 14px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #0f1117;
+      --surface: #171b24;
+      --surface-2: #1e2230;
+      --ink: #e4e8f0;
+      --ink-soft: #a0a8b8;
+      --ink-faint: #6c7588;
+      --line: #252a38;
+      --line-strong: #323848;
+      --teal: #3cc0c4;
+      --teal-soft: rgba(60,192,196,0.12);
+      --teal-mid: rgba(60,192,196,0.22);
+      --green: #5cc882;
+      --green-soft: rgba(92,200,130,0.14);
+      --amber: #e8a840;
+      --amber-soft: rgba(232,168,64,0.14);
+      --slate: #8890a0;
+      --slate-soft: rgba(136,144,160,0.12);
+      --shadow: 0 1px 3px rgba(0,0,0,0.20), 0 6px 20px -8px rgba(0,0,0,0.40);
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #0f1117;
+    --surface: #171b24;
+    --surface-2: #1e2230;
+    --ink: #e4e8f0;
+    --ink-soft: #a0a8b8;
+    --ink-faint: #6c7588;
+    --line: #252a38;
+    --line-strong: #323848;
+    --teal: #3cc0c4;
+    --teal-soft: rgba(60,192,196,0.12);
+    --teal-mid: rgba(60,192,196,0.22);
+    --green: #5cc882;
+    --green-soft: rgba(92,200,130,0.14);
+    --amber: #e8a840;
+    --amber-soft: rgba(232,168,64,0.14);
+    --slate: #8890a0;
+    --slate-soft: rgba(136,144,160,0.12);
+    --shadow: 0 1px 3px rgba(0,0,0,0.20), 0 6px 20px -8px rgba(0,0,0,0.40);
+  }
+
+  * { box-sizing: border-box; }
+  html { background: var(--bg); }
+  body {
+    margin: 0; background: var(--bg); color: var(--ink);
+    font-family: var(--sans); line-height: 1.55; font-size: 15px;
+    -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility;
+  }
+  h1, h2, h3, h4 { margin: 0; }
+  p { margin: 0; }
+  button { font-family: var(--sans); cursor: pointer; }
+  ::selection { background: var(--teal-mid); }
+  :focus-visible { outline: 2.5px solid var(--teal); outline-offset: 2px; border-radius: 4px; }
+  @media (prefers-reduced-motion: reduce) { *, *::before, *::after { transition-duration: 0.01ms !important; animation-duration: 0.01ms !important; } }
+
+  .wrap { max-width: 820px; margin: 0 auto; padding: 0 18px 80px; }
+
+  header {
+    padding: 36px 0 28px;
+    border-bottom: 2px solid var(--line);
+    margin-bottom: 24px;
+  }
+  .eyebrow {
+    font-family: var(--mono); font-size: 11px; font-weight: 600;
+    letter-spacing: 0.14em; text-transform: uppercase;
+    color: var(--teal); margin-bottom: 14px;
+    display: flex; align-items: center; gap: 10px;
+  }
+  .eyebrow .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--teal); flex: none; }
+  .eyebrow .rule { flex: 1; height: 1px; background: var(--line); }
+  h1 {
+    font-family: var(--serif); font-weight: 600;
+    font-size: clamp(28px, 5vw, 40px); line-height: 1.08;
+    letter-spacing: -0.015em; text-wrap: balance;
+  }
+  .lede {
+    color: var(--ink-soft); font-size: 15px; margin-top: 10px; max-width: 62ch;
+  }
+  .lede strong { color: var(--ink); font-weight: 600; }
+  .date {
+    font-family: var(--mono); font-size: 12px; color: var(--ink-faint);
+    margin-top: 12px;
+  }
+
+  .stats {
+    display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px;
+    margin: 22px 0 14px;
+  }
+  .stat {
+    background: var(--surface); border: 1px solid var(--line);
+    border-radius: 10px; padding: 13px 14px;
+    box-shadow: var(--shadow);
+  }
+  .stat .n {
+    font-family: var(--serif); font-size: 28px; font-weight: 600;
+    line-height: 1; font-variant-numeric: tabular-nums;
+  }
+  .stat .lbl {
+    font-size: 11.5px; color: var(--ink-faint); margin-top: 4px;
+    display: flex; align-items: center; gap: 6px;
+  }
+  .stat .lbl .lamp { width: 7px; height: 7px; border-radius: 50%; flex: none; }
+  .stat.verified .n { color: var(--green); } .stat.verified .lamp { background: var(--green); }
+  .stat.remaining .n { color: var(--amber); } .stat.remaining .lamp { background: var(--amber); }
+  .stat.groups-stat .n { color: var(--slate); } .stat.groups-stat .lamp { background: var(--slate); }
+  @media (max-width: 540px) { .stats { grid-template-columns: 1fr 1fr; } }
+
+  .progress-card {
+    background: var(--surface); border: 1px solid var(--line);
+    border-radius: var(--radius); padding: 14px 16px; box-shadow: var(--shadow);
+    display: flex; flex-direction: column; gap: 10px;
+  }
+  .progress-row {
+    display: flex; justify-content: space-between; align-items: baseline;
+    flex-wrap: wrap; gap: 8px;
+  }
+  .progress-row .h {
+    font-family: var(--mono); font-size: 11px; font-weight: 600;
+    letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink-faint);
+  }
+  .progress-row .count {
+    font-size: 14px; color: var(--ink); font-variant-numeric: tabular-nums;
+  }
+  .progress-row .count b { font-family: var(--serif); font-size: 19px; color: var(--teal); }
+  .bar {
+    height: 8px; background: var(--surface-2); border: 1px solid var(--line);
+    border-radius: 999px; overflow: hidden;
+  }
+  .bar > i {
+    display: block; height: 100%; width: 0%; border-radius: 999px;
+    background: linear-gradient(90deg, var(--teal), var(--green));
+    transition: width .4s ease;
+  }
+  .toolbar {
+    display: flex; gap: 7px; flex-wrap: wrap; align-items: center;
+  }
+  .toolbtn {
+    font-size: 12px; font-weight: 600; color: var(--ink);
+    background: var(--surface-2); border: 1px solid var(--line-strong);
+    border-radius: 8px; padding: 5px 10px; cursor: pointer;
+    transition: background .12s ease, border-color .12s ease;
+  }
+  .toolbtn:hover { background: var(--teal-soft); border-color: var(--teal); color: var(--teal); }
+  .spacer { flex: 1; }
+
+  .sticky {
+    position: sticky; top: 0; z-index: 20;
+    background: color-mix(in srgb, var(--surface) 90%, transparent);
+    backdrop-filter: saturate(1.3) blur(10px);
+    border: 1px solid var(--line); border-radius: 999px;
+    box-shadow: var(--shadow); padding: 7px 8px 7px 16px;
+    margin: 0 auto 20px; display: flex; align-items: center; gap: 10px;
+  }
+  .sticky-track {
+    flex: 1; height: 7px; border-radius: 999px;
+    background: var(--surface-2); overflow: hidden; border: 1px solid var(--line);
+  }
+  .sticky-track i { height: 100%; display: block; border-radius: 999px; background: var(--green); transition: width .4s ease; }
+  .sticky-count {
+    font-size: 12px; font-weight: 700; white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+  }
+  .sticky-count .muted { color: var(--ink-faint); font-weight: 600; }
+
+  .group {
+    background: var(--surface); border: 1px solid var(--line);
+    border-radius: var(--radius); box-shadow: var(--shadow);
+    margin-bottom: 14px; overflow: hidden;
+  }
+  .group-head {
+    width: 100%; border: none; background: transparent; text-align: left;
+    display: flex; align-items: center; gap: 12px; padding: 15px 16px;
+    cursor: pointer; color: var(--ink);
+  }
+  .group-head:hover { background: var(--surface-2); }
+  .gh-icon {
+    width: 32px; height: 32px; flex: none; border-radius: 9px;
+    background: var(--teal-soft); color: var(--teal);
+    font-size: 15px; display: grid; place-items: center; font-weight: 700;
+    font-family: var(--mono);
+  }
+  .gh-text { flex: 1; min-width: 0; }
+  .gh-text h3 { font-size: 15px; font-weight: 700; letter-spacing: -0.01em; }
+  .gh-blurb { font-size: 12px; color: var(--ink-faint); margin-top: 1px; }
+  .gh-count {
+    font-size: 11.5px; font-weight: 700; color: var(--ink-soft);
+    background: var(--surface-2); border: 1px solid var(--line);
+    padding: 3px 9px; border-radius: 999px; white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+  }
+  .gh-count.full { background: var(--green-soft); color: var(--green); border-color: transparent; }
+  .gh-chev {
+    color: var(--ink-faint); transition: transform .2s ease; font-size: 11px; flex: none;
+  }
+  .group.collapsed .gh-chev { transform: rotate(-90deg); }
+  .group-body { border-top: 1px solid var(--line); }
+  .group.collapsed .group-body { display: none; }
+  .group-bar-track { height: 3px; background: var(--surface-2); display: flex; }
+  .group-bar-track i { height: 100%; background: var(--green); transition: width .35s ease; }
+
+  .item {
+    display: grid; grid-template-columns: 42px 1fr;
+    border-bottom: 1px solid var(--line);
+  }
+  .item:last-child { border-bottom: none; }
+  .item-check {
+    display: flex; align-items: flex-start; justify-content: center; padding-top: 14px;
+  }
+  .chk {
+    appearance: none; -webkit-appearance: none;
+    width: 19px; height: 19px; border: 1.5px solid var(--line-strong);
+    border-radius: 5px; background: var(--surface); cursor: pointer;
+    position: relative; flex: none;
+    transition: background .12s ease, border-color .12s ease;
+  }
+  .chk:hover { border-color: var(--teal); }
+  .chk:checked { background: var(--green); border-color: var(--green); }
+  .chk:checked::after {
+    content: ""; position: absolute; left: 5.5px; top: 2px;
+    width: 5px; height: 9px; border: solid #fff; border-width: 0 2px 2px 0;
+    transform: rotate(42deg);
+  }
+  .item-body { padding: 12px 14px 14px 0; min-width: 0; }
+  .item-top { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+  .item-id {
+    font-family: var(--mono); font-size: 11px; color: var(--ink-faint);
+    font-weight: 600; flex: none;
+  }
+  .item-name { font-size: 14px; font-weight: 600; }
+  .item.done .item-name { color: var(--ink-faint); }
+  .item-what {
+    font-size: 13px; color: var(--ink-soft); margin-top: 5px; line-height: 1.5;
+  }
+  .item-verify {
+    font-size: 12.5px; color: var(--ink); margin-top: 8px;
+    display: flex; gap: 7px;
+  }
+  .item-verify .vl {
+    flex: none; font-family: var(--mono); font-size: 10px; font-weight: 700;
+    letter-spacing: 0.06em; text-transform: uppercase;
+    color: var(--green); background: var(--green-soft);
+    padding: 2px 7px; border-radius: 5px; height: fit-content; margin-top: 1px;
+  }
+
+  .foot {
+    margin-top: 36px; padding-top: 18px; border-top: 1px solid var(--line);
+    font-size: 12px; color: var(--ink-faint); line-height: 1.6;
+  }
+
+  @media print {
+    .sticky, .toolbar { display: none !important; }
+    .group.collapsed .group-body { display: block !important; }
+    .group { box-shadow: none; break-inside: avoid; }
+    body { background: #fff; }
+  }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <header>
+    <div class="eyebrow">
+      <span class="dot"></span>
+      Switchboard &middot; scope of work
+      <span class="rule"></span>
+    </div>
+    <h1>Scope of Work Verification</h1>
+    <p class="lede">
+      Everything the delivered product is supposed to do. Open the app, try each item, and tick it off. If something doesn't work, leave it unchecked and note what happened.
+    </p>
+    <div class="date">August 10, 2026</div>
+
+    <div class="stats" id="stats">
+      <div class="stat verified"><span class="n" id="cntDone">0</span><span class="lbl"><span class="lamp"></span>Verified</span></div>
+      <div class="stat remaining"><span class="n" id="cntLeft">0</span><span class="lbl"><span class="lamp"></span>Remaining</span></div>
+      <div class="stat groups-stat"><span class="n" id="grpCnt">0</span><span class="lbl"><span class="lamp"></span>Categories</span></div>
+    </div>
+
+    <div class="progress-card">
+      <div class="progress-row">
+        <span class="h">Verification progress</span>
+        <span class="count"><b id="revDone">0</b> / <span id="revTotal">0</span></span>
+      </div>
+      <div class="bar"><i id="revBar"></i></div>
+      <div class="toolbar">
+        <button class="toolbtn" id="expandAll">Expand all</button>
+        <button class="toolbtn" id="collapseAll">Collapse all</button>
+        <span class="spacer"></span>
+        <button class="toolbtn" id="resetBtn">Reset all</button>
+      </div>
+    </div>
+  </header>
+
+  <div class="sticky" id="sticky">
+    <div class="sticky-track"><i id="stkFill" style="width:0%"></i></div>
+    <div class="sticky-count" id="stickyCount"><span>0</span><span class="muted"> / 0</span></div>
+  </div>
+
+  <div id="groups"></div>
+
+  <footer class="foot">
+    <div>Covers the full delivered scope: demo MVP plus all post-MVP hardening through August 10, 2026. Items not in scope (future features, ops activation) are excluded.</div>
+    <div style="margin-top:8px;font-family:var(--mono);font-size:11px;">Switchboard &middot; scope of work verification &middot; Aug 10, 2026</div>
+  </footer>
+</div>
+
+<script>
+(function () {
+  "use strict";
+
+  var GROUPS = [
+    { id: "A", title: "Creating a plan", blurb: "The hosting wizard, cascading invites, polls, and plan options", items: [
+      { id:"A1", name:"Create a plan with the wizard", what:"Set a title, pick a date and time, add a location, write a description, and attach a cover image. The wizard walks you through each step.", verify:"Create a new plan from scratch. Fill in a title, date/time, location, description, and a cover image. Confirm each step saves and the plan is created." },
+      { id:"A2", name:"Time picker uses 5-minute steps", what:"Picking a time offers 5-minute increments (not all 60 minutes), which is easier especially on phones.", verify:"Tap the time field in the plan wizard. Confirm it shows 5-minute increments." },
+      { id:"A3", name:"Plans need context before invites go out", what:"Every plan must include at least a location or description before you can invite people. This prevents empty plans that look broken when someone opens the link.", verify:"Try to send invites on a plan with no location and no description. It should stop you." },
+      { id:"A4", name:"Cascading invites", what:"Instead of blasting everyone at once, you set an order and the app invites one person (or wave) at a time. When someone accepts, the chain stops so you never over-invite. It keeps going in the background even when nobody has the app open.", verify:"Create a plan, add several people in a specific order, and watch it invite them one at a time. Confirm it stops when someone accepts." },
+      { id:"A5", name:"Preview the cascade before sending", what:"Before the first invite goes out, a simulator shows exactly who will be reached and in what order, so there are no surprises.", verify:"On the review step, run the simulator and read the projected order." },
+      { id:"A6", name:"Edit the cascade after sending", what:"After the chain is live, you can still reorder who's up next, resend an invite, or change how long each person has to respond — without affecting who already accepted.", verify:"On a live plan, reorder the queue and change a response window. Confirm already-accepted invites aren't affected." },
+      { id:"A7", name:"Anonymous polls", what:"For group decisions (which date, which place), everyone privately rates each option love / good / rather not. A consensus meter shows how the group is leaning. No one — not even the host — can see how any single person voted.", verify:"As a non-host, rate some poll options. Confirm you see only group totals, never individual votes." },
+      { id:"A8", name:"Poll resolution", what:"A poll can resolve on its own when a deadline hits, by the host picking a winner, or through a runoff between the top options.", verify:"Set a vote deadline on a poll and run it through to a resolved winner." },
+      { id:"A9", name:"Per-guest RSVP questions", what:"Ask questions when people RSVP (dietary needs, what are you bringing). Answers are visible only to the host.", verify:"Add an RSVP question, answer it as a guest, and confirm only the host can see the answer." },
+      { id:"A10", name:"Cover image, wishlist link, and calendar export", what:"Each plan can carry a cover image, link out to a registry or wishlist, offer a one-tap Google Calendar add, and let the host export the guest list.", verify:"Set a cover image and a wishlist link. As a guest, add the event to your calendar." },
+    ]},
+
+    { id: "B", title: "Sharing plans", blurb: "Invite links that work for anyone, signed in or not", items: [
+      { id:"B1", name:"Share links are on by default", what:"New plans have invite-link sharing enabled automatically, so you don't have to hunt for a toggle before sharing.", verify:"Create a new plan and confirm the share link is already active without toggling anything." },
+      { id:"B2", name:"Anyone with the link can see the full plan", what:"Each plan gets a unique share URL. Anyone with the link can see the full plan — cover image, location, dates, description, and calendar links — without an account.", verify:"Copy the share link from a plan and open it in a private or signed-out browser. Confirm you see the cover, location, dates, description, and 'Add to calendar.'" },
+      { id:"B3", name:"Signing in to RSVP brings you back to the plan", what:"Viewing is open to everyone, but answering requires signing in. After signing in, you're brought right back to the same plan — the link isn't lost.", verify:"Open an invite link signed out, tap RSVP, sign in, and confirm you land back on the plan ready to answer." },
+      { id:"B4", name:"After accepting, you can get to the full event", what:"After accepting an invite via a share link, you see an 'Open the plan' link to the full event page with rooms, polls, and the attendee list.", verify:"Accept an invite via a share link and confirm you can tap through to the full event page." },
+      { id:"B5", name:"Invite links work when the date is undecided", what:"If you're still polling for a date, the invite link still works — recipients see the plan and can respond. The undecided date shows as a note, not a blocker.", verify:"Share a link for a plan that has a date poll still open. Confirm the recipient can see and respond to it." },
+      { id:"B6", name:"The invite URL is a tappable link", what:"The displayed share URL on the host's event page is a real link you can tap to open in a new tab. Copy and Share buttons are also available.", verify:"On your plan, confirm the displayed invite URL is tappable and opens in a new tab." },
+      { id:"B7", name:"Link previews in messaging apps", what:"Pasting a Switchboard link into iMessage, WhatsApp, Slack, or similar shows a branded preview card — title, description, and image — instead of a raw URL.", verify:"Paste the plan's share link into a messaging app and confirm a preview card appears." },
+    ]},
+
+    { id: "C", title: "During the event", blurb: "Living rooms, photos, announcements, and attendee management", items: [
+      { id:"C1", name:"Living rooms with auto-filed tabs", what:"A group chat that automatically sorts what you drop in — addresses go to Addresses, links to Links, tasks to Tasks, notes to Notes — so nobody scrolls through chat to find the details.", verify:"Paste an address and a link into a room. Confirm they file into the right tabs." },
+      { id:"C2", name:"Room photos", what:"Send photos into a room and they collect in a dedicated Photos tab.", verify:"Send a photo in a room and find it in the Photos tab." },
+      { id:"C3", name:"Live updates", what:"Messages and filed items appear live for everyone in the room — no refresh needed, and the sender never sees their own message duplicated.", verify:"With two accounts in one room, send a message and confirm it appears live on the other screen." },
+      { id:"C4", name:"Host announcements", what:"A one-way host broadcast (door code, running late, bring a jacket) that appears on the event page, in the living room, and in the notification inbox.", verify:"Post an announcement and confirm it shows on the event page, in the room, and in notifications." },
+      { id:"C5", name:"Tappable attendee list", what:"Every person on a plan is tappable. Hosts can reach guests via SMS or email; connections can be invited with in-app notifications.", verify:"Open a plan with attendees and tap someone's name. Confirm a detail sheet opens with contact or invite options." },
+      { id:"C6", name:"Run It Back", what:"Re-invite the same crew into a fresh plan in one step, automatically dropping anyone who said it wasn't their thing.", verify:"From a past event, tap Run It Back and confirm the crew is pre-loaded (minus anyone who passed)." },
+    ]},
+
+    { id: "D", title: "Finding things to do", blurb: "AI-powered discovery, solo and social modes, the intent launchpad", items: [
+      { id:"D1", name:"Describe what you want, get curated suggestions", what:"Describe the kind of experience you're looking for and the app returns fitting activities, each with a short 'why this fits,' that you can turn into a plan in one tap.", verify:"Open Explore, describe an experience, and confirm you get suggestions you can turn into a plan." },
+      { id:"D2", name:"Solo and social modes", what:"Search as 'Just me' or a group, and toggle 'Open to meeting people.' Each combination gives you different suggestions.", verify:"Try 'Just me' with 'Open to meeting people' on, then off. Confirm the suggestions change." },
+      { id:"D3", name:"Intent launchpad", what:"Before the wizard, choose what kind of thing you're doing: 'I've got a plan' goes straight to the wizard, 'Help me figure it out' opens the wizard with polling pre-enabled, and 'Find something to do' opens Explore.", verify:"Tap the main create button and confirm you see the three options." },
+    ]},
+
+    { id: "E", title: "Moments and matching", blurb: "Serendipitous encounters, mutual signals, and availability", items: [
+      { id:"E1", name:"Three moments of consent", what:"Check in somewhere and, if someone else is there, you each move through three consent steps (open, curious, matched) before either person is revealed. A match drops you both into a shared room.", verify:"Two accounts check into the same place. Progress through the consent steps and confirm a shared room opens on match." },
+      { id:"E2", name:"Geo-tagged check-ins on the map", what:"Attach a location to your check-in and it appears on the map as a pin.", verify:"Geo-tag a check-in and find it on the map." },
+      { id:"E3", name:"'Down to Connect' — mutual only", what:"Privately signal 'I'd be down to connect' with someone. They only learn about it if they independently signal the same thing. Unrequited interest is never visible to anyone.", verify:"Have two accounts express interest. Confirm only the mutual case reveals — and it appears live." },
+      { id:"E4", name:"Availability signals", what:"A one-tap 'I'm free' signal visible only to the circles you choose, that expires on its own. No public broadcast.", verify:"Raise a signal to one circle. Confirm people in other circles can't see it, and confirm it auto-expires." },
+    ]},
+
+    { id: "F", title: "Map and zones", blurb: "Live location, map layers, zones, and presence", items: [
+      { id:"F1", name:"Serendipity zones", what:"Named places you check into — a conference, a cruise, a campus, a festival. The zone is the place; your check-in is a moment within it.", verify:"Create a zone and check into it." },
+      { id:"F2", name:"Zone presence shows other people", what:"Zone check-in counts correctly show how many other people are currently checked in, not just your own check-ins.", verify:"Check into a zone from two different accounts. Confirm each sees the other person in the count." },
+      { id:"F3", name:"Zones on the map", what:"Give a zone a location and it shows up as a toggleable layer on the map.", verify:"Anchor a zone to a location and confirm it appears on the map." },
+      { id:"F4", name:"Live location sharing", what:"Opt in to share your location and appear live on the map. It's mutual (you only see people who can see you), respects blocks, blurred to roughly 110 meters, and turns itself off automatically.", verify:"Two accounts opt in and confirm they see each other. Confirm the blurring and auto-off." },
+      { id:"F5", name:"Toggleable map layers", what:"Plans, zones, and shared places are independent layers you can switch on and off on the map.", verify:"Toggle each map layer independently." },
+      { id:"F6", name:"Map layer counts open a directory", what:"Tapping a layer count on the map opens a list of everything in that layer, sorted by distance from you, with links to open each one.", verify:"Tap a layer count (like '3 events') and confirm a sorted directory opens." },
+      { id:"F7", name:"Map stays where you put it", what:"The map only centers on your location when first opened. After that, panning and browsing are uninterrupted by GPS updates.", verify:"Open the map, then pan away from your location. Confirm the map doesn't snap back." },
+    ]},
+
+    { id: "G", title: "People and connections", blurb: "Circles, friend requests, blocking, give-space, and onboarding", items: [
+      { id:"G1", name:"Circles", what:"Circles are a real management view — open one to see members, add or remove people, rename or delete it, and change its emoji.", verify:"Open a circle on the People page. Add and remove a member, rename the circle, and change the emoji." },
+      { id:"G2", name:"Connect and friend requests", what:"Send connect requests (the recipient is notified) and resend one that's still pending.", verify:"Send a connect request and confirm the recipient is notified. Resend a pending one." },
+      { id:"G3", name:"Blocking", what:"Blocking someone removes them from your discovery, matching, and the map — enforced for real, not just hidden in the interface.", verify:"Block an account and confirm they disappear from discovery, matching, and the map." },
+      { id:"G4", name:"Give Space", what:"Quietly flag someone you'd rather not run into. You get a private heads-up if they're already visibly attending something — it never reveals hidden guest lists. It only warns, never removes, and is invisible to the other person.", verify:"Give space to someone, then check a plan they're attending. Confirm you see the private heads-up." },
+      { id:"G5", name:"Report and Block are easy to find", what:"Report and Block are reachable from profiles, room members, moment reveals, and connect requests — the places you'd actually encounter someone.", verify:"Find the Report and Block options from a profile, from a room member, and from a moment." },
+      { id:"G6", name:"People search with guidance", what:"Searching by email or phone only works for verified contacts. The search now explains this limitation and suggests searching by handle.", verify:"Search for someone by email. Confirm it explains the limitation and suggests alternatives." },
+      { id:"G7", name:"Getting-started card", what:"New users see a three-step onboarding card on the home page: add a friend, make a plan, send a signal. It's dismissible and can be brought back from Settings.", verify:"Sign in as a newer user and confirm the getting-started card appears." },
+      { id:"G8", name:"Share the app itself", what:"You can share Switchboard with someone — a 'join me on Switchboard' invite link — without having to create a plan first.", verify:"Find the 'Invite to Switchboard' option and confirm it produces a shareable link." },
+    ]},
+
+    { id: "H", title: "Boards and community", blurb: "Invite-only local groups with notices and events", items: [
+      { id:"H1", name:"Invite-only boards", what:"Local groups where only members see the content — walled off so outsiders can't read it.", verify:"Confirm a non-member can't see a board's content." },
+      { id:"H2", name:"Board invite links", what:"Moderators can create shareable join links for a board, and rotate them to invalidate old ones.", verify:"Join a board via a link. As a moderator, rotate the code and confirm the old one stops working." },
+      { id:"H3", name:"Board posts with editing", what:"Board posts show the first date of a happening. Authors can edit their own posts — title, details, schedule, location. The label says 'Recurring announcement' (not 'Recurring event').", verify:"Create a board post with a date, then edit it. Confirm the label says 'Recurring announcement.'" },
+      { id:"H4", name:"Community landing", what:"A landing page that leads into boards and community groups.", verify:"Open the Community page and confirm it shows available boards." },
+    ]},
+
+    { id: "I", title: "Account and settings", blurb: "Sign-in, profile, onboarding, settings, and phone verification", items: [
+      { id:"I1", name:"Sign up and sign in", what:"Create an account and sign in with email and password.", verify:"Create an account and sign in successfully." },
+      { id:"I2", name:"Password reset", what:"Request a password reset and receive a link. If the link expires, the page explains why and offers a way to request a new one.", verify:"Request a reset. If you have an expired link, confirm the message is helpful and offers re-request." },
+      { id:"I3", name:"Clear sign-in error messages", what:"Each sign-in problem gets an honest, specific message. Unconfirmed email says to check your inbox and offers a re-send button. Suspended accounts say so and offer a way to get help. Rate limits say to wait. None of these pretend the password was wrong.", verify:"If possible, try signing in with an unconfirmed account. Confirm you get a specific message, not 'wrong password.'" },
+      { id:"I4", name:"No sign-in dead ends", what:"No combination of account state leaves someone stuck with no way forward. Every blocked state has a clear message and a next step you can actually take.", verify:"Confirm signing in works smoothly — no infinite spinners, no redirect loops, no unexplained failures." },
+      { id:"I5", name:"Old URLs redirect correctly", what:"Bookmarks and old links from alternate URLs redirect to switchboardsocial.me, preserving the path.", verify:"If you have an old URL or bookmark, confirm it redirects to the correct page on switchboardsocial.me." },
+      { id:"I6", name:"Onboarding for new users", what:"New users are walked through picking interests and setting up circles before they can do anything else — even if they arrived through a deep link. After onboarding, they continue to their original destination.", verify:"Sign in with a fresh account and confirm you're guided through onboarding before reaching the rest of the app." },
+      { id:"I7", name:"Profile editing and public profiles", what:"Edit your own profile (photo, bio, interests) and view other people's public profiles.", verify:"Edit your profile and visit someone else's public profile." },
+      { id:"I8", name:"Settings save reliably", what:"Changing settings shows a 'Saved' confirmation when it works. If the save fails, your changes stay dirty and the error is visible — it never silently reverts.", verify:"Change a setting, confirm you see 'Saved.' Reload the page and confirm your change is still there." },
+      { id:"I9", name:"Phone verification", what:"Add a phone number in Settings and receive a verification code via SMS.", verify:"Add a phone number and confirm you receive and can enter a verification code." },
+      { id:"I10", name:"18+ confirmation", what:"Users must confirm they are 18+ and accept the latest terms before using the app.", verify:"Confirm the age/terms gate appears for users who haven't accepted the latest version." },
+      { id:"I11", name:"Account deletion", what:"Users can delete their account and see a clear confirmation that it was removed.", verify:"Delete a throwaway account and confirm the deletion banner appears." },
+      { id:"I12", name:"Notification preferences", what:"Real controls to choose what you're notified about, saved through the settings bar.", verify:"Change a notification preference and confirm it saves." },
+    ]},
+
+    { id: "J", title: "Notifications and quality", blurb: "Notification inbox, error messages, realtime, and app install", items: [
+      { id:"J1", name:"Notification inbox", what:"A persistent notification inbox so nothing is lost when push notifications are off or missed.", verify:"Trigger a notification and find it in the inbox." },
+      { id:"J2", name:"Room messages trigger notifications", what:"A message in a Living Room sends a notification to other members (bundled so you're not flooded), skipping anyone already looking at the room.", verify:"Send a message in a room and confirm the other member gets a notification." },
+      { id:"J3", name:"New poll options notify voters", what:"When someone adds a new option to a poll you already voted on, you get a notification so you can reconsider.", verify:"Add a poll option to a plan where others have voted. Confirm they get a notification." },
+      { id:"J4", name:"Realtime across the app", what:"Rooms, room items, moments, and mutual matches all update live — no manual refresh needed.", verify:"With two accounts, trigger an update on each surface and confirm it appears live." },
+      { id:"J5", name:"Poll votes register instantly", what:"Tapping a poll option highlights it immediately — no waiting for the server to respond.", verify:"Vote on a poll option and confirm it highlights instantly." },
+      { id:"J6", name:"Error messages are specific and helpful", what:"When something goes wrong, the message tells you what actually happened and includes a short diagnostic code. If the problem is on the server side, it doesn't blame you or suggest retrying.", verify:"If you encounter an error, confirm it has a specific message and a diagnostic code (like SB-INVITE-EXPIRED)." },
+      { id:"J7", name:"Installable as a phone app", what:"The app can be installed on your phone's home screen with a real icon, so it works like a native app.", verify:"On your phone, use 'Add to Home Screen' and confirm it installs with a real icon." },
+      { id:"J8", name:"Searchable feature catalogue", what:"A searchable directory of everything the app can do — organized by category, answering 'what can this do?' and 'where do I find it?'", verify:"Open the Features page (from the menu or Settings), search for something, and confirm results appear with directions." },
+      { id:"J9", name:"Greeting matches your timezone", what:"'Good morning' / 'Good afternoon' / 'Good evening' on the home page uses your local time of day.", verify:"Confirm the home page greeting matches your actual time of day." },
+      { id:"J10", name:"Family and caregiver activity options", what:"Family & Kids interest options and caregiver-inclusive activity presets are available, so parents and guardians can find relevant plans.", verify:"Check the interests and activity options in Settings for family and caregiver choices." },
+      { id:"J11", name:"Legal pages", what:"Privacy policy, terms of service, and copyright pages are in place with real contact information.", verify:"Open each legal page and confirm the content and contact info are present." },
+    ]},
+  ];
+
+  var TOTAL = 0;
+  GROUPS.forEach(function(g) { TOTAL += g.items.length; });
+
+  var KEY = "swb-scope-v3";
+  var state = {};
+  try { state = JSON.parse(localStorage.getItem(KEY)) || {}; } catch(e) {}
+  function save() { try { localStorage.setItem(KEY, JSON.stringify(state)); } catch(e) {} }
+
+  var root = document.getElementById("groups");
+
+  document.getElementById("grpCnt").textContent = GROUPS.length;
+
+  function renderGroups() {
+    root.innerHTML = "";
+    GROUPS.forEach(function(g) {
+      var groupDone = g.items.filter(function(it) { return state[it.id]; }).length;
+      var groupTotal = g.items.length;
+      var pct = groupTotal ? Math.round(groupDone / groupTotal * 100) : 0;
+      var isFull = groupDone === groupTotal;
+
+      var card = document.createElement("div");
+      card.className = "group";
+
+      card.innerHTML =
+        '<button class="group-head">' +
+          '<div class="gh-icon">' + g.id + '</div>' +
+          '<div class="gh-text"><h3>' + esc(g.title) + '</h3><div class="gh-blurb">' + esc(g.blurb) + '</div></div>' +
+          '<span class="gh-count' + (isFull ? ' full' : '') + '">' + groupDone + ' / ' + groupTotal + '</span>' +
+          '<span class="gh-chev">&#9656;</span>' +
+        '</button>' +
+        '<div class="group-body">' +
+          '<div class="group-bar-track"><i style="width:' + pct + '%"></i></div>' +
+        '</div>';
+
+      var body = card.querySelector(".group-body");
+      g.items.forEach(function(it) {
+        var checked = state[it.id];
+        var el = document.createElement("div");
+        el.className = "item" + (checked ? " done" : "");
+        el.innerHTML =
+          '<div class="item-check"><input type="checkbox" class="chk" data-id="' + it.id + '"' + (checked ? ' checked' : '') + '></div>' +
+          '<div class="item-body">' +
+            '<div class="item-top">' +
+              '<span class="item-id">' + it.id + '</span>' +
+              '<span class="item-name">' + esc(it.name) + '</span>' +
+            '</div>' +
+            '<div class="item-what">' + esc(it.what) + '</div>' +
+            '<div class="item-verify"><span class="vl">Try it</span><span>' + esc(it.verify) + '</span></div>' +
+          '</div>';
+        body.appendChild(el);
+      });
+
+      card.querySelector(".group-head").addEventListener("click", function() {
+        card.classList.toggle("collapsed");
+      });
+
+      root.appendChild(card);
+    });
+
+    root.addEventListener("change", function(e) {
+      if (e.target.classList.contains("chk")) {
+        var id = e.target.getAttribute("data-id");
+        if (e.target.checked) { state[id] = true; } else { delete state[id]; }
+        save();
+        updateCounts();
+        var item = e.target.closest(".item");
+        if (item) item.classList.toggle("done", e.target.checked);
+        var group = e.target.closest(".group");
+        if (group) updateGroupCount(group);
+      }
+    });
+  }
+
+  function esc(s) {
+    var d = document.createElement("div");
+    d.textContent = s;
+    return d.innerHTML;
+  }
+
+  function updateCounts() {
+    var done = Object.keys(state).length;
+    var left = TOTAL - done;
+    var pct = TOTAL ? Math.round(done / TOTAL * 100) : 0;
+
+    document.getElementById("cntDone").textContent = done;
+    document.getElementById("cntLeft").textContent = left;
+    document.getElementById("revDone").textContent = done;
+    document.getElementById("revTotal").textContent = TOTAL;
+    document.getElementById("revBar").style.width = pct + "%";
+    document.getElementById("stkFill").style.width = pct + "%";
+    document.getElementById("stickyCount").innerHTML =
+      '<span>' + done + '</span><span class="muted"> / ' + TOTAL + '</span>';
+  }
+
+  function updateGroupCount(groupEl) {
+    var checks = groupEl.querySelectorAll(".chk");
+    var d = 0;
+    checks.forEach(function(c) { if (c.checked) d++; });
+    var t = checks.length;
+    var cnt = groupEl.querySelector(".gh-count");
+    cnt.textContent = d + " / " + t;
+    cnt.classList.toggle("full", d === t);
+    var bar = groupEl.querySelector(".group-bar-track i");
+    if (bar) bar.style.width = (t ? Math.round(d/t*100) : 0) + "%";
+  }
+
+  renderGroups();
+  updateCounts();
+
+  document.getElementById("expandAll").addEventListener("click", function() {
+    document.querySelectorAll(".group").forEach(function(g) { g.classList.remove("collapsed"); });
+  });
+  document.getElementById("collapseAll").addEventListener("click", function() {
+    document.querySelectorAll(".group").forEach(function(g) { g.classList.add("collapsed"); });
+  });
+  document.getElementById("resetBtn").addEventListener("click", function() {
+    if (confirm("Reset all checkboxes?")) {
+      state = {}; save();
+      renderGroups(); updateCounts();
+    }
+  });
+})();
+</script>
+
+</body>
+</html>
