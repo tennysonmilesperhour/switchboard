@@ -297,7 +297,22 @@ test.describe('authenticated surface', () => {
     // The poll renders on the event page in the deciding phase.
     await page.getByRole('textbox', { name: 'Suggest an idea' }).fill('Tacos');
     await page.getByRole('button', { name: 'Add', exact: true }).first().click();
-    await expect(page.getByText('Tacos')).toBeVisible({ timeout: 15_000 });
+
+    // Quote the app's own objection when the idea doesn't land. PollSection
+    // renders a `role="alert"` when addSuggestion refuses ("Voting has closed",
+    // "Only the host can add options"), and without reading it this assertion
+    // can only ever say "element(s) not found" — which is what left this
+    // failure unexplained while the suite sat red. If the option really is
+    // missing and the app said nothing, that is worth distinguishing too.
+    await expect(async () => {
+      const complaint = await pageComplaints(page);
+      expect(
+        await page.getByText('Tacos').isVisible(),
+        complaint
+          ? `the app refused the suggestion: ${complaint}`
+          : 'the suggestion never appeared and the app raised no objection',
+      ).toBe(true);
+    }).toPass({ timeout: 15_000 });
     await page.getByRole('button', { name: 'Absolutely love this' }).first().click();
   });
 
