@@ -156,7 +156,7 @@ jobs:
           for context in test-results/*/error-context.md; do
             found=1
             echo "::group::$context"
-            awk '/^# Page snapshot/,0' "$context" | head -c 20000
+            awk '/^# Page snapshot/,0' "$context" | head -c 4000
             echo "::endgroup::"
           done
           [ "$found" = 1 ] || echo "No error-context.md was written — the failure was not a page assertion."
@@ -176,3 +176,44 @@ jobs:
             test-results/
           retention-days: 14
           if-no-files-found: warn
+
+      # Last, so it is the last thing in the log.
+      #
+      # Everything above this — the snapshot, the artifact upload, the runner's
+      # cleanup — sits between a failure and the end of the job, so reading a red
+      # run meant paging back through hundreds of lines for the one sentence that
+      # says what broke. Three separate investigations here started that way.
+      # Whatever else the log holds, it now ends with the verdict.
+      - name: What failed, in one place
+        if: failure()
+        run: |
+          node -e '
+            const fs = require("fs");
+            const path = "playwright-report/results.json";
+            if (!fs.existsSync(path)) {
+              console.log("No JSON report — the run failed before any test reported.");
+              process.exit(0);
+            }
+            const report = JSON.parse(fs.readFileSync(path, "utf8"));
+            const failures = [];
+            const walk = (suite) => {
+              for (const spec of suite.specs ?? []) {
+                for (const test of spec.tests ?? []) {
+                  for (const run of test.results ?? []) {
+                    if (run.status === "passed" || run.status === "skipped") continue;
+                    failures.push([spec.title, (run.error?.message ?? "(no message)")]);
+                  }
+                }
+              }
+              for (const child of suite.suites ?? []) walk(child);
+            };
+            for (const suite of report.suites ?? []) walk(suite);
+            if (!failures.length) {
+              console.log("The JSON report lists no failing test — the job failed outside the suite.");
+              process.exit(0);
+            }
+            for (const [title, message] of failures) {
+              console.log("\n=== " + title + " ===");
+              console.log(message.replace(/\x1b\[[0-9;]*m/g, "").trim());
+            }
+          '

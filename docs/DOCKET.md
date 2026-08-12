@@ -57,18 +57,31 @@ reader can redo it in one command rather than trust this file.
   wrong.
 - ✅ **Already done — custom emoji + label signals** (round 2, 6c).
   `SignalBar` has the emoji field and "Add your own status…" input.
-- 🛠️ **Give Space doesn't filter yet** (round 2, 4b). `profile_avoids` is
-  consulted by nothing: `grep -rn profile_avoids supabase/migrations` hits only
-  its own migration and a `zone_presence` comment explaining why counts are
-  deliberately *not* shrunk. The surfaces that filter `are_blocked` today —
-  `list_discoverable_people`, `find_nearby_people`, contact matching,
-  compatibility — do not filter avoids.
-  **Needs a decision before building:** `SECURITY.md` says an avoid may
-  "filter or privately annotate information the viewer was already authorized
-  to see", but also that it must never "appear on a map, zone, moment, or other
-  location surface", and `zone_presence` treats shrinking a count as removal.
-  Filtering a browse list (people discovery) is clearly sanctioned; filtering a
-  *location* surface is the judgment call. Do not guess this one.
+- ❌ **"Give Space doesn't filter" was never a gap** (round 2, 4b) — struck, and
+  this entry kept so it is not raised a fourth time. It read as unfinished work
+  and it is the design, stated in three places: the `profile_avoids` migration
+  ("the guiding rule is **warn, never remove**"), `giveSpace` in
+  `src/lib/actions/connections.ts` ("it never removes anyone from anything"),
+  and the shipped entry lower in this very file ("Guardrail held: warn, never
+  remove"). This file was arguing with itself — one line called filtering
+  missing, another called *not* filtering the guardrail being upheld.
+  The map was not a judgment call either. `SECURITY.md` permits an avoid to
+  "filter or privately annotate" — permissive, an upper bound, not a
+  requirement — while forbidding it to "appear on a map, zone, moment, or other
+  location surface", which rules out both filtering *and* warning there. Reading
+  those two clauses as competing was the error; the location clause is an
+  absolute carve-out that applies to every use of an avoid.
+  Making Give Space filter would be a **product decision to make it more like a
+  block**, not a safety fix. It would need the three statements above changed
+  first, and the `zone_presence` count semantics settled — shrinking a shared
+  count is observable by the person being avoided, which is the one thing the
+  feature exists to prevent.
+- ✅ **The real Give Space gap, now closed.** The control lived only in
+  `/people`, which lists people you are *connected to* — so the person most
+  worth avoiding, someone you are not friends with who keeps turning up on your
+  plans, was the one person you could not avoid. The event page's heads-up only
+  fires for someone already on the list, so they could never trigger a warning
+  either. `GiveSpaceButton` now sits on any profile.
   A "who can see me right now" screen (4c) is separate and still open.
 - 🛠️ **Signal rings on avatars** (6a). Confirmed unbuilt — `Avatar` has a
   boolean `ring` that paints plain white, with no status tier.
@@ -339,9 +352,10 @@ density + safety, not the next sprint.
   each person in `/people`, and a private heads-up on the event page when an
   *already-visible* avoided attendee is going (never computed against hidden
   guest lists, so it can't be an "is X going?" oracle). Guardrail held: **warn,
-  never remove**; invisible to the other person. *Remaining:* set "give space"
-  from a public profile / on non-friends; the host-private "these two don't mix"
-  note for guest-list hygiene; fold into the shared reachability engine.
+  never remove**; invisible to the other person. Setting "give space" from a
+  public profile / on non-friends is now done (`GiveSpaceButton`).
+  *Remaining:* the host-private "these two don't mix" note for guest-list
+  hygiene; fold into the shared reachability engine.
 - **Get-to-know-you games.** Solo / duo (reveal simultaneously, like mutual
   intents) / group icebreakers. Doubles as a sensor that enriches matching.
   Model: explicit interests (shared/editable) vs private inferences (tune-only,

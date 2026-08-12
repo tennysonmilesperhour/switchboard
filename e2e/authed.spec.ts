@@ -121,6 +121,35 @@ function browserNoise(page: Page): () => string {
 }
 
 /**
+ * Record what the page asks the server for, and what it gets back.
+ *
+ * The remaining question about the poll suggestion is whether `router.refresh()`
+ * refetches at all. "The write landed but the page never showed it" has two
+ * causes that look identical on screen — no refetch was made, or one was made
+ * and came back without the new row (or as a redirect) — and only the traffic
+ * tells them apart. A server action POST and an RSC refetch both go to the page
+ * URL; the `RSC` header is what distinguishes them.
+ */
+function pageTraffic(page: Page, match: RegExp): () => string {
+  const lines: string[] = [];
+  page.on('response', (response) => {
+    const request = response.request();
+    if (!match.test(response.url())) return;
+    const headers = request.headers();
+    const kind =
+      request.method() === 'POST'
+        ? headers['next-action']
+          ? 'server action'
+          : 'POST'
+        : headers['rsc'] || headers['next-router-state-tree']
+          ? 'RSC refetch'
+          : 'document';
+    lines.push(`${kind} → ${response.status()}`);
+  });
+  return () => (lines.length ? lines.join(', ') : 'nothing');
+}
+
+/**
  * What the group-decision screen is showing, in the terms that tell apart the
  * ways an idea can fail to land.
  *
@@ -342,6 +371,7 @@ test.describe('authenticated surface', () => {
     await expect(submit).toBeVisible({ timeout: 5_000 });
     await submit.click();
     await page.waitForURL(/\/events\/[0-9a-f-]{36}/, { timeout: 15_000 });
+    const traffic = pageTraffic(page, /\/events\/[0-9a-f-]{36}/);
 
     // Reload before touching anything, for the reason "a host invites a
     // connection directly" already documents: the cookies this page will send
@@ -388,6 +418,7 @@ test.describe('authenticated surface', () => {
               screen.options.length ? screen.options.join(', ') : 'none'
             }`,
             browser ? `The browser logged: ${browser}` : 'The browser logged nothing.',
+            `Traffic to the plan URL since it loaded: ${traffic()}`,
           ].join('\n'),
         );
       }).toPass({ timeout: 15_000 });
