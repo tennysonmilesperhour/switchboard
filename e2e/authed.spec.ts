@@ -343,6 +343,19 @@ test.describe('authenticated surface', () => {
     await submit.click();
     await page.waitForURL(/\/events\/[0-9a-f-]{36}/, { timeout: 15_000 });
 
+    // Reload before touching anything, for the reason "a host invites a
+    // connection directly" already documents: the cookies this page will send
+    // on the next server action can still carry the access token from before
+    // `createEvent` rotated them. That POST then comes back as a redirect
+    // rather than a result, the action's promise rejects, and — until the
+    // `catch` added to PollSection — the screen said nothing at all.
+    //
+    // This journey was missing the same guard its sibling has, which is why it
+    // failed intermittently and silently: box cleared, list unchanged, no
+    // objection, nothing written.
+    await page.reload();
+    await page.waitForLoadState('networkidle');
+
     // The poll renders on the event page in the deciding phase.
     await page.getByRole('textbox', { name: 'Suggest an idea' }).fill('Tacos');
     await page.getByRole('button', { name: 'Add', exact: true }).first().click();

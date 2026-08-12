@@ -143,6 +143,11 @@ jobs:
       # download the zip. Egress policy, an expired link, or simply reading the
       # run from a phone all defeat that. Print it, so the log alone answers
       # "what did the app show?".
+      #
+      # Only the snapshot: Playwright also writes the failing spec's source into
+      # this file, and printing the whole thing pushed the assertion message —
+      # the part that says what went wrong — off the end of a `tail`. Evidence
+      # that buries the verdict is not evidence.
       - name: Show what was on the screen
         if: failure()
         run: |
@@ -151,7 +156,7 @@ jobs:
           for context in test-results/*/error-context.md; do
             found=1
             echo "::group::$context"
-            cat "$context"
+            awk '/^# Page snapshot/,0' "$context" | head -c 20000
             echo "::endgroup::"
           done
           [ "$found" = 1 ] || echo "No error-context.md was written — the failure was not a page assertion."

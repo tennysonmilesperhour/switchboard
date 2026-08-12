@@ -13,6 +13,7 @@ import {
   pickWinner,
 } from '@/lib/actions/polls';
 import { nextWeight, type Weight } from '@/lib/engine/scoring';
+import { errorFor, errorRef, type ErrorCode } from '@/lib/errors';
 import type { Poll, PollOption } from '@/lib/types';
 
 export interface OptionResult {
@@ -62,6 +63,7 @@ export function PollSection({
 }: PollSectionProps) {
   const [suggestion, setSuggestion] = useState('');
   const [error, setError] = useState('');
+  const [errorCode, setErrorCode] = useState<ErrorCode | null>(null);
   const [pending, startTransition] = useTransition();
   const router = useRouter();
 
@@ -144,14 +146,46 @@ export function PollSection({
   // the realtime subscription above refreshes, because someone else's vote is
   // the one case where nothing has been handed to us.
 
+  /**
+   * Add an idea to the list.
+   *
+   * The `catch` is not defensive padding. `addSuggestion` can *reject* rather
+   * than return `{ ok: false }` — a server action whose POST is answered with a
+   * redirect instead of a result, which is what happens when the cookies the
+   * browser sends carry an access token the server has already rotated (see the
+   * same hazard called out in e2e/authed.spec.ts). A rejection inside
+   * `startTransition` never reaches `setError`, so the screen showed nothing at
+   * all: the box had already cleared, the list was unchanged, and the app had
+   * no comment. That is indistinguishable from being ignored, and it is how
+   * this failure went unexplained across several CI runs and an unknown number
+   * of real ones.
+   *
+   * The typed text goes back in the box on any failure. Clearing optimistically
+   * is right when the write lands; keeping the words when it doesn't is the
+   * difference between "try again" and "type it again".
+   */
   function submitSuggestion(e: React.FormEvent) {
     e.preventDefault();
     const label = suggestion;
     setSuggestion('');
+    setError('');
+    setErrorCode(null);
     startTransition(async () => {
-      const result = await addSuggestion(poll.id, eventId, label);
-      if (!result.ok) setError(result.error ?? 'Could not add that');
-      else router.refresh();
+      try {
+        const result = await addSuggestion(poll.id, eventId, label);
+        if (result.ok) {
+          router.refresh();
+          return;
+        }
+        setSuggestion(label);
+        setError(result.error ?? 'Could not add that');
+        setErrorCode(result.code ?? null);
+      } catch {
+        setSuggestion(label);
+        const failed = errorFor('SB-POLL-SUGGEST');
+        setError(failed.message);
+        setErrorCode('SB-POLL-SUGGEST');
+      }
     });
   }
 
@@ -209,7 +243,14 @@ export function PollSection({
       )}
 
       {error && (
-        <p role="alert" className="text-sm text-rose-deep mb-3">{error}</p>
+        <p role="alert" className="text-sm text-rose-deep mb-3">
+          {error}
+          {errorCode && (
+            <span className="ml-2 text-xs text-ink-faint font-mono">
+              {errorRef(errorCode)}
+            </span>
+          )}
+        </p>
       )}
 
       <ul className="space-y-2.5">
