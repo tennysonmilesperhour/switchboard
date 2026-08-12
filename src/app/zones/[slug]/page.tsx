@@ -5,6 +5,8 @@ import { AppShell } from '@/components/shell/AppShell';
 import { toMapPoint } from '@/lib/geo';
 import { mapFocusHref } from '@/lib/map-directory';
 import { ZoneCheckIn } from './ZoneCheckIn';
+import { ZoneAccess } from './ZoneAccess';
+import { ZoneJoinRequest } from './ZoneJoinRequest';
 
 export default async function ZonePage({
   params,
@@ -18,13 +20,63 @@ export default async function ZonePage({
   } = await supabase.auth.getUser();
   if (!user) redirect('/login');
 
+  // RLS decides this: a private zone the viewer isn't part of simply isn't
+  // here, so the page needs no visibility check of its own. What it does need
+  // is to tell the difference between "no such zone" and "a zone you can ask to
+  // join" — hence the second, id-only lookup through the definer helper below.
   const { data: zone } = await supabase
     .from('zones')
-    .select('id, slug, name, description, experiences, latitude, longitude')
+    .select(
+      'id, slug, name, description, experiences, latitude, longitude, visibility, organizer_id',
+    )
     .eq('slug', slug)
     .maybeSingle();
-  if (!zone) notFound();
+
+  if (!zone) {
+    // Private and not yours: offer the front door rather than a 404, but only
+    // when a zone by that slug genuinely exists. `find_private_zone_by_slug`
+    // returns nothing but the id and name, so this can't be used to enumerate.
+    const { data: knockable } = await supabase.rpc('find_private_zone_by_slug', {
+      p_slug: slug,
+    });
+    const row = Array.isArray(knockable) ? knockable[0] : null;
+    if (!row) notFound();
+    return (
+      <AppShell title={row.name} back="/zones">
+        <ZoneJoinRequest
+          zoneId={row.id}
+          zoneName={row.name}
+          alreadyAsked={row.request_pending}
+        />
+      </AppShell>
+    );
+  }
+
   const point = toMapPoint(zone.latitude, zone.longitude);
+  const canManage = await supabase
+    .rpc('is_zone_moderator', { p_zone: zone.id, p_user: user.id })
+    .then(({ data }) => data === true);
+
+  // Only fetched for someone who can act on them; RLS returns nothing to
+  // anyone else regardless.
+  const [{ data: memberRows }, { data: requestRows }] = canManage
+    ? await Promise.all([
+        supabase
+          .from('zone_members')
+          .select('member_id, role, profile:profiles(display_name)')
+          .eq('zone_id', zone.id),
+        supabase
+          .from('zone_join_requests')
+          .select('id, requester_id, note, profile:profiles(display_name)')
+          .eq('zone_id', zone.id)
+          .eq('status', 'pending'),
+      ])
+    : [{ data: null }, { data: null }];
+
+  function nameOf(row: { profile: unknown }): string {
+    const profile = Array.isArray(row.profile) ? row.profile[0] : row.profile;
+    return (profile as { display_name?: string } | null)?.display_name ?? 'Someone';
+  }
 
   // Two different questions, and only one of them can be asked of the table.
   // `moments` is owner-only under RLS, so a direct count here is always just the
@@ -50,7 +102,7 @@ export default async function ZonePage({
       <div className="space-y-6">
         <div className="rounded-card bg-ink text-paper p-6">
           <p className="text-xs font-bold uppercase tracking-widest text-gold-deep">
-            Serendipity Zone
+            {zone.visibility === 'private' ? 'Private Zone' : 'Serendipity Zone'}
           </p>
           <h2 className="font-extrabold tracking-tight text-3xl mt-1.5 text-balance">
             ✨ {zone.name}
@@ -92,6 +144,25 @@ export default async function ZonePage({
               : ['Coffee Conversation', 'Networking', 'Meet Someone New']
           }
         />
+
+        {canManage && (
+          <ZoneAccess
+            zoneId={zone.id}
+            visibility={zone.visibility === 'private' ? 'private' : 'public'}
+            organizerId={zone.organizer_id}
+            members={(memberRows ?? []).map((row) => ({
+              member_id: row.member_id,
+              role: row.role,
+              display_name: nameOf(row),
+            }))}
+            requests={(requestRows ?? []).map((row) => ({
+              id: row.id,
+              requester_id: row.requester_id,
+              note: row.note,
+              display_name: nameOf(row),
+            }))}
+          />
+        )}
       </div>
     </AppShell>
   );

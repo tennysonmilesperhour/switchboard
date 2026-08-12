@@ -165,6 +165,13 @@ export const FEATURE_GROUPS: readonly FeatureGroup[] = [
         href: '/discover',
       },
       {
+        id: 'privacy-access',
+        title: 'Privacy and access',
+        blurb:
+          'Change what guests can see about each other — who’s in, the whole invite list, expired invitations — at any point, not just when you set the plan up.',
+        where: 'Your plan’s page → Privacy and access',
+      },
+      {
         id: 'co-hosts',
         title: 'Co-hosts',
         blurb:
@@ -398,6 +405,14 @@ export const FEATURE_GROUPS: readonly FeatureGroup[] = [
         blurb:
           'Named places you check into — a conference, a cruise, a campus, a festival — so “who else is here?” has an answer.',
         where: 'More → Zones',
+        href: '/zones',
+      },
+      {
+        id: 'private-zones',
+        title: 'Private zones',
+        blurb:
+          'Make a zone visible only to people you let in, by link or by request, and remove anyone later. Public zones still work exactly as before.',
+        where: 'Zones → create one, or a zone you organize → Who can be here',
         href: '/zones',
       },
       {

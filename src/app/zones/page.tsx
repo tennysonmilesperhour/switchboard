@@ -32,7 +32,9 @@ export default async function ZonesPage({
 
   const { data: zones } = await supabase
     .from('zones')
-    .select('id, slug, name, description, organizer_id, latitude, longitude')
+    // Private zones the viewer isn't part of never come back — RLS decides,
+    // so this list needed no filtering of its own.
+    .select('id, slug, name, description, organizer_id, latitude, longitude, visibility')
     .order('created_at', { ascending: false })
     .limit(20);
 
@@ -66,7 +68,9 @@ export default async function ZonesPage({
               {zones?.map((zone) => (
                 <Link key={zone.id} href={`/zones/${zone.slug}`} className="block group">
                   <Card className="group-hover:border-terracotta transition-colors">
-                    <p className="font-bold">✨ {zone.name}</p>
+                    <p className="font-bold">
+                      {zone.visibility === 'private' ? '🔒' : '✨'} {zone.name}
+                    </p>
                     {zone.description && (
                       <p className="text-sm text-ink-soft mt-0.5">{zone.description}</p>
                     )}
@@ -112,6 +116,40 @@ export default async function ZonesPage({
                   className="w-full rounded-card border border-line bg-paper px-3 py-2.5 text-sm outline-none focus:border-terracotta"
                 />
                 <ZoneLocationField className="w-full rounded-card border border-line bg-paper px-3 py-2.5 text-sm outline-none focus:border-terracotta" />
+                <fieldset>
+                  <legend className="text-xs text-ink-faint mb-1.5">
+                    Who can find this zone
+                  </legend>
+                  <div className="flex flex-wrap gap-1.5">
+                    {[
+                      {
+                        value: 'public',
+                        label: '🌍 Anyone',
+                        hint: 'A conference, festival, or campus',
+                      },
+                      {
+                        value: 'private',
+                        label: '🔒 Only people I let in',
+                        hint: 'A trip, an offsite, a small group',
+                      },
+                    ].map((option, index) => (
+                      <label
+                        key={option.value}
+                        title={option.hint}
+                        className="inline-flex items-center gap-1.5 rounded-pill border border-line bg-paper px-2.5 py-1.5 text-xs cursor-pointer has-checked:bg-ink has-checked:text-paper has-checked:border-ink"
+                      >
+                        <input
+                          type="radio"
+                          name="visibility"
+                          value={option.value}
+                          defaultChecked={index === 0}
+                          className="sr-only"
+                        />
+                        {option.label}
+                      </label>
+                    ))}
+                  </div>
+                </fieldset>
                 <fieldset>
                   <legend className="text-xs text-ink-faint mb-1.5">
                     Curated experiences for this zone

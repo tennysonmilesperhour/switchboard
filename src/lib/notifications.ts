@@ -124,6 +124,10 @@ const KIND_TO_CATEGORY: Record<string, NotificationCategory> = {
   connection_request: 'social',
   connection_accepted: 'social',
   match: 'social',
+  // Someone asking to be let into a private zone, and the answer. Both are
+  // about who is in a group with you, which is what 'social' covers.
+  zone_join_request: 'social',
+  zone_join_approved: 'social',
   // Anonymous "someone's down to connect" nudge — never names the sender, so it
   // belongs with the other consent-first social signals, gated by notify_social.
   interest_received: 'social',

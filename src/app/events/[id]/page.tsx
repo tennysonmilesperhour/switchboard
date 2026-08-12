@@ -30,6 +30,7 @@ import { HostControls } from './HostControls';
 import { CoHostManager } from './CoHostManager';
 import { AddInvitees } from './AddInvitees';
 import { InviteLink } from './InviteLink';
+import { PrivacyAccess } from './PrivacyAccess';
 import { getRelationship, getMutualConnections } from '@/lib/server/relationship';
 import { inviteExpiresAt } from '@/lib/engine/cascade';
 import { threadGate, THREAD_PREVIEW_COUNT } from '@/lib/engine/thread';
@@ -1100,6 +1101,15 @@ export default async function EventPage({
             event={event}
             pollDecided={poll?.phase === 'decided'}
             isPrimaryHost={isHost}
+          />
+        )}
+
+        {canManage && event.status !== 'cancelled' && (
+          <PrivacyAccess
+            eventId={event.id}
+            showInviteList={event.show_invite_list}
+            showAccepted={event.show_accepted}
+            showExpired={event.show_expired}
           />
         )}
 

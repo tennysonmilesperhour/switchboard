@@ -142,6 +142,28 @@ const REGISTRY = {
     fix: 'It may have been turned off or replaced. Ask whoever shared it for an up-to-date one.',
     actor: 'reader',
   },
+  // Zones carry their own link and their own membership, so they get their own
+  // area for the same reason boards did.
+  'SB-ZONE-UNKNOWN': {
+    message: 'This zone invite link doesn’t match any zone.',
+    fix: 'It may have been replaced since it was sent. Ask the organizer for a current one.',
+    actor: 'reader',
+  },
+  'SB-ZONE-LINK': {
+    message: 'Switchboard couldn’t make an invite link for this zone.',
+    fix: null,
+    actor: 'operator',
+  },
+  'SB-ZONE-ACCESS': {
+    message: 'Only the organizer can manage who’s in this zone.',
+    fix: 'Ask whoever set the zone up.',
+    actor: 'host',
+  },
+  'SB-ZONE-SAVE': {
+    message: 'Switchboard couldn’t save that change to the zone.',
+    fix: null,
+    actor: 'operator',
+  },
 
   // ————————————————————————— answering an invitation —————————————————————————
   'SB-RSVP-AUTH': {
@@ -251,6 +273,11 @@ const REGISTRY = {
     message: 'This plan couldn’t be deleted.',
     fix: 'Try again in a moment.',
     actor: 'reader',
+  },
+  'SB-PLAN-ACCESS': {
+    message: 'Only the host can change this plan.',
+    fix: 'Ask the host, or a co-host they’ve added.',
+    actor: 'host',
   },
   'SB-INVITE-SEND': {
     message: 'Those invitations didn’t go out.',
@@ -399,6 +426,7 @@ const AREA_CODES: Record<string, ErrorCode> = {
   'plans.invited-events': 'SB-PLAN-LOAD',
   'event-create': 'SB-PLAN-CREATE',
   'event-update': 'SB-PLAN-SAVE',
+  'event-visibility': 'SB-PLAN-SAVE',
   'event-locate': 'SB-PLAN-SAVE',
   'event.delete': 'SB-PLAN-DELETE',
   'event.delete-room': 'SB-PLAN-DELETE',
@@ -414,6 +442,14 @@ const AREA_CODES: Record<string, ErrorCode> = {
   'event-invite-link': 'SB-SHARE-SAVE',
   'event-share-link': 'SB-SHARE-SAVE',
   'event-share-link-rotate': 'SB-SHARE-SAVE',
+
+  // Zone access
+  'zone.invite-link': 'SB-ZONE-LINK',
+  'zone.invite-link-rotate': 'SB-ZONE-LINK',
+  'zone.join-request': 'SB-ZONE-SAVE',
+  'zone.resolve-request': 'SB-ZONE-SAVE',
+  'zone.membership': 'SB-ZONE-SAVE',
+  'zone.visibility': 'SB-ZONE-SAVE',
 
   // Answering
   'share-rsvp.respond': 'SB-RSVP-SAVE',

@@ -122,6 +122,11 @@ export function boardJoinUrl(code: string): string {
   return absoluteUrl(`/boards/join/${encodeURIComponent(code)}`);
 }
 
+/** A private zone's shareable join link. Same shape as a board's, same rules. */
+export function zoneJoinUrl(code: string): string {
+  return absoluteUrl(`/zones/join/${encodeURIComponent(code)}`);
+}
+
 /**
  * The link for "here's Switchboard" — the app itself, with no plan attached.
  *

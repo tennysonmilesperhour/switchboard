@@ -319,6 +319,44 @@ check-in. Covered by `supabase/tests/zone_presence.test.sql`.
 Litmus test: *does a zone surface ever return something that identifies who is
 there, to someone who has not themselves checked in?*
 
+## Private zones (membership decides readability)
+
+Zones shipped world-readable — `zones_select ... using (true)` — which was right
+for the conference/festival case they were built for and wrong for every private
+gathering someone tried to use them for. `20260812120000_private_zones.sql` adds
+`visibility` plus a `zone_members` roster, following the boards model rather
+than inventing a second access system.
+
+- **The policy is the only gate.** `zones_select` is
+  `visibility = 'public' or is_zone_member(id, auth.uid())`. Every zone reader —
+  the `/zones` list, the zone page, the map's Zones layer, `locateMyPlaces` —
+  goes through the caller's RLS client, so all of them inherited the restriction
+  without being modified. Do not reimplement this check in a page; if a new
+  surface needs zone rows, read them through RLS and it is already correct.
+- **Membership is never self-writable.** Base RLS lets only organizers and
+  moderators insert into `zone_members`; the join paths are definer functions
+  that re-check the caller and the specific zone. `join_zone_via_code` forces
+  `role = 'member'`, so a shared link can never mint a moderator.
+- **The code is the capability**, exactly as for boards: minting and rotating
+  are moderator-only, and rotating invalidates every link already shared.
+- **Ownership and membership identity are frozen by trigger** (`organizer_id`,
+  `zone_id`, `member_id`), since RLS cannot compare OLD to NEW.
+- **Checking in is gated on the write.** `moments.zone_id` is owner-only under
+  RLS, so nothing stopped a non-member from checking into a private zone and
+  landing in its presence count — the one number that crosses the member
+  boundary. A `BEFORE INSERT OR UPDATE` trigger on `moments` enforces
+  `can_view_zone`.
+- **A private zone's address is a door, not a 404.**
+  `find_private_zone_by_slug` returns the id, the name, and whether you have
+  already asked — nothing else, keyed by exact slug, at most one row. It answers
+  "does this address exist" for someone who was handed the URL; it cannot be
+  used to enumerate private zones or read their contents.
+
+Covered by `supabase/tests/private_zones.test.sql`.
+
+Litmus test: *could someone outside a private zone learn its description, its
+roster, its coordinates, or that anyone is in it?*
+
 ## Known residual risks / follow-ups
 
 ## Give Space safety invariant
