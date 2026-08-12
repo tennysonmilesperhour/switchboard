@@ -279,6 +279,15 @@ const REGISTRY = {
     fix: 'Ask the host, or a co-host they’ve added.',
     actor: 'host',
   },
+  // Distinct from SB-PLAN-ACCESS on purpose. That one means "we asked, and the
+  // answer is no". This one means we could not ask — and telling a host they
+  // are not the host, when the truth is that a check failed, sends them looking
+  // for a permission problem that does not exist.
+  'SB-PLAN-AUTHZ': {
+    message: 'Switchboard couldn’t confirm you host this plan.',
+    fix: null,
+    actor: 'operator',
+  },
   'SB-INVITE-SEND': {
     message: 'Those invitations didn’t go out.',
     fix: 'Try again — anyone already invited keeps their invitation.',
@@ -427,6 +436,7 @@ const AREA_CODES: Record<string, ErrorCode> = {
   'event-create': 'SB-PLAN-CREATE',
   'event-update': 'SB-PLAN-SAVE',
   'event-visibility': 'SB-PLAN-SAVE',
+  'authz.event-manager': 'SB-PLAN-AUTHZ',
   'poll.follow-up': 'SB-PLAN-SAVE',
   'poll.follow-up-remove': 'SB-PLAN-SAVE',
   'event-locate': 'SB-PLAN-SAVE',

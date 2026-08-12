@@ -5,7 +5,7 @@ import { revalidatePath } from 'next/cache';
 import { createClient } from '@/lib/supabase/server';
 import { requireUser, requireUserOrRedirect } from '@/lib/server/require-user';
 import { createAdminClient } from '@/lib/supabase/admin';
-import { isEventManager } from '@/lib/server/authz';
+import { checkEventManager, isEventManager } from '@/lib/server/authz';
 import {
   advanceEventCascade,
   deliverInviteNow,
@@ -596,7 +596,11 @@ export async function inviteConnectionNow(
   const auth = await requireUser();
   if (!auth.ok) return auth;
   const { supabase, user } = auth;
-  if (!(await isEventManager(user.id, eventId))) {
+  // Three outcomes, not two. A check that could not run is an operational
+  // failure with its own code — not a verdict that this person isn't the host.
+  const manager = await checkEventManager(user.id, eventId);
+  if (!manager.ok) return failure('SB-PLAN-AUTHZ');
+  if (!manager.isManager) {
     return { ok: false, error: 'Only the host can invite people to this plan.' };
   }
   if (profileId === user.id) return { ok: false, error: 'That’s you.' };

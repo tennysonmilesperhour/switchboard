@@ -75,13 +75,37 @@ Code can't close these; they need the owner or a dashboard:
   scheduler with the `CRON_SECRET` bearer.
 - **Preview environment isolation** (own Supabase project, complete config) and
   confirming the **authed-E2E GitHub job is a required check**.
-- **CI on `main` is red** (as of 2026-08-11, every push since ~Aug 7): the
-  Authenticated E2E job fails on `e2e/authed.spec.ts` › "a host invites a
-  connection directly" — the app toasts "Only the host can invite people to
-  this plan." where the test expects "Invitation sent to E2E Guest" (a second
-  test, the group-decision one, fails intermittently). Diagnose whether it's a
-  fixture/authorization regression or a stale test before making the job a
-  required check.
+- **CI on `main` is red** — the Authenticated E2E job, on every push since
+  **2026-07-31** (not Aug 7 as first recorded; run 281 shows it red on the very
+  commit that added the invite test, so that test has never passed). Two fail:
+  `authed.spec.ts:345` "a host invites a connection directly" and
+  `authed.spec.ts:278` "a host opens a group decision, suggests, and votes".
+
+  **What's established** (2026-08-12):
+  - Not a database problem. Applying every migration to a clean Postgres shows
+    `is_event_host` correct (true for the host, false for others) and
+    executable by `service_role` — the grant-hardening migration did not lock
+    it out, which was the first hypothesis.
+  - Both failures reduce to the *same* shape: a server action taken
+    **immediately after** plan creation is refused. Creating a plan passes;
+    only the follow-up action fails, in both tests. A non-host can neither
+    invite nor add poll options, which is exactly the pair of symptoms.
+  - The likeliest cause is the one `authed.spec.ts` already documents in a
+    comment: the cookies sent on the second action carry an access token from
+    before `createEvent` rotated it, so `getUser()` resolves to a stale or
+    different session. The `await host.reload()` added as a workaround is
+    evidently not sufficient. If real, this is a **user-facing** race, not a
+    test artifact — worth confirming before dismissing.
+  - Fixed on the way past: a failed authz check used to be reported as
+    "Only the host can invite people to this plan" with no log line, so the
+    screen accused the host of not being the host and left no evidence. It now
+    separates "not permitted" from "could not check" (`SB-PLAN-AUTHZ`).
+  - CI now retains Playwright traces, screenshots, and the report on failure.
+    The absence of any artifact is why this stayed unexplained for two weeks.
+
+  **Next step:** read the artifacts from the first red run after this change —
+  the trace shows whose session the page held at the moment of the refusal,
+  which confirms or kills the session-rotation theory outright.
 - Legal copy sign-off; run `supabase test db` + the `E2E_DB=1` suite once
   against a disposable project before any release.
 

@@ -136,3 +136,19 @@ jobs:
         run: npx playwright test e2e/authed.spec.ts
         env:
           PLAYWRIGHT_WEB_SERVER: npm run start
+
+      # A failing browser journey with nothing kept is a failure nobody can
+      # diagnose: this suite stayed red for two weeks because the only evidence
+      # was one assertion message, and answering "what did the app actually
+      # show?" needed a database no reviewer had. Keep the report, the traces,
+      # and the per-test error context whenever it goes red.
+      - name: Keep the failure evidence
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: authed-e2e-failure
+          path: |
+            playwright-report/
+            test-results/
+          retention-days: 14
+          if-no-files-found: warn

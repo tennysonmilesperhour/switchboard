@@ -7,7 +7,11 @@ export default defineConfig({
   timeout: 60_000,
   use: {
     baseURL: process.env.PLAYWRIGHT_BASE_URL ?? 'http://localhost:3000',
-    trace: 'on-first-retry',
+    // `on-first-retry` keeps nothing when a run has no retries, which is how a
+    // red suite can stay unexplained. Keep a trace and a screenshot for any
+    // test that fails, so the first red run already carries its own evidence.
+    trace: 'retain-on-failure',
+    screenshot: 'only-on-failure',
   },
   projects: [
     { name: 'mobile', use: { ...devices['iPhone 13'] } },
