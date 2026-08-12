@@ -62,6 +62,13 @@ export function PollSection({
   eventId,
 }: PollSectionProps) {
   const [suggestion, setSuggestion] = useState('');
+  // Options this device added, kept until a server render includes them.
+  //
+  // Not an optimistic overlay: these are rows the server has already saved and
+  // handed back, with real ids, so they can be ranked immediately. They exist
+  // because the re-render that should have shown them does not reliably arrive
+  // — see submitSuggestion.
+  const [justAdded, setJustAdded] = useState<PollOption[]>([]);
   const [error, setError] = useState('');
   const [errorCode, setErrorCode] = useState<ErrorCode | null>(null);
   const [pending, startTransition] = useTransition();
@@ -122,7 +129,13 @@ export function PollSection({
   const resultFor = (optionId: string) =>
     results.find((r) => r.option_id === optionId);
 
-  const ranked = [...options].sort((a, b) => {
+  // The server's list wins on every id it knows about; anything this device
+  // added that has not come back yet is appended. Once a render includes it,
+  // the `seen` check drops the local copy rather than showing it twice.
+  const seen = new Set(options.map((option) => option.id));
+  const shownOptions = [...options, ...justAdded.filter((option) => !seen.has(option.id))];
+
+  const ranked = [...shownOptions].sort((a, b) => {
     const ra = resultFor(a.id);
     const rb = resultFor(b.id);
     return (
@@ -163,6 +176,15 @@ export function PollSection({
    * The typed text goes back in the box on any failure. Clearing optimistically
    * is right when the write lands; keeping the words when it doesn't is the
    * difference between "try again" and "type it again".
+   *
+   * On success the saved row is kept locally rather than waited for. Both
+   * `revalidatePath` and `router.refresh()` were already firing, and CI caught
+   * them returning **200 without the new option** — three refetches in a row —
+   * while a full page load showed it at once. So an idea could be saved and
+   * stay invisible until something unrelated reloaded the page, which reads as
+   * the app having dropped it. The row the server hands back carries its real
+   * id, so it can be ranked immediately and is replaced by the server's copy on
+   * the first render that includes it.
    */
   function submitSuggestion(e: React.FormEvent) {
     e.preventDefault();
@@ -174,6 +196,7 @@ export function PollSection({
       try {
         const result = await addSuggestion(poll.id, eventId, label);
         if (result.ok) {
+          if (result.option) setJustAdded((current) => [...current, result.option!]);
           router.refresh();
           return;
         }
