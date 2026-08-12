@@ -11,6 +11,10 @@ export interface OpenTableRow {
   event_id: string;
   title: string;
   starts_at: string | null;
+  /** IANA zone the plan was created in; passed to `formatDateTime` so the
+   * server (UTC) and client (viewer's zone) render the same text and don't
+   * trip a hydration mismatch (React #418). Supplied by `list_open_tables()`. */
+  time_zone: string | null;
   location_name: string | null;
   host_name: string;
   spots_left: number;
@@ -37,7 +41,7 @@ export function OpenTables({ tables }: { tables: OpenTableRow[] }) {
               <div className="min-w-0">
                 <p className="font-bold truncate">{table.title}</p>
                 <p className="text-xs text-ink-soft mt-0.5">
-                  {formatDateTime(table.starts_at)}
+                  {formatDateTime(table.starts_at, table.time_zone)}
                   {table.location_name ? ` · ${table.location_name}` : ''}
                 </p>
                 <p className="text-xs text-ink-faint mt-0.5">
