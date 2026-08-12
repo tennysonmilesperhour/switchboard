@@ -1,47 +1,74 @@
--- Give the service role back the functions the server calls with it.
+-- Let the service role execute the private function bodies its wrappers call.
 --
--- `20260713151000_function_grant_hardening.sql` did two correct things and one
--- thing with a consequence nobody saw:
+-- `20260717192758_move_definer_bodies_private.sql` moved every authenticated
+-- `SECURITY DEFINER` body out of the exposed `public` API schema into `private`,
+-- and left a thin `SECURITY INVOKER` wrapper behind:
 --
---   revoke execute on function ... from public, anon;   -- per function
---   alter default privileges in schema public revoke execute on functions from public;
+--     public.is_event_host(uuid, uuid)   -- security INVOKER
+--       └─ select private.is_event_host(...)   -- security DEFINER, the real body
 --
--- In Supabase, `service_role`'s EXECUTE on a `public` function comes from the
--- implicit PUBLIC grant. Revoking PUBLIC therefore revoked it from the service
--- role too — silently, because nothing calls these functions as service_role
--- during a migration. Tables were unaffected (Supabase grants those to the API
--- roles explicitly), so the app looked fine everywhere except the few paths
--- that go through `createAdminClient()`.
+-- The wrapper was granted to `authenticated, service_role`. The body was not.
+-- `alter function ... set schema private` carries the function's existing ACL
+-- with it, so each private body kept the `authenticated` grant it already had
+-- and never gained one for `service_role` — only the five *trigger* functions
+-- got an explicit `grant ... to service_role`, because that branch of the loop
+-- said so.
 --
--- What that broke, and for how long:
+-- A `SECURITY INVOKER` wrapper runs as its caller, so the caller needs EXECUTE
+-- on what it calls. That split the world in two:
 --
---   `is_event_host`  — every host-only action routed through isEventManager:
---                      inviting someone directly, editing the cascade, closing
---                      a poll, posting an announcement. The host was told
---                      "Only the host can invite people to this plan." The
---                      authenticated E2E suite has been red on this since
---                      2026-07-31 and the message sent everyone looking at
---                      permissions rather than at grants.
---   `resolve_parental_approval` — shipped 2026-08-11 with grants to `anon` and
---                      `authenticated` but not `service_role`, and it is only
---                      ever called with the admin client. A guardian following
---                      an approval link could not approve.
+--   authenticated → wrapper runs as authenticated → body allows it   → works
+--   service_role  → wrapper runs as service_role  → body denies it   → 42501
 --
--- Proven, not guessed: the CI server log now carries
+-- Which is why nothing looked broken except the handful of paths that go
+-- through `createAdminClient()`, and why the failure reads
+-- `permission denied for function is_event_host` — a message that names the
+-- wrapper and the body identically, so it points at neither.
+--
+-- What it cost: every host-only action behind `isEventManager` (inviting
+-- directly, cascade edits, closing a poll, announcements) told hosts
+-- "Only the host can invite people to this plan." from 2026-07-17 onward, and
+-- the authenticated E2E suite has been red since the invite journey was added
+-- on 07-31. Separately, `resolve_parental_approval` shipped on 08-11 granting
+-- `anon` and `authenticated` but never `service_role`, and is only ever called
+-- with the admin client — a guardian following an approval link could not
+-- approve.
+--
+-- Proven from the CI server log, not inferred:
 --   {"area":"authz.event-manager","userCode":"SB-PLAN-AUTHZ",
 --    "message":"permission denied for function is_event_host","code":"42501"}
 --
--- Least privilege is preserved. This grants EXECUTE to `service_role` only —
--- `public` and `anon` stay revoked, and no client-facing role gains anything.
--- These two functions are already reachable by `authenticated` (is_event_host)
--- and by the guardian's token flow (resolve_parental_approval); the service
--- role is simply how the server asks on their behalf.
---
--- The standing rule this leaves behind: because default privileges no longer
--- grant EXECUTE to PUBLIC, **any function invoked through `createAdminClient()`
--- must carry an explicit `grant execute ... to service_role`.**
--- `supabase/tests/service_role_grants.test.sql` asserts exactly that, for every
--- such function, so the next one cannot be missed silently.
+-- Least privilege holds. `private` is not in PostgREST's exposed schemas and
+-- `public`/`anon` were revoked from both the schema and its functions by the
+-- migration above; this widens nothing to the browser. `service_role` is the
+-- server itself, already past RLS by definition — it is the one role that must
+-- be able to run these.
 
-grant execute on function public.is_event_host(uuid, uuid) to service_role;
+do $$
+declare
+  v_function record;
+begin
+  for v_function in
+    select p.oid::regprocedure as signature
+    from pg_proc p
+    join pg_namespace n on n.oid = p.pronamespace
+    where n.nspname = 'private'
+      and not has_function_privilege('service_role', p.oid, 'execute')
+  loop
+    execute format(
+      'grant execute on function %s to service_role',
+      v_function.signature
+    );
+  end loop;
+end;
+$$;
+
+-- Shipped 08-11 with grants to `anon` and `authenticated` only, and called
+-- exclusively through the admin client. Not part of the private-body move —
+-- it simply never listed the role that calls it.
 grant execute on function public.resolve_parental_approval(text, boolean) to service_role;
+
+-- The standing rule this leaves behind, asserted by
+-- `supabase/tests/service_role_grants.test.sql`: anything reachable through
+-- `createAdminClient()` must be executable by `service_role` — including, for a
+-- `SECURITY INVOKER` wrapper, the private body it delegates to.

@@ -27,12 +27,21 @@
 
 begin;
 
--- One assertion per function, plus the catch-all below.
-select plan(10);
+-- One assertion per function, plus the two catch-alls below.
+select plan(12);
 
 select ok(
   has_function_privilege('service_role', 'public.is_event_host(uuid, uuid)', 'EXECUTE'),
   'service_role can execute is_event_host (isEventManager — every host-only action)'
+);
+
+-- The wrapper is not the whole story, and asserting only the wrapper is how a
+-- first attempt at this fix passed pgTAP while the app still got 42501.
+-- `public.is_event_host` is SECURITY INVOKER: it runs as its caller and calls
+-- `private.is_event_host`, so the caller needs EXECUTE on the body too.
+select ok(
+  has_function_privilege('service_role', 'private.is_event_host(uuid, uuid)', 'EXECUTE'),
+  'service_role can execute the PRIVATE body its invoker wrapper delegates to'
 );
 
 select ok(
@@ -93,6 +102,28 @@ select is(
       and has_function_privilege('anon', p.oid, 'EXECUTE')),
   0,
   'no service-role entry point is reachable by anon'
+);
+
+/*
+ * The general rule, rather than one assertion per function: every body in
+ * `private` exists to be called by a `public` wrapper that runs as its caller,
+ * and the server is one of those callers. A body the service role cannot
+ * execute is a path that works for a signed-in person and 42501s for the
+ * server — the exact shape of the bug this file was written for, and one that
+ * no per-function list would have caught for the *next* function moved.
+ *
+ * `private` stays unreachable from the browser regardless: it is not an
+ * exposed PostgREST schema, and `public`/`anon` are revoked from the schema
+ * itself (20260717192758).
+ */
+select is(
+  (select count(*)::int
+     from pg_proc p
+     join pg_namespace n on n.oid = p.pronamespace
+    where n.nspname = 'private'
+      and not has_function_privilege('service_role', p.oid, 'EXECUTE')),
+  0,
+  'every private function body is executable by service_role'
 );
 
 select * from finish();
