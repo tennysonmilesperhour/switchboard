@@ -1,3 +1,7 @@
+> **Archived 2026-08-11.** The milestones here were executed across July 2026
+> (its own status header records most of it). Remaining threads (broader test
+> coverage, ops activation) are carried forward in [`../DOCKET.md`](../DOCKET.md).
+
 # Completion Plan — path to a shippable v1
 
 A hand-off backlog for finishing Switchboard. It is the output of a full

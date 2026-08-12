@@ -1,3 +1,7 @@
+> **Archived 2026-08-11.** Branch-status snapshot from mid-July 2026; Bucket A
+> merged. Bucket B's ops items (migrations parity, provider keys, cron plan,
+> test-suite runs) are carried forward in [`../DOCKET.md`](../DOCKET.md).
+
 # MVP Ship Checklist — where the code stands, what only you can do
 
 This is the honest state of the app for shipping the first working MVP to the

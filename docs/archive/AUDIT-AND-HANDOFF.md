@@ -1,3 +1,9 @@
+> **Archived 2026-08-11.** The engineering audit and hand-off prompts (Parts
+> 1–5) were executed in July 2026; treat their findings as historical. Parts
+> 6–9 (north-star metrics, humane engagement, interoperability strategy, the
+> operating system) remain worth reading as strategy, and their unbuilt ideas
+> are tracked in [`../DOCKET.md`](../DOCKET.md) and [`../INNOVATIONS.md`](../INNOVATIONS.md).
+
 # Switchboard: Audit, Roadmap, and Opus 4.8 Hand-off Prompts
 
 *Prepared 2026-07-07. A full read of the tree: 8 migrations, 22 server-action

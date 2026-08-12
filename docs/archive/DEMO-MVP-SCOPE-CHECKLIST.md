@@ -1,3 +1,7 @@
+> **Archived 2026-08-11.** The Phase 1 walkthrough checklist for the delivered
+> demo. Its "Next phase" items (N1–N16) are carried forward in
+> [`../DOCKET.md`](../DOCKET.md) so this snapshot no longer needs updating.
+
 # Demo MVP — Scope Checklist
 
 A line-by-line checklist for reviewing the demo MVP side-by-side with the app.

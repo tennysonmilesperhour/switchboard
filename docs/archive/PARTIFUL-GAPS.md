@@ -1,3 +1,7 @@
+> **Archived 2026-08-11.** Write-up of the July 2026 hosting table-stakes pass.
+> Several "still open" items have since shipped (co-hosts, themes UI, split the
+> bill); the rest are carried forward in [`../DOCKET.md`](../DOCKET.md).
+
 # Partiful gaps: what's standard, and what we shipped
 
 Partiful is an invitation-and-event-page tool. Switchboard is a

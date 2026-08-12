@@ -1,3 +1,8 @@
+> **Archived 2026-08-11.** Point-in-time audit of commit `ef77d94` with closeout
+> updates through 2026-07-17. The code-side blockers were fixed; the release
+> gate's still-open ops items (provider config, leaked-password protection,
+> preview isolation, pilot ops) are carried forward in [`../DOCKET.md`](../DOCKET.md).
+
 # Switchboard Ship-Readiness Audit
 
 - **Audit date:** 2026-07-13
