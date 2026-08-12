@@ -14,6 +14,7 @@ import {
   sendPhotoMessage,
   toggleTask,
 } from '@/lib/actions/rooms';
+import { blockProfile, reportProfile } from '@/lib/actions/connections';
 import { addExpense, deleteExpense } from '@/lib/actions/expenses';
 import { uploadImage } from '@/lib/client/upload-image';
 import { formatRelative } from '@/lib/format';
@@ -93,6 +94,7 @@ export function RoomClient({
   const [expenseUrl, setExpenseUrl] = useState('');
   const [expenseError, setExpenseError] = useState<string | null>(null);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const [memberMenu, setMemberMenu] = useState<string | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const photoInputRef = useRef<HTMLInputElement>(null);
   const router = useRouter();
@@ -101,6 +103,19 @@ export function RoomClient({
 
   useEffect(() => {
     markRoomRead(roomId).catch(() => undefined);
+    const interval = setInterval(() => {
+      markRoomRead(roomId).catch(() => undefined);
+    }, 30_000);
+    const onVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        markRoomRead(roomId).catch(() => undefined);
+      }
+    };
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener('visibilitychange', onVisibility);
+    };
   }, [roomId]);
 
   async function onPickPhoto(e: React.ChangeEvent<HTMLInputElement>) {
@@ -334,11 +349,76 @@ export function RoomClient({
                   className={`flex gap-2.5 ${mine ? 'flex-row-reverse' : ''}`}
                 >
                   {!mine && (
-                    <Avatar
-                      name={memberNames[message.sender_id] ?? '?'}
-                      seed={message.sender_id}
-                      size="sm"
-                    />
+                    <div className="relative">
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setMemberMenu((prev) =>
+                            prev === message.sender_id ? null : message.sender_id,
+                          )
+                        }
+                        className="rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-terracotta"
+                      >
+                        <Avatar
+                          name={memberNames[message.sender_id] ?? '?'}
+                          seed={message.sender_id}
+                          size="sm"
+                        />
+                      </button>
+                      {memberMenu === message.sender_id && (
+                        <div className="absolute left-0 top-full z-30 mt-1 min-w-[120px] rounded-card border border-line bg-card p-1 shadow-float">
+                          <button
+                            type="button"
+                            disabled={pending}
+                            className="w-full rounded-btn px-3 py-1.5 text-left text-xs font-semibold text-ink-faint hover:bg-cream"
+                            onClick={async () => {
+                              setMemberMenu(null);
+                              const reason = window.prompt(
+                                `Briefly describe why you are reporting ${memberNames[message.sender_id] ?? 'this person'}.`,
+                              );
+                              if (!reason) return;
+                              startTransition(async () => {
+                                const result = await reportProfile(message.sender_id, reason);
+                                if (!result.ok)
+                                  return toast.error(
+                                    result.error ?? 'Could not send the report.',
+                                    result.code,
+                                  );
+                                toast.success('Report received.');
+                              });
+                            }}
+                          >
+                            Report
+                          </button>
+                          <button
+                            type="button"
+                            disabled={pending}
+                            className="w-full rounded-btn px-3 py-1.5 text-left text-xs font-semibold text-rose-deep hover:bg-cream"
+                            onClick={async () => {
+                              setMemberMenu(null);
+                              const ok = await confirm({
+                                title: `Block ${memberNames[message.sender_id] ?? 'this person'}?`,
+                                body: 'They will be removed and will not be able to reconnect with you.',
+                                confirmLabel: 'Block',
+                                danger: true,
+                              });
+                              if (!ok) return;
+                              startTransition(async () => {
+                                const result = await blockProfile(message.sender_id);
+                                if (!result.ok)
+                                  return toast.error(
+                                    result.error ?? 'Could not block that person.',
+                                    result.code,
+                                  );
+                                router.refresh();
+                              });
+                            }}
+                          >
+                            Block
+                          </button>
+                        </div>
+                      )}
+                    </div>
                   )}
                   <div className={`max-w-[75%] ${mine ? 'items-end' : ''}`}>
                     {!mine && (

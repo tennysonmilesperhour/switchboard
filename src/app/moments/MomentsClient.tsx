@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useTransition } from 'react';
+import { useEffect, useState, useTransition } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/Button';
@@ -17,7 +17,9 @@ import {
 } from '@/lib/actions/moments';
 import { formatRelative } from '@/lib/format';
 import { EXPERIENCE_PRESETS } from '@/lib/types';
+import { BlockReportButtons } from '@/components/profile/BlockReportButtons';
 import { useCurrentLocation } from '@/lib/client/use-current-location';
+import { createClient } from '@/lib/supabase/client';
 
 export interface MyMoment {
   id: string;
@@ -30,6 +32,7 @@ export interface MyMoment {
 
 export interface Candidate {
   id: string;
+  userId: string | null;
   experiences: string[];
   headline: string | null;
   stage: 'none' | 'curious' | 'revealed' | 'accepted' | 'passed';
@@ -54,6 +57,41 @@ export function MomentsClient({
   const location = useCurrentLocation();
   const router = useRouter();
   const toast = useToast();
+
+  useEffect(() => {
+    if (!myMoment) return;
+    const supabase = createClient();
+    const channel = supabase
+      .channel(`moments-${myMoment.id}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'moments',
+          filter: `id=eq.${myMoment.id}`,
+        },
+        () => {
+          router.refresh();
+        },
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'moment_interests',
+          filter: `moment_id=eq.${myMoment.id}`,
+        },
+        () => {
+          router.refresh();
+        },
+      )
+      .subscribe();
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [myMoment?.id, router]);
 
   function toggleExperience(label: string) {
     setExperiences((current) =>
@@ -425,6 +463,14 @@ export function MomentsClient({
                       </div>
                     )}
                   </>
+                )}
+                {candidate.userId && (
+                  <div className="mt-3 border-t border-line pt-2">
+                    <BlockReportButtons
+                      targetId={candidate.userId}
+                      name={candidate.intro?.name ?? 'this person'}
+                    />
+                  </div>
                 )}
               </Card>
             ))}

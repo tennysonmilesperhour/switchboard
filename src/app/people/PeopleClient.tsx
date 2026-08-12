@@ -492,6 +492,53 @@ export function PeopleClient({
                   >
                     Ignore
                   </Button>
+                  <button
+                    type="button"
+                    disabled={pending}
+                    onClick={() => {
+                      const reason = window.prompt(
+                        `Briefly describe why you are reporting ${request.name}.`,
+                      );
+                      if (!reason) return;
+                      startTransition(async () => {
+                        const result = await reportProfile(request.id, reason);
+                        if (!result.ok)
+                          return toast.error(
+                            result.error ?? 'Could not send the report.',
+                            result.code,
+                          );
+                        toast.success('Report received.');
+                      });
+                    }}
+                    className="rounded-pill px-2 py-1 text-xs font-semibold text-ink-faint hover:text-ink"
+                  >
+                    Report
+                  </button>
+                  <button
+                    type="button"
+                    disabled={pending}
+                    onClick={async () => {
+                      const ok = await confirm({
+                        title: `Block ${request.name}?`,
+                        body: 'They will be removed and will not be able to reconnect with you.',
+                        confirmLabel: 'Block',
+                        danger: true,
+                      });
+                      if (!ok) return;
+                      startTransition(async () => {
+                        const result = await blockProfile(request.id, request.connectionId);
+                        if (!result.ok)
+                          return toast.error(
+                            result.error ?? 'Could not block that person.',
+                            result.code,
+                          );
+                        router.refresh();
+                      });
+                    }}
+                    className="rounded-pill px-2 py-1 text-xs font-semibold text-rose-deep hover:text-rose"
+                  >
+                    Block
+                  </button>
                 </div>
               </Card>
             ))}
