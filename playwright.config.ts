@@ -25,6 +25,19 @@ export default defineConfig({
    * which sent every investigation looking for a UI bug that wasn't there.
    */
   expect: { timeout: 15_000 },
+  /**
+   * In CI, also emit a machine-readable report so the workflow can print a
+   * compact "what failed and why" at the very end of the job.
+   *
+   * The list reporter puts the failure near the middle of a long log, ahead of
+   * artifact upload and cleanup chatter, and a failed page assertion drags a
+   * page snapshot and a source excerpt in with it. Reading a red run then means
+   * paging back through hundreds of lines for the one sentence that matters —
+   * which is how the last three investigations here started.
+   */
+  reporter: process.env.CI
+    ? [['list'], ['json', { outputFile: 'playwright-report/results.json' }]]
+    : 'list',
   webServer: process.env.PLAYWRIGHT_BASE_URL
     ? undefined
     : {
