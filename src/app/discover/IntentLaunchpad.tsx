@@ -27,7 +27,7 @@ const INTENTS = [
 export function IntentLaunchpad() {
   return (
     <section className="space-y-3">
-      <h2 className="font-display text-xl font-bold">What's the move?</h2>
+      <h2 className="font-display text-xl font-bold">What&apos;s the move?</h2>
       <div className="grid gap-2">
         {INTENTS.map((intent) =>
           'href' in intent && intent.href ? (

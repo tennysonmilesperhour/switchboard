@@ -110,7 +110,7 @@ export default async function CommunityPage() {
               Choose an appropriate public or trusted place, share your plans
               with someone you trust, and leave whenever something feels wrong.
               For kid-inclusive plans, a parent or guardian stays responsible and
-              present. Never post a child's name, age, school, contact details,
+              present. Never post a child&apos;s name, age, school, contact details,
               or live location.
             </p>
           </Card>
@@ -165,7 +165,7 @@ function CommunityCovenantStandalone() {
           Choose an appropriate public or trusted place, share your plans with
           someone you trust, and leave whenever something feels wrong. For
           kid-inclusive plans, a parent or guardian stays responsible and
-          present. Never post a child's name, age, school, contact details, or
+          present. Never post a child&apos;s name, age, school, contact details, or
           live location.
         </p>
       </section>
