@@ -75,7 +75,9 @@ Code can't close these; they need the owner or a dashboard:
   scheduler with the `CRON_SECRET` bearer.
 - **Preview environment isolation** (own Supabase project, complete config) and
   confirming the **authed-E2E GitHub job is a required check**.
-- ~~**CI on `main` is red**~~ — **root cause found and fixed 2026-08-12.**
+- ~~**CI on `main` is red**~~ — **root cause found and fixed 2026-08-12**
+  (PR #136, merged). The invite journey passes again; one unrelated failure
+  remains, see the end of this entry.
 
   The Authenticated E2E job had been red on every push since **2026-07-31**
   (not Aug 7 as first recorded — run 281 shows it red on the very commit that
@@ -133,6 +135,21 @@ Code can't close these; they need the owner or a dashboard:
   function — *including the private body behind an invoker wrapper*, and as a
   general rule over the whole `private` schema, so the next function moved
   cannot repeat this.
+
+  **Confirmed by CI:** with the grant in place, `authed.spec.ts:345` (the invite
+  journey) passes and no `42501` appears in the server log. 8 passed, up from 7.
+
+  **Still open, and unrelated:** `authed.spec.ts:278` "a host opens a group
+  decision, suggests, and votes" — after adding a suggestion, `Tacos` never
+  renders. **Not** a permission problem: replaying the exact scenario against a
+  full local schema (host, `deciding` plan, `suggesting` poll) gives
+  `can_view_event = true`, `is_event_host = true`, and the `poll_options`
+  insert succeeds under the host's own RLS. The selector is right too — there
+  is exactly one `Add` button on that page. So the insert either fails for a
+  reason the page states in a `role="alert"` nobody was reading, or it succeeds
+  and the list never re-renders. The test now quotes the app's objection (or
+  says explicitly that there wasn't one), which separates those two on the next
+  run.
 - Legal copy sign-off; run `supabase test db` + the `E2E_DB=1` suite once
   against a disposable project before any release.
 
