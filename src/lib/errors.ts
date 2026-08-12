@@ -468,6 +468,7 @@ const AREA_CODES: Record<string, ErrorCode> = {
   'profile-save': 'SB-PROFILE-SAVE',
   'invite-claim.contact': 'SB-PROFILE-SAVE',
   'settings.interests': 'SB-SETTINGS-SAVE',
+  'settings.appearance': 'SB-SETTINGS-SAVE',
   'settings.discoverability': 'SB-SETTINGS-SAVE',
   'settings.sabbatical': 'SB-SETTINGS-SAVE',
   'settings.quiet-hours': 'SB-SETTINGS-SAVE',

@@ -8,6 +8,8 @@ import { ServiceWorkerRegistrar } from '@/components/system/ServiceWorkerRegistr
 import { PostHogProvider } from '@/components/system/PostHogProvider';
 import { ToastProvider } from '@/components/ui/Toast';
 import { ConfirmProvider } from '@/components/ui/ConfirmDialog';
+import { createClient } from '@/lib/supabase/server';
+import { resolveTheme, type AppThemeId } from '@/lib/themes-app';
 
 const workSans = Work_Sans({
   subsets: ['latin'],
@@ -63,11 +65,43 @@ export const viewport: Viewport = {
   viewportFit: 'cover',
 };
 
-export default function RootLayout({
+/**
+ * Read the signed-in person's appearance preset, if there is one.
+ *
+ * Server-side and inline on `<html>` rather than applied by a client effect:
+ * a theme swapped after hydration is a visible flash of the default palette on
+ * every single navigation, which is worse than not offering themes at all. A
+ * signed-out visitor, or any failure to read the profile, gets the default —
+ * this is decoration, and it must never be the reason a page doesn't render.
+ */
+async function currentTheme(): Promise<AppThemeId> {
+  try {
+    const supabase = await createClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) return 'default';
+    const { data } = await supabase
+      .from('profiles')
+      .select('appearance_theme')
+      .eq('id', user.id)
+      .maybeSingle();
+    return resolveTheme(data?.appearance_theme);
+  } catch {
+    return 'default';
+  }
+}
+
+export default async function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
+  const theme = await currentTheme();
   return (
-    <html lang="en" className={`${workSans.variable} antialiased`}>
+    <html
+      lang="en"
+      data-theme={theme}
+      className={`${workSans.variable} antialiased`}
+    >
       <body className="min-h-dvh">
         <PostHogProvider>
           <ToastProvider>

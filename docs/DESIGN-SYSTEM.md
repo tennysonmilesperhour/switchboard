@@ -74,11 +74,44 @@ and sliders.
 - Every query-heavy route has a `loading.tsx` built on `PageSkeleton`; the app
   has root `error.tsx` and `not-found.tsx`.
 
-## If you re-theme
+## Appearance presets (the token layer, swapped at runtime)
 
-The whole look is driven by the `@theme` tokens in `globals.css`. Changing the
-accent, neutrals, or type there restyles the app, because components reference
-tokens (`bg-terracotta`, `text-ink`, `bg-brand-gradient`, `plan-*`) rather than
-raw hex. If a future direction from `archive/DESIGN-DIRECTIONS.md` (e.g. Transit
-Board or Dusk Lounge) is adopted, port it by rewriting this token layer and the
-`.plan-*` / `--brand-gradient` rules, then update this document.
+The look above is the default, not the only one. A signed-in person can pick a
+preset in Settings → Appearance; it is stored on their profile
+(`profiles.appearance_theme`) and applied as `data-theme` on `<html>` by the
+root layout, server-side — never by a client effect, which would flash the
+default palette on every navigation.
+
+A preset is **only** a token override, defined in `globals.css` under
+`[data-theme="…"]`. No component knows themes exist: they all reference
+`bg-terracotta`, `text-ink`, `bg-brand-gradient`, `plan-*`, and those resolve
+through the custom properties. Presets ship today for **Almanac** (cream and
+ink), **Dusk** (warm dark, candle amber), and **Transit** (one signal color) —
+the first three of the five directions explored before launch and shelved in
+`archive/DESIGN-DIRECTIONS.md`.
+
+Rules for adding one, enforced by `src/lib/themes-app.test.ts`:
+
+- **Redefine every token in `REQUIRED_TOKENS`, in full.** A half-swapped
+  palette — new background, inherited ink — is how a theme ends up unreadable
+  in the one corner nobody opened while building it.
+- **Meet WCAG AA** on body text, secondary text, accent-as-link, and each
+  semantic pair (`sage-deep` on `sage-soft`, and so on). The test computes the
+  ratios from the CSS itself, so it fails on the real values rather than on an
+  intention.
+- **Keep semantics semantic.** `sage` still means availability and acceptance,
+  `rose` still means decline. A theme changes the register, never the meaning.
+- **Register it in `src/lib/themes-app.ts`** and in the migration's CHECK
+  constraint, so an unknown value can never reach `<html>`.
+
+Note that `.plan-*` gradients are derived from the `--color-plan-*` tokens with
+`color-mix`, not written as literal hex. They were the last hardcoded colors in
+the app, and the reason a themed screen still had six bright pink and violet
+cards in the middle of it.
+
+## If you re-theme wholesale
+
+Changing the accent, neutrals, or type in the `@theme` block restyles the app's
+default for everyone, the same way a preset restyles it for one person. If a
+future direction is adopted as *the* look rather than an option, port it by
+rewriting that block and the `--brand-gradient` rule, then update this document.

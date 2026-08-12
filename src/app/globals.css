@@ -62,6 +62,133 @@
   --brand-gradient: linear-gradient(96deg, #f82a63 0%, #d1318a 55%, #8a38f5 120%);
 }
 
+/* ----- Appearance presets -----
+ *
+ * Every preset is a complete swap of the token layer and nothing else. No
+ * component knows a theme exists: they reference `bg-terracotta`, `text-ink`,
+ * `bg-brand-gradient`, `plan-*`, and those all resolve through these custom
+ * properties. That is the re-theming path docs/DESIGN-SYSTEM.md describes,
+ * made available from Settings rather than requiring a rewrite.
+ *
+ * Each preset redefines every token it touches, in full. A half-swapped
+ * palette — new background, inherited ink — is how a theme ends up unreadable
+ * in the one corner nobody opened while building it. Semantics are preserved
+ * in all of them: sage still means available and accepted, rose still means
+ * declined; a theme changes the register, never the meaning.
+ *
+ * See src/lib/themes-app.ts, and themes-app.test.ts for the contrast checks.
+ */
+
+/* Almanac: cream stock, ink-heavy type, oxblood for action. */
+[data-theme="almanac"] {
+  --color-paper: #f6f1e5;
+  --color-cream: #efe8d8;
+  --color-card: #fffdf7;
+  --color-ink: #1c1a15;
+  --color-ink-soft: #55503f;
+  --color-ink-faint: #7a745f;
+  --color-line: #ded5c0;
+
+  --color-terracotta: #9c2f24;
+  --color-terracotta-deep: #7a2119;
+  --color-terracotta-soft: #f3e2dc;
+
+  --color-sage: #3f7d5c;
+  --color-sage-deep: #2c5c43;
+  --color-sage-soft: #e0ecdf;
+
+  --color-gold: #b8860b;
+  --color-gold-soft: #f4e9cd;
+  --color-gold-deep: #6b4a05;
+
+  --color-rose-soft: #f6dedd;
+  --color-rose-deep: #a32f2a;
+
+  --color-plan-pink: #9c2f24;
+  --color-plan-purple: #5b4a7d;
+  --color-plan-blue: #2f5d7c;
+  --color-plan-jade: #3f7d5c;
+  --color-plan-orange: #b8860b;
+  --color-plan-magenta: #8a3d5c;
+
+  --brand-gradient: linear-gradient(96deg, #9c2f24 0%, #8a3d5c 55%, #5b4a7d 120%);
+}
+
+/* Dusk: warm dark, candle amber, cream text. Never blue-gray tech dark. */
+[data-theme="dusk"] {
+  --color-paper: #1e1712;
+  --color-cream: #2a211a;
+  --color-card: #2a211a;
+  --color-ink: #f4ece1;
+  --color-ink-soft: #c4b5a4;
+  --color-ink-faint: #9c8b78;
+  --color-line: #3d3128;
+
+  --color-terracotta: #e8a24b;
+  --color-terracotta-deep: #f2b968;
+  --color-terracotta-soft: #3a2c1c;
+
+  --color-sage: #6fbfa3;
+  --color-sage-deep: #8fd4bc;
+  --color-sage-soft: #24322c;
+
+  --color-gold: #e8a24b;
+  --color-gold-soft: #33271a;
+  /* Reads on a dark surface, where the light theme's deep amber would not. */
+  --color-gold-deep: #f2c27f;
+
+  --color-rose-soft: #3a2226;
+  --color-rose-deep: #f08a95;
+
+  --color-plan-pink: #d4657f;
+  --color-plan-purple: #9b7bc4;
+  --color-plan-blue: #6d9ec9;
+  --color-plan-jade: #6fbfa3;
+  --color-plan-orange: #e8a24b;
+  --color-plan-magenta: #c4739b;
+
+  --brand-gradient: linear-gradient(96deg, #e8a24b 0%, #d4657f 55%, #9b7bc4 120%);
+
+  --shadow-lift: 0 2px 5px rgb(0 0 0 / 0.4), 0 1px 2px rgb(0 0 0 / 0.3);
+  --shadow-float: 0 8px 28px rgb(0 0 0 / 0.5), 0 2px 6px rgb(0 0 0 / 0.35);
+  --shadow-card: 0 2px 5px rgb(0 0 0 / 0.45), inset 0 -10px 14px rgb(0 0 0 / 0.15);
+}
+
+/* Transit: departure-board discipline, one signal color, warm off-white. */
+[data-theme="transit"] {
+  --color-paper: #faf8f5;
+  --color-cream: #f0ece6;
+  --color-card: #ffffff;
+  --color-ink: #16161a;
+  --color-ink-soft: #4a4a52;
+  --color-ink-faint: #74747e;
+  --color-line: #dedad3;
+
+  --color-terracotta: #d94a00;
+  --color-terracotta-deep: #a33800;
+  --color-terracotta-soft: #ffe8dc;
+
+  --color-sage: #0f7b5a;
+  --color-sage-deep: #0a5a41;
+  --color-sage-soft: #d9efe6;
+
+  --color-gold: #b07500;
+  --color-gold-soft: #fbeecd;
+  --color-gold-deep: #6b4700;
+
+  --color-rose-soft: #ffe0e0;
+  --color-rose-deep: #c2281f;
+
+  --color-plan-pink: #d94a00;
+  --color-plan-purple: #4b3f8f;
+  --color-plan-blue: #1c5b96;
+  --color-plan-jade: #0f7b5a;
+  --color-plan-orange: #b07500;
+  --color-plan-magenta: #9c2b62;
+
+  --brand-gradient: linear-gradient(96deg, #d94a00 0%, #b03a1a 55%, #7a2f2f 120%);
+}
+
 html {
   background: var(--color-paper);
 }
@@ -111,24 +238,61 @@ h1, h2 {
   background-image: var(--brand-gradient);
 }
 
-/* Per-color plan-card gradients: vivid, top-lit, slightly deepening. */
+/* Per-color plan-card gradients: vivid, top-lit, slightly deepening.
+ *
+ * Derived from the `--color-plan-*` tokens rather than written as literal hex,
+ * so an appearance preset restyles plan cards along with everything else.
+ * These were the last hardcoded colors in the app, and they were the reason a
+ * themed Almanac or Dusk screen still had six bright pink and violet cards
+ * sitting in the middle of it. The mix percentages reproduce the original
+ * light-to-deep sweep to within a shade. */
 .plan-pink {
-  background-image: linear-gradient(155deg, #ff4d7e 0%, #f82a63 48%, #d81c72 100%);
+  background-image: linear-gradient(
+    155deg,
+    color-mix(in oklab, var(--color-plan-pink) 82%, white) 0%,
+    var(--color-plan-pink) 48%,
+    color-mix(in oklab, var(--color-plan-pink) 88%, black) 100%
+  );
 }
 .plan-purple {
-  background-image: linear-gradient(155deg, #a95cff 0%, #8a38f5 52%, #6d28d9 100%);
+  background-image: linear-gradient(
+    155deg,
+    color-mix(in oklab, var(--color-plan-purple) 78%, white) 0%,
+    var(--color-plan-purple) 52%,
+    color-mix(in oklab, var(--color-plan-purple) 85%, black) 100%
+  );
 }
 .plan-blue {
-  background-image: linear-gradient(155deg, #6fa5ff 0%, #5392ff 50%, #3478f6 100%);
+  background-image: linear-gradient(
+    155deg,
+    color-mix(in oklab, var(--color-plan-blue) 82%, white) 0%,
+    var(--color-plan-blue) 50%,
+    color-mix(in oklab, var(--color-plan-blue) 88%, black) 100%
+  );
 }
 .plan-jade {
-  background-image: linear-gradient(155deg, #35c9ad 0%, #21af96 52%, #178a76 100%);
+  background-image: linear-gradient(
+    155deg,
+    color-mix(in oklab, var(--color-plan-jade) 80%, white) 0%,
+    var(--color-plan-jade) 52%,
+    color-mix(in oklab, var(--color-plan-jade) 85%, black) 100%
+  );
 }
 .plan-orange {
-  background-image: linear-gradient(155deg, #f6c15c 0%, #eeae36 50%, #e0872b 100%);
+  background-image: linear-gradient(
+    155deg,
+    color-mix(in oklab, var(--color-plan-orange) 80%, white) 0%,
+    var(--color-plan-orange) 50%,
+    color-mix(in oklab, var(--color-plan-orange) 87%, black) 100%
+  );
 }
 .plan-magenta {
-  background-image: linear-gradient(155deg, #ec5aa8 0%, #d1318a 52%, #a21c6b 100%);
+  background-image: linear-gradient(
+    155deg,
+    color-mix(in oklab, var(--color-plan-magenta) 80%, white) 0%,
+    var(--color-plan-magenta) 52%,
+    color-mix(in oklab, var(--color-plan-magenta) 82%, black) 100%
+  );
 }
 
 /* Pink range slider used in onboarding / settings. */

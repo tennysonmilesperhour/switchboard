@@ -12,7 +12,10 @@ import { SOCIAL_BY_ID } from '@/lib/socials';
 import { USERNAME_PATTERN, isEmail } from '@/lib/auth-identity';
 import { normalizePhoneNumber } from '@/lib/phone';
 import { safeNextPath } from '@/lib/security';
-import { reportOperationalError } from '@/lib/server/observability';
+import { reportAndFail, reportOperationalError } from '@/lib/server/observability';
+import { resolveTheme, themeById } from '@/lib/themes-app';
+import { loadPassport } from '@/lib/server/passport';
+import { passportProgress } from '@/lib/passport';
 import { LEGAL_VERSION } from '@/lib/legal';
 import { capture } from '@/lib/analytics/server';
 import { ANALYTICS_EVENTS } from '@/lib/analytics/events';
@@ -343,6 +346,46 @@ export async function updateDiscoverability(formData: FormData): Promise<ActionR
 
   revalidatePath('/settings');
   revalidatePath('/discover');
+  return { ok: true };
+}
+
+/**
+ * Choose an appearance preset.
+ *
+ * Revalidates the layout rather than a page, because the theme is read in the
+ * root layout and applied to `<html>` — revalidating `/settings` alone would
+ * leave every other route rendering the old palette until it happened to be
+ * re-fetched.
+ *
+ * The earned theme is re-checked here from the person's own data, not trusted
+ * from the form. It is only a decoration, but a control that can be bypassed
+ * by editing a request teaches that all of them can be.
+ */
+export async function updateAppearanceTheme(theme: string): Promise<ActionResult> {
+  const auth = await requireUser();
+  if (!auth.ok) return auth;
+  const { supabase, user } = auth;
+
+  const resolved = resolveTheme(theme);
+  const wanted = themeById(resolved);
+  if (wanted.earned) {
+    const passport = await loadPassport(user.id);
+    if (!passportProgress(passport).done) {
+      return { ok: false, error: 'That one unlocks once you’ve tried everything.' };
+    }
+  }
+
+  const { error } = await supabase
+    .from('profiles')
+    .update({ appearance_theme: resolved })
+    .eq('id', user.id);
+  if (error) {
+    return reportAndFail('SB-SETTINGS-SAVE', 'settings.appearance', error, {
+      userId: user.id,
+    });
+  }
+
+  revalidatePath('/', 'layout');
   return { ok: true };
 }
 
