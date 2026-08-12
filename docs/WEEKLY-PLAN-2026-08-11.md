@@ -1,5 +1,9 @@
 # Weekly Plan — 2026-08-11
 
+> **Status: all six shipped.** Built in the order below, one commit each. Where
+> the plan's assumptions turned out to be wrong against the code, the change
+> notes say so — see "What the plan got wrong" at the end.
+
 Six updates for this week, each cross-referenced against the existing plans
 (`DOCKET.md`, `INNOVATIONS.md`, the archived client-feedback and audit docs) and
 against the code as it stands today, so work picks up where prior threads left
@@ -232,19 +236,52 @@ letting the feed below stay the true center of gravity.
 
 ---
 
-## Suggested sequencing for the week
+## Sequencing (as built)
 
-1. **Docs consolidation** (this PR) — done alongside this plan.
-2. **Dashboard pillar row + naming checklist** — small, visible, no schema.
-3. **Private zones + the host Privacy & access panel** — DB work, pgTAP first.
-4. **Poll tree v1** — migration, runner unlock, follow-up-poll UI.
-5. **Feature passport** — rides on `/features`, needs no migration.
-6. **Appearance presets** — token-layer work + DESIGN-SYSTEM.md update.
+1. ✅ **Docs consolidation** — merged as #131.
+2. ✅ **Dashboard pillar row + naming checklist** (`de1e7a2`) — no schema.
+3. ✅ **Private zones + host Privacy & access panel** (`ff6e0d2`) —
+   `20260812120000_private_zones.sql`, `supabase/tests/private_zones.test.sql`.
+4. ✅ **Poll trees** (`1145884`) — `20260812130000_poll_trees.sql`,
+   `supabase/tests/poll_trees.test.sql`, `src/lib/poll-tree.test.ts`.
+5. ✅ **Feature passport** (`0a44293`) — no migration; `src/lib/passport.test.ts`.
+6. ✅ **Appearance presets** (`e6a9c67`) —
+   `20260812140000_appearance_theme.sql`, `src/lib/themes-app.test.ts`.
 
-Each lands as its own PR with the standing quality bar: `npm test`,
-`npx tsc --noEmit`, `npm run lint`, `npm run build`, `supabase test db` green,
-plus a features-index entry for anything user-facing and an error code for any
-new operational failure (`src/lib/errors.ts`).
+Standing quality bar held on each: `npm test`, `npx tsc --noEmit`,
+`npm run lint`, and `npm run build` green, a features-index entry for every
+user-facing surface, and an error code for every new operational failure.
+
+**Two migrations and two pgTAP suites need Docker**, which this environment
+doesn't have: run `supabase test db` once locally before these go to
+production, and apply `20260812120000`, `20260812130000`, and `20260812140000`
+via the normal migration workflow.
+
+## What the plan got wrong
+
+Three assumptions in this document did not survive contact with the code. All
+three were resolved in favour of the code, and each is recorded in the commit
+that hit it:
+
+1. **`suggest_deadline` is not vestigial.** The plan said the poll-tree
+   migration was the moment to drop it, on the archived checklist's word.
+   `create_event_atomic` writes it and the wizard collects it, so dropping the
+   column would have broken plan creation. What was true is that nothing ever
+   *acted* on it — a host who set "suggestions close at 6pm" got nothing at
+   6pm. The sweep now performs that transition, so the setting means what it
+   says, and the column stays.
+2. **Explore can't be a passport stamp.** The plan listed "tried discover" as a
+   derivable milestone. Discovery is stateless by design — the AI call stores
+   nothing — so the stamp could only have been a guess or a new tracking table
+   built for a badge. Replaced with joining a board or zone, which leaves a
+   real row.
+3. **The event page could not survive a second poll.** It read its poll with
+   `.maybeSingle()`, which throws as soon as a plan has two. The poll-tree work
+   had to fix the reader before it could add the writer.
+
+One thing the plan under-scoped: the `.plan-*` card gradients were hardcoded
+hex, so appearance presets would have restyled the whole app *except* the plan
+cards in the middle of every screen. They now derive from the token layer.
 
 ## Open questions (assumptions noted, not blocking)
 

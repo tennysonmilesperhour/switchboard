@@ -17,6 +17,21 @@ yet" while their features were live in the app). This docket and
 yet done. This section carries forward every still-open item found in the
 archived docs so nothing evaporates with them.
 
+### ✅ Shipped 2026-08-12 (the weekly plan, executed)
+
+Private zones with an owner-managed roster, join links, and request-to-approve;
+a host Privacy & access panel that makes the three event visibility flags
+editable after creation; poll trees (a follow-up opens by itself when its
+parent is decided) plus the suggest-deadline sweep that makes that long-stored
+setting real; the feature passport on `/features`; and appearance presets
+(Almanac, Dusk, Transit) with a contrast-checked token layer. Home now leads
+with four equal pillars. `docs/NAMING.md` is the naming checklist — its
+**decide** rows are the open work there.
+
+**Needs Docker before production:** `supabase test db` for
+`private_zones.test.sql` and `poll_trees.test.sql`, then apply migrations
+`20260812120000`, `20260812130000`, `20260812140000`.
+
 ### ✅ Verified shipped since the sections below were written
 
 Client-feedback rounds 1–3 (archived plans) are implemented: decline-with-a-note
