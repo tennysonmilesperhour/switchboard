@@ -44,24 +44,47 @@ verified contact records, and per-event themes with a wizard picker. The
 feature index (`/features`, `src/lib/features.ts`) plus its test now guard the
 catalogue of what exists.
 
-### 🛠️ Still open, carried from the client-feedback plans
+### 🛠️ Still open — **each line re-verified against the code 2026-08-12**
 
-- **Give Space invariant + mutual muting.** The "avoid lists filter, never
-  reveal" invariant was *never written into `docs/SECURITY.md`* (round 2, item
-  4a — cheapest durable safeguard, do first), and `profile_avoids` still isn't
-  consulted by nearby discovery / signals / moments / mutual candidates in
-  either direction (4b). A "who can see me right now" screen (4c) remains open.
-- **Signal rings on avatars** (round 2, 6a) — `Avatar` still has only the plain
-  white `ring` prop; the ambient status tier stays unbuilt.
-- **Daily digest** (6b), **custom emoji + label signals** (6c), **message
-  full-text search** (5c stage 2, RLS-scoped, never the admin client).
-- **Availability Heatmap → AWI poll** (2a; `INNOVATIONS.md` #8) and, only after
-  it proves out, **read-only Google Calendar free/busy** (2b).
-- **Post-level reporting** into the moderation queue (round 1, Phase 3).
-- **Board announcement → a real scoped plan** ("Make this a plan", round 3 /
-  demo checklist N14).
-- **Kids-welcome event attribute + host checklist** (round 3, slice 3) — only
-  alongside public event discovery.
+The 2026-08-11 consolidation verified the *shipped* list but carried this
+*open* list forward on the archived docs' word. Two of its items were already
+built, which is the same drift the consolidation existed to end. Every line
+below has now been checked against the source; the check is named so the next
+reader can redo it in one command rather than trust this file.
+
+- ✅ **Already done — Give Space invariant.** It *is* in `docs/SECURITY.md`
+  (§"Give Space safety invariant"). The claim that it was "never written" was
+  wrong.
+- ✅ **Already done — custom emoji + label signals** (round 2, 6c).
+  `SignalBar` has the emoji field and "Add your own status…" input.
+- 🛠️ **Give Space doesn't filter yet** (round 2, 4b). `profile_avoids` is
+  consulted by nothing: `grep -rn profile_avoids supabase/migrations` hits only
+  its own migration and a `zone_presence` comment explaining why counts are
+  deliberately *not* shrunk. The surfaces that filter `are_blocked` today —
+  `list_discoverable_people`, `find_nearby_people`, contact matching,
+  compatibility — do not filter avoids.
+  **Needs a decision before building:** `SECURITY.md` says an avoid may
+  "filter or privately annotate information the viewer was already authorized
+  to see", but also that it must never "appear on a map, zone, moment, or other
+  location surface", and `zone_presence` treats shrinking a count as removal.
+  Filtering a browse list (people discovery) is clearly sanctioned; filtering a
+  *location* surface is the judgment call. Do not guess this one.
+  A "who can see me right now" screen (4c) is separate and still open.
+- 🛠️ **Signal rings on avatars** (6a). Confirmed unbuilt — `Avatar` has a
+  boolean `ring` that paints plain white, with no status tier.
+- 🛠️ **Daily digest** (6b). Confirmed unbuilt: "digest" appears in
+  `notify.ts` only in comments. Needs a cadence decision.
+- 🛠️ **Message full-text search** (5c stage 2). Confirmed unbuilt — no
+  `textSearch`/`websearch` anywhere. RLS-scoped, never the admin client.
+- 🛠️ **Availability Heatmap → AWI poll** (2a; `INNOVATIONS.md` #8). Confirmed
+  unbuilt. Only after it proves out: **read-only Google free/busy** (2b).
+- 🛠️ **Post-level reporting** into the moderation queue (round 1, Phase 3).
+  Confirmed unbuilt; `/moderation` exists to extend, `user_reports` targets
+  users only.
+- 🛠️ **Board announcement → a real scoped plan** ("Make this a plan", N14).
+  Confirmed unbuilt.
+- 🛠️ **Kids-welcome event attribute + host checklist** (round 3, slice 3).
+  Confirmed unbuilt, and deliberately gated on public event discovery existing.
 
 ### 🔧 Ops residuals, carried from the audits and ship checklists
 
