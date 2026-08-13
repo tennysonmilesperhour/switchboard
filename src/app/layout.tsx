@@ -8,6 +8,7 @@ import { ServiceWorkerRegistrar } from '@/components/system/ServiceWorkerRegistr
 import { PostHogProvider } from '@/components/system/PostHogProvider';
 import { ToastProvider } from '@/components/ui/Toast';
 import { ConfirmProvider } from '@/components/ui/ConfirmDialog';
+import { LiveNotifications } from '@/components/system/LiveNotifications';
 import { createClient } from '@/lib/supabase/server';
 import { resolveTheme, type AppThemeId } from '@/lib/themes-app';
 
@@ -66,36 +67,38 @@ export const viewport: Viewport = {
 };
 
 /**
- * Read the signed-in person's appearance preset, if there is one.
+ * Resolve the two things the shell needs about the signed-in person in one
+ * `auth.getUser()`: their appearance preset and their id.
  *
- * Server-side and inline on `<html>` rather than applied by a client effect:
- * a theme swapped after hydration is a visible flash of the default palette on
- * every single navigation, which is worse than not offering themes at all. A
- * signed-out visitor, or any failure to read the profile, gets the default —
- * this is decoration, and it must never be the reason a page doesn't render.
+ * The theme is applied server-side and inline on `<html>` rather than by a
+ * client effect — a theme swapped after hydration is a visible flash of the
+ * default palette on every navigation, worse than not offering themes at all.
+ * The id powers the live-notifications subscription. A signed-out visitor, or
+ * any failure to read the profile, gets the default theme and no listener —
+ * this is chrome, and it must never be the reason a page doesn't render.
  */
-async function currentTheme(): Promise<AppThemeId> {
+async function resolveShell(): Promise<{ theme: AppThemeId; userId: string | null }> {
   try {
     const supabase = await createClient();
     const {
       data: { user },
     } = await supabase.auth.getUser();
-    if (!user) return 'default';
+    if (!user) return { theme: 'default', userId: null };
     const { data } = await supabase
       .from('profiles')
       .select('appearance_theme')
       .eq('id', user.id)
       .maybeSingle();
-    return resolveTheme(data?.appearance_theme);
+    return { theme: resolveTheme(data?.appearance_theme), userId: user.id };
   } catch {
-    return 'default';
+    return { theme: 'default', userId: null };
   }
 }
 
 export default async function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
-  const theme = await currentTheme();
+  const { theme, userId } = await resolveShell();
   return (
     <html
       lang="en"
@@ -107,6 +110,7 @@ export default async function RootLayout({
           <ToastProvider>
             <ConfirmProvider>
               {children}
+              {userId && <LiveNotifications userId={userId} />}
               <VersionWatcher />
               <InstallPrompt />
               <PmfSurvey />
