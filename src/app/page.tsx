@@ -12,6 +12,8 @@ import { Greeting } from '@/components/home/Greeting';
 import { PillarRow } from '@/components/home/PillarRow';
 import { PassportCard } from '@/components/home/PassportCard';
 import { loadPassport } from '@/lib/server/passport';
+import { loadFindability } from '@/lib/server/findability';
+import { findabilitySettled } from '@/lib/findability';
 import { passportProgress } from '@/lib/passport';
 import {
   EnergyPrompt,
@@ -165,12 +167,14 @@ export default async function HomePage() {
   const energyPrompts = (recentPast ?? []).filter((event) => !loggedIds.has(event.id));
 
   // The getting-started card owns the first run; the passport only appears
-  // after its three steps are behind you, so a new user is never shown two
-  // progress cards at once.
+  // after its steps are behind you, so a new user is never shown two progress
+  // cards at once.
+  const findableDone = findabilitySettled(await loadFindability());
   const gettingStartedDone =
     (friendCount ?? 0) > 0 &&
     (upcoming?.length ?? 0) > 0 &&
-    (mySignals?.length ?? 0) > 0;
+    (mySignals?.length ?? 0) > 0 &&
+    findableDone;
   const passportSummary = gettingStartedDone
     ? passportProgress(await loadPassport(user.id))
     : { earned: 0, total: 0, done: false, next: null };
@@ -212,6 +216,7 @@ export default async function HomePage() {
             friendDone={(friendCount ?? 0) > 0}
             planDone={(upcoming?.length ?? 0) > 0}
             signalDone={(mySignals?.length ?? 0) > 0}
+            findableDone={findableDone}
           />
         )}
 

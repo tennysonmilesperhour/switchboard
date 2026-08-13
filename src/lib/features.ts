@@ -629,7 +629,7 @@ export const FEATURE_GROUPS: readonly FeatureGroup[] = [
         id: 'verified-contacts',
         title: 'Verified contact details',
         blurb:
-          'Verify an email or phone so invitations sent to it reach your account, and so people who have it can find you.',
+          'Verify an email or phone so invitations sent to it reach your account — and so friends searching for you, or importing their contacts, actually find you. Unverified details match nobody.',
         where: 'Settings → Verified contact details',
         href: '/settings',
       },

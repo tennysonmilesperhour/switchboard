@@ -11,15 +11,27 @@ interface GettingStartedProps {
   friendDone: boolean;
   planDone: boolean;
   signalDone: boolean;
+  /**
+   * Whether being findable is settled — a verified detail on file, or a
+   * deployment that can't verify one at all (`findabilitySettled`). The second
+   * case counts as done deliberately: a step that can never be ticked would
+   * keep this card on screen forever.
+   */
+  findableDone: boolean;
 }
 
 /**
- * The one first-run guidance card on Home: three live steps computed from real
+ * The one first-run guidance card on Home: four live steps computed from real
  * data, so it checks itself off and retires when everything is done. Dismissal
  * is a device preference (the `sb-*` localStorage convention, never
  * authorization); Settings offers a "show tips again" reset.
  */
-export function GettingStarted({ friendDone, planDone, signalDone }: GettingStartedProps) {
+export function GettingStarted({
+  friendDone,
+  planDone,
+  signalDone,
+  findableDone,
+}: GettingStartedProps) {
   // Start hidden; the effect reveals it only after checking storage, which
   // also avoids any SSR/client hydration mismatch.
   const [dismissed, setDismissed] = useState(true);
@@ -36,7 +48,7 @@ export function GettingStarted({ friendDone, planDone, signalDone }: GettingStar
     };
   }, []);
 
-  if (dismissed || (friendDone && planDone && signalDone)) return null;
+  if (dismissed || (friendDone && planDone && signalDone && findableDone)) return null;
 
   function dismiss() {
     localStorage.setItem(GETTING_STARTED_DISMISS_KEY, '1');
@@ -65,6 +77,12 @@ export function GettingStarted({ friendDone, planDone, signalDone }: GettingStar
       done: signalDone,
       label: 'Let friends know you’re around',
       hint: 'Tap a signal above — it turns off by itself',
+    },
+    {
+      done: findableDone,
+      label: 'Let friends find you',
+      hint: 'Verify an email or phone — searches only match verified ones',
+      href: '/settings',
     },
   ];
 
