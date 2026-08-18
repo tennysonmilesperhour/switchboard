@@ -53,8 +53,19 @@ export function InstallPrompt() {
     const event = deferred;
     if (!event) return;
     await event.prompt();
-    await event.userChoice;
-    localStorage.setItem(DISMISSED_KEY, '1');
+    const { outcome } = await event.userChoice;
+    // Accepting the prompt is not the same as ending up with an app. The
+    // browser still has to build and install a package, and Android can refuse
+    // it — a beta tester hit Play Protect's "built for an older version of
+    // Android" at exactly this point. Persisting the dismissal on `accepted`
+    // meant that device never saw the offer again: the one person we know
+    // wanted the app was the one person who could no longer install it.
+    //
+    // So only a real "no thanks" is remembered here. Success is remembered by
+    // the `appinstalled` listener above, which is the only signal that means
+    // the app exists. A blocked install simply leaves the offer standing, and
+    // Chrome re-fires `beforeinstallprompt` on a later visit.
+    if (outcome === 'dismissed') localStorage.setItem(DISMISSED_KEY, '1');
     setDeferred(null);
   }
 
