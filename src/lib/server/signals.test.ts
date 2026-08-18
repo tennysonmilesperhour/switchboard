@@ -22,9 +22,13 @@ function clientReturning(rows: unknown[]) {
     }),
     order: vi.fn(() => Promise.resolve({ data: rows, error: null })),
   };
+  const from = vi.fn(() => builder);
   return {
     calls,
-    client: { from: vi.fn(() => builder) } as never,
+    // Kept separately so assertions about *whether we queried at all* have
+    // something typed to look at.
+    from,
+    client: { from } as unknown as Parameters<typeof loadVisibleSignals>[0],
   };
 }
 
@@ -64,9 +68,9 @@ describe('loadVisibleSignals', () => {
   });
 
   it('does not query at all for an empty or duplicate-only list', async () => {
-    const { client } = clientReturning([]);
+    const { client, from } = clientReturning([]);
     expect(await loadVisibleSignals(client, [])).toEqual({});
-    expect(client.from).not.toHaveBeenCalled();
+    expect(from, 'an empty list is not a reason to hit the database').not.toHaveBeenCalled();
   });
 
   it('de-duplicates the ids it asks about', async () => {
