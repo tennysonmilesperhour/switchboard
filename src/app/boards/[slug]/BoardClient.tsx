@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { Button } from '@/components/ui/Button';
 import { Avatar } from '@/components/ui/Avatar';
 import { Card, SectionHeader } from '@/components/ui/Card';
@@ -13,6 +14,7 @@ import { formatRelative, formatDate } from '@/lib/format';
 import {
   addBoardPost,
   deleteBoardPost,
+  planFromBoardPost,
   reportBoardPost,
   inviteToBoard,
   ensureBoardInviteLink,
@@ -35,6 +37,8 @@ export interface BoardPostRow {
   created_at: string;
   updated_at: string | null;
   fulfilled_at: string | null;
+  /** Set once this announcement has been turned into a real plan. */
+  event_id: string | null;
   expires_at: string | null;
   responses?: { responder_id: string }[] | null;
 }
@@ -98,6 +102,27 @@ export function BoardClient({
         toast.success('Sent to the moderators. Thanks for flagging it.');
       } catch {
         toast.error('Could not send that report. Try again.');
+      }
+    });
+  }
+
+  /**
+   * Promote your own announcement to a real plan.
+   *
+   * The board keeps the post — people are still reading it — and gains a way
+   * through to somewhere answers, a guest list and reminders exist.
+   */
+  function makePlan(postId: string) {
+    startTransition(async () => {
+      try {
+        const result = await planFromBoardPost(postId);
+        if (!result.ok || !result.eventId) {
+          toast.error(result.error ?? 'Could not make that a plan.', result.code);
+          return;
+        }
+        router.push(`/events/${result.eventId}`);
+      } catch {
+        toast.error('Could not make that a plan. Try again.');
       }
     });
   }
@@ -515,6 +540,25 @@ export function BoardClient({
                         })()}
                       </div>
                       <div className="flex shrink-0 items-center gap-1">
+                        {post.event_id ? (
+                          <Link
+                            href={`/events/${post.event_id}`}
+                            className="rounded-pill bg-sage-soft px-2 py-1 text-[11px] font-bold text-sage-deep hover:bg-sage/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-terracotta"
+                          >
+                            open the plan
+                          </Link>
+                        ) : (
+                          post.author_id === currentUserId && (
+                            <button
+                              type="button"
+                              onClick={() => makePlan(post.id)}
+                              disabled={pending}
+                              className="rounded-pill px-2 py-1 text-[11px] font-semibold text-sage-deep hover:text-sage focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-terracotta"
+                            >
+                              make it a plan
+                            </button>
+                          )
+                        )}
                         {post.author_id !== currentUserId && (
                           <button
                             type="button"

@@ -103,8 +103,13 @@ reader can redo it in one command rather than trust this file.
   a post deleted between report and review does not leave a moderator with
   nothing to judge. A "report" control sits on every board post that is not
   your own. Covered by `supabase/tests/post_reports.test.sql`.
-- 🛠️ **Board announcement → a real scoped plan** ("Make this a plan", N14).
-  Confirmed unbuilt.
+- ✅ **Board announcement → a real scoped plan** ("Make this a plan", N14).
+  `board_posts.event_id` plus `planFromBoardPost`. Only the author may promote
+  their own post, because creating the plan makes them its host. Board members
+  reach it through the plan's **share link** rather than a new board-scoped
+  visibility rule — `share-link.ts` stays the single authority on what an invite
+  URL does, which is the invariant that kept breaking when a second path was
+  invented. Idempotent: a second tap returns the existing plan.
 - 🛠️ **Kids-welcome event attribute + host checklist** (round 3, slice 3).
   Confirmed unbuilt, and deliberately gated on public event discovery existing.
 

@@ -310,6 +310,18 @@ const REGISTRY = {
     fix: 'Try again. If it keeps failing, report the person instead.',
     actor: 'reader',
   },
+  'SB-POST-AUTHOR': {
+    message: 'Only whoever posted this can turn it into a plan.',
+    fix: 'Ask them to — or post your own and make that one a plan.',
+    actor: 'reader',
+  },
+  // The plan exists; only the board's pointer to it is missing. Saying "could
+  // not create the plan" here would be false, and would get a second one made.
+  'SB-POST-LINK': {
+    message: 'The plan was created, but the board post didn’t link to it.',
+    fix: 'It’s on your plans list — open it from there.',
+    actor: 'reader',
+  },
   'SB-INVITE-SEND': {
     message: 'Those invitations didn’t go out.',
     fix: 'Try again — anyone already invited keeps their invitation.',
@@ -460,6 +472,7 @@ const AREA_CODES: Record<string, ErrorCode> = {
   'event-visibility': 'SB-PLAN-SAVE',
   'authz.event-manager': 'SB-PLAN-AUTHZ',
   'board.report-post': 'SB-POST-REPORT',
+  'board.post-to-plan': 'SB-POST-LINK',
   'poll.follow-up': 'SB-PLAN-SAVE',
   'poll.follow-up-remove': 'SB-PLAN-SAVE',
   'event-locate': 'SB-PLAN-SAVE',

@@ -13,6 +13,7 @@ import { normalizeUsername } from '@/lib/auth-identity';
 import { boardJoinUrl } from '@/lib/links';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { notifyUsers } from '@/lib/server/notify';
+import { createEvent } from '@/lib/actions/events';
 import { capture } from '@/lib/analytics/server';
 import { ANALYTICS_EVENTS } from '@/lib/analytics/events';
 
@@ -366,4 +367,108 @@ export async function reportBoardPost(
     return reportAndFail('SB-POST-REPORT', 'board.report-post', error);
   }
   return { ok: true };
+}
+
+/**
+ * Turn a board announcement into a real plan.
+ *
+ * A board post is a notice: "Saturday pickup game, 9am, usually the north
+ * field". Nobody can say they're coming, nobody sees who else is in, and there
+ * is no reminder — so the coordination the post is *about* happens somewhere
+ * else, or not at all. Doing it by hand meant retyping the post into the wizard
+ * and leaving the board still showing the old notice with no way through.
+ *
+ * Only the post's author may do this, and not because of a permission model:
+ * creating the plan makes them its host, and volunteering someone else to host
+ * is not a thing one neighbour should be able to do to another.
+ *
+ * The plan is reachable through its **share link**, not through a new
+ * board-scoped visibility rule. `src/lib/share-link.ts` is the single authority
+ * on what an invite URL does (`hostCanShare ⊆ canReadPlan`), and inventing a
+ * second path by which a non-invitee may read a plan is precisely the drift
+ * that broke invite links over and over. A board member follows the same URL a
+ * host would text anyone.
+ */
+export async function planFromBoardPost(postId: string): Promise<ActionResult & { eventId?: string }> {
+  const auth = await requireUser();
+  if (!auth.ok) return auth;
+  const { supabase, user } = auth;
+
+  // Read through the caller's own client: board membership is enforced by the
+  // board's own policy, so a stranger cannot turn someone else's notice into
+  // anything, or probe for post ids.
+  const { data: post } = await supabase
+    .from('board_posts')
+    .select('id, author_id, title, body, location, starts_at, event_id')
+    .eq('id', postId)
+    .maybeSingle<{
+      id: string;
+      author_id: string;
+      title: string;
+      body: string | null;
+      location: string | null;
+      starts_at: string | null;
+      event_id: string | null;
+    }>();
+  if (!post) return failure('SB-POST-MISSING');
+
+  // Already done. Returning the existing plan rather than an error means a
+  // double tap, a slow network, or two open tabs all land on the same place
+  // instead of creating a second half-populated plan with the same title.
+  if (post.event_id) return { ok: true, eventId: post.event_id };
+
+  if (post.author_id !== user.id) {
+    return failure('SB-POST-AUTHOR');
+  }
+
+  // A start time that has already passed is common on a standing notice
+  // ("every Saturday"), and createEvent rejects it. Drop it rather than refuse:
+  // an undated plan people can answer beats no plan at all, and the host can
+  // set the date in one edit.
+  const startsAt =
+    post.starts_at && new Date(post.starts_at).getTime() > Date.now() ? post.starts_at : null;
+
+  const created = await createEvent({
+    title: post.title,
+    description: post.body,
+    locationName: post.location,
+    locationAddress: null,
+    latitude: null,
+    longitude: null,
+    startsAt,
+    endsAt: null,
+    timeZone: null,
+    capacity: null,
+    inviteMode: 'all_at_once',
+    openTable: false,
+    // The board already knows who is around; the plan's own list starts empty
+    // and fills as people answer the link.
+    showInviteList: false,
+    showAccepted: true,
+    showExpired: false,
+    enablePoll: false,
+    pollResolution: 'host_pick',
+    suggestDeadline: null,
+    voteDeadline: null,
+    remindersEnabled: true,
+    invitees: [],
+  });
+  if (!created.ok || !created.eventId) {
+    return { ok: false, error: created.error ?? 'Could not create the plan.' };
+  }
+
+  const { error } = await supabase
+    .from('board_posts')
+    .update({ event_id: created.eventId })
+    .eq('id', post.id)
+    .eq('author_id', user.id);
+  if (error) {
+    // The plan exists and the author is its host; only the board's pointer is
+    // missing. Say so rather than implying nothing happened — otherwise they
+    // tap again and get a second plan.
+    return reportAndFail('SB-POST-LINK', 'board.post-to-plan', error);
+  }
+
+  revalidatePath('/boards');
+  return { ok: true, eventId: created.eventId };
 }
