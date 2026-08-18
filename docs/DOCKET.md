@@ -89,8 +89,18 @@ reader can redo it in one command rather than trust this file.
   `loadVisibleSignals`, which reads through the **viewer's own client** so the
   audience rule stays in the `signals_visible` policy rather than being copied
   into TypeScript. Live on `/people`.
-- 🛠️ **Daily digest** (6b). Confirmed unbuilt: "digest" appears in
-  `notify.ts` only in comments. Needs a cadence decision.
+- ✅ **Daily digest** (6b). Cadence chosen and stated in the migration rather
+  than left implicit: **once a day, in the morning, off by default**, at an hour
+  the reader picks in their own zone. Once because a digest that arrives twice
+  is two interruptions; morning because a summary that lands after people have
+  made their evening is a report, not a prompt; off because adding an outbound
+  message to someone's phone without asking is the wrong default even when the
+  message is good. Anything time-sensitive still arrives when it happens — the
+  digest only batches the accumulating kinds. `digest_sent_at` guarantees at
+  most one a day regardless of how often the cron fires, and a quiet day sends
+  nothing at all. `/api/cron/digest` runs hourly (8am is a different instant for
+  everyone). **Change the cadence here if you'd rather it were weekly** — the
+  decision is one column and one comment, not a rewrite.
 - ✅ **Message full-text search** (5c stage 2). `searchMessages` uses PostgREST
   `websearch` over a GIN index on `to_tsvector('english', body)`, run through
   the **caller's own client** so `messages_select` scopes it exactly as it

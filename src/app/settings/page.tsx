@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/Button';
 import Link from 'next/link';
 import { PushManager } from '@/components/push/PushManager';
 import { NotificationPreferences } from '@/components/settings/NotificationPreferences';
+import { DigestPreference } from '@/components/settings/DigestPreference';
 import { ShowTipsAgain } from '@/components/settings/ShowTipsAgain';
 import { InterestPicker } from '@/components/profile/InterestPicker';
 import { SettingsForm, SettingsSaveProvider } from './SettingsSaveBar';
@@ -51,7 +52,7 @@ export default async function SettingsPage({
   const { data: profile } = await supabase
     .from('profiles')
     .select(
-      'display_name, handle, interests, down_to, sabbatical, sabbatical_message, quiet_hours_start, quiet_hours_end, discoverable, discovery_geography, discovery_demographics, discovery_interests, discovery_involvements, discovery_mutuals, discovery_contexts, notify_plans, notify_suggestions, notify_reminders, notify_messages, notify_social, appearance_theme',
+      'display_name, handle, interests, down_to, sabbatical, sabbatical_message, quiet_hours_start, quiet_hours_end, discoverable, discovery_geography, discovery_demographics, discovery_interests, discovery_involvements, discovery_mutuals, discovery_contexts, notify_plans, notify_suggestions, notify_reminders, notify_messages, notify_social, appearance_theme, digest_enabled, digest_hour',
     )
     .eq('id', user.id)
     .single();
@@ -294,6 +295,10 @@ export default async function SettingsPage({
 
                 <div className="py-5">
                   <NotificationPreferences initial={notificationPrefs} />
+                  <DigestPreference
+                    enabled={profile?.digest_enabled ?? false}
+                    hour={profile?.digest_hour ?? 8}
+                  />
                 </div>
 
                 <div className="pt-5">

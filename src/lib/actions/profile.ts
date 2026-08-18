@@ -517,3 +517,38 @@ export async function signOut(): Promise<void> {
   await supabase.auth.signOut();
   redirect('/welcome');
 }
+
+/**
+ * Turn the daily digest on or off, and say when it should land.
+ *
+ * Off by default (see the migration): adding an outbound message to someone's
+ * phone without asking is the wrong default even when the message is good.
+ *
+ * The hour is stored as a local hour, not an instant, because "8am" is what
+ * someone means and the sweep is what should do the time-zone arithmetic.
+ */
+export async function updateDigestPreference(
+  enabled: boolean,
+  hour: number,
+): Promise<ActionResult> {
+  const auth = await requireUser();
+  if (!auth.ok) return auth;
+  const { supabase, user } = auth;
+
+  // Clamp rather than reject: an out-of-range hour is a broken client, not a
+  // decision the reader made, and refusing their whole change over it helps
+  // nobody. The CHECK constraint is still the backstop.
+  const safeHour = Number.isFinite(hour) ? Math.min(23, Math.max(0, Math.round(hour))) : 8;
+
+  const { error } = await supabase
+    .from('profiles')
+    .update({ digest_enabled: enabled, digest_hour: safeHour })
+    .eq('id', user.id);
+  if (error) {
+    return reportAndFail('SB-SETTINGS-SAVE', 'settings.digest', error, {
+      userId: user.id,
+    });
+  }
+  revalidatePath('/settings');
+  return { ok: true };
+}
