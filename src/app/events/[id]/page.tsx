@@ -27,6 +27,8 @@ import { ScheduleNextButton } from '@/components/events/ScheduleNextButton';
 import { PollSection, type OptionResult } from '@/components/polls/PollSection';
 import { PollChain } from '@/components/polls/PollChain';
 import { FollowUpComposer } from '@/components/polls/FollowUpComposer';
+import { AvailabilityGrid } from '@/components/events/AvailabilityGrid';
+import { loadAvailability } from '@/lib/actions/availability';
 import { recurrenceLabel } from '@/lib/engine/recurrence';
 import { HostControls } from './HostControls';
 import { CoHostManager } from './CoHostManager';
@@ -388,6 +390,11 @@ export default async function EventPage({
     (row) => row.phase === 'decided' && row.id !== poll?.id,
   );
   const pendingPolls = allPolls.filter((row) => row.phase === 'pending');
+
+  // When people are free. Counts only — `event_availability_counts` is the sole
+  // door onto this table and returns no user id, so neither this page nor the
+  // host can learn which times any one person picked.
+  const availability = await loadAvailability(id);
 
   // What each already-settled question landed on, so the chain can show the
   // answer rather than just "decided".
@@ -994,6 +1001,21 @@ export default async function EventPage({
             <p className="text-sm text-ink-soft mt-0.5">
               If a spot opens up, you’ll be the first to know.
             </p>
+          </Card>
+        )}
+
+        {/* When everyone is free. Above the poll on purpose: it is the input to
+            choosing a date, and a group that reads it first proposes times
+            people can actually make. */}
+        {!event.starts_at && (
+          <Card>
+            <AvailabilityGrid
+              eventId={id}
+              timeZone={event.time_zone ?? null}
+              counts={availability}
+              isHost={isHost}
+              pollId={poll && poll.phase !== 'decided' ? poll.id : null}
+            />
           </Card>
         )}
 

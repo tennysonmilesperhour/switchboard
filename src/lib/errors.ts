@@ -322,6 +322,24 @@ const REGISTRY = {
     fix: 'It’s on your plans list — open it from there.',
     actor: 'reader',
   },
+  // Availability grid. Its own area: "when people are free" is a different
+  // thing from the plan itself, and a code that says so is more use in a
+  // screenshot than a generic save failure.
+  'SB-FREE-SLOT': {
+    message: 'Some of those times aren’t on the grid any more.',
+    fix: 'Reload the plan — the week it offers has moved on since you opened it.',
+    actor: 'reader',
+  },
+  'SB-FREE-SAVE': {
+    message: 'When you’re free didn’t save.',
+    fix: 'Try again. Nothing partial was kept, so you won’t end up with half of it stored.',
+    actor: 'reader',
+  },
+  'SB-FREE-POLL': {
+    message: 'Those times didn’t make it onto the poll.',
+    fix: 'Try again, or add them as suggestions by hand.',
+    actor: 'reader',
+  },
   'SB-INVITE-SEND': {
     message: 'Those invitations didn’t go out.',
     fix: 'Try again — anyone already invited keeps their invitation.',
@@ -473,6 +491,9 @@ const AREA_CODES: Record<string, ErrorCode> = {
   'authz.event-manager': 'SB-PLAN-AUTHZ',
   'board.report-post': 'SB-POST-REPORT',
   'board.post-to-plan': 'SB-POST-LINK',
+  'availability.clear': 'SB-FREE-SAVE',
+  'availability.save': 'SB-FREE-SAVE',
+  'availability.to-poll': 'SB-FREE-POLL',
   'poll.follow-up': 'SB-PLAN-SAVE',
   'poll.follow-up-remove': 'SB-PLAN-SAVE',
   'event-locate': 'SB-PLAN-SAVE',

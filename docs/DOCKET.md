@@ -98,8 +98,15 @@ reader can redo it in one command rather than trust this file.
   for it. Surfaced under the existing rooms-inbox search box, additive to the
   room-title filter. `'english'` stemming is a stated limitation, recorded in
   the migration.
-- 🛠️ **Availability Heatmap → AWI poll** (2a; `INNOVATIONS.md` #8). Confirmed
-  unbuilt. Only after it proves out: **read-only Google free/busy** (2b).
+- ✅ **Availability Heatmap → AWI poll** (2a; `INNOVATIONS.md` #8). A 7-day ×
+  4-band grid on any undated plan; the host can send the best-attended slots
+  straight onto the date poll, which is the whole point of collecting it.
+  Individual rows are **owner-only under RLS** and the group sees counts through
+  `event_availability_counts`, which has no argument that could return a user
+  id — same rule as poll votes, because "who is free Friday night" is a question
+  about someone's private life. Slots are validated against the grid the app
+  offers, so the column cannot become a free-form timestamp store.
+  Still open, and now unblocked: **read-only Google free/busy** (2b).
 - ✅ **Post-level reporting** into the moderation queue (round 1, Phase 3).
   `user_reports` gained `target_kind`/`target_id` rather than getting a parallel
   table, so the existing resolution tracking, `platform_moderators` authority,
