@@ -83,8 +83,12 @@ reader can redo it in one command rather than trust this file.
   fires for someone already on the list, so they could never trigger a warning
   either. `GiveSpaceButton` now sits on any profile.
   A "who can see me right now" screen (4c) is separate and still open.
-- 🛠️ **Signal rings on avatars** (6a). Confirmed unbuilt — `Avatar` has a
-  boolean `ring` that paints plain white, with no status tier.
+- ✅ **Signal rings on avatars** (6a). `Avatar` takes an `AvatarSignal` and
+  draws a sage ring plus the signal's own emoji, with the label as screen-reader
+  text so the ring never carries meaning by colour alone. Fed by
+  `loadVisibleSignals`, which reads through the **viewer's own client** so the
+  audience rule stays in the `signals_visible` policy rather than being copied
+  into TypeScript. Live on `/people`.
 - 🛠️ **Daily digest** (6b). Confirmed unbuilt: "digest" appears in
   `notify.ts` only in comments. Needs a cadence decision.
 - 🛠️ **Message full-text search** (5c stage 2). Confirmed unbuilt — no

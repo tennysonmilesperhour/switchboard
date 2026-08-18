@@ -29,12 +29,26 @@ const SIZES = {
 
 type AvatarSize = keyof typeof SIZES;
 
+/**
+ * What this person is up for right now, if the viewer is allowed to know.
+ *
+ * Always comes from `loadVisibleSignals`, which reads through the viewer's own
+ * client so the audience rule stays in the RLS policy. A ring is only ever
+ * drawn from a row the viewer could already have read.
+ */
+export interface AvatarSignal {
+  emoji: string;
+  label: string;
+}
+
 interface AvatarProps {
   name: string;
   seed?: string;
   src?: string | null;
   size?: AvatarSize;
   ring?: boolean;
+  /** Draw a live-signal ring and badge. Omit or pass null for no signal. */
+  signal?: AvatarSignal | null;
   className?: string;
 }
 
@@ -44,21 +58,27 @@ export function Avatar({
   src,
   size = 'md',
   ring = false,
+  signal = null,
   className = '',
 }: AvatarProps) {
   const hue = hueFor(seed ?? name);
-  const ringCls = ring ? 'ring-2 ring-white' : '';
-  if (src) {
-    return (
-      // eslint-disable-next-line @next/next/no-img-element
-      <img
-        src={src}
-        alt={name}
-        className={`${SIZES[size]} rounded-full object-cover ${ringCls} ${className}`}
-      />
-    );
-  }
-  return (
+  // A signal ring wins over the plain contrast ring: both are the same pixels,
+  // and "this person is around right now" is the more useful thing to say with
+  // them.
+  const ringCls = signal
+    ? 'ring-2 ring-sage ring-offset-1 ring-offset-paper'
+    : ring
+      ? 'ring-2 ring-white'
+      : '';
+
+  const face = src ? (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      src={src}
+      alt={name}
+      className={`${SIZES[size]} rounded-full object-cover ${ringCls} ${className}`}
+    />
+  ) : (
     <span
       aria-hidden
       className={`${SIZES[size]} rounded-full inline-flex items-center justify-center font-bold select-none ${ringCls} ${className}`}
@@ -68,6 +88,24 @@ export function Avatar({
       }}
     >
       {initials(name) || '•'}
+    </span>
+  );
+
+  if (!signal) return face;
+
+  // The emoji is the signal's own, so the ring never depends on colour alone to
+  // say what it means — and the label rides along as text for anyone who is not
+  // looking at colour at all.
+  return (
+    <span className="relative inline-flex">
+      {face}
+      <span
+        className="absolute -bottom-0.5 -right-0.5 rounded-full bg-paper px-0.5 text-[10px] leading-none shadow-sm"
+        aria-hidden
+      >
+        {signal.emoji}
+      </span>
+      <span className="sr-only">{`${name} is up for ${signal.label} right now`}</span>
     </span>
   );
 }
