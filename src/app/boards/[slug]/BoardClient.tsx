@@ -13,6 +13,7 @@ import { formatRelative, formatDate } from '@/lib/format';
 import {
   addBoardPost,
   deleteBoardPost,
+  reportBoardPost,
   inviteToBoard,
   ensureBoardInviteLink,
   rotateBoardInviteLink,
@@ -65,6 +66,41 @@ export function BoardClient({
   const router = useRouter();
   const toast = useToast();
   const confirm = useConfirm();
+
+  /**
+   * Flag one post.
+   *
+   * Reporting the author was the only option before this — heavier than most
+   * people mean, and it left a moderator hunting for which post it was about.
+   *
+   * The prompt is deliberately plain rather than a menu of categories: a
+   * sentence in the reporter's own words is what a human moderator can actually
+   * act on, and a category list invites people to pick the closest wrong one.
+   */
+  function flagPost(postId: string) {
+    const reason = window.prompt(
+      'What’s wrong with this post? A sentence is plenty — a moderator reads it.',
+    );
+    if (reason === null) return;
+    if (!reason.trim()) {
+      toast.error('Add a short reason so a moderator knows what to look at.');
+      return;
+    }
+    startTransition(async () => {
+      try {
+        const result = await reportBoardPost(postId, reason);
+        if (!result.ok) {
+          toast.error(result.error ?? 'Could not send that report.', result.code);
+          return;
+        }
+        // No count, no public mark on the post: a reporter learns only that it
+        // was received, and the author is never told who flagged them.
+        toast.success('Sent to the moderators. Thanks for flagging it.');
+      } catch {
+        toast.error('Could not send that report. Try again.');
+      }
+    });
+  }
 
   async function removePost(postId: string) {
     const ok = await confirm({
@@ -477,6 +513,18 @@ export function BoardClient({
                             </div>
                           );
                         })()}
+                      </div>
+                      <div className="flex shrink-0 items-center gap-1">
+                        {post.author_id !== currentUserId && (
+                          <button
+                            type="button"
+                            onClick={() => flagPost(post.id)}
+                            disabled={pending}
+                            className="rounded-pill px-2 py-1 text-[11px] text-ink-faint hover:text-rose-deep focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-terracotta"
+                          >
+                            report
+                          </button>
+                        )}
                       </div>
                       {canRemove && (
                         <div className="flex shrink-0 items-center gap-1">

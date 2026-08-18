@@ -1,6 +1,9 @@
 'use server';
 
 import type { ActionResult } from '@/lib/errors';
+import { failure } from '@/lib/errors';
+import { reportAndFail } from '@/lib/server/observability';
+import { checkRateLimit } from '@/lib/server/rate-limit';
 
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
@@ -304,4 +307,63 @@ export async function deleteBoardPost(
   if (!user) return;
   await supabase.from('board_posts').delete().eq('id', postId);
   revalidatePath(`/boards/${slug}`);
+}
+
+/**
+ * Report a single board post.
+ *
+ * Reporting the author was the only option before this, which is both heavier
+ * than most reporters mean and less useful than it sounds: a moderator got a
+ * name and a prose description, then had to go find the post — by which time
+ * there might be a dozen more. This names the post itself.
+ *
+ * `reported_id` is still the author, so the report lands in the one moderation
+ * queue with the one resolution path (see the migration). The reporter never
+ * learns anything about the author they could not already see, and the post's
+ * own text is carried into the queue so a deletion between report and review
+ * does not leave a moderator with nothing to judge.
+ */
+export async function reportBoardPost(
+  postId: string,
+  reason: string,
+): Promise<ActionResult> {
+  const cleanReason = reason.trim().slice(0, 500);
+  if (!cleanReason) return { ok: false, error: 'Add a short reason.' };
+
+  const auth = await requireUser();
+  if (!auth.ok) return auth;
+  const { supabase, user } = auth;
+
+  // The post must be one this person can actually see. Reading it through their
+  // own client means board membership is enforced by the same policy that
+  // governs the board itself — a stranger cannot probe for post ids.
+  const { data: post } = await supabase
+    .from('board_posts')
+    .select('id, author_id, board_id')
+    .eq('id', postId)
+    .maybeSingle<{ id: string; author_id: string; board_id: string }>();
+  if (!post) return failure('SB-POST-MISSING');
+
+  if (post.author_id === user.id) {
+    return { ok: false, error: 'That’s your own post.' };
+  }
+
+  // Same budget as profile reports: enough for a bad afternoon on a board,
+  // not enough to flood the queue or mass-target one person.
+  if (!(await checkRateLimit(`report:${user.id}`, 10, 60 * 60))) {
+    return { ok: false, error: 'You’ve filed several reports. Try again later.' };
+  }
+
+  const { error } = await supabase.from('user_reports').insert({
+    reporter_id: user.id,
+    reported_id: post.author_id,
+    target_kind: 'board_post',
+    target_id: post.id,
+    reason: cleanReason,
+  });
+  // Filing twice is the same report, not a failure the reporter needs to see.
+  if (error && error.code !== '23505') {
+    return reportAndFail('SB-POST-REPORT', 'board.report-post', error);
+  }
+  return { ok: true };
 }

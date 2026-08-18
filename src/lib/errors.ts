@@ -297,6 +297,19 @@ const REGISTRY = {
     fix: 'It’s still in the box — try again. Reload first if this page has been open a while.',
     actor: 'reader',
   },
+  // A post someone is trying to flag has to still exist, and has to be one they
+  // can see. Both come out as "not found" on purpose: a stranger probing post
+  // ids should not learn which of them are real.
+  'SB-POST-MISSING': {
+    message: 'That post isn’t there any more.',
+    fix: 'It may have been taken down already. Reload the board.',
+    actor: 'reader',
+  },
+  'SB-POST-REPORT': {
+    message: 'That report didn’t reach the moderators.',
+    fix: 'Try again. If it keeps failing, report the person instead.',
+    actor: 'reader',
+  },
   'SB-INVITE-SEND': {
     message: 'Those invitations didn’t go out.',
     fix: 'Try again — anyone already invited keeps their invitation.',
@@ -446,6 +459,7 @@ const AREA_CODES: Record<string, ErrorCode> = {
   'event-update': 'SB-PLAN-SAVE',
   'event-visibility': 'SB-PLAN-SAVE',
   'authz.event-manager': 'SB-PLAN-AUTHZ',
+  'board.report-post': 'SB-POST-REPORT',
   'poll.follow-up': 'SB-PLAN-SAVE',
   'poll.follow-up-remove': 'SB-PLAN-SAVE',
   'event-locate': 'SB-PLAN-SAVE',

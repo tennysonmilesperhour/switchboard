@@ -95,9 +95,14 @@ reader can redo it in one command rather than trust this file.
   `textSearch`/`websearch` anywhere. RLS-scoped, never the admin client.
 - 🛠️ **Availability Heatmap → AWI poll** (2a; `INNOVATIONS.md` #8). Confirmed
   unbuilt. Only after it proves out: **read-only Google free/busy** (2b).
-- 🛠️ **Post-level reporting** into the moderation queue (round 1, Phase 3).
-  Confirmed unbuilt; `/moderation` exists to extend, `user_reports` targets
-  users only.
+- ✅ **Post-level reporting** into the moderation queue (round 1, Phase 3).
+  `user_reports` gained `target_kind`/`target_id` rather than getting a parallel
+  table, so the existing resolution tracking, `platform_moderators` authority,
+  and security-definer accessors all keep working — one queue, one resolution
+  path. `list_open_reports` now carries the post's own **text** (not a link), so
+  a post deleted between report and review does not leave a moderator with
+  nothing to judge. A "report" control sits on every board post that is not
+  your own. Covered by `supabase/tests/post_reports.test.sql`.
 - 🛠️ **Board announcement → a real scoped plan** ("Make this a plan", N14).
   Confirmed unbuilt.
 - 🛠️ **Kids-welcome event attribute + host checklist** (round 3, slice 3).
