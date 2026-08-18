@@ -12,12 +12,12 @@ insert into auth.users (id, email) values
   ('aaaaaaaa-0000-4000-8000-000000000001', 'author@example.test'),
   ('aaaaaaaa-0000-4000-8000-000000000002', 'reporter@example.test')
 on conflict do nothing;
-insert into public.profiles (id, display_name, handle) values
-  ('aaaaaaaa-0000-4000-8000-000000000001', 'Author', 'postauthor'),
-  ('aaaaaaaa-0000-4000-8000-000000000002', 'Reporter', 'postreporter')
-on conflict do nothing;
+insert into public.profiles (id, display_name, onboarded) values
+  ('aaaaaaaa-0000-4000-8000-000000000001', 'Author', true),
+  ('aaaaaaaa-0000-4000-8000-000000000002', 'Reporter', true)
+on conflict (id) do update set display_name = excluded.display_name;
 
-insert into public.boards (id, name, slug, owner_id)
+insert into public.boards (id, name, slug, created_by)
 values ('bbbbbbbb-0000-4000-8000-000000000001', 'Test Board', 'test-board-reports',
         'aaaaaaaa-0000-4000-8000-000000000001');
 
@@ -27,15 +27,18 @@ values ('cccccccc-0000-4000-8000-000000000001',
         'aaaaaaaa-0000-4000-8000-000000000001',
         'A post', 'Body text');
 
--- 1. The default is unchanged, so every report written before this migration
---    is still a profile report and nothing had to be backfilled.
+-- 1. A report written the old way is still a profile report, so nothing had to
+--    be backfilled and every existing row still means what it meant.
+insert into public.user_reports (reporter_id, reported_id, reason)
+values ('aaaaaaaa-0000-4000-8000-000000000002',
+        'aaaaaaaa-0000-4000-8000-000000000001',
+        'Rude in a room');
 select is(
-  (select target_kind from public.user_reports limit 0),
-  null,
-  'the table accepts the new columns'
+  (select target_kind from public.user_reports
+    where reason = 'Rude in a room'),
+  'profile',
+  'a report with no target is still a profile report'
 );
-
-set local role postgres;
 
 -- 2. A post report records which post.
 insert into public.user_reports (reporter_id, reported_id, reason, target_kind, target_id)
@@ -43,8 +46,7 @@ values ('aaaaaaaa-0000-4000-8000-000000000002',
         'aaaaaaaa-0000-4000-8000-000000000001',
         'Spam', 'board_post', 'cccccccc-0000-4000-8000-000000000001');
 select is(
-  (select target_id from public.user_reports
-    where reporter_id = 'aaaaaaaa-0000-4000-8000-000000000002'),
+  (select target_id from public.user_reports where reason = 'Spam'),
   'cccccccc-0000-4000-8000-000000000001'::uuid,
   'a post report names the post'
 );
