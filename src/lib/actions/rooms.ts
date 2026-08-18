@@ -139,3 +139,62 @@ export async function markRoomRead(roomId: string): Promise<void> {
     .eq('member_id', auth.user.id);
   revalidatePath('/rooms');
 }
+
+/** One message that matched, with enough around it to be worth showing. */
+export interface MessageHit {
+  id: string;
+  roomId: string;
+  roomTitle: string;
+  senderName: string;
+  body: string;
+  createdAt: string;
+}
+
+/**
+ * Search the messages in rooms you belong to.
+ *
+ * Rooms accumulate what plans are actually made of — the address someone
+ * pasted, what they said they'd bring, the time that got moved — and the only
+ * way to find any of it again was to scroll. The longer a room had been useful,
+ * the worse that got.
+ *
+ * Runs through the caller's own client, so `messages_select` scopes it exactly
+ * as it scopes reading: a message the searcher could not open cannot be found
+ * by searching for it. Reaching for the admin client here — the obvious way to
+ * "make search fast" — would be a second answer to who may read a message, and
+ * the second answer is the one that leaks.
+ *
+ * `websearch` rather than `plain`: it understands quoted phrases and `-word`,
+ * and, unlike `to_tsquery`, it cannot be made to throw by ordinary punctuation.
+ * Somebody searching for `what's the address?` should get results, not an error.
+ */
+export async function searchMessages(query: string): Promise<MessageHit[]> {
+  const trimmed = query.trim();
+  // Two characters is the shortest search worth running; below that every room
+  // matches and the result is noise rather than an answer.
+  if (trimmed.length < 2) return [];
+
+  const auth = await requireUser();
+  if (!auth.ok) return [];
+  const { supabase } = auth;
+
+  const { data } = await supabase
+    .from('messages')
+    .select('id, body, created_at, room_id, room:rooms(title), sender:profiles(display_name)')
+    .textSearch('body', trimmed, { type: 'websearch', config: 'english' })
+    .order('created_at', { ascending: false })
+    .limit(30);
+
+  return (data ?? []).map((row) => {
+    const room = Array.isArray(row.room) ? row.room[0] : row.room;
+    const sender = Array.isArray(row.sender) ? row.sender[0] : row.sender;
+    return {
+      id: row.id as string,
+      roomId: row.room_id as string,
+      roomTitle: room?.title ?? 'A room',
+      senderName: sender?.display_name ?? 'Someone',
+      body: row.body as string,
+      createdAt: row.created_at as string,
+    };
+  });
+}

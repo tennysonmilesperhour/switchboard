@@ -91,8 +91,13 @@ reader can redo it in one command rather than trust this file.
   into TypeScript. Live on `/people`.
 - 🛠️ **Daily digest** (6b). Confirmed unbuilt: "digest" appears in
   `notify.ts` only in comments. Needs a cadence decision.
-- 🛠️ **Message full-text search** (5c stage 2). Confirmed unbuilt — no
-  `textSearch`/`websearch` anywhere. RLS-scoped, never the admin client.
+- ✅ **Message full-text search** (5c stage 2). `searchMessages` uses PostgREST
+  `websearch` over a GIN index on `to_tsvector('english', body)`, run through
+  the **caller's own client** so `messages_select` scopes it exactly as it
+  scopes reading — a message you could not open cannot be found by searching
+  for it. Surfaced under the existing rooms-inbox search box, additive to the
+  room-title filter. `'english'` stemming is a stated limitation, recorded in
+  the migration.
 - 🛠️ **Availability Heatmap → AWI poll** (2a; `INNOVATIONS.md` #8). Confirmed
   unbuilt. Only after it proves out: **read-only Google free/busy** (2b).
 - ✅ **Post-level reporting** into the moderation queue (round 1, Phase 3).
