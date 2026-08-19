@@ -38,9 +38,15 @@ export interface AppTheme {
    * taken away once unlocked, because a stamp is permanent.
    */
   earned?: boolean;
+  /**
+   * Configured rather than fixed: its palette comes from the person's own
+   * choices, derived in `theme-custom.ts`, not from a block in globals.css.
+   * Picking it opens an editor instead of just applying.
+   */
+  custom?: boolean;
 }
 
-export type AppThemeId = 'default' | 'dusk' | 'almanac' | 'transit';
+export type AppThemeId = 'default' | 'dusk' | 'almanac' | 'transit' | 'custom';
 
 export const APP_THEMES: readonly AppTheme[] = [
   {
@@ -67,6 +73,13 @@ export const APP_THEMES: readonly AppTheme[] = [
     blurb: 'Departure-board discipline. One signal color, nothing spare.',
     swatches: ['#faf8f5', '#ffffff', '#ff5c00'],
     earned: true,
+  },
+  {
+    id: 'custom',
+    name: 'Yours',
+    blurb: 'Your photo, your colors. The rest is worked out from them.',
+    swatches: ['#f9fbfd', '#eeae36', '#f82a63'],
+    custom: true,
   },
 ] as const;
 

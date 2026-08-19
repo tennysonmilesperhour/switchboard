@@ -16,6 +16,8 @@ import { CalendarSubscribe } from './CalendarSubscribe';
 import { ContactVerification } from './ContactVerification';
 import { AppearanceSection } from './AppearancePicker';
 import { resolveTheme } from '@/lib/themes-app';
+import { parseCustomAppearance } from '@/lib/theme-custom';
+import { reportOperationalError } from '@/lib/server/observability';
 import { loadPassport } from '@/lib/server/passport';
 import { passportProgress } from '@/lib/passport';
 import { INTEREST_CATEGORIES, DOWN_TO_GROUP } from '@/lib/interests';
@@ -48,13 +50,22 @@ export default async function SettingsPage({
   } = await supabase.auth.getUser();
   if (!user) redirect('/login');
 
-  const { data: profile } = await supabase
+  const { data: profile, error: profileError } = await supabase
     .from('profiles')
     .select(
-      'display_name, handle, interests, down_to, sabbatical, sabbatical_message, quiet_hours_start, quiet_hours_end, discoverable, discovery_geography, discovery_demographics, discovery_interests, discovery_involvements, discovery_mutuals, discovery_contexts, notify_plans, notify_suggestions, notify_reminders, notify_messages, notify_social, appearance_theme',
+      'display_name, handle, interests, down_to, sabbatical, sabbatical_message, quiet_hours_start, quiet_hours_end, discoverable, discovery_geography, discovery_demographics, discovery_interests, discovery_involvements, discovery_mutuals, discovery_contexts, notify_plans, notify_suggestions, notify_reminders, notify_messages, notify_social, appearance_theme, appearance_custom',
     )
     .eq('id', user.id)
     .single();
+  // A read that fails here renders every field blank and every preference at its
+  // default, which looks exactly like a person who has set nothing — the failure
+  // mode that hid a missing column grant for a release. Log it so it is at worst
+  // a mystery with a log line.
+  if (profileError) {
+    await reportOperationalError('settings.appearance-read', profileError, {
+      userId: user.id,
+    });
+  }
 
   // calendar_token is withheld from the general profiles API surface; fetch the
   // caller's own value through the security-definer accessor (see SB-01).
@@ -131,6 +142,8 @@ export default async function SettingsPage({
             />
             <AppearanceSection
               current={resolveTheme(profile?.appearance_theme)}
+              custom={parseCustomAppearance(profile?.appearance_custom)}
+              userId={user.id}
               passportComplete={passportComplete}
             />
           </section>
