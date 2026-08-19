@@ -83,19 +83,55 @@ reader can redo it in one command rather than trust this file.
   fires for someone already on the list, so they could never trigger a warning
   either. `GiveSpaceButton` now sits on any profile.
   A "who can see me right now" screen (4c) is separate and still open.
-- 🛠️ **Signal rings on avatars** (6a). Confirmed unbuilt — `Avatar` has a
-  boolean `ring` that paints plain white, with no status tier.
-- 🛠️ **Daily digest** (6b). Confirmed unbuilt: "digest" appears in
-  `notify.ts` only in comments. Needs a cadence decision.
-- 🛠️ **Message full-text search** (5c stage 2). Confirmed unbuilt — no
-  `textSearch`/`websearch` anywhere. RLS-scoped, never the admin client.
-- 🛠️ **Availability Heatmap → AWI poll** (2a; `INNOVATIONS.md` #8). Confirmed
-  unbuilt. Only after it proves out: **read-only Google free/busy** (2b).
-- 🛠️ **Post-level reporting** into the moderation queue (round 1, Phase 3).
-  Confirmed unbuilt; `/moderation` exists to extend, `user_reports` targets
-  users only.
-- 🛠️ **Board announcement → a real scoped plan** ("Make this a plan", N14).
-  Confirmed unbuilt.
+- ✅ **Signal rings on avatars** (6a). `Avatar` takes an `AvatarSignal` and
+  draws a sage ring plus the signal's own emoji, with the label as screen-reader
+  text so the ring never carries meaning by colour alone. Fed by
+  `loadVisibleSignals`, which reads through the **viewer's own client** so the
+  audience rule stays in the `signals_visible` policy rather than being copied
+  into TypeScript. Live on `/people`.
+- ✅ **Daily digest** (6b). Cadence chosen and stated in the migration rather
+  than left implicit: **once a day, in the morning, off by default**, at an hour
+  the reader picks in their own zone. Once because a digest that arrives twice
+  is two interruptions; morning because a summary that lands after people have
+  made their evening is a report, not a prompt; off because adding an outbound
+  message to someone's phone without asking is the wrong default even when the
+  message is good. Anything time-sensitive still arrives when it happens — the
+  digest only batches the accumulating kinds. `digest_sent_at` guarantees at
+  most one a day regardless of how often the cron fires, and a quiet day sends
+  nothing at all. `/api/cron/digest` runs hourly (8am is a different instant for
+  everyone). **Change the cadence here if you'd rather it were weekly** — the
+  decision is one column and one comment, not a rewrite.
+- ✅ **Message full-text search** (5c stage 2). `searchMessages` uses PostgREST
+  `websearch` over a GIN index on `to_tsvector('english', body)`, run through
+  the **caller's own client** so `messages_select` scopes it exactly as it
+  scopes reading — a message you could not open cannot be found by searching
+  for it. Surfaced under the existing rooms-inbox search box, additive to the
+  room-title filter. `'english'` stemming is a stated limitation, recorded in
+  the migration.
+- ✅ **Availability Heatmap → AWI poll** (2a; `INNOVATIONS.md` #8). A 7-day ×
+  4-band grid on any undated plan; the host can send the best-attended slots
+  straight onto the date poll, which is the whole point of collecting it.
+  Individual rows are **owner-only under RLS** and the group sees counts through
+  `event_availability_counts`, which has no argument that could return a user
+  id — same rule as poll votes, because "who is free Friday night" is a question
+  about someone's private life. Slots are validated against the grid the app
+  offers, so the column cannot become a free-form timestamp store.
+  Still open, and now unblocked: **read-only Google free/busy** (2b).
+- ✅ **Post-level reporting** into the moderation queue (round 1, Phase 3).
+  `user_reports` gained `target_kind`/`target_id` rather than getting a parallel
+  table, so the existing resolution tracking, `platform_moderators` authority,
+  and security-definer accessors all keep working — one queue, one resolution
+  path. `list_open_reports` now carries the post's own **text** (not a link), so
+  a post deleted between report and review does not leave a moderator with
+  nothing to judge. A "report" control sits on every board post that is not
+  your own. Covered by `supabase/tests/post_reports.test.sql`.
+- ✅ **Board announcement → a real scoped plan** ("Make this a plan", N14).
+  `board_posts.event_id` plus `planFromBoardPost`. Only the author may promote
+  their own post, because creating the plan makes them its host. Board members
+  reach it through the plan's **share link** rather than a new board-scoped
+  visibility rule — `share-link.ts` stays the single authority on what an invite
+  URL does, which is the invariant that kept breaking when a second path was
+  invented. Idempotent: a second tap returns the existing plan.
 - 🛠️ **Kids-welcome event attribute + host checklist** (round 3, slice 3).
   Confirmed unbuilt, and deliberately gated on public event discovery existing.
 

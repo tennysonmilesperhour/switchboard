@@ -45,6 +45,8 @@ const WITHHELD: Record<string, string> = {
     'SB-01: contact detail behind the contact_public opt-out. Owners read it through my_private_profile().',
   contact_phone_normalized:
     'SB-01: the match key for phone-based contact import; only security-definer functions compare against it.',
+  digest_sent_at:
+    'Send bookkeeping for the daily digest: written and read only by sweepDigests through the service-role client, which bypasses the allowlist. Nothing renders it.',
 };
 
 function migrationSources(): string[] {

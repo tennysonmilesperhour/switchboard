@@ -4,7 +4,7 @@ import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/Button';
 import { Card, SectionHeader } from '@/components/ui/Card';
-import { Avatar } from '@/components/ui/Avatar';
+import { Avatar, type AvatarSignal } from '@/components/ui/Avatar';
 import { Chip } from '@/components/ui/Chip';
 import { Icon } from '@/components/ui/Icon';
 import { EmptyState } from '@/components/ui/EmptyState';
@@ -40,6 +40,8 @@ export interface FriendRow {
   handle: string;
   circleIds: string[];
   isAvoided: boolean;
+  /** What they're up for right now, when this viewer is in the audience. */
+  signal?: AvatarSignal | null;
 }
 
 export interface RequestRow {
@@ -564,7 +566,12 @@ export function PeopleClient({
                     aria-expanded={expanded}
                     onClick={() => setExpandedFriend(expanded ? null : friend.id)}
                   >
-                    <Avatar name={friend.name} seed={friend.id} size="sm" />
+                    <Avatar
+                      name={friend.name}
+                      seed={friend.id}
+                      size="sm"
+                      signal={friend.signal}
+                    />
                     <span className="flex-1">
                       <span className="font-bold block">{friend.name}</span>
                       <span className="text-xs text-ink-faint">

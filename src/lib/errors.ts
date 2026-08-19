@@ -297,6 +297,49 @@ const REGISTRY = {
     fix: 'It’s still in the box — try again. Reload first if this page has been open a while.',
     actor: 'reader',
   },
+  // A post someone is trying to flag has to still exist, and has to be one they
+  // can see. Both come out as "not found" on purpose: a stranger probing post
+  // ids should not learn which of them are real.
+  'SB-POST-MISSING': {
+    message: 'That post isn’t there any more.',
+    fix: 'It may have been taken down already. Reload the board.',
+    actor: 'reader',
+  },
+  'SB-POST-REPORT': {
+    message: 'That report didn’t reach the moderators.',
+    fix: 'Try again. If it keeps failing, report the person instead.',
+    actor: 'reader',
+  },
+  'SB-POST-AUTHOR': {
+    message: 'Only whoever posted this can turn it into a plan.',
+    fix: 'Ask them to — or post your own and make that one a plan.',
+    actor: 'reader',
+  },
+  // The plan exists; only the board's pointer to it is missing. Saying "could
+  // not create the plan" here would be false, and would get a second one made.
+  'SB-POST-LINK': {
+    message: 'The plan was created, but the board post didn’t link to it.',
+    fix: 'It’s on your plans list — open it from there.',
+    actor: 'reader',
+  },
+  // Availability grid. Its own area: "when people are free" is a different
+  // thing from the plan itself, and a code that says so is more use in a
+  // screenshot than a generic save failure.
+  'SB-FREE-SLOT': {
+    message: 'Some of those times aren’t on the grid any more.',
+    fix: 'Reload the plan — the week it offers has moved on since you opened it.',
+    actor: 'reader',
+  },
+  'SB-FREE-SAVE': {
+    message: 'When you’re free didn’t save.',
+    fix: 'Try again. Nothing partial was kept, so you won’t end up with half of it stored.',
+    actor: 'reader',
+  },
+  'SB-FREE-POLL': {
+    message: 'Those times didn’t make it onto the poll.',
+    fix: 'Try again, or add them as suggestions by hand.',
+    actor: 'reader',
+  },
   'SB-INVITE-SEND': {
     message: 'Those invitations didn’t go out.',
     fix: 'Try again — anyone already invited keeps their invitation.',
@@ -459,6 +502,11 @@ const AREA_CODES: Record<string, ErrorCode> = {
   'event-update': 'SB-PLAN-SAVE',
   'event-visibility': 'SB-PLAN-SAVE',
   'authz.event-manager': 'SB-PLAN-AUTHZ',
+  'board.report-post': 'SB-POST-REPORT',
+  'board.post-to-plan': 'SB-POST-LINK',
+  'availability.clear': 'SB-FREE-SAVE',
+  'availability.save': 'SB-FREE-SAVE',
+  'availability.to-poll': 'SB-FREE-POLL',
   'poll.follow-up': 'SB-PLAN-SAVE',
   'poll.follow-up-remove': 'SB-PLAN-SAVE',
   'event-locate': 'SB-PLAN-SAVE',
@@ -501,6 +549,7 @@ const AREA_CODES: Record<string, ErrorCode> = {
   'invite-claim.contact': 'SB-PROFILE-SAVE',
   'settings.interests': 'SB-SETTINGS-SAVE',
   'settings.appearance': 'SB-SETTINGS-SAVE',
+  'settings.digest': 'SB-SETTINGS-SAVE',
   'layout.appearance': 'SB-LOOK-UNREAD',
   'settings.appearance-read': 'SB-LOOK-UNREAD',
   'settings.discoverability': 'SB-SETTINGS-SAVE',

@@ -18,6 +18,11 @@ export interface OpenReport {
   reported_id: string;
   reported_name: string | null;
   reported_handle: string | null;
+  /** 'profile' for a report about a person, 'board_post' for one post. */
+  target_kind: string | null;
+  target_id: string | null;
+  target_title: string | null;
+  target_body: string | null;
 }
 
 export function ModerationClient({ reports }: { reports: OpenReport[] }) {
@@ -68,6 +73,33 @@ function ReportCard({ report }: { report: OpenReport }) {
       <p className="mt-1.5 rounded-card bg-cream p-3 text-sm text-ink-soft break-words">
         “{report.reason}”
       </p>
+      {report.target_kind === 'board_post' && (
+        /*
+         * The post's own text, carried into the queue by `list_open_reports`
+         * rather than linked. A post taken down between the report and this
+         * screen would otherwise leave nothing to judge — and a moderator
+         * deciding on the reporter's paraphrase alone is how the wrong call
+         * gets made.
+         */
+        <div className="mt-1.5 rounded-card border border-line p-3">
+          <p className="text-[11px] font-bold uppercase tracking-wide text-ink-faint">
+            The post they flagged
+          </p>
+          {report.target_title && (
+            <p className="mt-1 text-sm font-bold break-words">{report.target_title}</p>
+          )}
+          {report.target_body ? (
+            <p className="mt-0.5 text-sm text-ink-soft break-words whitespace-pre-wrap">
+              {report.target_body}
+            </p>
+          ) : null}
+          {!report.target_title && !report.target_body && (
+            <p className="mt-1 text-sm text-ink-faint">
+              This post has since been deleted.
+            </p>
+          )}
+        </div>
+      )}
       <p className="mt-1.5 text-[11px] text-ink-faint">
         {formatRelative(report.created_at)}
       </p>

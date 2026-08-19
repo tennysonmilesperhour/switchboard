@@ -1,6 +1,7 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, useTransition } from 'react';
+import { searchMessages, type MessageHit } from '@/lib/actions/rooms';
 import Link from 'next/link';
 import { Card } from '@/components/ui/Card';
 import { Icon, type IconName } from '@/components/ui/Icon';
@@ -26,6 +27,40 @@ const SECTIONS = [
 
 export function RoomsInbox({ rooms }: { rooms: InboxRoom[] }) {
   const [query, setQuery] = useState('');
+  const [hits, setHits] = useState<MessageHit[]>([]);
+  const [searching, startSearch] = useTransition();
+
+  /**
+   * The room filter above is instant because the rooms are already here. What
+   * was *said* in them is not, so it takes a round trip — debounced, because a
+   * query per keystroke is a query per keystroke.
+   *
+   * Results are additive: filtering by room title still works exactly as it
+   * did, and message hits appear underneath. Someone searching an address they
+   * remember reading gets it whether they recall which room it was in.
+   */
+  useEffect(() => {
+    const trimmed = query.trim();
+    if (trimmed.length < 2) return;
+    const timer = setTimeout(() => {
+      startSearch(async () => {
+        try {
+          setHits(await searchMessages(trimmed));
+        } catch {
+          // A failed search shows no results rather than an error: the room
+          // filter above still works, and the page is not broken.
+          setHits([]);
+        }
+      });
+    }, 250);
+    return () => clearTimeout(timer);
+  }, [query]);
+
+  // Derived rather than cleared in the effect: whether to show message hits is
+  // a function of the current query, so making it one removes the need to keep
+  // a second copy of that fact in sync — and with it the stale-results window
+  // where clearing the box still showed the last search.
+  const shownHits = query.trim().length >= 2 ? hits : [];
   const filtered = useMemo(() => {
     const needle = query.trim().toLowerCase();
     return rooms
@@ -60,6 +95,32 @@ export function RoomsInbox({ rooms }: { rooms: InboxRoom[] }) {
         </Link>)}</div>
       </section>;
     })}
-    {filtered.length === 0 && <p className="py-8 text-center text-sm text-ink-muted">No rooms match that search.</p>}
+    {shownHits.length > 0 && (
+      <section>
+        <h2 className="mb-2 text-xs font-bold uppercase tracking-wider text-ink-faint">
+          In messages
+        </h2>
+        <ul className="space-y-1.5">
+          {shownHits.map((hit) => (
+            <li key={hit.id}>
+              <Link
+                href={`/rooms/${hit.roomId}`}
+                className="block rounded-xl border border-border bg-surface px-4 py-3 hover:border-ink-faint"
+              >
+                <p className="text-xs font-bold text-ink-faint">
+                  {hit.senderName} · {hit.roomTitle} · {formatRelative(hit.createdAt)}
+                </p>
+                <p className="mt-0.5 line-clamp-2 text-sm text-ink-soft break-words">{hit.body}</p>
+              </Link>
+            </li>
+          ))}
+        </ul>
+      </section>
+    )}
+    {filtered.length === 0 && shownHits.length === 0 && (
+      <p className="py-8 text-center text-sm text-ink-muted">
+        {searching ? 'Searching…' : 'Nothing matches that search.'}
+      </p>
+    )}
   </div>;
 }

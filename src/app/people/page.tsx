@@ -7,6 +7,7 @@ import { EmptyState } from '@/components/ui/EmptyState';
 import { FindableNudge } from '@/components/profile/FindableNudge';
 import { loadFindability } from '@/lib/server/findability';
 import { PeopleClient, type FriendRow, type RequestRow, type CircleRow } from './PeopleClient';
+import { loadVisibleSignals } from '@/lib/server/signals';
 
 export const metadata: Metadata = { title: 'People' };
 
@@ -73,6 +74,17 @@ export default async function PeoplePage() {
     } else {
       incoming.push(row);
     }
+  }
+
+  // Who is up for something right now. Loaded after the friend list because it
+  // is keyed by their ids, and through the viewer's own client so the audience
+  // rule stays in the `signals_visible` policy.
+  const signals = await loadVisibleSignals(
+    supabase,
+    friends.map((friend) => friend.id),
+  );
+  for (const friend of friends) {
+    friend.signal = signals[friend.id] ?? null;
   }
 
   const circleRows: CircleRow[] = (circles ?? []).map((circle) => ({
