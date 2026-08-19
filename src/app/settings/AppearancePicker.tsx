@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState, useTransition } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { Card } from '@/components/ui/Card';
 import { Icon } from '@/components/ui/Icon';
@@ -182,18 +182,27 @@ function CustomEditor({
   const share = useMemo(() => wallpaperShare(draft), [draft]);
   const dirty = JSON.stringify(draft) !== savedKey;
 
-  usePreview(vars, hasWallpaper(draft));
+  usePreview(vars, hasWallpaper(draft), saved);
 
   async function matchToImage() {
     if (!draft.wallpaper) return;
     setMatching(true);
-    const palette = await paletteFromImage(draft.wallpaper, draft);
+    const palette = await paletteFromImage(draft.wallpaper);
     setMatching(false);
-    if (palette.background === draft.background && palette.button === draft.button) {
+    if (!palette) {
       toast.error('Couldn’t read colors out of that image.');
       return;
     }
-    setDraft((previous) => ({ ...previous, ...palette }));
+    // Merged field by field, and against the CURRENT draft rather than the one
+    // captured when the image started decoding — a slow decode used to quietly
+    // roll back whatever you changed while you waited. Naming the three fields
+    // also keeps a palette from carrying anything else into the draft.
+    setDraft((previous) => ({
+      ...previous,
+      background: palette.background,
+      button: palette.button,
+      highlight: palette.highlight,
+    }));
   }
 
   function save() {
@@ -330,45 +339,62 @@ function CustomEditor({
 }
 
 /**
- * Apply a palette to the live document while it is being edited, and put back
- * exactly what was there on the way out.
+ * Apply a palette to the live document while it is being edited, and put the
+ * SAVED one back on the way out.
  *
- * `<html>`'s inline style is the server's, so the snapshot is taken per property
- * — set what was set, remove what was not — rather than by clobbering
- * `style.cssText`, which would also throw away anything else living there.
+ * "The saved one" rather than "whatever the DOM held at mount", which is the
+ * distinction this got wrong. A mount-time snapshot is stale the moment you
+ * save: the server then re-renders `<html>` with the new palette, the snapshot
+ * still describes the old one, and leaving Settings — a client transition, so
+ * no fresh server render — reverted the whole app to the theme you had before
+ * you edited it. Deriving the baseline from `saved` instead means it is correct
+ * by construction at every point, including after a save, because `saved` is
+ * exactly what the server rendered.
+ *
+ * `data-theme` is deliberately untouched: this editor only exists while the
+ * custom preset is the applied one, so the attribute already says `custom`, and
+ * writing it here would fight the server on the way out when someone leaves by
+ * picking a different preset.
  */
-function usePreview(vars: Record<string, string>, wallpaper: boolean) {
-  const restore = useRef<(() => void) | null>(null);
+function usePreview(
+  vars: Record<string, string>,
+  wallpaper: boolean,
+  saved: CustomAppearance,
+) {
+  // Which properties we put on the element, so ones that later leave the set —
+  // `--wallpaper`, when the image is removed — are taken off again rather than
+  // lingering as a background nothing references.
+  const applied = useRef<string[]>([]);
 
-  useEffect(() => {
+  const apply = useCallback((next: Record<string, string>, showImage: boolean) => {
     const root = document.documentElement;
-    if (!restore.current) {
-      const style = root.getAttribute('style');
-      const themeAttribute = root.getAttribute('data-theme');
-      const wallpaperAttribute = root.getAttribute('data-wallpaper');
-      restore.current = () => {
-        if (style === null) root.removeAttribute('style');
-        else root.setAttribute('style', style);
-        if (themeAttribute === null) root.removeAttribute('data-theme');
-        else root.setAttribute('data-theme', themeAttribute);
-        if (wallpaperAttribute === null) root.removeAttribute('data-wallpaper');
-        else root.setAttribute('data-wallpaper', wallpaperAttribute);
-      };
+    for (const token of applied.current) {
+      if (!(token in next)) root.style.removeProperty(token);
     }
-    for (const [token, value] of Object.entries(vars)) {
+    for (const [token, value] of Object.entries(next)) {
       root.style.setProperty(token, value);
     }
-    root.setAttribute('data-theme', 'custom');
-    if (wallpaper) root.setAttribute('data-wallpaper', 'on');
+    applied.current = Object.keys(next);
+    if (showImage) root.setAttribute('data-wallpaper', 'on');
     else root.removeAttribute('data-wallpaper');
-  }, [vars, wallpaper]);
+  }, []);
+
+  useEffect(() => {
+    apply(vars, wallpaper);
+  }, [vars, wallpaper, apply]);
+
+  // Kept in a ref so the unmount cleanup reads the latest saved palette rather
+  // than closing over the one that happened to be current when it was created.
+  const baseline = useRef(saved);
+  useEffect(() => {
+    baseline.current = saved;
+  }, [saved]);
 
   useEffect(
     () => () => {
-      restore.current?.();
-      restore.current = null;
+      apply(customThemeVars(baseline.current), hasWallpaper(baseline.current));
     },
-    [],
+    [apply],
   );
 }
 

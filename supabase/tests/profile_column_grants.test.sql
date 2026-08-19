@@ -43,9 +43,9 @@ select ok(
 -- ————————————————————— the allowlist is actually in force —————————————————————
 --
 -- The assertions above pass just as happily when profiles has a table-wide
--- SELECT grant, because a table-level privilege covers every column. So the one
--- that matters is this: SB-01 is only doing anything while there is NO
--- table-wide SELECT grant to override it.
+-- SELECT grant, because a table-level privilege covers every column. The
+-- withheld-column checks below would catch that, but they would report it as
+-- four unrelated columns going readable at once; this pair names the cause.
 --
 -- This is not hypothetical either. `supabase/seed.sql` used to hand
 -- anon/authenticated `grant select on all tables in schema public`, which

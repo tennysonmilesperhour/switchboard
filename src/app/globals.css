@@ -208,30 +208,30 @@
   --color-card: #fdfdfe;
   --color-ink: #191919;
   --color-ink-soft: #6a6a6b;
-  --color-ink-faint: #89898a;
+  --color-ink-faint: #888889;
   --color-line: #d5d7d9;
 
   --color-terracotta: #e0265a;
-  --color-terracotta-deep: #c72250;
-  --color-terracotta-soft: #f5e3e8;
+  --color-terracotta-deep: #cd2353;
+  --color-terracotta-soft: #f7e9ed;
 
   --color-sage: #18865e;
-  --color-sage-deep: #157754;
-  --color-sage-soft: #d9ede5;
+  --color-sage-deep: #167a56;
+  --color-sage-soft: #e1f1eb;
 
   --color-gold: #eeae36;
-  --color-gold-soft: #efe8d9;
-  --color-gold-deep: #87621f;
+  --color-gold-soft: #f3ede1;
+  --color-gold-deep: #8b651f;
 
-  --color-rose-soft: #f2e5e6;
+  --color-rose-soft: #f5eaec;
   --color-rose-deep: #b62034;
 
   --color-plan-pink: #d91249;
   --color-plan-purple: #9e6c0d;
-  --color-plan-blue: #34860b;
-  --color-plan-jade: #0b865f;
-  --color-plan-orange: #124ed9;
-  --color-plan-magenta: #9f12d9;
+  --color-plan-blue: #d93712;
+  --color-plan-jade: #15890b;
+  --color-plan-orange: #0d809b;
+  --color-plan-magenta: #6c12d9;
 
   --brand-gradient: linear-gradient(96deg, #e0265a 0%, #bc4b3e 55%, #976f22 120%);
 }

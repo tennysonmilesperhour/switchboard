@@ -278,20 +278,58 @@ function color(value: unknown, fallback: string): string {
 /**
  * A wallpaper reference we are willing to render.
  *
- * It must be a public object in one of our own buckets — an arbitrary origin
- * here would let a stored profile value phone home from every page of the app,
- * on every device the account signs in on. The character rules are belt and
- * braces for the CSS sink: the URL ends up inside a `url("…")` token, and while
- * it is set through `style.setProperty` (which cannot escape into a new rule),
- * a quote or paren could still smuggle a second value into the property.
+ * Two independent things are being checked, and it is worth being precise about
+ * which does what, because an earlier version of this got the first one wrong:
+ *
+ * 1. **The origin has to be our own storage.** This value is stored on a profile
+ *    and then fetched by the browser as a `background-image` on every page, on
+ *    every device the account signs into, for as long as it stays set. An
+ *    attacker-chosen origin is therefore not a one-off request but durable
+ *    beaconing that outlives whatever foothold set it. RLS means someone can
+ *    only ever write their own row, so this is post-compromise persistence
+ *    rather than a cross-user attack — which is still worth closing, and cheap.
+ *
+ *    Matching the bucket path as a substring is NOT this check: anyone can
+ *    serve `https://attacker.example/storage/v1/object/public/covers/…`. The
+ *    origin is compared against the configured Supabase project, and the path is
+ *    anchored to `pathname` so a query string or fragment cannot carry it.
+ *
+ * 2. **The characters have to be safe for the CSS sink.** The URL ends up inside
+ *    a `url("…")` token in a style attribute, so a quote or paren could close
+ *    the token and add a second declaration. That is a real constraint rather
+ *    than a backstop, and the closed character set below is what enforces it.
+ *
+ * Fails closed when the project URL is unset or unparseable: no wallpaper is a
+ * far better answer than an unverified one.
  */
 export function isWallpaperUrl(value: unknown): value is string {
   if (typeof value !== 'string' || value.length === 0 || value.length > 500) return false;
-  if (!/^https:\/\//i.test(value)) return false;
   if (/["'()\\<>\s;]/.test(value)) return false;
+
+  const project = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  if (!project) return false;
+
+  let url: URL;
+  let projectOrigin: string;
+  try {
+    url = new URL(value);
+    projectOrigin = new URL(project).origin;
+  } catch {
+    return false;
+  }
+
+  if (url.protocol !== 'https:') return false;
+  // `origin` folds in scheme, host and port, and — unlike a string prefix —
+  // cannot be spoofed by userinfo (`https://ours@evil.tld/`) or a lookalike
+  // subdomain, because `new URL` has already resolved those.
+  if (url.origin !== projectOrigin) return false;
+  if (url.search || url.hash) return false;
+  // Decoded once by `new URL`, so a `%2e%2e` traversal is a literal `..` here.
+  if (url.pathname.includes('..')) return false;
+
   return new RegExp(
-    `/storage/v1/object/public/(?:${WALLPAPER_BUCKETS.join('|')})/`,
-  ).test(value);
+    `^/storage/v1/object/public/(?:${WALLPAPER_BUCKETS.join('|')})/[^/]+/.+$`,
+  ).test(url.pathname);
 }
 
 /**
@@ -374,13 +412,19 @@ function relaxMost(
  * possible image pixel showing through it. Always returns a palette; whether
  * that palette is good enough is `inksAreGoodEnough`'s question.
  */
-function inksAt(paper: string, card: string, cream: string, share: number) {
-  // The worst wallpaper pixel is a luminance extreme, so compositing pure black
-  // and pure white at `share` bounds every image there is.
+function inksAt(surfaces: string[], paper: string, share: number) {
+  // Every surface the app puts text on — page, card, secondary, and each tinted
+  // chip — plus the page background with the worst wallpaper pixel showing
+  // through it. A luminance extreme bounds every image there is, so compositing
+  // pure black and pure white at `share` covers all of them.
+  //
+  // The tinted surfaces belong in this list and were once missing from it. Body
+  // and secondary ink go on them constantly (`Card tone="gold"`, the perk rows,
+  // any paragraph inside a toned card), and solving the inks against the plain
+  // surfaces alone left `text-ink-soft` at 1.7:1 on a dark theme's gold-soft
+  // while every pair the tests checked stayed green.
   const backgrounds = [
-    paper,
-    card,
-    cream,
+    ...surfaces,
     mix(paper, '#000000', share),
     mix(paper, '#ffffff', share),
   ];
@@ -408,7 +452,7 @@ function inksAt(paper: string, card: string, cream: string, share: number) {
   };
 }
 
-/** Readable at AA, and still legible AS a hierarchy. */
+/** Readable at AA on every surface, and still legible AS a hierarchy. */
 function inksAreGoodEnough(inks: ReturnType<typeof inksAt>): boolean {
   return (
     inks.inkContrast >= 4.5 &&
@@ -425,19 +469,14 @@ function inksAreGoodEnough(inks: ReturnType<typeof inksAt>): boolean {
  * exactly where the type still works. A background with contrast to spare buys
  * a bolder wallpaper; a mid-gray one has nothing to spend and gets almost none.
  */
-function affordableShare(
-  paper: string,
-  card: string,
-  cream: string,
-  wanted: number,
-): number {
+function affordableShare(surfaces: string[], paper: string, wanted: number): number {
   if (wanted <= 0) return 0;
-  if (inksAreGoodEnough(inksAt(paper, card, cream, wanted))) return wanted;
+  if (inksAreGoodEnough(inksAt(surfaces, paper, wanted))) return wanted;
   let low = 0;
   let high = wanted;
   for (let i = 0; i < 14; i += 1) {
     const midpoint = (low + high) / 2;
-    if (inksAreGoodEnough(inksAt(paper, card, cream, midpoint))) low = midpoint;
+    if (inksAreGoodEnough(inksAt(surfaces, paper, midpoint))) low = midpoint;
     else high = midpoint;
   }
   // Quantised down so the alpha written into the scrim is exact: the guarantee
@@ -476,11 +515,21 @@ function tintedSurface(card: string, tint: string, inkExtreme: string): string {
   const base = luminance(card);
   const limit = surfaceLuminanceLimit(inkExtreme);
   // A step toward the ink, so the surface reads as a tint of the card rather
-  // than another card — then held on the ink's side of the limit.
+  // than another card — but a step PROPORTIONAL to the card, not a fixed
+  // fraction of the way to the extreme.
+  //
+  // That distinction is the whole of it. `base + (1 - base) * 0.2` looks like a
+  // small nudge and is one on a light theme, where `base` is near 1; on a dark
+  // theme, where `base` is 0.02, it is a jump to a mid-tone — a surface eight
+  // times lighter than the card it is supposedly a tint of. Body ink then has
+  // to be legible on a page at 0.02 and a chip at 0.22 at once, which is what
+  // put `text-ink-soft` at 1.7:1 on Dusk-like themes. The shipped dark preset
+  // does the obvious thing instead: `--color-gold-soft: #33271a` against a card
+  // of `#2a211a`, barely a shade apart. This now does the same.
   const target =
     inkExtreme === '#000000'
-      ? Math.max(limit, base * 0.82)
-      : Math.min(limit, base + (1 - base) * 0.2);
+      ? Math.max(limit, base * 0.86)
+      : Math.min(limit, base * 1.6 + 0.008);
   return atLuminance(hue, Math.min(0.55, Math.max(0.12, saturation * 0.5)), target);
 }
 
@@ -499,10 +548,36 @@ function planPalette(button: string, highlight: string, dark: boolean): string[]
   const [buttonHue, buttonSat] = rgbToHsl(button);
   const [highlightHue] = rgbToHsl(highlight);
   let offset = (((highlightHue - buttonHue) % 360) + 360) % 360;
-  // Two hues that close together are one hue; nudge so the six stay distinct.
+  // Two hues this close together are one hue; nudge so the six stay distinct.
   if (offset < 20 || offset > 340) offset = 60;
-  const gap = (360 - offset) / 5;
-  const hues = [0, offset, ...[1, 2, 3, 4].map((i) => offset + gap * i)];
+
+  // Both anchors, then the remaining four spread over BOTH arcs the anchors cut
+  // the wheel into, each arc getting hues in proportion to its length.
+  //
+  // Filling only the arc above `offset` — which is what this did — quietly
+  // depends on the highlight sitting clockwise of the button. Put it the other
+  // way round and the whole palette crowds into the short arc that is left:
+  // Switchboard's own two colors in the opposite roles (button #eeae36,
+  // highlight #f82a63, offset ~303) produced six oranges 11 degrees apart, a
+  // gradient rather than a palette. The same two colors in the shipped order
+  // spread over 56 degrees, which is why it looked fine.
+  const arcs = [
+    { start: 0, length: offset },
+    { start: offset, length: 360 - offset },
+  ];
+  const total = 360;
+  const hues = [0, offset];
+  for (const arc of arcs) {
+    const count = Math.round((arc.length / total) * 4);
+    for (let i = 1; i <= count && hues.length < 6; i += 1) {
+      hues.push(arc.start + (arc.length * i) / (count + 1));
+    }
+  }
+  // Rounding can leave the pair one short; fall back to the wider arc's midpoint.
+  while (hues.length < 6) {
+    const widest = arcs[0].length > arcs[1].length ? arcs[0] : arcs[1];
+    hues.push(widest.start + widest.length * (hues.length / 8 + 0.5));
+  }
   const saturation = Math.min(0.85, Math.max(0.45, buttonSat));
   const lightness = dark ? 0.54 : 0.46;
   // Plan cards are a full-bleed color with white type over it, so these are
@@ -532,8 +607,25 @@ function derive(custom: CustomAppearance) {
   const card = safeSurface(paper, '#ffffff', dark ? 0.09 : 0.62, extreme);
   const cream = safeSurface(paper, dark ? '#ffffff' : '#000000', 0.05, extreme);
 
+  // The tinted chips are surfaces too, so they are derived HERE — before the
+  // inks — and handed to the ink solver along with the plain ones. They depend
+  // only on the card and the ink direction, so there is no ordering problem;
+  // deriving them afterwards (as this once did) simply left them out of the
+  // constraint set, and body text on a toned card was unreadable as a result.
+  const [, buttonSaturation] = rgbToHsl(custom.button);
+  const semanticSaturation = Math.min(0.7, Math.max(0.34, buttonSaturation));
+  const sage = whiteReadable(hslToHex(158, semanticSaturation, dark ? 0.42 : 0.34));
+  const rose = hslToHex(352, semanticSaturation, dark ? 0.62 : 0.42);
+
+  const accentSoft = tintedSurface(card, custom.button, extreme);
+  const goldSoft = tintedSurface(card, custom.highlight, extreme);
+  const sageSoft = tintedSurface(card, sage, extreme);
+  const roseSoft = tintedSurface(card, rose, extreme);
+
+  const surfaces = [paper, card, cream, accentSoft, goldSoft, sageSoft, roseSoft];
+
   const wanted = custom.wallpaper ? custom.wallpaperStrength / 100 : 0;
-  const share = affordableShare(paper, card, cream, wanted);
+  const share = affordableShare(surfaces, paper, wanted);
 
   return {
     paper,
@@ -542,18 +634,37 @@ function derive(custom: CustomAppearance) {
     dark,
     extreme,
     share,
-    ...inksAt(paper, card, cream, share),
+    sage,
+    rose,
+    accentSoft,
+    goldSoft,
+    sageSoft,
+    roseSoft,
+    ...inksAt(surfaces, paper, share),
   };
 }
 
 /**
  * The complete token override for a custom appearance, as CSS custom
- * properties. Applied as an inline `style` on `<html>` — set through the CSSOM
- * one property at a time, so no value is ever parsed as CSS syntax.
+ * properties, applied as an inline `style` on `<html>`.
+ *
+ * On the server that style object is SERIALISED INTO A STYLE ATTRIBUTE, so
+ * these values really are parsed as CSS — an earlier version of this comment
+ * claimed the opposite, on the strength of the client path where React sets
+ * each property through `style.setProperty`. What actually makes it safe is
+ * that nothing free-form gets in: every colour is validated to `#rrggbb` by
+ * `parseCustomAppearance`, the gradient and scrim are built here from those
+ * validated colours, and the only caller-supplied string — the wallpaper URL —
+ * is held to a closed character set by `isWallpaperUrl` precisely because it
+ * lands inside a `url("…")` token. React's attribute escaping is the backstop,
+ * not the control.
  */
 export function customThemeVars(custom: CustomAppearance): Record<string, string> {
-  const { paper, card, cream, dark, extreme, share, ink, inkSoft, inkFaint } =
-    derive(custom);
+  const {
+    paper, card, cream, dark, extreme, share,
+    ink, inkSoft, inkFaint,
+    sage, rose, accentSoft, goldSoft, sageSoft, roseSoft,
+  } = derive(custom);
   const line = mix(paper, ink, dark ? 0.22 : 0.16);
 
   // The accent is a FILL, and 18 places in the app put `text-white` on it —
@@ -563,27 +674,28 @@ export function customThemeVars(custom: CustomAppearance): Record<string, string
   // exactly as much as white needs and no more. Somebody who picks a pale
   // yellow "button color" gets a deeper yellow button, not an unreadable one.
   const accent = whiteReadable(custom.button);
-  // `-deep` is the same accent as TEXT, on a card; `-soft` is the surface it
-  // sits on, tinted from the untouched choice so the hue stays theirs.
-  const accentSoft = tintedSurface(card, custom.button, extreme);
-  const accentDeep = readableOn(accent, [card, paper, accentSoft], 4.5, extreme);
 
-  const goldSoft = tintedSurface(card, custom.highlight, extreme);
-  const goldDeep = readableOn(custom.highlight, [card, goldSoft], 4.5, extreme);
+  // The `-deep` tokens are the same colors used as TEXT. Every one of them is
+  // solved against the page as well as the card and its own tinted surface:
+  // `text-rose-deep` and friends appear on bare page background (the discover
+  // form's errors, for one), and leaving `paper` out of a list — which is
+  // exactly what three of these four used to do — is invisible in every test
+  // that only checks a label on its own chip, and lands at 1.9:1 on a mid-tone
+  // page.
+  const on = (color: string, own: string) =>
+    readableOn(color, [card, paper, cream, own], 4.5, extreme);
 
+  const accentDeep = on(accent, accentSoft);
+  const goldDeep = on(custom.highlight, goldSoft);
   // Semantics, re-registered. Green still means accepted and red still means
-  // declined; only their saturation and lightness follow the theme. Green is a
-  // fill under white text too (the primary Button's success variant), so it
-  // gets the same treatment the accent does rather than lightening on a dark
-  // page — a colored button on a dark page is still a colored button.
-  const [, buttonSat] = rgbToHsl(custom.button);
-  const saturation = Math.min(0.7, Math.max(0.34, buttonSat));
-  const sage = whiteReadable(hslToHex(158, saturation, dark ? 0.42 : 0.34));
-  const sageSoft = tintedSurface(card, sage, extreme);
-  const sageDeep = readableOn(sage, [card, sageSoft], 4.5, extreme);
-  const rose = hslToHex(352, saturation, dark ? 0.62 : 0.42);
-  const roseSoft = tintedSurface(card, rose, extreme);
-  const roseDeep = readableOn(rose, [card, roseSoft], 4.5, extreme);
+  // declined; only their saturation and lightness follow the theme (both are
+  // derived in `derive`, because their tinted surfaces have to exist before the
+  // inks are solved). Green is a fill under white text too — the primary
+  // Button's success variant — so it is deepened like the accent rather than
+  // lightened on a dark page: a colored button on a dark page is still a
+  // colored button.
+  const sageDeep = on(sage, sageSoft);
+  const roseDeep = on(rose, roseSoft);
 
   const gradientEnd = whiteReadable(custom.highlight);
 

@@ -90,8 +90,8 @@ function circularDistance(a: number, b: number): number {
  */
 export function paletteFromPixels(
   pixels: Uint8ClampedArray,
-  fallback: ExtractedPalette,
-): ExtractedPalette {
+  fallback: ExtractedPalette | null,
+): ExtractedPalette | null {
   const buckets = bucketize(pixels);
   if (buckets.length === 0) return fallback;
 
@@ -104,7 +104,11 @@ export function paletteFromPixels(
     .filter(({ score }) => score > 0)
     .sort((a, b) => b.score - a.score);
 
-  if (scored.length === 0) return { ...fallback, background };
+  // A picture with a mood but no colors in it — a grayscale photograph. Keep
+  // whatever accents were already chosen rather than returning gray buttons.
+  if (scored.length === 0) {
+    return fallback ? { ...fallback, background } : null;
+  }
 
   const button = scored[0].bucket;
   // A highlight that is the button again teaches nothing about what is

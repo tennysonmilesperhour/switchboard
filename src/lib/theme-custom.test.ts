@@ -1,20 +1,37 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import {
   DEFAULT_CUSTOM,
   contrast,
   customThemeVars,
   hasWallpaper,
+  hslToHex,
   isWallpaperUrl,
   luminance,
   wallpaperShare,
   mix,
   parseCustomAppearance,
+  rgbToHsl,
   type CustomAppearance,
 } from '@/lib/theme-custom';
 
 const CSS = readFileSync(join(process.cwd(), 'src/app/globals.css'), 'utf8');
+
+/**
+ * `isWallpaperUrl` compares against the configured project origin, so the tests
+ * have to configure one. The host below is deliberately NOT the one the
+ * rejection cases use.
+ */
+const PROJECT = 'https://xyz.supabase.co';
+const ORIGINAL_PROJECT = process.env.NEXT_PUBLIC_SUPABASE_URL;
+beforeAll(() => {
+  process.env.NEXT_PUBLIC_SUPABASE_URL = PROJECT;
+});
+afterAll(() => {
+  if (ORIGINAL_PROJECT === undefined) delete process.env.NEXT_PUBLIC_SUPABASE_URL;
+  else process.env.NEXT_PUBLIC_SUPABASE_URL = ORIGINAL_PROJECT;
+});
 
 /** A deterministic generator, so a failure is reproducible from its seed. */
 function rng(seed: number): () => number {
@@ -65,24 +82,50 @@ function sampleAppearances(count: number): CustomAppearance[] {
  * is not an exemption from PRODUCT.md's WCAG AA target; it is the case where
  * the target has to be met by construction, because nobody reviews the colors.
  */
-const READABLE_PAIRS: Array<[string, string, number, string]> = [
-  ['--color-ink', '--color-paper', 4.5, 'body text on the background'],
-  ['--color-ink', '--color-card', 4.5, 'body text on a card'],
-  ['--color-ink', '--color-cream', 4.5, 'body text on a secondary surface'],
-  ['--color-ink-soft', '--color-paper', 4.5, 'secondary text'],
-  ['--color-ink-soft', '--color-card', 4.5, 'secondary text on a card'],
-  ['--color-ink-faint', '--color-card', 3, 'faint text on a card'],
-  ['--color-ink-faint', '--color-paper', 3, 'faint text on the background'],
-  ['--color-terracotta-deep', '--color-card', 4.5, 'accent text on a card'],
+const SURFACES = [
+  '--color-paper',
+  '--color-card',
+  '--color-cream',
+  '--color-terracotta-soft',
+  '--color-gold-soft',
+  '--color-sage-soft',
+  '--color-rose-soft',
+];
+
+/** Body and secondary ink go on every surface, including the tinted ones. */
+const INK_PAIRS: Array<[string, string, number, string]> = SURFACES.flatMap(
+  (surface) =>
+    [
+      ['--color-ink', surface, 4.5, `body text on ${surface}`],
+      ['--color-ink-soft', surface, 4.5, `secondary text on ${surface}`],
+      ['--color-ink-faint', surface, 3, `faint text on ${surface}`],
+    ] as Array<[string, string, number, string]>,
+);
+
+/**
+ * Each `-deep` colour is text, and it appears on the page, on a card, and on
+ * its own tinted chip — `text-rose-deep` on a bare form, `text-sage-deep` in a
+ * toned card, `text-gold-deep` on a perk row. Checking only the chip is what
+ * let three of these four ship at 1.9:1 against a mid-tone page while every
+ * assertion here passed.
+ */
+const DEEP_PAIRS: Array<[string, string, number, string]> = (
   [
-    '--color-terracotta-deep',
-    '--color-terracotta-soft',
-    4.5,
-    'accent text on its own surface',
-  ],
-  ['--color-sage-deep', '--color-sage-soft', 4.5, 'acceptance text on its own surface'],
-  ['--color-gold-deep', '--color-gold-soft', 4.5, 'highlight text on its own surface'],
-  ['--color-rose-deep', '--color-rose-soft', 4.5, 'decline text on its own surface'],
+    ['--color-terracotta-deep', '--color-terracotta-soft'],
+    ['--color-gold-deep', '--color-gold-soft'],
+    ['--color-sage-deep', '--color-sage-soft'],
+    ['--color-rose-deep', '--color-rose-soft'],
+  ] as Array<[string, string]>
+).flatMap(([deep, own]) =>
+  [own, '--color-card', '--color-paper', '--color-cream'].map(
+    (surface) =>
+      [deep, surface, 4.5, `${deep} on ${surface}`] as [string, string, number, string],
+  ),
+);
+
+const READABLE_PAIRS: Array<[string, string, number, string]> = [
+  ...INK_PAIRS,
+  ...DEEP_PAIRS,
 ];
 
 describe('parseCustomAppearance', () => {
@@ -149,6 +192,24 @@ describe('isWallpaperUrl', () => {
   it('rejects anything that is not ours, and anything that could break the sink', () => {
     for (const bad of [
       'https://evil.example.com/beacon.png',
+      // The one that used to pass: the bucket path was matched as a SUBSTRING
+      // of the whole URL, so any host could simply serve that path and be
+      // rendered as a background-image on every page, on every device, for as
+      // long as it stayed set.
+      'https://evil.example.com/storage/v1/object/public/covers/uid/a.png',
+      // Same trick with the real host somewhere it doesn't count.
+      'https://evil.example.com/?x=https://xyz.supabase.co/storage/v1/object/public/covers/uid/a.png',
+      'https://evil.example.com/#/storage/v1/object/public/covers/uid/a.png',
+      // Userinfo that reads like our host to a naive prefix check.
+      'https://xyz.supabase.co@evil.example.com/storage/v1/object/public/covers/uid/a.png',
+      // A lookalike subdomain, and a host our host is a prefix of.
+      'https://xyz.supabase.co.evil.example.com/storage/v1/object/public/covers/uid/a.png',
+      // Right host, wrong path shape.
+      'https://xyz.supabase.co/storage/v1/object/sign/covers/uid/a.png',
+      'https://xyz.supabase.co/x/storage/v1/object/public/covers/uid/a.png',
+      'https://xyz.supabase.co/storage/v1/object/public/covers/a.png',
+      'https://xyz.supabase.co/storage/v1/object/public/covers/uid/../../secret.png',
+      'https://xyz.supabase.co/storage/v1/object/public/covers/uid/a.png?download=1',
       'http://xyz.supabase.co/storage/v1/object/public/covers/uid/a.png',
       'javascript:alert(1)',
       'data:image/svg+xml;base64,AAAA',
@@ -161,6 +222,16 @@ describe('isWallpaperUrl', () => {
     ]) {
       expect(isWallpaperUrl(bad), String(bad)).toBe(false);
     }
+  });
+
+  it('fails closed when the project origin is not configured', () => {
+    const ours = `${PROJECT}/storage/v1/object/public/covers/uid/a.png`;
+    expect(isWallpaperUrl(ours)).toBe(true);
+    delete process.env.NEXT_PUBLIC_SUPABASE_URL;
+    // No configured project means nothing can be verified as ours, and an
+    // unverified beacon is worse than no wallpaper.
+    expect(isWallpaperUrl(ours)).toBe(false);
+    process.env.NEXT_PUBLIC_SUPABASE_URL = PROJECT;
   });
 });
 
@@ -275,14 +346,49 @@ describe('customThemeVars', () => {
     const pale = customThemeVars({ ...DEFAULT_CUSTOM, button: '#ffe600' });
     // Same yellow, dark enough to put a label on.
     expect(contrast('#ffffff', pale['--color-terracotta'])).toBeGreaterThanOrEqual(4.5);
-    const [hue] = [pale['--color-terracotta']].map(
-      (hex) => (parseInt(hex.slice(1, 3), 16) > parseInt(hex.slice(5, 7), 16) ? 'warm' : 'cool'),
-    );
-    expect(hue).toBe('warm');
+    // Actually the same hue, not merely "still warmer than it is cool".
+    const [chosenHue] = rgbToHsl('#ffe600');
+    const [renderedHue] = rgbToHsl(pale['--color-terracotta']);
+    expect(Math.abs(renderedHue - chosenHue)).toBeLessThan(15);
 
     // An already-deep choice is left exactly as chosen.
     const deep = customThemeVars({ ...DEFAULT_CUSTOM, button: '#123f7a' });
     expect(deep['--color-terracotta']).toBe('#123f7a');
+  });
+
+  /**
+   * Six plan colors that are all the same color are a gradient, not a palette.
+   * The spread used to depend on the highlight sitting clockwise of the button:
+   * Switchboard's own two colors in the opposite roles collapsed to six oranges
+   * eleven degrees apart.
+   */
+  it('keeps the six plan colors distinct however the two hues are ordered', () => {
+    const planHues = (button: string, highlight: string) =>
+      Object.entries(customThemeVars({ ...DEFAULT_CUSTOM, button, highlight }))
+        .filter(([token]) => token.startsWith('--color-plan-'))
+        .map(([, hex]) => rgbToHsl(hex)[0]);
+
+    const separation = (hues: number[]) => {
+      let worst = 360;
+      for (let i = 0; i < hues.length; i += 1) {
+        for (let j = i + 1; j < hues.length; j += 1) {
+          const raw = Math.abs(hues[i] - hues[j]) % 360;
+          worst = Math.min(worst, raw > 180 ? 360 - raw : raw);
+        }
+      }
+      return worst;
+    };
+
+    // Both orderings of the shipped pair, and a full sweep of the second hue.
+    expect(separation(planHues('#f82a63', '#eeae36'))).toBeGreaterThan(20);
+    expect(separation(planHues('#eeae36', '#f82a63'))).toBeGreaterThan(20);
+    for (let degrees = 0; degrees < 360; degrees += 15) {
+      const highlight = hslToHex(degrees, 0.7, 0.5);
+      expect(
+        separation(planHues('#f82a63', highlight)),
+        `highlight at ${degrees} degrees`,
+      ).toBeGreaterThan(20);
+    }
   });
 
   it('keeps acceptance green and decline red', () => {

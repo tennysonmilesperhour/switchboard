@@ -59,9 +59,12 @@ follow, and both have been broken:
   against a database strictly more permissive than production. The seed now
   grants SELECT table by table, skipping `profiles`.
   `supabase/tests/profile_column_grants.test.sql` asserts
-  `not has_table_privilege('authenticated', 'public.profiles', 'SELECT')`, which
-  is the assertion that catches it — the per-column checks pass either way,
-  because a table-wide grant satisfies them too.
+  `not has_table_privilege('authenticated', 'public.profiles', 'SELECT')`. The
+  withheld-column checks catch a restored table grant too; what the table-level
+  assertion adds is that it names the cause, rather than reporting that four
+  unrelated columns all became readable at once. The *positive* per-column
+  checks are the ones that pass either way, since a table-wide grant satisfies
+  them.
 
 Note when writing either: `REVOKE SELECT ON <table>` also drops that table's
 column-level SELECT grants, so "grant broadly, then revoke the one table" leaves

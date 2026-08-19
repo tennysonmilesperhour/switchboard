@@ -22,15 +22,24 @@ function hue(hex: string): number {
   return rgbToHsl(hex)[0];
 }
 
+/** Extraction that is expected to succeed; fails the test loudly if it didn't. */
+function extract(
+  pixels: Uint8ClampedArray,
+  fallback: ExtractedPalette | null = FALLBACK,
+): ExtractedPalette {
+  const palette = paletteFromPixels(pixels, fallback);
+  expect(palette, 'expected a palette, got null').not.toBeNull();
+  return palette!;
+}
+
 describe('paletteFromPixels', () => {
   it('takes the page color from what the picture is mostly made of', () => {
-    const palette = paletteFromPixels(
+    const palette = extract(
       image([
         ['#123f7a', 800], // a deep blue sky, most of the frame
         ['#e8b04b', 120],
         ['#c0392b', 80],
       ]),
-      FALLBACK,
     );
     // Same family as the dominant color…
     expect(Math.abs(hue(palette.background) - hue('#123f7a'))).toBeLessThan(30);
@@ -45,14 +54,13 @@ describe('paletteFromPixels', () => {
    * what is actually vivid, however little of it there is.
    */
   it('takes the accents from what is vivid, not from what is common', () => {
-    const palette = paletteFromPixels(
+    const palette = extract(
       image([
         ['#8a8a8a', 2000], // overwhelming, and completely uninteresting
         ['#0f0f0f', 900],
         ['#e03a2f', 60], // a red door
         ['#2e8b57', 40], // a green awning
       ]),
-      FALLBACK,
     );
     expect(Math.abs(hue(palette.button) - hue('#e03a2f'))).toBeLessThan(20);
     expect(Math.abs(hue(palette.highlight) - hue('#2e8b57'))).toBeLessThan(20);
@@ -61,7 +69,7 @@ describe('paletteFromPixels', () => {
   it('keeps the highlight a real distance from the button', () => {
     // One-color image: the highlight has to be invented rather than repeated,
     // or "highlighted" and "ordinary" become the same color.
-    const palette = paletteFromPixels(image([['#3355dd', 1000]]), FALLBACK);
+    const palette = extract(image([['#3355dd', 1000]]));
     const separation = Math.abs(hue(palette.button) - hue(palette.highlight));
     expect(Math.min(separation, 360 - separation)).toBeGreaterThan(20);
   });
@@ -73,10 +81,21 @@ describe('paletteFromPixels', () => {
     expect(paletteFromPixels(clear, FALLBACK)).toEqual(FALLBACK);
   });
 
+  /**
+   * With no fallback to fall back to, "couldn't read it" has to be sayable.
+   * Echoing the caller's own colors back instead is indistinguishable from
+   * success, which is how the Match-colors button reported failure every time
+   * it worked twice on the same picture.
+   */
+  it('says null when there is nothing to read and no fallback', () => {
+    expect(paletteFromPixels(new Uint8ClampedArray([]), null)).toBeNull();
+    expect(paletteFromPixels(image([['#9a9a9a', 500]]), null)).toBeNull();
+  });
+
   it('keeps the accents when only the page color can be read', () => {
     // A grayscale picture has a mood but no accents; keeping the previous ones
     // beats returning gray buttons.
-    const palette = paletteFromPixels(image([['#9a9a9a', 500]]), FALLBACK);
+    const palette = extract(image([['#9a9a9a', 500]]));
     expect(palette.button).toBe(FALLBACK.button);
     expect(palette.highlight).toBe(FALLBACK.highlight);
     expect(palette.background).not.toBe(FALLBACK.background);
@@ -90,7 +109,7 @@ describe('paletteFromPixels', () => {
    */
   it('leaves the page color with contrast to spend', () => {
     for (const dominant of ['#123f7a', '#e8b04b', '#7a7a7a', '#2b1a12', '#eeeeee']) {
-      const { background } = paletteFromPixels(image([[dominant, 500]]), FALLBACK);
+      const { background } = extract(image([[dominant, 500]]));
       const best = Math.max(contrast('#000000', background), contrast('#ffffff', background));
       expect(best, `${dominant} -> ${background}`).toBeGreaterThan(7);
     }

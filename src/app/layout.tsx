@@ -95,8 +95,10 @@ const SIGNED_OUT: Shell = {
  * client effect — a theme swapped after hydration is a visible flash of the
  * default palette on every navigation, worse than not offering themes at all.
  * The custom preset's tokens ride along the same way, as inline custom
- * properties: they are set through the CSSOM one property at a time, so a
- * stored value is never parsed as CSS.
+ * properties. They are serialised into a style attribute here, so they ARE
+ * parsed as CSS — what keeps that safe is that every one of them is derived
+ * from values `parseCustomAppearance` has already validated to a strict hex or,
+ * for the wallpaper URL, to a closed character set. See `customThemeVars`.
  *
  * The id powers the live-notifications subscription. A signed-out visitor, or
  * any failure to read the profile, gets the default theme and no listener —
