@@ -60,7 +60,27 @@ jobs:
           SUPABASE_PROJECT_ID: ${{ secrets.SUPABASE_PROJECT_ID }}
         run: |
           supabase link --project-ref "$SUPABASE_PROJECT_ID"
-          supabase db push
+          # --include-all: apply pending migrations whose timestamp sorts BEFORE
+          # the last one already applied.
+          #
+          # Without it, `db push` refuses the moment two branches merge out of
+          # timestamp order — which is not an edge case, it is what happens
+          # whenever two PRs are open at once. #150 (20260819120000) merged
+          # first and deployed; #148, branched earlier, then merged with five
+          # 20260818* migrations that now sorted before it, and the deploy
+          # failed with "Found local migration files to be inserted before the
+          # last migration on remote database". Nothing was applied, so main was
+          # green while production was missing six migrations and the settings
+          # page was reading columns that did not exist there.
+          #
+          # The guard this drops is "a migration authored on a stale branch
+          # could apply after newer ones". That is worth knowing about, but it
+          # is not worth a failed deploy every time two branches are in flight,
+          # and it is not the check that would catch a genuinely incompatible
+          # migration — the pgTAP suite and the parity step below are. Ordering
+          # between independent migrations is not something the timestamp can
+          # promise anyway; only the migrations' own dependencies can.
+          supabase db push --include-all
 
       - name: Verify schema parity (no migration left pending)
         env:
