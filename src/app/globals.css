@@ -189,6 +189,53 @@
   --brand-gradient: linear-gradient(96deg, #d94a00 0%, #b03a1a 55%, #7a2f2f 120%);
 }
 
+/* Custom: three chosen colors, everything else derived.
+ *
+ * Unlike the presets above, this block is not the theme — `customThemeVars` in
+ * src/lib/theme-custom.ts derives the real values from the person's choices and
+ * the root layout sets them as inline custom properties on <html>, where they
+ * win over these. What is written here is the derivation applied to
+ * DEFAULT_CUSTOM, and it exists for the moment before those inline values are
+ * known: a signed-out visitor on a shared link, a profile read that fell over,
+ * a value that no longer validates. A theme with no tokens at all is an
+ * unreadable app, so `custom` gets a complete palette like every other preset.
+ *
+ * theme-custom.test.ts regenerates these and fails if they drift.
+ */
+[data-theme="custom"] {
+  --color-paper: #f9fbfd;
+  --color-cream: #edeef0;
+  --color-card: #fdfdfe;
+  --color-ink: #191919;
+  --color-ink-soft: #6a6a6b;
+  --color-ink-faint: #888889;
+  --color-line: #d5d7d9;
+
+  --color-terracotta: #e0265a;
+  --color-terracotta-deep: #cd2353;
+  --color-terracotta-soft: #f7e9ed;
+
+  --color-sage: #18865e;
+  --color-sage-deep: #167a56;
+  --color-sage-soft: #e1f1eb;
+
+  --color-gold: #eeae36;
+  --color-gold-soft: #f3ede1;
+  --color-gold-deep: #8b651f;
+
+  --color-rose-soft: #f5eaec;
+  --color-rose-deep: #b62034;
+
+  --color-plan-pink: #d91249;
+  --color-plan-purple: #9e6c0d;
+  --color-plan-blue: #d93712;
+  --color-plan-jade: #15890b;
+  --color-plan-orange: #0d809b;
+  --color-plan-magenta: #6c12d9;
+
+  --brand-gradient: linear-gradient(96deg, #e0265a 0%, #bc4b3e 55%, #976f22 120%);
+}
+
 html {
   background: var(--color-paper);
 }
@@ -199,6 +246,44 @@ body {
   font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
   overscroll-behavior-y: none;
+}
+
+/* ----- Wallpaper -----
+ *
+ * Two fixed layers under the whole app: the image, and a scrim of the page
+ * color over it. The scrim is what makes an arbitrary photograph safe to put
+ * behind an interface — its opacity is computed per palette in
+ * `customThemeVars`, at the exact point where the worst pixel an image can
+ * contain still leaves every text weight above its contrast threshold.
+ *
+ * Fixed rather than scrolling, so the image behaves like a desk the app sits on
+ * instead of a very long banner, and so a short page shows the same framing as
+ * a long one. Cards keep their own opaque surfaces on top; only the page
+ * background is the image.
+ */
+[data-wallpaper="on"] body {
+  background: transparent;
+}
+
+[data-wallpaper="on"] body::before,
+[data-wallpaper="on"] body::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+}
+
+[data-wallpaper="on"] body::before {
+  z-index: -2;
+  background-image: var(--wallpaper);
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+}
+
+[data-wallpaper="on"] body::after {
+  z-index: -1;
+  background: var(--wallpaper-scrim);
 }
 
 /*

@@ -10,6 +10,7 @@ import {
 } from './PeopleDiscoveryClient';
 import { OpenTables, type OpenTableRow } from '@/components/events/OpenTables';
 import { VenuePerks, type VenueRow, type VenueClaim } from '@/components/venues/VenuePerks';
+import { IntentLaunchpad } from './IntentLaunchpad';
 
 export const metadata: Metadata = { title: 'Explore' };
 
@@ -75,13 +76,18 @@ export default async function DiscoverPage() {
   return (
     <AppShell title="Explore">
       <div className="space-y-8">
+        <IntentLaunchpad />
+        <div id="browse">
         <PeopleDiscoveryClient
           people={(people ?? []) as DiscoveryPerson[]}
           matches={matches}
           discoverable={Boolean(profile?.discoverable)}
         />
         <OpenTables tables={(openTables ?? []) as OpenTableRow[]} />
+        </div>
+        <div id="brainstorm">
         <DiscoverClient defaultInterests={profile?.interests ?? []} />
+        </div>
         <VenuePerks
           venues={(venues ?? []) as VenueRow[]}
           myClaims={(myVenues ?? []) as VenueClaim[]}

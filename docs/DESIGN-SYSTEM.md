@@ -82,6 +82,15 @@ preset in Settings → Appearance; it is stored on their profile
 root layout, server-side — never by a client effect, which would flash the
 default palette on every navigation.
 
+Both of those columns are read through the session client, which means both
+need an explicit SELECT grant: `profiles` has a column allowlist rather than a
+table-level grant (see `docs/SECURITY.md`, SB-01), and a column left off it
+fails the *whole* query, so the app sees an empty profile rather than a denied
+column. `appearance_theme` shipped without its grant and the symptom was that
+Settings appeared to ignore every theme you picked.
+`src/lib/profile-column-grants.test.ts` now fails on a profiles column that is
+neither granted nor documented as withheld.
+
 A preset is **only** a token override, defined in `globals.css` under
 `[data-theme="…"]`. No component knows themes exist: they all reference
 `bg-terracotta`, `text-ink`, `bg-brand-gradient`, `plan-*`, and those resolve
@@ -108,6 +117,38 @@ Note that `.plan-*` gradients are derived from the `--color-plan-*` tokens with
 `color-mix`, not written as literal hex. They were the last hardcoded colors in
 the app, and the reason a themed screen still had six bright pink and violet
 cards in the middle of it.
+
+### One preset is not written down: `custom`
+
+`custom` takes three colors from the person — a background, a button color, a
+highlight — plus an optional wallpaper image, and **derives** the rest of the
+token layer at render time in `src/lib/theme-custom.ts`. The derived values are
+set as inline custom properties on `<html>` by the root layout, alongside
+`data-theme="custom"`; only the three choices are stored
+(`profiles.appearance_custom`).
+
+It works this way because the rules above cannot be reviewed for a palette
+nobody has seen. So they are met by construction instead:
+
+- Body ink is whichever of black or white has more room against the page. The
+  two cannot both fail — their contrast ratios against any color multiply to
+  21 — so the better one is never below ~4.58:1, and the page background is
+  workable whatever gets chosen.
+- Every other surface (cards, secondary surfaces, the tinted chips a colored
+  label sits on) is held on that ink's side of a luminance limit, so one text
+  direction reads on all of them.
+- Secondary and faint ink are body ink relaxed back toward the page. The
+  relaxation has a floor as well as a target, so the hierarchy cannot collapse
+  into three shades of the same near-black.
+- The wallpaper is not dimmed to a fixed opacity. The ink weights and the image
+  share are solved together, and the slider gets as much image as still leaves
+  every weight above its threshold against the worst pixel a photograph can
+  contain — so a background with contrast to spare buys a bolder wallpaper, and
+  a mid-gray one gets almost none.
+
+`src/lib/theme-custom.test.ts` fuzzes hundreds of palettes through the same
+contrast pairs the shipped presets are held to, plus the wallpaper composite. If
+you add a token to the presets, it fails until the derivation covers that too.
 
 ## If you re-theme wholesale
 

@@ -67,6 +67,17 @@ export default async function MomentsPage() {
       headline: string | null;
     }>;
 
+    const userIdByMoment = new Map<string, string>();
+    if (foundList.length > 0) {
+      const { data: momentOwners } = await admin
+        .from('moments')
+        .select('id, user_id')
+        .in('id', foundList.map((c) => c.id));
+      for (const m of momentOwners ?? []) {
+        userIdByMoment.set(m.id, m.user_id);
+      }
+    }
+
     // Only the mutually-curious candidates get a gentle introduction. Fetch all
     // of their moments in one query rather than one round trip per candidate.
     const introIds = foundList
@@ -98,6 +109,7 @@ export default async function MomentsPage() {
         const stage = (stageByOther.get(candidate.id) ?? 'none') as Candidate['stage'];
         return {
           id: candidate.id,
+          userId: userIdByMoment.get(candidate.id) ?? null,
           experiences: candidate.experiences,
           headline: candidate.headline,
           stage,

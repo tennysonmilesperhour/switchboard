@@ -4,6 +4,8 @@ import { createClient } from '@/lib/supabase/server';
 import { appInviteUrl } from '@/lib/links';
 import { AppShell } from '@/components/shell/AppShell';
 import { EmptyState } from '@/components/ui/EmptyState';
+import { FindableNudge } from '@/components/profile/FindableNudge';
+import { loadFindability } from '@/lib/server/findability';
 import { PeopleClient, type FriendRow, type RequestRow, type CircleRow } from './PeopleClient';
 import { loadVisibleSignals } from '@/lib/server/signals';
 
@@ -104,10 +106,15 @@ export default async function PeoplePage() {
   // server where someone can fix it (see src/lib/links.ts).
   const inviteUrl = appInviteUrl();
 
+  // Whether the people who already have this person's email or phone can find
+  // them. Rendered above the search that fails for exactly this reason.
+  const findability = await loadFindability();
+
   return (
     <AppShell title="People">
       {friends.length === 0 && incoming.length === 0 && outgoing.length === 0 ? (
         <div className="space-y-6">
+          <FindableNudge state={findability} />
           <EmptyState
             emoji="☺"
             title="Your people live here"
@@ -123,14 +130,17 @@ export default async function PeoplePage() {
           />
         </div>
       ) : (
-        <PeopleClient
-          friends={friends}
-          incoming={incoming}
-          outgoing={outgoing}
-          circles={circleRows}
-          households={households}
-          inviteUrl={inviteUrl}
-        />
+        <div className="space-y-6">
+          <FindableNudge state={findability} />
+          <PeopleClient
+            friends={friends}
+            incoming={incoming}
+            outgoing={outgoing}
+            circles={circleRows}
+            households={households}
+            inviteUrl={inviteUrl}
+          />
+        </div>
       )}
     </AppShell>
   );

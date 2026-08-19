@@ -449,8 +449,8 @@ export const FEATURE_GROUPS: readonly FeatureGroup[] = [
       {
         id: 'community',
         title: 'Community',
-        blurb: 'The way in to boards, and what’s expected of everyone on them.',
-        where: 'Boards, and the footer of the welcome page',
+        blurb: 'Your boards, the community covenant, and what’s expected of everyone.',
+        where: 'More sheet, and the footer of the welcome page',
         href: '/community',
       },
     ],
@@ -614,8 +614,12 @@ export const FEATURE_GROUPS: readonly FeatureGroup[] = [
       {
         id: 'install-app',
         title: 'Install Switchboard',
-        blurb: 'Add it to your home screen and it behaves like an app, icon and all.',
-        where: 'Your browser’s Share → Add to Home Screen',
+        blurb:
+          'Add it to your home screen and it behaves like an app, icon and all. There is no APK and nothing to download — the browser installs it.',
+        // The old directions were the iPhone route only. An Android tester who
+        // follows them finds no such menu item, and someone who can't install
+        // the supported way goes looking for an "app" to download instead.
+        where: 'Android: Chrome menu ⋮ → Install app. iPhone: Share → Add to Home Screen',
       },
       {
         id: 'calendar-feed',
@@ -629,7 +633,7 @@ export const FEATURE_GROUPS: readonly FeatureGroup[] = [
         id: 'verified-contacts',
         title: 'Verified contact details',
         blurb:
-          'Verify an email or phone so invitations sent to it reach your account, and so people who have it can find you.',
+          'Verify an email or phone so invitations sent to it reach your account — and so friends searching for you, or importing their contacts, actually find you. Unverified details match nobody.',
         where: 'Settings → Verified contact details',
         href: '/settings',
       },
@@ -637,7 +641,7 @@ export const FEATURE_GROUPS: readonly FeatureGroup[] = [
         id: 'appearance',
         title: 'How the app looks',
         blurb:
-          'Pick a look — cream and ink, warm dark, or the bright default — and it follows your account to every device you sign in on.',
+          'Pick a look — cream and ink, warm dark, or the bright default — or build your own from a photo and three colors, with the picture behind everything. It follows your account to every device you sign in on.',
         where: 'Settings → Appearance',
         href: '/settings',
       },

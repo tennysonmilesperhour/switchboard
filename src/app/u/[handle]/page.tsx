@@ -7,6 +7,7 @@ import { AppShell } from '@/components/shell/AppShell';
 import { Avatar } from '@/components/ui/Avatar';
 import { Icon } from '@/components/ui/Icon';
 import { ConnectButton } from '@/components/profile/ConnectButton';
+import { BlockReportButtons } from '@/components/profile/BlockReportButtons';
 import { GiveSpaceButton } from '@/components/profile/GiveSpaceButton';
 import { SOCIAL_BY_ID, hrefFor, displayHandle } from '@/lib/socials';
 import {
@@ -220,6 +221,11 @@ export default async function PublicProfilePage({
                 targetId={profile.id}
                 name={displayName}
                 avoided={Boolean(avoid.data)}
+              />
+              <BlockReportButtons
+                targetId={profile.id}
+                name={displayName}
+                connectionId={relationship.connectionId}
               />
               {mutualLine ? (
                 <p className="flex items-center gap-1.5 text-xs font-semibold text-ink-soft">

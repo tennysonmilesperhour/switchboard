@@ -29,6 +29,13 @@ export interface ImageInputProps {
   aspect?: 'video' | 'square';
   /** Accessible label for the picker (e.g. "cover image"). */
   label?: string;
+  /**
+   * Offer "or paste an image link" alongside the upload buttons. Off for
+   * surfaces that need the file to be ours: the wallpaper is read back through
+   * a canvas to match colors to it, and a cross-origin image taints the canvas
+   * so the read throws. An option that cannot work is worse than no option.
+   */
+  allowLink?: boolean;
   className?: string;
 }
 
@@ -48,6 +55,7 @@ export function ImageInput({
   bucket = 'media',
   aspect = 'video',
   label = 'image',
+  allowLink = true,
   className,
 }: ImageInputProps) {
   const uploadInput = useRef<HTMLInputElement>(null);
@@ -162,13 +170,15 @@ export function ImageInput({
                   Upload
                 </button>
               </div>
-              <button
-                type="button"
-                onClick={() => setShowUrl((v) => !v)}
-                className="text-xs font-medium text-ink-faint underline decoration-line underline-offset-2 hover:text-ink"
-              >
-                or paste an image link
-              </button>
+              {allowLink ? (
+                <button
+                  type="button"
+                  onClick={() => setShowUrl((v) => !v)}
+                  className="text-xs font-medium text-ink-faint underline decoration-line underline-offset-2 hover:text-ink"
+                >
+                  or paste an image link
+                </button>
+              ) : null}
             </>
           )}
         </div>

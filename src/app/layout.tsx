@@ -8,8 +8,15 @@ import { ServiceWorkerRegistrar } from '@/components/system/ServiceWorkerRegistr
 import { PostHogProvider } from '@/components/system/PostHogProvider';
 import { ToastProvider } from '@/components/ui/Toast';
 import { ConfirmProvider } from '@/components/ui/ConfirmDialog';
+import { LiveNotifications } from '@/components/system/LiveNotifications';
 import { createClient } from '@/lib/supabase/server';
 import { resolveTheme, type AppThemeId } from '@/lib/themes-app';
+import {
+  customThemeVars,
+  hasWallpaper,
+  parseCustomAppearance,
+} from '@/lib/theme-custom';
+import { reportOperationalError } from '@/lib/server/observability';
 
 const workSans = Work_Sans({
   subsets: ['latin'],
@@ -65,41 +72,84 @@ export const viewport: Viewport = {
   viewportFit: 'cover',
 };
 
+interface Shell {
+  theme: AppThemeId;
+  /** Token overrides for the custom preset; empty for every other theme. */
+  themeVars: Record<string, string>;
+  wallpaper: boolean;
+  userId: string | null;
+}
+
+const SIGNED_OUT: Shell = {
+  theme: 'default',
+  themeVars: {},
+  wallpaper: false,
+  userId: null,
+};
+
 /**
- * Read the signed-in person's appearance preset, if there is one.
+ * Resolve the things the shell needs about the signed-in person in one
+ * `auth.getUser()`: their appearance, and their id.
  *
- * Server-side and inline on `<html>` rather than applied by a client effect:
- * a theme swapped after hydration is a visible flash of the default palette on
- * every single navigation, which is worse than not offering themes at all. A
- * signed-out visitor, or any failure to read the profile, gets the default —
- * this is decoration, and it must never be the reason a page doesn't render.
+ * The theme is applied server-side and inline on `<html>` rather than by a
+ * client effect — a theme swapped after hydration is a visible flash of the
+ * default palette on every navigation, worse than not offering themes at all.
+ * The custom preset's tokens ride along the same way, as inline custom
+ * properties. They are serialised into a style attribute here, so they ARE
+ * parsed as CSS — what keeps that safe is that every one of them is derived
+ * from values `parseCustomAppearance` has already validated to a strict hex or,
+ * for the wallpaper URL, to a closed character set. See `customThemeVars`.
+ *
+ * The id powers the live-notifications subscription. A signed-out visitor, or
+ * any failure to read the profile, gets the default theme and no listener —
+ * this is chrome, and it must never be the reason a page doesn't render. A
+ * failed read is reported rather than only swallowed: a column this query names
+ * but cannot select fails the whole query, and the last time that happened the
+ * only symptom was that Settings appeared to ignore the theme you picked.
  */
-async function currentTheme(): Promise<AppThemeId> {
+async function resolveShell(): Promise<Shell> {
   try {
     const supabase = await createClient();
     const {
       data: { user },
     } = await supabase.auth.getUser();
-    if (!user) return 'default';
-    const { data } = await supabase
+    if (!user) return SIGNED_OUT;
+    const { data, error } = await supabase
       .from('profiles')
-      .select('appearance_theme')
+      .select('appearance_theme, appearance_custom')
       .eq('id', user.id)
       .maybeSingle();
-    return resolveTheme(data?.appearance_theme);
+    if (error) {
+      await reportOperationalError('layout.appearance', error, { userId: user.id });
+      return { ...SIGNED_OUT, userId: user.id };
+    }
+
+    const theme = resolveTheme(data?.appearance_theme);
+    if (theme !== 'custom') {
+      return { theme, themeVars: {}, wallpaper: false, userId: user.id };
+    }
+    const custom = parseCustomAppearance(data?.appearance_custom);
+    return {
+      theme,
+      themeVars: customThemeVars(custom),
+      wallpaper: hasWallpaper(custom),
+      userId: user.id,
+    };
   } catch {
-    return 'default';
+    return SIGNED_OUT;
   }
 }
 
 export default async function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
-  const theme = await currentTheme();
+  const { theme, themeVars, wallpaper, userId } = await resolveShell();
   return (
     <html
       lang="en"
       data-theme={theme}
+      data-wallpaper={wallpaper ? 'on' : undefined}
+      style={themeVars as React.CSSProperties}
       className={`${workSans.variable} antialiased`}
     >
       <body className="min-h-dvh">
@@ -107,6 +157,7 @@ export default async function RootLayout({
           <ToastProvider>
             <ConfirmProvider>
               {children}
+              {userId && <LiveNotifications userId={userId} />}
               <VersionWatcher />
               <InstallPrompt />
               <PmfSurvey />
