@@ -32,6 +32,44 @@ server action is convenience, never protection.
 
 Litmus test: *if RLS were the only code that ran, would the data still be safe?*
 
+### RLS is row-level. Columns are grants, and grants are fail-closed
+
+RLS cannot restrict *columns*, so a column too sensitive to be world-readable is
+withheld with a **column grant** instead:
+`20260710120000_lock_sensitive_profile_columns.sql` dropped the table-level
+SELECT grant on `public.profiles` and re-granted an explicit allowlist, putting
+`calendar_token` and the contact columns out of reach of the API. Two rules
+follow, and both have been broken:
+
+- **A new `profiles` column is unreadable until a migration names it.** That is
+  the right default and it fails in a hostile shape: a denied column fails the
+  *whole* query with `permission denied for table profiles` — which names the
+  table, not the column — so the app sees "no profile row", not "you may not
+  read that". `appearance_theme` shipped without its grant and Settings looked
+  like it was ignoring the theme you picked; `legal_terms_version` shipped
+  without its grant and the proxy quietly stopped funnelling half-registered
+  accounts into onboarding. `src/lib/profile-column-grants.test.ts` now fails on
+  a column that is neither granted nor documented as withheld.
+- **Nothing downstream may hand the grant back.** `supabase/seed.sql` (local and
+  CI only) used to run `grant select on all tables in schema public to anon,
+  authenticated`, which restored precisely the table-level grant that fix
+  removed — a table privilege covers every column, so the allowlist stopped
+  meaning anything. For as long as that stood, the pgTAP tests asserting these
+  columns were withheld could not have failed, and every local and CI run was
+  against a database strictly more permissive than production. The seed now
+  grants SELECT table by table, skipping `profiles`.
+  `supabase/tests/profile_column_grants.test.sql` asserts
+  `not has_table_privilege('authenticated', 'public.profiles', 'SELECT')`. The
+  withheld-column checks catch a restored table grant too; what the table-level
+  assertion adds is that it names the cause, rather than reporting that four
+  unrelated columns all became readable at once. The *positive* per-column
+  checks are the ones that pass either way, since a table-wide grant satisfies
+  them.
+
+Note when writing either: `REVOKE SELECT ON <table>` also drops that table's
+column-level SELECT grants, so "grant broadly, then revoke the one table" leaves
+nothing readable. Grant narrowly instead.
+
 ## 2. UPDATE policies need `WITH CHECK`, and ownership columns are immutable
 
 An UPDATE policy written with only `USING` silently reuses `USING` as its check.
@@ -228,6 +266,11 @@ integrations a deployment has wired up is reconnaissance, not public data.
   `find_nearby_people` mutual/block/visibility/radius/coarsening invariants.
 - `supabase/tests/zone_presence.test.sql` — `moments` stays owner-only and
   `zone_presence` counts only other, live, unblocked people in its own zone.
+- `supabase/tests/profile_column_grants.test.sql` — SB-01's column allowlist is
+  actually in force (no table-wide SELECT on `profiles`), the withheld columns
+  are still withheld, and the columns the app reads are readable.
+- `src/lib/profile-column-grants.test.ts` — no `profiles` column is left off the
+  allowlist without a written reason.
 
 ## Media privacy (gated content)
 

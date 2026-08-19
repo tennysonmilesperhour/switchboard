@@ -14,6 +14,7 @@ import { normalizePhoneNumber } from '@/lib/phone';
 import { safeNextPath } from '@/lib/security';
 import { reportAndFail, reportOperationalError } from '@/lib/server/observability';
 import { resolveTheme, themeById } from '@/lib/themes-app';
+import { parseCustomAppearance } from '@/lib/theme-custom';
 import { loadPassport } from '@/lib/server/passport';
 import { passportProgress } from '@/lib/passport';
 import { LEGAL_VERSION } from '@/lib/legal';
@@ -375,14 +376,68 @@ export async function updateAppearanceTheme(theme: string): Promise<ActionResult
     }
   }
 
-  const { error } = await supabase
+  // Read the value back rather than trusting a clean UPDATE. A theme that saves
+  // and cannot be read is not a hypothetical: `appearance_theme` shipped without
+  // a SELECT grant, so this write succeeded every time while the app went on
+  // rendering the default, and the picker looked like it was ignoring taps. An
+  // UPDATE that reports success on a value nobody can read is a lie the reader
+  // is left to work out for themselves.
+  const { data: saved, error } = await supabase
     .from('profiles')
     .update({ appearance_theme: resolved })
-    .eq('id', user.id);
-  if (error) {
-    return reportAndFail('SB-SETTINGS-SAVE', 'settings.appearance', error, {
-      userId: user.id,
-    });
+    .eq('id', user.id)
+    .select('appearance_theme')
+    .maybeSingle<{ appearance_theme: string | null }>();
+  if (error || saved?.appearance_theme !== resolved) {
+    return reportAndFail('SB-SETTINGS-SAVE', 'settings.appearance', error ?? {
+      message: 'appearance_theme did not read back after a successful update',
+      saved: saved?.appearance_theme ?? null,
+    }, { userId: user.id, theme: resolved });
+  }
+
+  revalidatePath('/', 'layout');
+  return { ok: true };
+}
+
+/**
+ * Save the custom preset's three colors and its wallpaper.
+ *
+ * Only the choices are stored. Every other token — ink, lines, the accent's
+ * variants, the acceptance and decline colors, the plan palette, the gradient —
+ * is derived from these at render time by `customThemeVars`, which is what keeps
+ * the contrast invariant true for combinations nobody reviewed. Storing the
+ * derived values instead would make them writable, and a writable token layer is
+ * a writable contrast ratio.
+ *
+ * `parseCustomAppearance` is the validator and it is fail-safe by design, so
+ * this cannot reject: a malformed field becomes the default rather than an
+ * error. The one thing checked here that a pure parser cannot check is
+ * ownership — the wallpaper has to be a file this account uploaded, not another
+ * account's cover pulled out of a public bucket.
+ */
+export async function updateCustomAppearance(
+  custom: unknown,
+): Promise<ActionResult> {
+  const auth = await requireUser();
+  if (!auth.ok) return auth;
+  const { supabase, user } = auth;
+
+  const parsed = parseCustomAppearance(custom);
+  const appearance =
+    parsed.wallpaper && !parsed.wallpaper.includes(`/${user.id}/`)
+      ? { ...parsed, wallpaper: null }
+      : parsed;
+
+  const { data: saved, error } = await supabase
+    .from('profiles')
+    .update({ appearance_theme: 'custom', appearance_custom: appearance })
+    .eq('id', user.id)
+    .select('appearance_theme')
+    .maybeSingle<{ appearance_theme: string | null }>();
+  if (error || saved?.appearance_theme !== 'custom') {
+    return reportAndFail('SB-SETTINGS-SAVE', 'settings.appearance', error ?? {
+      message: 'appearance_custom did not read back after a successful update',
+    }, { userId: user.id });
   }
 
   revalidatePath('/', 'layout');

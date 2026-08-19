@@ -641,7 +641,7 @@ export const FEATURE_GROUPS: readonly FeatureGroup[] = [
         id: 'appearance',
         title: 'How the app looks',
         blurb:
-          'Pick a look — cream and ink, warm dark, or the bright default — and it follows your account to every device you sign in on.',
+          'Pick a look — cream and ink, warm dark, or the bright default — or build your own from a photo and three colors, with the picture behind everything. It follows your account to every device you sign in on.',
         where: 'Settings → Appearance',
         href: '/settings',
       },

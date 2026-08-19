@@ -348,6 +348,19 @@ const REGISTRY = {
     actor: 'reader',
   },
   /**
+   * The chosen appearance could not be read back, so the app is wearing the
+   * standard palette instead of the person's own. Nothing they can do about it
+   * — this is a server-side read failing — but it needs a code, because the
+   * symptom is completely mute: the app simply looks like it always did, and
+   * Settings looks like it is ignoring what you pick. That is precisely how a
+   * missing column grant hid for a whole release.
+   */
+  'SB-LOOK-UNREAD': {
+    message: 'Your chosen look couldn’t be loaded, so this is the standard one.',
+    fix: null,
+    actor: 'operator',
+  },
+  /**
    * The root layout itself threw, so `src/app/global-error.tsx` renders without
    * the app's stylesheet or its imports and writes this code out as a literal.
    * A test asserts the two stay in step.
@@ -488,6 +501,8 @@ const AREA_CODES: Record<string, ErrorCode> = {
   'invite-claim.contact': 'SB-PROFILE-SAVE',
   'settings.interests': 'SB-SETTINGS-SAVE',
   'settings.appearance': 'SB-SETTINGS-SAVE',
+  'layout.appearance': 'SB-LOOK-UNREAD',
+  'settings.appearance-read': 'SB-LOOK-UNREAD',
   'settings.discoverability': 'SB-SETTINGS-SAVE',
   'settings.sabbatical': 'SB-SETTINGS-SAVE',
   'settings.quiet-hours': 'SB-SETTINGS-SAVE',
