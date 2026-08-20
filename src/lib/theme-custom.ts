@@ -333,6 +333,29 @@ export function isWallpaperUrl(value: unknown): value is string {
 }
 
 /**
+ * Canonicalise a stored wallpaper reference, then validate it.
+ *
+ * The upload route hands back the object's public URL with a cache-busting
+ * `?v=<timestamp>` query appended, and `isWallpaperUrl` — the CSS-sink
+ * validator — deliberately refuses any URL carrying a query or fragment. Left
+ * unreconciled the two disagree: the exact URL the picker is handed is the one
+ * the save throws away, so a wallpaper someone just chose is silently dropped
+ * to null and never persists past the settings page.
+ *
+ * Dropping everything from the first `?` or `#` before validating resolves it
+ * without loosening the validator. The query is not part of which object this
+ * is — the storage path is already unique — so the cleaned URL points at the
+ * same image; an attacker URL still fails the origin and path checks on that
+ * cleaned value (a foreign host with our path in its query collapses to the
+ * foreign origin); and the stored reference stays a bare `url("…")`.
+ */
+function wallpaperReference(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  const clean = value.split(/[?#]/)[0];
+  return isWallpaperUrl(clean) ? clean : null;
+}
+
+/**
  * Read a stored `appearance_custom` value into something renderable.
  *
  * Fail-safe per field rather than all-or-nothing: a row can outlive the deploy
@@ -343,7 +366,7 @@ export function parseCustomAppearance(value: unknown): CustomAppearance {
   const raw = (value && typeof value === 'object' ? value : {}) as Record<string, unknown>;
   const strength = Number(raw.wallpaperStrength);
   return {
-    wallpaper: isWallpaperUrl(raw.wallpaper) ? raw.wallpaper : null,
+    wallpaper: wallpaperReference(raw.wallpaper),
     background: color(raw.background, DEFAULT_CUSTOM.background),
     button: color(raw.button, DEFAULT_CUSTOM.button),
     highlight: color(raw.highlight, DEFAULT_CUSTOM.highlight),

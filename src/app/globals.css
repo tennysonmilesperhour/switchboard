@@ -261,6 +261,13 @@ body {
  * a long one. Cards keep their own opaque surfaces on top; only the page
  * background is the image.
  */
+/* A solid base under the fixed image, on the root element itself: nothing
+ * flashes white while a large photo is still decoding, and the scrim always
+ * composites over the page color rather than the browser's canvas. */
+[data-wallpaper="on"] {
+  background-color: var(--color-paper);
+}
+
 [data-wallpaper="on"] body {
   background: transparent;
 }
@@ -271,6 +278,11 @@ body {
   position: fixed;
   inset: 0;
   pointer-events: none;
+  /* Promote each layer to its own GPU tile. Without this, iOS Safari
+   * re-rasterises a fixed, viewport-sized background on every scroll frame; with
+   * a translucent bar blurring it on top, the whole screen judders and takes
+   * seconds to settle. Composited once, it stays put and scrolling stays smooth. */
+  transform: translateZ(0);
 }
 
 [data-wallpaper="on"] body::before {
@@ -284,6 +296,23 @@ body {
 [data-wallpaper="on"] body::after {
   z-index: -1;
   background: var(--wallpaper-scrim);
+}
+
+/* The app's top and bottom bars are translucent and blurred. A backdrop blur is
+ * cheap over a static page and ruinous over a fixed, full-screen photo: iOS
+ * Safari reblurs the whole image every frame, which is the bulk of the wallpaper
+ * jank. With a wallpaper set, sit the bars on a solid surface with no blur —
+ * cheaper to composite, and steadier to read over a busy photo. Scoped to
+ * wallpaper mode, so the frosted bars are untouched on every other theme. */
+[data-wallpaper="on"] .chrome-bar {
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+[data-wallpaper="on"] header.chrome-bar {
+  background-color: var(--color-paper);
+}
+[data-wallpaper="on"] nav.chrome-bar {
+  background-color: var(--color-card);
 }
 
 /*

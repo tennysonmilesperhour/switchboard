@@ -58,7 +58,7 @@ export function BottomNav() {
 
       <nav
         aria-label="Main navigation"
-        className="fixed bottom-0 inset-x-0 z-40 border-t border-line/70 bg-card/80 backdrop-blur-xl pb-[env(safe-area-inset-bottom)]"
+        className="chrome-bar fixed bottom-0 inset-x-0 z-40 border-t border-line/70 bg-card/80 backdrop-blur-xl pb-[env(safe-area-inset-bottom)]"
       >
         <div className="mx-auto max-w-lg grid grid-cols-5 items-center px-2">
           {LEFT.map((tab) => (
