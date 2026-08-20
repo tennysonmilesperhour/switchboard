@@ -15,7 +15,7 @@ interface AppShellProps {
 export function AppShell({ title, back, action, children }: AppShellProps) {
   return (
     <div className="mx-auto max-w-lg min-h-dvh flex flex-col">
-      <header className="sticky top-0 z-30 flex items-center gap-2 px-4 py-3 bg-paper/85 backdrop-blur-xl">
+      <header className="chrome-bar sticky top-0 z-30 flex items-center gap-2 px-4 py-3 bg-paper/85 backdrop-blur-xl">
         {back ? (
           <Link
             href={back}
