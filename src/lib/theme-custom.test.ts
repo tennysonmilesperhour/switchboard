@@ -162,6 +162,36 @@ describe('parseCustomAppearance', () => {
     expect(partial.wallpaperStrength).toBe(100);
   });
 
+  /**
+   * The upload route returns the object's public URL with a cache-busting
+   * `?v=<timestamp>` appended, and `isWallpaperUrl` refuses any query string.
+   * Without canonicalisation the wallpaper a person just picked is dropped to
+   * null on save and never persists — the reported bug. The query is stripped
+   * and the bare object URL is stored.
+   */
+  it('keeps a wallpaper whose upload URL carries a cache-busting query', () => {
+    const withCacheBuster = parseCustomAppearance({
+      wallpaper:
+        'https://xyz.supabase.co/storage/v1/object/public/covers/uid/wallpaper-1.jpg?v=1737000000000',
+    });
+    expect(withCacheBuster.wallpaper).toBe(
+      'https://xyz.supabase.co/storage/v1/object/public/covers/uid/wallpaper-1.jpg',
+    );
+  });
+
+  /**
+   * Canonicalisation must not become a smuggling route: a foreign origin with
+   * our path parked in its query collapses to the foreign origin once the query
+   * is stripped, and is still rejected.
+   */
+  it('does not let a query string smuggle in a foreign origin', () => {
+    const attack = parseCustomAppearance({
+      wallpaper:
+        'https://evil.example.com/?x=https://xyz.supabase.co/storage/v1/object/public/covers/uid/a.png',
+    });
+    expect(attack.wallpaper).toBeNull();
+  });
+
   it('renders something for anything at all', () => {
     for (const junk of [null, undefined, '', 0, [], 'custom', { background: 42 }]) {
       expect(parseCustomAppearance(junk)).toEqual(DEFAULT_CUSTOM);
