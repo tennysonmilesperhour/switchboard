@@ -1,6 +1,14 @@
+import { PLAN_CARD_FULL_MIN_H, PLAN_CARD_TILE_ASPECT } from './PlanCard';
+
 /**
  * Loading placeholders. A single calm pulse (never a flashy shimmer) so a
  * loading screen reads as "settling in", matching the app's restful tone.
+ *
+ * A placeholder's job is to hold the space its content will take. When it holds
+ * less, the arriving content shoves the page down — and on iOS that shove is
+ * what starts the URL-bar collapse, so the whole layout animates. The plan-card
+ * placeholders therefore take their geometry from `PlanCard` itself rather than
+ * from numbers typed twice.
  */
 
 export function Skeleton({ className = '' }: { className?: string }) {
@@ -12,13 +20,36 @@ export function Skeleton({ className = '' }: { className?: string }) {
   );
 }
 
-/** A stand-in for a PlanCard while the plan feed loads. */
-export function PlanCardSkeleton() {
+/**
+ * A stand-in for a PlanCard while the plan feed loads, in the same two shapes
+ * the real card comes in: the tall `full` card the feed uses, and the `tile`
+ * the plans grid uses.
+ *
+ * The pulse lives only on the outer surface. Nesting a pulsing bar inside a
+ * pulsing card multiplies the two opacity curves, so the inner bars beat
+ * against the card at a second frequency.
+ */
+export function PlanCardSkeleton({
+  variant = 'full',
+}: {
+  variant?: 'full' | 'tile';
+}) {
+  if (variant === 'tile') {
+    return (
+      <div
+        className={`${PLAN_CARD_TILE_ASPECT} animate-pulse rounded-card bg-line/50 p-3.5`}
+        aria-hidden
+      />
+    );
+  }
   return (
-    <div className="rounded-card bg-line/50 p-5 animate-pulse" aria-hidden>
-      <Skeleton className="h-3 w-24 bg-line" />
-      <Skeleton className="mt-3 h-6 w-3/4 bg-line" />
-      <Skeleton className="mt-4 h-3 w-1/2 bg-line" />
+    <div
+      className={`${PLAN_CARD_FULL_MIN_H} animate-pulse rounded-card bg-line/50 p-6`}
+      aria-hidden
+    >
+      <div className="h-3 w-24 rounded-lg bg-line" />
+      <div className="mt-3 h-6 w-3/4 rounded-lg bg-line" />
+      <div className="mt-4 h-3 w-1/2 rounded-lg bg-line" />
     </div>
   );
 }
@@ -38,6 +69,17 @@ export function CardListSkeleton({ rows = 4 }: { rows?: number }) {
             <Skeleton className="h-3 w-1/2" />
           </div>
         </div>
+      ))}
+    </div>
+  );
+}
+
+/** A stand-in for a grid of plan tiles (the plans page). */
+export function PlanGridSkeleton({ tiles = 4 }: { tiles?: number }) {
+  return (
+    <div className="grid grid-cols-2 gap-3" aria-hidden>
+      {Array.from({ length: tiles }).map((_, i) => (
+        <PlanCardSkeleton key={i} variant="tile" />
       ))}
     </div>
   );

@@ -1,6 +1,7 @@
 import Link from 'next/link';
+import { Suspense } from 'react';
 import { BottomNav } from './BottomNav';
-import { NotificationBell } from './NotificationBell';
+import { BellPlaceholder, NotificationBell } from './NotificationBell';
 import { NotificationNudge } from './NotificationNudge';
 import { Icon } from '@/components/ui/Icon';
 
@@ -14,7 +15,12 @@ interface AppShellProps {
 /** Authenticated app chrome: sticky header + bottom tab bar. */
 export function AppShell({ title, back, action, children }: AppShellProps) {
   return (
-    <div className="mx-auto max-w-lg min-h-dvh flex flex-col">
+    // `svh` rather than `dvh`: `dvh` re-resolves on every frame of iOS Safari's
+    // URL-bar collapse, relaying out the whole column while the two fixed
+    // wallpaper layers re-composite beneath it — which is the shaking a page
+    // load shows. `svh` is fixed at the small viewport, so the column height
+    // stops moving mid-animation.
+    <div className="mx-auto max-w-lg min-h-[100svh] flex flex-col">
       <header className="chrome-bar sticky top-0 z-30 flex items-center gap-2 px-4 py-3 bg-paper/85 backdrop-blur-xl">
         {back ? (
           <Link
@@ -37,7 +43,16 @@ export function AppShell({ title, back, action, children }: AppShellProps) {
             switchboard
           </Link>
         )}
-        {action ?? <NotificationBell />}
+        {action ?? (
+          // The bell is an async server component that costs two serial round
+          // trips. Unsuspended it blocked the whole shell — including every
+          // route's `loading.tsx`, which renders this same shell, so the
+          // "instant" loading state waited on the database before painting at
+          // all. Suspending it lets the shell flush immediately.
+          <Suspense fallback={<BellPlaceholder />}>
+            <NotificationBell />
+          </Suspense>
+        )}
       </header>
       <NotificationNudge />
       <main className="flex-1 px-4 pb-28 pt-1">{children}</main>

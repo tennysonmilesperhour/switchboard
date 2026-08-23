@@ -12,6 +12,20 @@ export const PLAN_COLORS = [
 
 export type PlanColor = (typeof PLAN_COLORS)[number];
 
+/**
+ * The geometry a plan card occupies, exported so the loading placeholders in
+ * `Skeleton.tsx` reserve exactly what the real card will take.
+ *
+ * These were duplicated as literals, and drifted: the feed skeleton stood 116px
+ * tall where the card it stood in for is 416px, so the moment real content
+ * arrived the page grew by over a thousand pixels. On iOS that flips the
+ * document from "fits one screen" to "scrollable" in a single frame, which
+ * starts Safari's URL-bar collapse — and everything on screen moves while it
+ * animates. Shared constants are what stop the two drifting apart again.
+ */
+export const PLAN_CARD_FULL_MIN_H = 'min-h-[26rem]';
+export const PLAN_CARD_TILE_ASPECT = 'aspect-[4/5]';
+
 const GRADIENT: Record<PlanColor, string> = {
   pink: 'plan-pink',
   purple: 'plan-purple',
@@ -75,9 +89,9 @@ export function PlanCard({
     <div
       className={`group relative overflow-hidden rounded-card text-white shadow-card ${
         variant === 'full'
-          ? 'min-h-[26rem] p-6'
+          ? `${PLAN_CARD_FULL_MIN_H} p-6`
           : variant === 'tile'
-            ? 'aspect-[4/5] p-3.5'
+            ? `${PLAN_CARD_TILE_ASPECT} p-3.5`
             : 'p-4'
       } ${className}`}
     >

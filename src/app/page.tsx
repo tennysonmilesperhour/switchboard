@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
-import { createClient } from '@/lib/supabase/server';
+import { createClient, getRenderUser } from '@/lib/supabase/server';
 import { AppShell } from '@/components/shell/AppShell';
 import { Card, SectionHeader } from '@/components/ui/Card';
 import { Avatar } from '@/components/ui/Avatar';
@@ -29,9 +29,7 @@ import type { SwitchboardEvent } from '@/lib/types';
 
 export default async function HomePage() {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getRenderUser();
   if (!user) redirect('/welcome');
 
   const { data: profile } = await supabase
