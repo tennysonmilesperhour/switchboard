@@ -140,11 +140,17 @@ nobody has seen. So they are met by construction instead:
 - Secondary and faint ink are body ink relaxed back toward the page. The
   relaxation has a floor as well as a target, so the hierarchy cannot collapse
   into three shades of the same near-black.
-- The wallpaper is not dimmed to a fixed opacity. The ink weights and the image
-  share are solved together, and the slider gets as much image as still leaves
-  every weight above its threshold against the worst pixel a photograph can
-  contain — so a background with contrast to spare buys a bolder wallpaper, and
-  a mid-gray one gets almost none.
+- The wallpaper is never dimmed for readability. It shows at exactly the
+  strength that was asked for; the slider is linear and is not clamped.
+  Readability is bought somewhere else: every surface the app puts text on —
+  cards, chips, the header, the tab bar, and the plates behind section headings
+  and empty states — is painted at `1 - plateVeil` over the photograph, and
+  `plateVeil` is the largest transparency that still leaves every ink weight
+  above its threshold against the worst pixel a photograph can contain. So a
+  background with contrast to spare lets the picture through its own cards; a
+  mid-gray one gets solid cards and still shows the picture everywhere else.
+  Solving the plate rather than the image is what stopped a "100%" slider from
+  showing 26% of somebody's photo.
 
 `src/lib/theme-custom.test.ts` fuzzes hundreds of palettes through the same
 contrast pairs the shipped presets are held to, plus the wallpaper composite. If

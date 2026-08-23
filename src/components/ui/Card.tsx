@@ -37,8 +37,11 @@ export function SectionHeader({
   action?: React.ReactNode;
 }) {
   return (
+    // `text-plate` is inert on every ordinary theme; under a wallpaper it puts
+    // this heading on a plate rather than on the raw photograph. Section headers
+    // are the largest body of text in the app with no surface of its own.
     <div className="flex items-end justify-between gap-3 mb-3">
-      <div>
+      <div className="text-plate text-plate-inset">
         <h2 className="font-display text-xl text-ink">{title}</h2>
         {hint ? <p className="text-sm text-ink-faint mt-0.5">{hint}</p> : null}
       </div>

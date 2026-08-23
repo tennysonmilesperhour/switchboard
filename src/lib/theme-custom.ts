@@ -435,11 +435,19 @@ function relaxMost(
  * possible image pixel showing through it. Always returns a palette; whether
  * that palette is good enough is `inksAreGoodEnough`'s question.
  */
-function inksAt(surfaces: string[], paper: string, share: number) {
+function inksAt(surfaces: string[], paper: string, veil: number) {
   // Every surface the app puts text on — page, card, secondary, and each tinted
-  // chip — plus the page background with the worst wallpaper pixel showing
-  // through it. A luminance extreme bounds every image there is, so compositing
-  // pure black and pure white at `share` covers all of them.
+  // chip — and then each of those surfaces again with the worst wallpaper pixel
+  // showing through it at `veil`. A luminance extreme bounds every image there
+  // is, so compositing pure black and pure white through each plate covers
+  // every photograph anyone can upload.
+  //
+  // Note what is NOT here any more: the raw page background with the image
+  // behind it. Text no longer sits on the bare photo — every text-bearing
+  // surface is a plate — so the quantity that has to be solved is how
+  // transparent those plates may be, not how dim the image must be. That is the
+  // whole of the change: `veil` is bounded by contrast, `share` is not, and the
+  // slider stops fighting the type.
   //
   // The tinted surfaces belong in this list and were once missing from it. Body
   // and secondary ink go on them constantly (`Card tone="gold"`, the perk rows,
@@ -448,8 +456,10 @@ function inksAt(surfaces: string[], paper: string, share: number) {
   // while every pair the tests checked stayed green.
   const backgrounds = [
     ...surfaces,
-    mix(paper, '#000000', share),
-    mix(paper, '#ffffff', share),
+    ...surfaces.flatMap((surface) => [
+      mix(surface, '#000000', veil),
+      mix(surface, '#ffffff', veil),
+    ]),
   ];
 
   const extreme = inkExtremeFor(paper);
@@ -485,26 +495,40 @@ function inksAreGoodEnough(inks: ReturnType<typeof inksAt>): boolean {
 }
 
 /**
- * How much wallpaper this appearance can actually afford to show, 0-1.
+ * How transparent this palette can afford to make the plates under its text,
+ * 0-1. 0 means fully opaque cards and bars; 1 would mean no plate at all.
  *
- * This is the point of solving the inks and the strength together: the image is
- * not dimmed to some fixed opacity chosen once for everybody, it is dimmed to
- * exactly where the type still works. A background with contrast to spare buys
- * a bolder wallpaper; a mid-gray one has nothing to spend and gets almost none.
+ * This is what the palette's contrast headroom is now spent on. It used to be
+ * spent dimming the photograph, which was the wrong purchase twice over: it
+ * capped a "100%" slider at 26% of the image, and it did so to protect text
+ * that mostly sits on opaque cards anyway. A plate at a fixed opacity bounds
+ * the image behind text no matter how bright the image is, so the ink solve
+ * stops depending on the wallpaper entirely and the slider becomes a pure
+ * brightness control.
+ *
+ * A background with contrast to spare buys more see-through plates; a mid-gray
+ * one has nothing to spend and gets fully opaque ones — and its photo still
+ * shows at full strength everywhere the app puts no text, which is strictly
+ * more than the nothing it showed before.
  */
-function affordableShare(surfaces: string[], paper: string, wanted: number): number {
-  if (wanted <= 0) return 0;
-  if (inksAreGoodEnough(inksAt(surfaces, paper, wanted))) return wanted;
+function affordableVeil(surfaces: string[], paper: string): number {
+  if (inksAreGoodEnough(inksAt(surfaces, paper, 1))) return 1;
   let low = 0;
-  let high = wanted;
+  let high = 1;
   for (let i = 0; i < 14; i += 1) {
     const midpoint = (low + high) / 2;
     if (inksAreGoodEnough(inksAt(surfaces, paper, midpoint))) low = midpoint;
     else high = midpoint;
   }
-  // Quantised down so the alpha written into the scrim is exact: the guarantee
+  // Quantised down so the alpha written into each plate is exact: the guarantee
   // is only as good as the number that reaches the browser.
   return Math.floor(low * 1000) / 1000;
+}
+
+/** A surface colour as a plate: the same colour, at `1 - veil` opacity. */
+function plate(hex: string, veil: number): string {
+  const [r, g, b] = parseHex(hex);
+  return `rgba(${r}, ${g}, ${b}, ${(1 - veil).toFixed(3)})`;
 }
 
 /** The color with `hue` and `saturation` whose luminance is closest to `target`. */
@@ -614,9 +638,33 @@ function planPalette(button: string, highlight: string, dark: boolean): string[]
 
 /**
  * Everything the token layer needs, solved together: the surfaces, the three
- * inks, and how much wallpaper the result can carry.
+ * inks, and how transparent the plates over the wallpaper can be.
+ *
+ * Memoised, because it is not cheap — two binary searches over fourteen
+ * candidate backgrounds — and every render asks for the same answer more than
+ * once: the root layout calls `customThemeVars` and `hasWallpaper` on the same
+ * appearance, and Settings adds `wallpaperShare` and `plateVeil` on top.
+ *
+ * Safe to hold across requests: the result is a pure function of the five
+ * validated fields of its input, carries nothing about who asked, and the key
+ * is that input. Bounded so a stream of distinct palettes cannot grow it
+ * without limit — the eviction order does not matter because every entry is
+ * reproducible.
  */
+const DERIVED = new Map<string, ReturnType<typeof solve>>();
+const DERIVED_MAX = 64;
+
 function derive(custom: CustomAppearance) {
+  const key = `${custom.background}|${custom.button}|${custom.highlight}|${custom.wallpaperStrength}|${custom.wallpaper ? '1' : '0'}`;
+  const hit = DERIVED.get(key);
+  if (hit) return hit;
+  const solved = solve(custom);
+  if (DERIVED.size >= DERIVED_MAX) DERIVED.clear();
+  DERIVED.set(key, solved);
+  return solved;
+}
+
+function solve(custom: CustomAppearance) {
   const paper = custom.background;
   const extreme = inkExtremeFor(paper);
   const dark = extreme === '#ffffff';
@@ -647,8 +695,11 @@ function derive(custom: CustomAppearance) {
 
   const surfaces = [paper, card, cream, accentSoft, goldSoft, sageSoft, roseSoft];
 
-  const wanted = custom.wallpaper ? custom.wallpaperStrength / 100 : 0;
-  const share = affordableShare(surfaces, paper, wanted);
+  // The image shows at exactly the requested strength — never clamped, because
+  // nothing about readability depends on it any more. `veil` is the quantity
+  // contrast actually bounds.
+  const share = custom.wallpaper ? custom.wallpaperStrength / 100 : 0;
+  const veil = custom.wallpaper ? affordableVeil(surfaces, paper) : 0;
 
   return {
     paper,
@@ -657,13 +708,14 @@ function derive(custom: CustomAppearance) {
     dark,
     extreme,
     share,
+    veil,
     sage,
     rose,
     accentSoft,
     goldSoft,
     sageSoft,
     roseSoft,
-    ...inksAt(surfaces, paper, share),
+    ...inksAt(surfaces, paper, veil),
   };
 }
 
@@ -684,7 +736,7 @@ function derive(custom: CustomAppearance) {
  */
 export function customThemeVars(custom: CustomAppearance): Record<string, string> {
   const {
-    paper, card, cream, dark, extreme, share,
+    paper, card, cream, dark, extreme, share, veil,
     ink, inkSoft, inkFaint,
     sage, rose, accentSoft, goldSoft, sageSoft, roseSoft,
   } = derive(custom);
@@ -767,9 +819,23 @@ export function customThemeVars(custom: CustomAppearance): Record<string, string
       mix(accent, gradientEnd, 0.5),
     )} 55%, ${gradientEnd} 120%)`,
 
-    // The scrim is the page background at whatever opacity leaves the text
-    // alone; `share` is how much wallpaper shows through it.
+    // The scrim is now a DIMMER, not a readability device: it is the page
+    // background at exactly the strength the person did not ask for. At 100 its
+    // alpha is 0 and the photograph is raw.
     '--wallpaper-scrim': `rgba(${pr}, ${pg}, ${pb}, ${(1 - share).toFixed(3)})`,
+
+    // The plates. Every surface the app puts text on is painted at this
+    // opacity over the photograph, and `veil` is the largest transparency the
+    // ink solve above proved readable against the worst pixel any image can
+    // contain. Built from the same already-hex-validated colours as the opaque
+    // tokens — no new caller-supplied string reaches CSS here.
+    '--plate-paper': plate(paper, veil),
+    '--plate-card': plate(card, veil),
+    '--plate-cream': plate(cream, veil),
+    '--plate-terracotta-soft': plate(accentSoft, veil),
+    '--plate-gold-soft': plate(goldSoft, veil),
+    '--plate-sage-soft': plate(sageSoft, veil),
+    '--plate-rose-soft': plate(roseSoft, veil),
   };
 
   // Unused when the surfaces are light, but a dark custom theme needs the same
@@ -788,12 +854,23 @@ export function customThemeVars(custom: CustomAppearance): Record<string, string
 }
 
 /**
- * How much of the wallpaper actually shows, 0-1, after clamping to what the
- * palette can carry. Settings shows this so a slider that stops moving is
- * explained rather than mysterious.
+ * How much of the wallpaper shows, 0-1 — now exactly the strength that was
+ * asked for, because the image is no longer dimmed to protect the type.
  */
 export function wallpaperShare(custom: CustomAppearance): number {
   return derive(custom).share;
+}
+
+/**
+ * How transparent this palette's plates are, 0-1. 0 is a fully opaque card;
+ * higher lets more of the photograph through the app's own surfaces.
+ *
+ * Exported so Settings can say what the palette actually bought, and so the
+ * tests can assert the readability guarantee against the same number the
+ * browser gets.
+ */
+export function plateVeil(custom: CustomAppearance): number {
+  return derive(custom).veil;
 }
 
 /** True when this appearance has an image that will actually be visible. */

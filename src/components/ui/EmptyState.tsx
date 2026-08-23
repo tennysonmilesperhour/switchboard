@@ -7,7 +7,9 @@ interface EmptyStateProps {
 
 export function EmptyState({ emoji, title, body, action }: EmptyStateProps) {
   return (
-    <div className="flex flex-col items-center text-center gap-2 py-12 px-6">
+    // `text-plate` does nothing on an ordinary theme; under a wallpaper it puts
+    // this text on a plate instead of on the raw photograph. See globals.css.
+    <div className="text-plate flex flex-col items-center text-center gap-2 py-12 px-6">
       <span className="text-4xl" aria-hidden>
         {emoji}
       </span>

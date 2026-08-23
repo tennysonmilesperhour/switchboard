@@ -9,6 +9,7 @@ import {
   hslToHex,
   isWallpaperUrl,
   luminance,
+  plateVeil,
   wallpaperShare,
   mix,
   parseCustomAppearance,
@@ -469,13 +470,27 @@ describe('the wallpaper scrim', () => {
   }
 
   /**
-   * Text sits directly on the page background all over this app, and an
-   * arbitrary photograph behind it is an arbitrary contrast ratio. The scrim is
-   * what keeps that from being true — so it is checked against the worst
-   * wallpaper that exists: one whose pixels are pure black, and one whose
-   * pixels are pure white.
+   * Text never sits on the raw photograph: every text-bearing surface is a
+   * plate, painted at `1 - plateVeil` over the image. So the thing that has to
+   * hold is that the WORST pixel showing through EVERY plate still leaves each
+   * ink weight above its threshold — checked against the worst wallpaper that
+   * exists, one of pure black and one of pure white.
+   *
+   * This is the same AA claim the scrim model made, over a wider constraint
+   * set: seven surfaces × two extremes, where the old test checked the page
+   * background alone. What changed is the surface the text actually has, not
+   * the promise made about it.
    */
-  it('never lets an image push text below AA, at any strength', () => {
+  it('never lets an image push text below AA, through any plate', () => {
+    const SURFACE_TOKENS = [
+      '--color-paper',
+      '--color-card',
+      '--color-cream',
+      '--color-terracotta-soft',
+      '--color-gold-soft',
+      '--color-sage-soft',
+      '--color-rose-soft',
+    ];
     for (const appearance of sampleAppearances(400)) {
       const withImage = {
         ...appearance,
@@ -484,20 +499,23 @@ describe('the wallpaper scrim', () => {
         wallpaperStrength: 100,
       };
       const vars = customThemeVars(withImage);
-      const share = 1 - scrimAlpha(vars);
-      for (const pixel of ['#000000', '#ffffff']) {
-        const composited = mix(vars['--color-paper'], pixel, share);
-        for (const [text, min] of [
-          [vars['--color-ink'], 4.5],
-          [vars['--color-ink-soft'], 4.5],
-          [vars['--color-ink-faint'], 3],
-        ] as Array<[string, number]>) {
-          const ratio = contrast(text, composited);
-          expect(
-            ratio,
-            `${text} over a ${pixel} wallpaper at ${(share * 100).toFixed(0)}% is ` +
-              `${ratio.toFixed(2)}:1, needs ${min}:1 (background ${appearance.background})`,
-          ).toBeGreaterThanOrEqual(min);
+      const veil = plateVeil(withImage);
+      for (const token of SURFACE_TOKENS) {
+        for (const pixel of ['#000000', '#ffffff']) {
+          const composited = mix(vars[token], pixel, veil);
+          for (const [text, min] of [
+            [vars['--color-ink'], 4.5],
+            [vars['--color-ink-soft'], 4.5],
+            [vars['--color-ink-faint'], 3],
+          ] as Array<[string, number]>) {
+            const ratio = contrast(text, composited);
+            expect(
+              ratio,
+              `${text} on ${token} over a ${pixel} wallpaper showing through a ` +
+                `${(veil * 100).toFixed(1)}% plate is ${ratio.toFixed(2)}:1, ` +
+                `needs ${min}:1 (background ${appearance.background})`,
+            ).toBeGreaterThanOrEqual(min);
+          }
         }
       }
     }
@@ -514,38 +532,64 @@ describe('the wallpaper scrim', () => {
     expect(quiet).toBeCloseTo(0.9, 5);
   });
 
-  it('hides the image entirely when the palette has no headroom', () => {
-    // Mid-gray admits at most ~4.6:1 with anything, so there is nothing left to
-    // spend on an image. It gets scrimmed out rather than made unreadable.
-    expect(
-      wallpaperShare({
-        ...DEFAULT_CUSTOM,
-        background: '#808080',
-        wallpaper: 'https://xyz.supabase.co/storage/v1/object/public/covers/uid/w.jpg',
-        wallpaperStrength: 100,
-      }),
-    ).toBeLessThan(0.05);
+  /**
+   * Same underlying fact the old `share < 0.05` assertion carried — this
+   * palette has no contrast to spend — asserted on the variable that now
+   * carries it. Mid-gray admits at most ~4.6:1 with anything, so its plates go
+   * fully opaque. The photo is not hidden any more: it still shows at full
+   * strength everywhere the app puts no text, which is strictly more than the
+   * nothing it used to get.
+   */
+  it('gives a palette with no headroom fully opaque plates', () => {
+    const noHeadroom = {
+      ...DEFAULT_CUSTOM,
+      background: '#808080',
+      wallpaper: 'https://xyz.supabase.co/storage/v1/object/public/covers/uid/w.jpg',
+      wallpaperStrength: 100,
+    };
+    expect(plateVeil(noHeadroom)).toBe(0);
+    expect(wallpaperShare(noHeadroom)).toBe(1);
   });
 
   /**
-   * The point of solving the inks and the strength together: a background with
-   * contrast to spare shows more of the image than one without, rather than
-   * every theme getting the same timid dimming.
+   * The bar the old model failed at: production shipped a "100%" slider that
+   * showed 25.7% of the image, which passed a `> 0.25` assertion by 0.007 while
+   * the person looking at it reported the photo had not saved. The replacement
+   * is stated in terms someone can perceive — at full strength the photograph
+   * is undimmed — and the palette's headroom is asserted where it now goes.
    */
-  it('shows a usable amount of a wallpaper on an ordinary background', () => {
+  it('shows the whole picture at full strength, and tracks the slider', () => {
     const wallpaper =
       'https://xyz.supabase.co/storage/v1/object/public/covers/uid/w.jpg';
-    expect(
-      wallpaperShare({ ...DEFAULT_CUSTOM, wallpaper, wallpaperStrength: 100 }),
-    ).toBeGreaterThan(0.25);
-    expect(
-      wallpaperShare({
-        ...DEFAULT_CUSTOM,
-        background: '#12100f',
-        wallpaper,
-        wallpaperStrength: 100,
-      }),
-    ).toBeGreaterThan(0.25);
+    for (const background of [DEFAULT_CUSTOM.background, '#12100f', '#fefefe']) {
+      const base = { ...DEFAULT_CUSTOM, background, wallpaper };
+      expect(wallpaperShare({ ...base, wallpaperStrength: 100 })).toBe(1);
+      // The slider is linear now: what you ask for is what shows.
+      for (const strength of [10, 25, 50, 75]) {
+        expect(wallpaperShare({ ...base, wallpaperStrength: strength })).toBeCloseTo(
+          strength / 100,
+          5,
+        );
+      }
+      // …and an ordinary background still buys see-through plates.
+      expect(plateVeil({ ...base, wallpaperStrength: 100 })).toBeGreaterThan(0);
+    }
+  });
+
+  /**
+   * The two quantities are now independent, which is the whole point: contrast
+   * bounds the plates, brightness is the person's to choose.
+   */
+  it('keeps plate translucency independent of the requested strength', () => {
+    const wallpaper =
+      'https://xyz.supabase.co/storage/v1/object/public/covers/uid/w.jpg';
+    for (const appearance of sampleAppearances(60)) {
+      const base = { ...appearance, wallpaper };
+      const atFull = plateVeil({ ...base, wallpaperStrength: 100 });
+      for (const strength of [10, 40, 70]) {
+        expect(plateVeil({ ...base, wallpaperStrength: strength })).toBe(atFull);
+      }
+    }
   });
 
   it('treats a zero strength as no wallpaper at all', () => {
