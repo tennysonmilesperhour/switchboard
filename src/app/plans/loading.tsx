@@ -1,5 +1,5 @@
 import { PageSkeleton } from '@/components/shell/PageSkeleton';
 
 export default function Loading() {
-  return <PageSkeleton title="Coming up" variant="list" />;
+  return <PageSkeleton title="Coming up" variant="grid" />;
 }

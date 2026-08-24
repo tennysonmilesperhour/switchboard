@@ -13,6 +13,7 @@ import {
   DEFAULT_CUSTOM,
   customThemeVars,
   hasWallpaper,
+  plateVeil,
   wallpaperShare,
   type CustomAppearance,
 } from '@/lib/theme-custom';
@@ -180,6 +181,7 @@ function CustomEditor({
 
   const vars = useMemo(() => customThemeVars(draft), [draft]);
   const share = useMemo(() => wallpaperShare(draft), [draft]);
+  const veil = useMemo(() => plateVeil(draft), [draft]);
   const dirty = JSON.stringify(draft) !== savedKey;
 
   usePreview(vars, hasWallpaper(draft), saved);
@@ -216,10 +218,12 @@ function CustomEditor({
     });
   }
 
-  // Requested strength above what the palette can carry: the slider stops
-  // having an effect, and a control that silently stops working is worse than
-  // one that says why.
-  const clamped = Boolean(draft.wallpaper) && share * 100 < draft.wallpaperStrength - 1;
+  // The picture now shows at exactly the strength that was asked for, so there
+  // is nothing to apologise for on the slider. What the palette buys instead is
+  // how much of the picture comes through the app's own cards and bars — worth
+  // saying, because it is the difference between a photo you glimpse at the
+  // edges and one the whole app sits on.
+  const showsThrough = Boolean(draft.wallpaper) && veil > 0.02;
 
   return (
     <div className="mt-4 rounded-card border border-line p-4" aria-busy={pending}>
@@ -279,12 +283,13 @@ function CustomEditor({
               className="mt-1.5 w-full accent-terracotta"
             />
           </label>
-          {clamped ? (
-            <p className="mt-1 text-xs leading-snug text-ink-faint">
-              Held at {Math.round(share * 100)}% so the text on top of it stays
-              readable. A background further from mid-gray lets more through.
-            </p>
-          ) : null}
+          <p className="mt-1 text-xs leading-snug text-ink-faint">
+            {showsThrough
+              ? `Cards and bars sit on top at ${Math.round(
+                  (1 - veil) * 100,
+                )}% so text stays readable — the picture still comes through them.`
+              : 'Cards and bars sit on top of it solidly, because this background has no contrast to spare. The picture shows in full everywhere else. A background further from mid-gray lets it through the cards too.'}
+          </p>
         </>
       ) : null}
 

@@ -298,21 +298,77 @@ body {
   background: var(--wallpaper-scrim);
 }
 
-/* The app's top and bottom bars are translucent and blurred. A backdrop blur is
- * cheap over a static page and ruinous over a fixed, full-screen photo: iOS
- * Safari reblurs the whole image every frame, which is the bulk of the wallpaper
- * jank. With a wallpaper set, sit the bars on a solid surface with no blur —
- * cheaper to composite, and steadier to read over a busy photo. Scoped to
- * wallpaper mode, so the frosted bars are untouched on every other theme. */
+/* ----- Plates -----
+ *
+ * With a wallpaper set, every surface the app puts text on becomes a PLATE: the
+ * same colour it already was, at `1 - veil` opacity over the photograph. The
+ * ink solve in `customThemeVars` proves those plates readable against the worst
+ * pixel any image can contain, which is what lets the image itself go undimmed
+ * — the scrim above is now only a brightness control.
+ *
+ * Swapping the utilities rather than the `--color-*` tokens is deliberate:
+ * borders, rings and `currentColor` keep reading the opaque colour, so only the
+ * fills go translucent. These rules stay outside `@layer` so they beat
+ * Tailwind's own `bg-*` utilities.
+ *
+ * The blur stays off. A backdrop blur is cheap over a static page and ruinous
+ * over a fixed, full-screen photo — iOS Safari reblurs the whole image every
+ * frame. Plain alpha over one already-promoted layer costs nothing like it. */
 [data-wallpaper="on"] .chrome-bar {
   backdrop-filter: none;
   -webkit-backdrop-filter: none;
 }
+/* The two bars carry their own `bg-paper/85` and `bg-card/80`, whose 15% and
+ * 20% are numbers someone picked for a frosted bar over a page — not numbers
+ * the ink solve has ever seen. Over a photograph they have to be plates like
+ * everything else, or a palette that solved to opaque plates would still be
+ * showing 15% of an arbitrary image behind the header title. */
 [data-wallpaper="on"] header.chrome-bar {
-  background-color: var(--color-paper);
+  background-color: var(--plate-paper);
 }
 [data-wallpaper="on"] nav.chrome-bar {
-  background-color: var(--color-card);
+  background-color: var(--plate-card);
+}
+[data-wallpaper="on"] .bg-paper {
+  background-color: var(--plate-paper);
+}
+[data-wallpaper="on"] .bg-card {
+  background-color: var(--plate-card);
+}
+[data-wallpaper="on"] .bg-cream {
+  background-color: var(--plate-cream);
+}
+[data-wallpaper="on"] .bg-terracotta-soft {
+  background-color: var(--plate-terracotta-soft);
+}
+[data-wallpaper="on"] .bg-gold-soft {
+  background-color: var(--plate-gold-soft);
+}
+[data-wallpaper="on"] .bg-sage-soft {
+  background-color: var(--plate-sage-soft);
+}
+[data-wallpaper="on"] .bg-rose-soft {
+  background-color: var(--plate-rose-soft);
+}
+
+/* Text with no surface of its own — section headings, empty states. Inert on
+ * every ordinary theme, and under a wallpaper it becomes a plate so the words
+ * are not sitting on the raw photograph. */
+.text-plate {
+  border-radius: var(--radius-card);
+}
+[data-wallpaper="on"] .text-plate {
+  background-color: var(--plate-paper);
+}
+
+/* For text that carries no padding of its own, and so would otherwise get a
+ * plate skin-tight to the glyphs. The negative margin cancels the padding
+ * exactly, so the plate grows OUTWARD around the text rather than displacing
+ * it: turning a wallpaper on never reflows the page. Only for elements with no
+ * padding — on one that has its own, this would override it. */
+[data-wallpaper="on"] .text-plate-inset {
+  padding: 0.5rem 0.75rem;
+  margin: -0.5rem -0.75rem;
 }
 
 /*

@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { createClient } from '@/lib/supabase/server';
+import { createClient, getRenderUser } from '@/lib/supabase/server';
 import { Icon } from '@/components/ui/Icon';
 
 /**
@@ -8,6 +8,24 @@ import { Icon } from '@/components/ui/Icon';
  * config: the count is read straight from the DB on each render, so a fresh
  * invite is visible in-app even for someone who never enabled notifications.
  */
+/** The bell's frame, with no count on it yet.
+ *
+ * Rendered as the Suspense fallback while the badge counts are still in flight,
+ * so the shell — and every route's `loading.tsx`, which renders this same
+ * `AppShell` — paints on the first flush instead of waiting on the bell's own
+ * round trips. Deliberately the same glyph in the same 36px slot as the settled
+ * bell, so the badge appearing later changes a corner, not the layout. */
+export function BellPlaceholder() {
+  return (
+    <span
+      aria-hidden
+      className="relative size-9 inline-flex items-center justify-center rounded-full text-terracotta-deep"
+    >
+      <Icon name="bell" size={22} />
+    </span>
+  );
+}
+
 export async function NotificationBell() {
   // The bell lives in the shared shell, so it must never crash a page. If
   // Supabase isn't configured or the lookup fails for any reason, fall back to
@@ -15,9 +33,7 @@ export async function NotificationBell() {
   let count = 0;
   try {
     const supabase = await createClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
+    const user = await getRenderUser();
     if (user) {
       const [{ count: invites }, { count: requests }, { count: unread }] = await Promise.all([
         // Only invites to events that haven't started: a never-answered invite

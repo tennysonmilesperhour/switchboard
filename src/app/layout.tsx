@@ -9,7 +9,7 @@ import { PostHogProvider } from '@/components/system/PostHogProvider';
 import { ToastProvider } from '@/components/ui/Toast';
 import { ConfirmProvider } from '@/components/ui/ConfirmDialog';
 import { LiveNotifications } from '@/components/system/LiveNotifications';
-import { createClient } from '@/lib/supabase/server';
+import { createClient, getRenderUser } from '@/lib/supabase/server';
 import { resolveTheme, type AppThemeId } from '@/lib/themes-app';
 import {
   customThemeVars,
@@ -110,9 +110,7 @@ const SIGNED_OUT: Shell = {
 async function resolveShell(): Promise<Shell> {
   try {
     const supabase = await createClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
+    const user = await getRenderUser();
     if (!user) return SIGNED_OUT;
     const { data, error } = await supabase
       .from('profiles')
@@ -152,7 +150,7 @@ export default async function RootLayout({
       style={themeVars as React.CSSProperties}
       className={`${workSans.variable} antialiased`}
     >
-      <body className="min-h-dvh">
+      <body className="min-h-[100svh]">
         <PostHogProvider>
           <ToastProvider>
             <ConfirmProvider>
