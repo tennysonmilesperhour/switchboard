@@ -276,7 +276,16 @@ body {
 [data-wallpaper="on"] body::after {
   content: "";
   position: fixed;
-  inset: 0;
+  top: 0;
+  left: 0;
+  right: 0;
+  /* `lvh`, not `inset: 0`. A fixed layer sized to the CURRENT viewport is
+   * re-measured on every frame of iOS Safari's URL-bar collapse, and a
+   * `background-size: cover` image re-scales to match each new height — the
+   * photo breathing under the interface for the whole animation. Sizing to the
+   * LARGE viewport pins it to one height the toolbar cannot change, so the
+   * image is rasterised once and simply sits there. */
+  height: 100lvh;
   pointer-events: none;
   /* Promote each layer to its own GPU tile. Without this, iOS Safari
    * re-rasterises a fixed, viewport-sized background on every scroll frame; with
@@ -349,6 +358,19 @@ body {
 }
 [data-wallpaper="on"] .bg-rose-soft {
   background-color: var(--plate-rose-soft);
+}
+
+/* Loading placeholders over a photograph.
+ *
+ * `animate-pulse` breathes a placeholder's opacity between 1 and 0.5. Over a
+ * page colour that is a gentle throb; over a WALLPAPER it means the photograph
+ * behind each box fades in and out twice a second, on every box, for as long as
+ * the page is loading — which is a screen full of rectangles visibly
+ * shimmering. Under a wallpaper the placeholders go still and sit on a plate
+ * instead: same calm "settling in" read, none of the flicker. */
+[data-wallpaper="on"] .skeleton-surface {
+  animation: none;
+  background-color: var(--plate-cream);
 }
 
 /* Text with no surface of its own — section headings, empty states. Inert on

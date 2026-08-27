@@ -54,8 +54,14 @@ export function NotificationNudge() {
   }
 
   return (
-    <div className="px-4 pt-2">
-      <div className="mx-auto flex max-w-lg items-center gap-3 rounded-card border border-line bg-gold-soft px-3.5 py-2.5">
+    // Pinned above the tab bar rather than sitting in the document flow. It
+    // decides whether to show itself only after an async push-state check, so
+    // in flow it inserted a band above <main> a beat after hydration and shoved
+    // the whole page down — on every route, every load. Out of flow it can
+    // appear whenever it likes and nothing moves. z-30 keeps it under the tab
+    // bar (z-40) rather than over it.
+    <div className="pointer-events-none fixed inset-x-0 bottom-0 z-30 px-4 pb-[calc(env(safe-area-inset-bottom)+4.75rem)]">
+      <div className="pointer-events-auto mx-auto flex max-w-lg items-center gap-3 rounded-card border border-line bg-gold-soft px-3.5 py-2.5 shadow-float">
         <Icon name="bell" size={18} className="shrink-0 text-terracotta-deep" />
         <p className="flex-1 text-xs text-ink-soft leading-snug">
           <span className="font-bold text-ink">Turn on notifications</span> so you
