@@ -28,6 +28,44 @@ interface AppearancePickerProps {
 }
 
 /**
+ * Write an appearance onto `<html>` — the same element, and the same tokens,
+ * the root layout paints server-side.
+ *
+ * This exists because the root layout does NOT re-render on a client
+ * navigation: Next only re-renders below the layout the two routes share, and
+ * everything shares the root. So after saving, `router.refresh()` updates the
+ * Settings page but the palette on `<html>` stays whatever the last full
+ * document load put there — which is why a saved theme only showed up
+ * elsewhere in the app after restarting it. The client has to commit the
+ * change itself; the server render is then merely in agreement on the next
+ * cold load.
+ *
+ * `applied` tracks what we wrote, so tokens that leave the set — every custom
+ * property when someone switches from "Yours" to a preset, or `--wallpaper`
+ * when the picture is removed — are taken back off rather than left behind
+ * where they would outrank the preset's own stylesheet block.
+ */
+let applied: string[] = [];
+
+function applyToRoot(
+  vars: Record<string, string>,
+  showImage: boolean,
+  theme?: AppThemeId,
+) {
+  const root = document.documentElement;
+  for (const token of applied) {
+    if (!(token in vars)) root.style.removeProperty(token);
+  }
+  for (const [token, value] of Object.entries(vars)) {
+    root.style.setProperty(token, value);
+  }
+  applied = Object.keys(vars);
+  if (showImage) root.setAttribute('data-wallpaper', 'on');
+  else root.removeAttribute('data-wallpaper');
+  if (theme) root.setAttribute('data-theme', theme);
+}
+
+/**
  * The appearance picker.
  *
  * Applies on tap rather than through the settings save bar: a theme is the one
@@ -80,6 +118,15 @@ export function AppearancePicker({
         toast.error(result.error ?? 'Could not change the look.', result.code);
         return;
       }
+      // Commit it to `<html>` ourselves — the root layout will not re-render on
+      // the way out of Settings. Switching AWAY from "Yours" also has to strip
+      // the custom properties, or they stay inline on the element and outrank
+      // the preset's own `[data-theme]` block.
+      applyToRoot(
+        id === 'custom' ? customThemeVars(custom) : {},
+        id === 'custom' && hasWallpaper(custom),
+        id,
+      );
       router.refresh();
     });
   }
@@ -184,7 +231,7 @@ function CustomEditor({
   const veil = useMemo(() => plateVeil(draft), [draft]);
   const dirty = JSON.stringify(draft) !== savedKey;
 
-  usePreview(vars, hasWallpaper(draft), saved);
+  const commitPreview = usePreview(vars, hasWallpaper(draft), saved);
 
   async function matchToImage() {
     if (!draft.wallpaper) return;
@@ -214,6 +261,9 @@ function CustomEditor({
         toast.error(result.error ?? 'Could not save that look.', result.code);
         return;
       }
+      // The saved palette is the truth now, so hold it on `<html>` rather than
+      // treating it as a preview the way out of Settings should undo.
+      commitPreview(draft);
       router.refresh();
     });
   }
@@ -366,27 +416,9 @@ function usePreview(
   wallpaper: boolean,
   saved: CustomAppearance,
 ) {
-  // Which properties we put on the element, so ones that later leave the set —
-  // `--wallpaper`, when the image is removed — are taken off again rather than
-  // lingering as a background nothing references.
-  const applied = useRef<string[]>([]);
-
-  const apply = useCallback((next: Record<string, string>, showImage: boolean) => {
-    const root = document.documentElement;
-    for (const token of applied.current) {
-      if (!(token in next)) root.style.removeProperty(token);
-    }
-    for (const [token, value] of Object.entries(next)) {
-      root.style.setProperty(token, value);
-    }
-    applied.current = Object.keys(next);
-    if (showImage) root.setAttribute('data-wallpaper', 'on');
-    else root.removeAttribute('data-wallpaper');
-  }, []);
-
   useEffect(() => {
-    apply(vars, wallpaper);
-  }, [vars, wallpaper, apply]);
+    applyToRoot(vars, wallpaper);
+  }, [vars, wallpaper]);
 
   // Kept in a ref so the unmount cleanup reads the latest saved palette rather
   // than closing over the one that happened to be current when it was created.
@@ -395,12 +427,24 @@ function usePreview(
     baseline.current = saved;
   }, [saved]);
 
+  // What a successful save calls: this palette is no longer a preview to be
+  // put back, it is what the account now has. Moving the baseline is the whole
+  // point — otherwise leaving Settings runs the cleanup below and restores the
+  // palette from BEFORE the save, and the app keeps the old look until the
+  // next full document load.
+  const commit = useCallback((next: CustomAppearance) => {
+    baseline.current = next;
+    applyToRoot(customThemeVars(next), hasWallpaper(next), 'custom');
+  }, []);
+
   useEffect(
     () => () => {
-      apply(customThemeVars(baseline.current), hasWallpaper(baseline.current));
+      applyToRoot(customThemeVars(baseline.current), hasWallpaper(baseline.current));
     },
-    [apply],
+    [],
   );
+
+  return commit;
 }
 
 function ColorField({

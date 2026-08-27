@@ -14,7 +14,7 @@ import { PLAN_CARD_FULL_MIN_H, PLAN_CARD_TILE_ASPECT } from './PlanCard';
 export function Skeleton({ className = '' }: { className?: string }) {
   return (
     <div
-      className={`animate-pulse rounded-lg bg-line/80 ${className}`}
+      className={`skeleton-surface animate-pulse rounded-lg bg-line/80 ${className}`}
       aria-hidden
     />
   );
@@ -37,14 +37,14 @@ export function PlanCardSkeleton({
   if (variant === 'tile') {
     return (
       <div
-        className={`${PLAN_CARD_TILE_ASPECT} animate-pulse rounded-card bg-line/50 p-3.5`}
+        className={`${PLAN_CARD_TILE_ASPECT} skeleton-surface animate-pulse rounded-card bg-line/50 p-3.5`}
         aria-hidden
       />
     );
   }
   return (
     <div
-      className={`${PLAN_CARD_FULL_MIN_H} animate-pulse rounded-card bg-line/50 p-6`}
+      className={`${PLAN_CARD_FULL_MIN_H} skeleton-surface animate-pulse rounded-card bg-line/50 p-6`}
       aria-hidden
     >
       <div className="h-3 w-24 rounded-lg bg-line" />
