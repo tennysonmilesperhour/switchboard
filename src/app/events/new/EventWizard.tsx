@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Button } from '@/components/ui/Button';
 import { Chip } from '@/components/ui/Chip';
 import { Avatar } from '@/components/ui/Avatar';
@@ -16,6 +16,7 @@ import {
   type RecurrenceKind,
 } from '@/lib/engine/recurrence';
 import { simulateCascade } from '@/lib/engine/cascade';
+import { canJumpTo, previousStep } from '@/lib/wizard-steps';
 import { hostSuggestions } from '@/lib/engine/suggestions';
 import {
   createEvent,
@@ -198,6 +199,17 @@ export function EventWizard({
 }) {
   const [step, setStep] = useState(0);
   const [submitting, setSubmitting] = useState(false);
+  /**
+   * Whether a spare history entry is parked behind us for the back gesture to
+   * land on. Nothing in the wizard changes the URL, so without one, the phone's
+   * back swipe leaves `/events/new` altogether and every field goes with it —
+   * which is how "I only wanted to fix the time" turns into starting the plan
+   * over. One entry is enough: consuming it steps back, and the effect below
+   * parks another for the step after that.
+   */
+  const backGuard = useRef(false);
+  /** Where a back we asked for should land, read once by the popstate handler. */
+  const backTarget = useRef<number | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(initialError);
 
   // Step 1 - basics
@@ -641,17 +653,63 @@ export function EventWizard({
 
   const selectedFriendCount = invitees.filter((i) => i.profileId).length;
 
-  const canNext = [
-    title.trim().length > 0 &&
-      hasInviteDetails(locationName, description) &&
-      !startsInPast &&
-      !endsBeforeStart,
-    true,
-    invitees.length > 0,
-    true,
-    true,
-    true,
-  ][step];
+  // Per-step: does this step have everything it needs? The Next button reads
+  // its own entry; the progress bar reads the whole array to decide which steps
+  // can be jumped to. One source, so the two can never disagree about whether
+  // Basics is finished.
+  const stepComplete = useMemo(
+    () => [
+      title.trim().length > 0 &&
+        hasInviteDetails(locationName, description) &&
+        !startsInPast &&
+        !endsBeforeStart,
+      true,
+      invitees.length > 0,
+      true,
+      true,
+      true,
+    ],
+    [title, locationName, description, startsInPast, endsBeforeStart, invitees.length],
+  );
+  const canNext = stepComplete[step];
+
+  useEffect(() => {
+    // Nothing to protect on the first step: back should leave, as it always
+    // would, and the browser does that on its own.
+    if (step === 0 || backGuard.current) return;
+    window.history.pushState(window.history.state, '');
+    backGuard.current = true;
+  }, [step]);
+
+  useEffect(() => {
+    const onPopState = () => {
+      backGuard.current = false;
+      // A gesture with no step named behind it is the browser's own back: one
+      // step. Anything else is a jump the wizard asked for, and said where to.
+      const asked = backTarget.current;
+      backTarget.current = null;
+      setStep((current) => (asked === null ? previousStep(current) : asked));
+    };
+    window.addEventListener('popstate', onPopState);
+    return () => window.removeEventListener('popstate', onPopState);
+  }, []);
+
+  /**
+   * Move to a step. Going back spends the parked history entry rather than
+   * leaving it behind, so the back gesture and the wizard's own controls stay
+   * one mechanism — otherwise a swipe after a Back tap would step back twice.
+   */
+  const goToStep = useCallback(
+    (target: number) => {
+      if (target < step && backGuard.current) {
+        backTarget.current = target;
+        window.history.back();
+        return;
+      }
+      setStep(target);
+    },
+    [step],
+  );
 
   async function submit() {
     setSubmitting(true);
@@ -737,28 +795,65 @@ export function EventWizard({
 
   return (
     <div className="space-y-6">
-      {/* Progress */}
+      {/* Progress. Each segment is a way back into the step it stands for:
+          spotting a wrong date on Review and having to press Back five times —
+          or worse, leave and start again — is the thing this is here to stop. */}
       <ol aria-label="Steps" className="flex items-center gap-1.5">
-        {STEPS.map((label, i) => (
-          <li key={label} className="flex-1">
-            <div
-              className={`h-2 rounded-pill transition-all duration-300 ${
-                i < step
-                  ? 'bg-terracotta'
-                  : i === step
-                    ? 'bg-brand-gradient'
-                    : 'bg-line'
-              }`}
-              title={label}
-            />
-          </li>
-        ))}
+        {STEPS.map((label, i) => {
+          const reachable = canJumpTo(i, step, stepComplete);
+          return (
+            <li key={label} className="flex-1">
+              <button
+                type="button"
+                disabled={!reachable}
+                aria-current={i === step ? 'step' : undefined}
+                aria-label={`Step ${i + 1}, ${label}`}
+                onClick={() => goToStep(i)}
+                title={label}
+                // The bar stays as slim as it was; the padding gives the button
+                // a real tap target without the segment growing to match.
+                className="group flex w-full items-center py-2.5 -my-2.5 outline-none disabled:cursor-default"
+              >
+                <span
+                  className={`h-2 w-full rounded-pill transition-all duration-300 group-focus-visible:ring-2 group-focus-visible:ring-terracotta ${
+                    i < step
+                      ? 'bg-terracotta'
+                      : i === step
+                        ? 'bg-brand-gradient'
+                        : 'bg-line'
+                  } ${reachable ? 'group-hover:opacity-80' : ''}`}
+                />
+              </button>
+            </li>
+          );
+        })}
       </ol>
 
       <header key={step} className="animate-rise">
-        <p className="text-xs font-bold uppercase tracking-[0.16em] text-terracotta">
-          Step {step + 1} of {STEPS.length}
-        </p>
+        <div className="flex items-center gap-3">
+          <p className="text-xs font-bold uppercase tracking-[0.16em] text-terracotta">
+            Step {step + 1} of {STEPS.length}
+          </p>
+          {step > 0 && (
+            // The footer's Back is below everything the step asks for, which on
+            // People or Review is a long way down. This one is where the eye
+            // already is when it notices the mistake.
+            <button
+              type="button"
+              onClick={() => goToStep(previousStep(step))}
+              className="inline-flex items-center gap-1 rounded-pill text-xs font-bold text-ink-soft outline-none transition-colors hover:text-terracotta focus-visible:ring-2 focus-visible:ring-terracotta"
+            >
+              <svg
+                viewBox="0 0 24 24"
+                aria-hidden
+                className="size-3.5 fill-current"
+              >
+                <path d="M14.7 6.7 13.3 5.3 6.6 12l6.7 6.7 1.4-1.4-5.3-5.3z" />
+              </svg>
+              Back to {STEPS[previousStep(step)]}
+            </button>
+          )}
+        </div>
         <h2
           className={`mt-2 tracking-tight text-ink ${
             step === 0
@@ -1816,7 +1911,12 @@ export function EventWizard({
       {/* Nav */}
       <div className="flex gap-3 pt-2">
         {step > 0 && (
-          <Button type="button" variant="secondary" size="lg" onClick={() => setStep(step - 1)}>
+          <Button
+            type="button"
+            variant="secondary"
+            size="lg"
+            onClick={() => goToStep(previousStep(step))}
+          >
             Back
           </Button>
         )}
@@ -1826,7 +1926,7 @@ export function EventWizard({
             size="lg"
             className="flex-1"
             disabled={!canNext}
-            onClick={() => setStep(step + 1)}
+            onClick={() => goToStep(step + 1)}
           >
             Next
           </Button>

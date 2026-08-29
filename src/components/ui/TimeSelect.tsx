@@ -86,10 +86,17 @@ export function TimeSelect({
         onChange={(next) => (next === '' ? onChange('') : emit({ hour12: Number(next) }))}
         className="pl-3.5"
       >
-        {/* Only offered when the caller allows an empty field. Its label is the
-            caller's own words ("No end time"), so the closed control says what
-            the blank means instead of showing a dash. */}
-        {emptyLabel !== undefined && <option value="">{emptyLabel}</option>}
+        {/* Offered when the caller allows an empty field, labelled in their own
+            words ("No end time") so the closed control says what the blank
+            means. Also rendered — but not selectable — when a field that is
+            supposed to always hold a time somehow doesn't: a select whose value
+            matches no option displays the first one, so without this the
+            control would quietly claim a time the plan does not have. */}
+        {(emptyLabel !== undefined || !parts) && (
+          <option value="" disabled={emptyLabel === undefined}>
+            {emptyLabel ?? '--'}
+          </option>
+        )}
         {HOUR_CHOICES.map((hour) => (
           <option key={hour} value={hour}>
             {hour}

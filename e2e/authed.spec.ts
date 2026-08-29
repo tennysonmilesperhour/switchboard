@@ -291,6 +291,46 @@ test.describe('authenticated surface', () => {
     await expect(page.getByPlaceholder(TITLE)).toBeVisible();
   });
 
+  test('going back in the wizard keeps the draft — by button, by segment, by gesture', async ({
+    page,
+  }) => {
+    // The complaint this covers: "let me change something from a previous page
+    // without starting over". Every route back has to land on the earlier step
+    // with the plan still in it — including the phone's back gesture, which
+    // used to leave /events/new entirely and take the whole draft with it.
+    await login(page, 'e2ehost');
+    await startPlan(page, 'E2E back navigation');
+
+    const title = page.getByPlaceholder(TITLE);
+    await clickWizardNext(page);
+    await clickWizardNext(page);
+    await expect(page.getByText('Step 3 of 6')).toBeVisible();
+
+    // 1. The Back button.
+    await page.getByRole('button', { name: 'Back', exact: true }).click();
+    await expect(page.getByText('Step 2 of 6')).toBeVisible();
+
+    // 2. The browser/phone back gesture — one step, not out of the wizard.
+    await page.goBack();
+    await expect(page.getByText('Step 1 of 6')).toBeVisible();
+    await expect(page).toHaveURL(/\/events\/new/);
+    await expect(title).toHaveValue('E2E back navigation');
+
+    // 3. A progress segment, jumping more than one step at a time.
+    await clickWizardNext(page);
+    await clickWizardNext(page);
+    await expect(page.getByText('Step 3 of 6')).toBeVisible();
+    await page.getByRole('button', { name: 'Step 1, Basics' }).click();
+    await expect(page.getByText('Step 1 of 6')).toBeVisible();
+    await expect(title).toHaveValue('E2E back navigation');
+
+    // Editing after going back is the point of going back.
+    await title.fill('E2E back navigation, revised');
+    await clickWizardNext(page);
+    await page.goBack();
+    await expect(title).toHaveValue('E2E back navigation, revised');
+  });
+
   test('a host can create a plan with a guest and land on the event page', async ({ page }) => {
     await login(page, 'e2ehost');
     await startPlan(page, 'E2E guest plan');

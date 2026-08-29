@@ -137,7 +137,11 @@ export default async function NewEventPage({
   });
 
   return (
-    <AppShell title="New plan" back="/plans">
+    // No header back arrow: it went to /plans, which threw the whole draft
+    // away. On a screen with a Back on every step, a second control wearing the
+    // same word and meaning "abandon this" is the one people press by mistake.
+    // Leaving deliberately is the bottom bar, which is always on screen.
+    <AppShell title="New plan">
       <EventWizard
         userId={user.id}
         friends={friends}
