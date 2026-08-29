@@ -4,6 +4,8 @@ import type { ErrorCode } from '@/lib/errors';
 
 import { requireUser } from '@/lib/server/require-user';
 import { checkRateLimit } from '@/lib/server/rate-limit';
+import { safeFetchText } from '@/lib/server/safe-fetch';
+import { isFetchableUrl } from '@/lib/net-guard';
 import { parseEvent, isoToDateTimeParts } from '@/lib/import-event';
 
 export interface ImportResult {
@@ -33,44 +35,39 @@ export async function importEventFromLink(rawUrl: string): Promise<ImportResult>
   if (!auth.ok) return auth;
   const { user } = auth;
 
-  let url: URL;
-  try {
-    url = new URL(rawUrl.trim());
-  } catch {
-    return { ok: false, error: 'That doesn’t look like a link.' };
-  }
-  if (url.protocol !== 'http:' && url.protocol !== 'https:') {
-    return { ok: false, error: 'Only http(s) links can be imported.' };
+  // Checked and fetched through the shared network guard. This used to be a
+  // bare `fetch` with `redirect: 'follow'`, which made it a server-side request
+  // forgery hole: any pasted link — or any public link that redirected — could
+  // steer our server at `127.0.0.1` or at the cloud metadata endpoint that
+  // hands out role credentials. The guard resolves the host, refuses private
+  // addresses, and re-checks every redirect hop.
+  const checked = isFetchableUrl(rawUrl);
+  if (!checked.ok) {
+    return {
+      ok: false,
+      error:
+        checked.reason === 'private'
+          ? 'That address is on a private network, so there’s nothing there to import.'
+          : 'That doesn’t look like a link.',
+    };
   }
 
   if (!(await checkRateLimit(`import:${user.id}`, 20, 60 * 60))) {
     return { ok: false, error: 'Too many imports. Try again in a bit.' };
   }
 
-  let content: string;
-  let contentType = '';
-  try {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 8000);
-    const response = await fetch(url, {
-      redirect: 'follow',
-      signal: controller.signal,
-      headers: {
-        // Some hosts serve richer metadata to link-unfurlers.
-        'User-Agent': 'SwitchboardBot/1.0 (+https://switchboard.app)',
-        Accept: 'text/html,text/calendar,application/xhtml+xml',
-      },
-    });
-    clearTimeout(timer);
-    if (!response.ok) {
-      return { ok: false, error: 'We couldn’t open that link.' };
-    }
-    contentType = response.headers.get('content-type') ?? '';
-    const buffer = await response.arrayBuffer();
-    content = new TextDecoder().decode(buffer.slice(0, MAX_BYTES));
-  } catch {
-    return { ok: false, error: 'We couldn’t read that link - just fill the plan in below.' };
+  const fetched = await safeFetchText(checked.url.toString(), {
+    maxBytes: MAX_BYTES,
+    // Some hosts serve richer metadata to link-unfurlers.
+    accept: 'text/html,text/calendar,application/xhtml+xml',
+  });
+  if (!fetched.ok || fetched.body === undefined) {
+    return fetched.reason === 'private'
+      ? { ok: false, error: 'That address is on a private network, so there’s nothing there to import.' }
+      : { ok: false, error: 'We couldn’t read that link - just fill the plan in below.' };
   }
+  const content = fetched.body;
+  const contentType = fetched.contentType ?? '';
 
   const parsed = parseEvent(content, contentType);
   if (!parsed || (!parsed.title && !parsed.startISO)) {

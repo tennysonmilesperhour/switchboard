@@ -14,6 +14,8 @@ import { InterestPicker } from '@/components/profile/InterestPicker';
 import { SettingsForm, SettingsSaveProvider } from './SettingsSaveBar';
 import { AccountControls } from './AccountControls';
 import { CalendarSubscribe } from './CalendarSubscribe';
+import { CalendarConnect } from './CalendarConnect';
+import { getCalendarStatus } from '@/lib/actions/calendar-sync';
 import { ContactVerification } from './ContactVerification';
 import { AppearanceSection } from './AppearancePicker';
 import { resolveTheme } from '@/lib/themes-app';
@@ -74,6 +76,9 @@ export default async function SettingsPage({
     .rpc('my_private_profile')
     .maybeSingle<{ calendar_token: string; contact_email: string | null; contact_phone: string | null }>();
   const calendarToken = privateProfile?.calendar_token ?? null;
+  // Whether a calendar is connected, and where it points — never the address
+  // itself, which is a bearer credential the server keeps to itself.
+  const calendarStatus = await getCalendarStatus();
   // Only to decide whether the earned preset shows as available; the action
   // re-checks it server-side before saving.
   const passportComplete = passportProgress(await loadPassport(user.id)).done;
@@ -214,17 +219,25 @@ export default async function SettingsPage({
             </Card>
           </section>
 
-          {calendarToken && (
-            <section>
-              <SectionHeader
-                title="Your calendar"
-                hint="Follow your plans from any calendar app"
-              />
+          {/* Both directions of "your calendar", together: publish your plans
+              out, and read your own week in. Someone looking for either finds
+              the other, which is most of what makes the pair legible. */}
+          <section>
+            <SectionHeader
+              title="Your calendar"
+              hint="Follow your plans from any calendar app — and let Switchboard see when you’re busy"
+            />
+            <div className="space-y-3">
+              {calendarToken && (
+                <Card>
+                  <CalendarSubscribe token={calendarToken} />
+                </Card>
+              )}
               <Card>
-                <CalendarSubscribe token={calendarToken} />
+                <CalendarConnect status={calendarStatus} />
               </Card>
-            </section>
-          )}
+            </div>
+          </section>
 
           <section>
             <SectionHeader

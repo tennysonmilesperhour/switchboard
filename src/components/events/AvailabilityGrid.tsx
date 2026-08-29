@@ -17,6 +17,15 @@ interface AvailabilityGridProps {
   isHost: boolean;
   /** The open poll to send the best slots to, when there is one. */
   pollId: string | null;
+  /** Bands this person's connected calendar says are taken. */
+  busySlots?: string[];
+  /**
+   * Whether a calendar is connected at all — which is not the same as having
+   * busy time in it. Someone with a genuinely clear week has no busy slots and
+   * is exactly who "fill from my calendar" helps most, so the offer is gated on
+   * the connection rather than on the emptiness of what it returned.
+   */
+  calendarConnected?: boolean;
 }
 
 /** Background per heat level. Level 0 stays plain so "nobody" reads as empty. */
@@ -49,6 +58,8 @@ export function AvailabilityGrid({
   counts,
   isHost,
   pollId,
+  busySlots = [],
+  calendarConnected = false,
 }: AvailabilityGridProps) {
   const slots = useMemo(() => gridSlots(new Date(), GRID_DAYS), []);
   const countBySlot = useMemo(() => {
@@ -78,6 +89,29 @@ export function AvailabilityGrid({
     }
     return seen;
   }, [slots]);
+
+  /**
+   * Fill the grid from the calendar: everything the week has room for.
+   *
+   * Offered rather than applied. A calendar knows when someone is occupied, not
+   * when they want to go out — a free Tuesday morning is not an offer to meet
+   * then — so this fills the board and leaves them to take things off it. Doing
+   * it silently on load would put answers in the group's count that its owner
+   * never gave, which is the one thing this grid has always refused to do.
+   *
+   * Only ever runs from a tap, and still needs Save afterwards.
+   */
+  function fillFromCalendar() {
+    const busy = new Set(busySlots);
+    const free = slots.filter((slot) => !busy.has(slot));
+    setMine(new Set(free));
+    setDirty(true);
+    toast.info(
+      free.length === 0
+        ? 'Your calendar has the whole week taken — untick anything that is still workable.'
+        : `Filled in ${free.length} free ${free.length === 1 ? 'time' : 'times'}. Take off any that don’t suit, then save.`,
+    );
+  }
 
   function toggle(slot: string) {
     setMine((current) => {
@@ -210,6 +244,13 @@ export function AvailabilityGrid({
         <Button size="sm" onClick={save} disabled={pending || !dirty}>
           {dirty ? 'Save when I’m free' : 'Saved'}
         </Button>
+        {/* Only for people who have connected a calendar — for everyone else
+            this would be a button that appears to do nothing. */}
+        {calendarConnected && (
+          <Button size="sm" variant="secondary" onClick={fillFromCalendar} disabled={pending}>
+            Fill from my calendar
+          </Button>
+        )}
         {isHost && pollId && (
           <Button size="sm" variant="secondary" onClick={sendToPoll} disabled={pending}>
             Put the best times on the poll

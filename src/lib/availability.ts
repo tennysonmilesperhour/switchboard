@@ -99,3 +99,31 @@ export function heatLevel(people: number, busiest: number): 0 | 1 | 2 | 3 | 4 {
   if (share >= 0.33) return 2;
   return 1;
 }
+
+/**
+ * The instants a slot covers: `[start, end)` in epoch milliseconds.
+ *
+ * The bands tile the day, so a slot ends where the next one begins — and the
+ * last band of the day runs until the first band of the next, which is what
+ * makes "late" the ten-hour overnight stretch rather than a two-hour sliver.
+ *
+ * Needed the moment anything outside the grid has to say whether it overlaps a
+ * slot (a calendar's busy blocks, say). Deriving it here keeps that answer in
+ * the same file as the band definitions, so the two cannot drift.
+ */
+export function slotRange(slot: string): { start: number; end: number } {
+  const start = new Date(slot);
+  const index = BANDS.findIndex((band) => band.startHour === start.getUTCHours());
+  const end = new Date(start);
+  if (index === -1) {
+    // Not a slot this grid produces. An hour is the least surprising answer,
+    // and callers that care should be checking isGridSlot() first.
+    end.setUTCHours(start.getUTCHours() + 1);
+  } else if (index === BANDS.length - 1) {
+    end.setUTCDate(start.getUTCDate() + 1);
+    end.setUTCHours(BANDS[0].startHour, 0, 0, 0);
+  } else {
+    end.setUTCHours(BANDS[index + 1].startHour, 0, 0, 0);
+  }
+  return { start: start.getTime(), end: end.getTime() };
+}
