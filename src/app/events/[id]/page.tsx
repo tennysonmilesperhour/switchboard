@@ -29,6 +29,7 @@ import { PollChain } from '@/components/polls/PollChain';
 import { FollowUpComposer } from '@/components/polls/FollowUpComposer';
 import { AvailabilityGrid } from '@/components/events/AvailabilityGrid';
 import { loadAvailability } from '@/lib/actions/availability';
+import { getCalendarStatus, myBusySlots } from '@/lib/actions/calendar-sync';
 import { recurrenceLabel } from '@/lib/engine/recurrence';
 import { HostControls } from './HostControls';
 import { CoHostManager } from './CoHostManager';
@@ -395,6 +396,17 @@ export default async function EventPage({
   // door onto this table and returns no user id, so neither this page nor the
   // host can learn which times any one person picked.
   const availability = await loadAvailability(id);
+
+  // This viewer's own busy bands, so the grid can be offered pre-filled. Both
+  // are private to them: busy slots never reach the counts, and nothing here is
+  // written until they press Save.
+  //
+  // Only fetched when the grid will actually render, which is only on a plan
+  // with no fixed time yet. Most plans have one, and on those these were two
+  // extra round trips on every view of a page that never shows the result.
+  const [calendarBusy, calendarStatus] = event.starts_at
+    ? [[] as string[], null]
+    : await Promise.all([myBusySlots(), getCalendarStatus()]);
 
   // What each already-settled question landed on, so the chain can show the
   // answer rather than just "decided".
@@ -1015,6 +1027,9 @@ export default async function EventPage({
               counts={availability}
               isHost={isHost}
               pollId={poll && poll.phase !== 'decided' ? poll.id : null}
+              busySlots={calendarBusy}
+              calendarUsable={calendarStatus?.usable ?? false}
+              coveredThrough={calendarStatus?.coveredThrough ?? null}
             />
           </Card>
         )}

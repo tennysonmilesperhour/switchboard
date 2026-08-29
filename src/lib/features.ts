@@ -637,6 +637,19 @@ export const FEATURE_GROUPS: readonly FeatureGroup[] = [
         where: 'Android: Chrome menu ⋮ → Install app. iPhone: Share → Add to Home Screen',
       },
       {
+        // The inbound half of the calendar story. Indexed next to the outbound
+        // feed so the two directions are found together — the question people
+        // actually arrive with is "what does this do with my calendar", and
+        // half an answer is what sends them looking for a feature that is
+        // already there.
+        id: 'calendar-connect',
+        title: 'Connect your calendar',
+        blurb:
+          'Paste your calendar’s read-only address and a plan’s “when is everyone free” grid starts filled in instead of blank. Busy times only — never what anything is called, where it is, or who else is going — and nothing is ever written back to your calendar.',
+        where: 'Settings → Your calendar',
+        href: '/settings',
+      },
+      {
         id: 'calendar-feed',
         title: 'Subscribe your calendar',
         blurb:

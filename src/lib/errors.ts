@@ -349,6 +349,29 @@ const REGISTRY = {
     fix: 'Try again. Nothing about the match itself changed — it’s still on Mutual, and the other person saw nothing either way.',
     actor: 'reader',
   },
+  // Connecting a calendar. Its own area: "we couldn't read your calendar" and
+  // "your plan didn't save" are different problems with different fixes, and a
+  // shared code would send someone to the wrong one.
+  'SB-CAL-FETCH': {
+    message: 'Switchboard couldn’t open that calendar.',
+    fix: 'Check the address is still shared from your calendar’s settings, then paste it again.',
+    actor: 'reader',
+  },
+  'SB-CAL-READ': {
+    message: 'That address opened, but there was no calendar in it.',
+    fix: 'It’s usually the secret iCal address that’s wanted — the one ending in .ics — rather than the page you view your calendar on.',
+    actor: 'reader',
+  },
+  'SB-CAL-SAVE': {
+    message: 'Your calendar connection didn’t save.',
+    fix: 'Try again. Nothing partial was kept.',
+    actor: 'reader',
+  },
+  'SB-CAL-GONE': {
+    message: 'There’s no calendar connected to refresh.',
+    fix: 'Connect one in Settings → Your calendar.',
+    actor: 'reader',
+  },
   'SB-INVITE-SEND': {
     message: 'Those invitations didn’t go out.',
     fix: 'Try again — anyone already invited keeps their invitation.',
@@ -521,6 +544,9 @@ const AREA_CODES: Record<string, ErrorCode> = {
   'availability.clear': 'SB-FREE-SAVE',
   'availability.save': 'SB-FREE-SAVE',
   'availability.to-poll': 'SB-FREE-POLL',
+  'calendar.connect': 'SB-CAL-SAVE',
+  'calendar.sync': 'SB-CAL-SAVE',
+  'calendar.disconnect': 'SB-CAL-SAVE',
   'match.dismiss': 'SB-MATCH-CLEAR',
   'match.restore': 'SB-MATCH-CLEAR',
   'poll.follow-up': 'SB-PLAN-SAVE',
