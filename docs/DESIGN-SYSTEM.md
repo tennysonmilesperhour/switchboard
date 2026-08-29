@@ -61,9 +61,13 @@ and sliders.
   primary/secondary/ghost/accept/danger), `Card` + `SectionHeader`, `Chip`,
   `Avatar`/`AvatarCluster`, `PlanCard`, `EmptyState`, `Icon`, `Skeleton`,
   `Toast` (`useToast`), `ConfirmDialog` (`useConfirm`).
-- Wall-clock times use `TimeSelect` (five-minute steps), never
-  `<input type="time">`: iOS ignores `step` on a time input and offers a
-  minute-by-minute wheel, so hosts aiming for 5:20 landed on 5:19.
+- Wall-clock times use `TimeSelect`, never `<input type="time">`: iOS ignores
+  `step` on a time input and offers a minute-by-minute wheel, so hosts aiming
+  for 5:20 landed on 5:19. `TimeSelect` asks for the time the way people say
+  one — an hour, a minute in five-minute steps, and an AM/PM toggle. It was a
+  single select of all 288 five-minute slots, which had the right detents and
+  the wrong shape: reaching 7:30pm meant scrolling past ninety rows. Three
+  short columns beat one long one.
 - Interactive controls carry a visible focus ring:
   `focus-visible:ring-2 focus-visible:ring-terracotta`, and a ~44px tap target.
 - Native `accent-color` controls (checkboxes, range sliders) use

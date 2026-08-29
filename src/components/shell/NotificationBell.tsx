@@ -2,12 +2,6 @@ import Link from 'next/link';
 import { createClient, getRenderUser } from '@/lib/supabase/server';
 import { Icon } from '@/components/ui/Icon';
 
-/**
- * Header bell with a live badge of things waiting on the user — pending
- * invitations plus incoming connection requests. This works with zero push
- * config: the count is read straight from the DB on each render, so a fresh
- * invite is visible in-app even for someone who never enabled notifications.
- */
 /** The bell's frame, with no count on it yet.
  *
  * Rendered as the Suspense fallback while the badge counts are still in flight,
@@ -26,6 +20,30 @@ export function BellPlaceholder() {
   );
 }
 
+/**
+ * Header bell with a live badge of unread notifications.
+ *
+ * The badge counts unread rows in `public.notifications` and **nothing else**.
+ * That is a rule, not an implementation detail, and `notification-badge.test.ts`
+ * fails if this file ever queries another table for the count.
+ *
+ * It used to add two more counts — invitations still sitting at `sent`, and
+ * incoming connection requests — from back before the notifications table
+ * existed. Both of those events write a notifications row of their own now
+ * (`event_invite`, `connection_request`), so one invitation lit the badge
+ * twice; and the copy of it that came from the `invites` table could not be
+ * cleared from the notifications screen at all. Reading everything and clearing
+ * the feed left a badge that would not go out, pointing at nothing the reader
+ * could do anything about from there. Whatever the bell shows must be
+ * answerable by the screen the bell opens.
+ *
+ * Invitations and connection requests are still *shown* on /notifications, and
+ * still live on /plans and /people where they can actually be answered.
+ *
+ * The count is read straight from the DB on each render, so this works with
+ * zero push config: a fresh notification is visible in-app even to someone who
+ * never enabled notifications.
+ */
 export async function NotificationBell() {
   // The bell lives in the shared shell, so it must never crash a page. If
   // Supabase isn't configured or the lookup fails for any reason, fall back to
@@ -35,30 +53,14 @@ export async function NotificationBell() {
     const supabase = await createClient();
     const user = await getRenderUser();
     if (user) {
-      const [{ count: invites }, { count: requests }, { count: unread }] = await Promise.all([
-        // Only invites to events that haven't started: a never-answered invite
-        // to a past event used to keep the badge lit forever with nothing
-        // actionable shown on /notifications to clear it.
-        supabase
-          .from('invites')
-          .select('id, event:events!inner(id)', { count: 'exact', head: true })
-          .eq('invitee_id', user.id)
-          .eq('status', 'sent')
-          .gte('event.starts_at', new Date().toISOString()),
-        supabase
-          .from('connections')
-          .select('id', { count: 'exact', head: true })
-          .eq('addressee_id', user.id)
-          .eq('status', 'pending'),
-        // Unread durable notifications — connection accepts, matches, join
-        // approvals, reminders, and everything else that's no longer push-only.
-        supabase
-          .from('notifications')
-          .select('id', { count: 'exact', head: true })
-          .eq('user_id', user.id)
-          .is('read_at', null),
-      ]);
-      count = (invites ?? 0) + (requests ?? 0) + (unread ?? 0);
+      // Every event worth a badge writes one of these — invitations, connection
+      // requests and accepts, matches, join approvals, reminders, messages.
+      const { count: unread } = await supabase
+        .from('notifications')
+        .select('id', { count: 'exact', head: true })
+        .eq('user_id', user.id)
+        .is('read_at', null);
+      count = unread ?? 0;
     }
   } catch {
     // Supabase unavailable/unconfigured — render the bell without a badge.

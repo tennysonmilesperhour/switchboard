@@ -27,8 +27,8 @@ export default async function NotificationsPage() {
     { count: unreadCount },
   ] = await Promise.all([
     // Only invites the user can still act on: an unanswered invite to an event
-    // that already started would otherwise sit in "Waiting on you" (and light
-    // the bell badge) forever with no way to clear it.
+    // that already started would otherwise sit in "Waiting on you" forever with
+    // no way to clear it.
     supabase
       .from('invites')
       .select('id, event:events!inner(id, title, starts_at, time_zone)')
@@ -109,7 +109,7 @@ export default async function NotificationsPage() {
             <section>
               <SectionHeader
                 title="Waiting on you 💌"
-                hint="These keep the bell badge on until you respond"
+                hint="Invitations you haven’t answered yet"
               />
               <div className="space-y-2">
                 {invites.map((invite) => {
@@ -139,7 +139,7 @@ export default async function NotificationsPage() {
             <section>
               <SectionHeader
                 title="Wants to connect 👋"
-                hint="Accept or ignore in People — these also keep the bell badge on"
+                hint="Accept or ignore in People"
               />
               <div className="space-y-2">
                 {requestList.map((request) => {

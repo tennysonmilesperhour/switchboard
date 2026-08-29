@@ -4,8 +4,11 @@ import Link from 'next/link';
 import { useTransition } from 'react';
 import { Button } from '@/components/ui/Button';
 import { Card, SectionHeader } from '@/components/ui/Card';
+import { useConfirm } from '@/components/ui/ConfirmDialog';
+import { useToast } from '@/components/ui/Toast';
 import { formatRelative } from '@/lib/format';
 import {
+  clearNotifications,
   markAllNotificationsRead,
   markNotificationRead,
 } from '@/lib/actions/notifications';
@@ -25,6 +28,12 @@ export interface FeedNotification {
  * taps "Mark all as read". Reading is an explicit acknowledgement, never a
  * side effect of merely loading the page, so the bell badge always points at
  * something the user can actually see and clear.
+ *
+ * Two controls, because they answer two different wishes: "stop telling me
+ * about these" (mark read — the badge goes out, the list stays) and "get rid of
+ * these" (clear — the list empties). Both report what happened; the mark-read
+ * call used to throw its result away, so a failure looked exactly like a
+ * success that hadn't refreshed yet.
  */
 export function NotificationsFeed({
   notifications,
@@ -34,11 +43,35 @@ export function NotificationsFeed({
   totalUnread: number;
 }) {
   const [pending, startTransition] = useTransition();
+  const confirm = useConfirm();
+  const toast = useToast();
 
   function markOne(notification: FeedNotification) {
     if (notification.read_at) return;
     startTransition(async () => {
-      await markNotificationRead(notification.id);
+      const result = await markNotificationRead(notification.id);
+      if (!result.ok) toast.error(result.error ?? 'Could not update that.', result.code);
+    });
+  }
+
+  function markAll() {
+    startTransition(async () => {
+      const result = await markAllNotificationsRead();
+      if (!result.ok) toast.error(result.error ?? 'Could not mark those as read.', result.code);
+    });
+  }
+
+  async function clearAll() {
+    const confirmed = await confirm({
+      title: 'Clear all notifications?',
+      body: 'This empties the list. Your plans, requests, and messages stay where they are.',
+      confirmLabel: 'Clear',
+      danger: true,
+    });
+    if (!confirmed) return;
+    startTransition(async () => {
+      const result = await clearNotifications();
+      if (!result.ok) toast.error(result.error ?? 'Could not clear those.', result.code);
     });
   }
 
@@ -49,24 +82,31 @@ export function NotificationsFeed({
         hint={
           totalUnread > 0
             ? `${totalUnread} unread — tap one to mark it read`
-            : 'All caught up'
+            : 'All read'
         }
         action={
-          totalUnread > 0 ? (
+          <div className="flex shrink-0 gap-2">
+            {totalUnread > 0 && (
+              <Button
+                type="button"
+                size="sm"
+                variant="secondary"
+                disabled={pending}
+                onClick={markAll}
+              >
+                Mark all read
+              </Button>
+            )}
             <Button
               type="button"
               size="sm"
-              variant="secondary"
+              variant="ghost"
               disabled={pending}
-              onClick={() =>
-                startTransition(async () => {
-                  await markAllNotificationsRead();
-                })
-              }
+              onClick={clearAll}
             >
-              {pending ? 'Marking…' : 'Mark all as read'}
+              Clear
             </Button>
-          ) : undefined
+          </div>
         }
       />
       <div className="space-y-2">
