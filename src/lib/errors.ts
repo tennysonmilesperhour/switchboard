@@ -340,6 +340,15 @@ const REGISTRY = {
     fix: 'Try again, or add them as suggestions by hand.',
     actor: 'reader',
   },
+  // Clearing a match off Home. Its own code rather than a borrowed save
+  // failure: the reader's worry when a dismissed card reappears is "did I just
+  // un-match this person?", and the message has to answer that before it
+  // answers anything else.
+  'SB-MATCH-CLEAR': {
+    message: 'That match didn’t clear off your Home.',
+    fix: 'Try again. Nothing about the match itself changed — it’s still on Mutual, and the other person saw nothing either way.',
+    actor: 'reader',
+  },
   'SB-INVITE-SEND': {
     message: 'Those invitations didn’t go out.',
     fix: 'Try again — anyone already invited keeps their invitation.',
@@ -507,6 +516,8 @@ const AREA_CODES: Record<string, ErrorCode> = {
   'availability.clear': 'SB-FREE-SAVE',
   'availability.save': 'SB-FREE-SAVE',
   'availability.to-poll': 'SB-FREE-POLL',
+  'match.dismiss': 'SB-MATCH-CLEAR',
+  'match.restore': 'SB-MATCH-CLEAR',
   'poll.follow-up': 'SB-PLAN-SAVE',
   'poll.follow-up-remove': 'SB-PLAN-SAVE',
   'event-locate': 'SB-PLAN-SAVE',

@@ -8,7 +8,13 @@ import { Card } from '@/components/ui/Card';
 import { Icon } from '@/components/ui/Icon';
 import { ImageInput } from '@/components/ui/ImageInput';
 import { TimeSelect } from '@/components/ui/TimeSelect';
-import { suggestWindow, WINDOW_CHOICES, type WindowPace } from '@/lib/engine/windows';
+import {
+  sharedWindow,
+  suggestWindow,
+  windowForNewInvitee,
+  WINDOW_CHOICES,
+  type WindowPace,
+} from '@/lib/engine/windows';
 import { isEmail } from '@/lib/auth-identity';
 import {
   RECURRENCE_CHOICES,
@@ -335,7 +341,7 @@ export function EventWizard({
           profileId: friend.id,
           name: friend.name,
           groupStage: 0,
-          windowMinutes: suggested.windowMinutes,
+          windowMinutes: newInviteeWindow(current),
         },
       ];
     });
@@ -395,7 +401,7 @@ export function EventWizard({
           profileId: m.id,
           name: m.name,
           groupStage: 0,
-          windowMinutes: suggested.windowMinutes,
+          windowMinutes: newInviteeWindow(current),
         }));
       return [...current, ...additions];
     });
@@ -419,7 +425,7 @@ export function EventWizard({
         name: label,
         guestContact: contact || undefined,
         groupStage: 0,
-        windowMinutes: suggested.windowMinutes,
+        windowMinutes: newInviteeWindow(current),
       },
     ]);
     setGuestName('');
@@ -465,7 +471,7 @@ export function EventWizard({
                   profileId: found.id,
                   name: found.name,
                   groupStage: 0,
-                  windowMinutes: suggested.windowMinutes,
+                  windowMinutes: newInviteeWindow(current),
                 },
               ],
         );
@@ -516,7 +522,7 @@ export function EventWizard({
             profileId: target.profileId,
             name: match.profile?.name ?? match.name,
             groupStage: 0,
-            windowMinutes: suggested.windowMinutes,
+            windowMinutes: newInviteeWindow(current),
           },
         ];
       }
@@ -534,7 +540,7 @@ export function EventWizard({
           name: match.name || target.contact!,
           guestContact: target.contact!,
           groupStage: 0,
-          windowMinutes: suggested.windowMinutes,
+          windowMinutes: newInviteeWindow(current),
         },
       ];
     });
@@ -582,6 +588,31 @@ export function EventWizard({
       [next[index], next[target]] = [next[target], next[index]];
       return next;
     });
+  }
+
+  /** The window everyone shares, or null when the rows disagree ("Mixed"). */
+  const commonWindow = useMemo(
+    () => sharedWindow(invitees.map((i) => i.windowMinutes)),
+    [invitees],
+  );
+
+  /**
+   * The window to give someone just added. Reads `current` from inside the
+   * `setInvitees` updater rather than the closed-over `invitees`, which may be
+   * a render behind when several people are added in one go.
+   */
+  function newInviteeWindow(current: DraftInvitee[]): number {
+    return windowForNewInvitee(
+      current.map((i) => i.windowMinutes),
+      suggested.windowMinutes,
+    );
+  }
+
+  /** The "select all" from the feedback: one window, everybody. */
+  function setWindowForEveryone(minutes: number) {
+    setInvitees((current) =>
+      current.map((invitee) => ({ ...invitee, windowMinutes: minutes })),
+    );
   }
 
   function updateInvitee(index: number, patch: Partial<DraftInvitee>) {
@@ -1511,6 +1542,70 @@ export function EventWizard({
               )}
             </p>
           </Card>
+          {/* Set one window for everybody.
+              Asked for as "an option set the time to respond for everyone to
+              be the same window. Like a select all button or something" — with
+              five people that was five identical dropdowns, and the odds of
+              getting all five the same by hand fall with every guest added.
+              Shown from two people up, since with one there is no "everyone".
+              It sits above the list because it is a decision about the whole
+              set; the per-person dropdowns stay exactly where they were, so
+              giving one person longer is still a normal thing to do. */}
+          {invitees.length > 1 && (
+            <div className="rounded-card border-2 border-line bg-card p-3">
+              <div className="flex flex-wrap items-center gap-2">
+                <label htmlFor="window-everyone" className="text-sm font-bold">
+                  Everyone gets
+                </label>
+                <select
+                  id="window-everyone"
+                  value={commonWindow ?? 'mixed'}
+                  onChange={(e) => {
+                    if (e.target.value === 'mixed') return;
+                    setWindowForEveryone(Number(e.target.value));
+                  }}
+                  className="rounded-pill border border-line bg-paper px-3 py-1.5 text-sm font-medium text-ink outline-none transition-colors focus:border-terracotta"
+                >
+                  {/* Only offered while they really are mixed, and never as a
+                      destination — picking "Mixed" would have to invent
+                      per-person values it has no way to know. */}
+                  {commonWindow === null && (
+                    <option value="mixed" disabled>
+                      Mixed
+                    </option>
+                  )}
+                  {/* A window typed into a custom row is still a shared window
+                      once everyone has it, so it has to be selectable here or
+                      the control would read "Mixed" for a list that agrees. */}
+                  {commonWindow !== null &&
+                    !WINDOW_CHOICES.some((c) => c.windowMinutes === commonWindow) && (
+                      <option value={commonWindow}>
+                        {splitWindow(commonWindow).amount} {splitWindow(commonWindow).unit}
+                      </option>
+                    )}
+                  {WINDOW_CHOICES.map((choice) => (
+                    <option key={choice.windowMinutes} value={choice.windowMinutes}>
+                      {choice.label} to respond
+                    </option>
+                  ))}
+                </select>
+                {commonWindow !== suggested.windowMinutes && (
+                  <button
+                    type="button"
+                    onClick={() => setWindowForEveryone(suggested.windowMinutes)}
+                    className="rounded-pill border border-line px-3 py-1.5 text-sm font-semibold text-terracotta transition-colors hover:border-terracotta"
+                  >
+                    Use suggested ({suggested.label})
+                  </button>
+                )}
+              </div>
+              <p className="mt-2 text-xs text-ink-faint">
+                {commonWindow === null
+                  ? 'Right now people have different windows. Pick one to give everybody the same.'
+                  : 'Everyone has the same window. You can still change any one person below.'}
+              </p>
+            </div>
+          )}
           <ol className="space-y-2">
             {invitees.map((invitee, index) => (
               <li

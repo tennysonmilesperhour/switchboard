@@ -93,3 +93,37 @@ export function paceFromChosenWindows(windowMinutes: number[]): WindowPace {
   if (median >= DAY) return 'relaxed';
   return 'standard';
 }
+
+/**
+ * The response window a set of invitees share, or null when they differ.
+ *
+ * Backs the wizard's "Everyone gets ..." control. Derived from the rows on
+ * every render rather than stored alongside them, so the control cannot claim
+ * a window the list has since moved away from: change one person by hand and
+ * this reports null ("Mixed"), which is what actually happened.
+ *
+ * An empty list has no shared window rather than a default one — there is no
+ * "everyone" to speak for yet, and answering 0 invitees with a number would put
+ * a confident value in a control that governs nobody.
+ */
+export function sharedWindow(windowMinutes: number[]): number | null {
+  if (windowMinutes.length === 0) return null;
+  const [first] = windowMinutes;
+  return windowMinutes.every((m) => m === first) ? first : null;
+}
+
+/**
+ * The window to give someone added to an existing list.
+ *
+ * Inherits the shared window when there is one, so "everyone gets a day"
+ * survives adding a sixth person; falls back to the suggestion only when the
+ * list has no single answer to inherit. Without this, the select-all control
+ * would be quietly undone by the next guest, and the host would have no reason
+ * to re-check a row they had already set.
+ */
+export function windowForNewInvitee(
+  windowMinutes: number[],
+  suggestedMinutes: number,
+): number {
+  return sharedWindow(windowMinutes) ?? suggestedMinutes;
+}
