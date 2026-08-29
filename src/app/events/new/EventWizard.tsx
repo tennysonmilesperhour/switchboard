@@ -799,12 +799,7 @@ export function EventWizard({
             </div>
             <div className="space-y-1.5 min-w-0">
               <label htmlFor="time" className={FIELD_LABEL}>Start</label>
-              <TimeSelect
-                id="time"
-                value={time}
-                onChange={setTime}
-                className={`${FIELD} min-w-0 [color-scheme:light]`}
-              />
+              <TimeSelect id="time" value={time} onChange={setTime} className="min-w-0" />
             </div>
             <div className="space-y-1.5 min-w-0 sm:col-span-2">
               <label htmlFor="endTime" className={FIELD_LABEL}>
@@ -815,7 +810,7 @@ export function EventWizard({
                 value={endTime}
                 onChange={setEndTime}
                 emptyLabel="No end time"
-                className={`${FIELD} min-w-0 [color-scheme:light]`}
+                className="min-w-0"
               />
             </div>
           </div>
