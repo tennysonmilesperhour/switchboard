@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useTransition } from 'react';
+import { useRouter } from 'next/navigation';
 
 import { Button } from '@/components/ui/Button';
 import { useToast } from '@/components/ui/Toast';
@@ -31,6 +32,11 @@ export function CalendarConnect({ status }: { status: CalendarStatus }) {
   const [pending, startTransition] = useTransition();
   const toast = useToast();
   const confirm = useConfirm();
+  // The status shown here is a server-component prop. revalidatePath marks the
+  // route stale, but the refresh is what actually pulls the new props into this
+  // already-mounted component — without it the card still says "not connected"
+  // straight after connecting. Same pattern as AvailabilityGrid.
+  const router = useRouter();
 
   function connect() {
     const value = url.trim();
@@ -45,6 +51,7 @@ export function CalendarConnect({ status }: { status: CalendarStatus }) {
         return;
       }
       setUrl('');
+      router.refresh();
       toast.success(
         result.slots
           ? `Calendar connected — ${result.slots} busy ${result.slots === 1 ? 'slot' : 'slots'} this week.`
@@ -60,6 +67,7 @@ export function CalendarConnect({ status }: { status: CalendarStatus }) {
         toast.error(result.error ?? 'That calendar could not be refreshed.', result.code);
         return;
       }
+      router.refresh();
       toast.success('Calendar refreshed.');
     });
   }
@@ -78,6 +86,7 @@ export function CalendarConnect({ status }: { status: CalendarStatus }) {
         toast.error(result.error ?? 'That didn’t disconnect.', result.code);
         return;
       }
+      router.refresh();
       toast.success('Calendar disconnected.');
     });
   }

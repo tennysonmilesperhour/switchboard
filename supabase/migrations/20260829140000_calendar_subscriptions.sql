@@ -32,12 +32,40 @@ create table if not exists public.calendar_subscriptions (
   -- the app ever handing back the secret.
   source_host text,
   last_synced_at timestamptz,
+  -- The window a sync covered: the grid it filled ran seven days from the day
+  -- it ran. Without this, busy rows from an earlier day look like a complete
+  -- answer for today's grid, and the days past the end of that old window read
+  -- as free when nothing has ever been checked for them.
+  covered_through timestamptz,
   last_status text not null default 'pending'
-    check (last_status in ('pending', 'ok', 'unreachable', 'unreadable', 'refused')),
+    check (last_status in ('pending', 'ok', 'unreachable', 'unreadable', 'refused', 'unsaved')),
   created_at timestamptz not null default now()
 );
 
 alter table public.calendar_subscriptions enable row level security;
+
+-- The address is withheld from the browser by a GRANT, not by a convention.
+--
+-- RLS scopes the row to its owner, but the owner's own browser still holds an
+-- `authenticated` session, so without this it could select its own ics_url back
+-- out over PostgREST. "The app never reads this column" was a promise the
+-- database was not enforcing.
+--
+-- The table-level SELECT has to go first. A column-level revoke does NOT carve
+-- a hole in a table-wide grant — Postgres keeps the broader privilege and the
+-- column stays readable — and Supabase's default privileges hand `authenticated`
+-- exactly such a table-wide SELECT on every new table in `public`. So: drop it,
+-- then grant back the columns that are safe to see, which is all of them but
+-- this one. INSERT/UPDATE/DELETE are untouched, so the owner's own session can
+-- still save and clear its subscription.
+revoke select on public.calendar_subscriptions from authenticated, anon;
+grant select (user_id, source_host, last_synced_at, covered_through, last_status, created_at)
+  on public.calendar_subscriptions to authenticated;
+
+-- The sync path reads the URL with the service role instead (readSubscriptionUrl
+-- in src/lib/actions/calendar-sync.ts), after re-authorizing the specific caller
+-- as docs/SECURITY.md requires of every admin-client call.
+grant select, insert, update, delete on public.calendar_subscriptions to service_role;
 
 -- Own row only, both directions. Nobody may read, write, or point someone
 -- else's calendar connection at a feed of their choosing.
@@ -76,10 +104,11 @@ returns table (
   connected boolean,
   source_host text,
   last_synced_at timestamptz,
-  last_status text
+  last_status text,
+  covered_through timestamptz
 )
 language sql stable security definer set search_path = public as $$
-  select true, s.source_host, s.last_synced_at, s.last_status
+  select true, s.source_host, s.last_synced_at, s.last_status, s.covered_through
   from public.calendar_subscriptions s
   where s.user_id = auth.uid();
 $$;

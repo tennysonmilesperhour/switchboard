@@ -160,3 +160,68 @@ describe('turning busy time into grid slots', () => {
     expect(busyGridSlots([], slots, slotRange)).toEqual([]);
   });
 });
+
+describe('things real calendars contain', () => {
+  test('a reminder does not shrink the meeting it is attached to', () => {
+    // The one that mattered most: a VALARM carries its own DURATION, and
+    // without component nesting it overwrote the event's. A three-hour meeting
+    // came back as five minutes, so a Google calendar (which attaches a
+    // reminder to almost everything) registered as very nearly free.
+    const [block] = busy(
+      ics(
+        'DTSTART:20260902T140000Z\nDTEND:20260902T170000Z\n' +
+          'BEGIN:VALARM\nTRIGGER:-PT10M\nACTION:DISPLAY\nDURATION:PT5M\nREPEAT:2\nEND:VALARM',
+      ),
+    );
+    expect((block.end - block.start) / 60_000).toBe(180);
+  });
+
+  test('a VTIMEZONE at the top of the file adds no busy time', () => {
+    // VTIMEZONE blocks carry their own DTSTART and RRULE. Read as events they
+    // would fill the week with phantom commitments.
+    const withZone =
+      'BEGIN:VCALENDAR\r\nBEGIN:VTIMEZONE\r\nTZID:America/Denver\r\n' +
+      'BEGIN:DAYLIGHT\r\nDTSTART:20260308T020000\r\nRRULE:FREQ=YEARLY;BYMONTH=3\r\nEND:DAYLIGHT\r\n' +
+      'END:VTIMEZONE\r\nEND:VCALENDAR';
+    expect(busy(withZone)).toHaveLength(0);
+  });
+
+  test('an Outlook zone name resolves instead of silently becoming UTC', () => {
+    // Exchange writes Windows zone names. Intl throws on them, and the UTC
+    // fallback put 9am Pacific at 09:00Z: seven hours out, a different band and
+    // very nearly a different day.
+    const [block] = busy(
+      ics(
+        'DTSTART;TZID=Pacific Standard Time:20260902T090000\n' +
+          'DTEND;TZID=Pacific Standard Time:20260902T100000',
+      ),
+    );
+    expect(new Date(block.start).toISOString()).toBe('2026-09-02T16:00:00.000Z');
+  });
+
+  test('overlapping meetings are not counted twice against a band', () => {
+    // Two identical 90-minute meetings take 30% of a five-hour evening, not
+    // 60%. Summing raw overlaps crossed the threshold and blacked out an
+    // evening that was mostly free.
+    const slots = gridSlots(WINDOW_START);
+    const blocks = busy(
+      ics(
+        'DTSTART:20260902T180000Z\nDTEND:20260902T193000Z',
+        'DTSTART:20260902T180000Z\nDTEND:20260902T193000Z',
+      ),
+    );
+    expect(busyGridSlots(blocks, slots, slotRange)).toEqual([]);
+  });
+
+  test('back-to-back meetings still add up to a busy band', () => {
+    // The merge must not go so far as to hide genuinely full evenings.
+    const slots = gridSlots(WINDOW_START);
+    const blocks = busy(
+      ics(
+        'DTSTART:20260902T170000Z\nDTEND:20260902T193000Z',
+        'DTSTART:20260902T193000Z\nDTEND:20260902T220000Z',
+      ),
+    );
+    expect(busyGridSlots(blocks, slots, slotRange)).toEqual(['2026-09-02T17:00:00.000Z']);
+  });
+});

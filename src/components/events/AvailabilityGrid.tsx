@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/Button';
 import { SectionHeader } from '@/components/ui/Card';
 import { useToast } from '@/components/ui/Toast';
+import { useConfirm } from '@/components/ui/ConfirmDialog';
 import { setAvailability, slotsToPollOptions } from '@/lib/actions/availability';
 import { BANDS, GRID_DAYS, gridSlots, heatLevel, type SlotCount } from '@/lib/availability';
 
@@ -20,12 +21,19 @@ interface AvailabilityGridProps {
   /** Bands this person's connected calendar says are taken. */
   busySlots?: string[];
   /**
-   * Whether a calendar is connected at all — which is not the same as having
-   * busy time in it. Someone with a genuinely clear week has no busy slots and
-   * is exactly who "fill from my calendar" helps most, so the offer is gated on
-   * the connection rather than on the emptiness of what it returned.
+   * Whether the calendar is connected AND its last read succeeded. Connection
+   * alone is not enough: a calendar that failed to read has no busy slots
+   * stored, and filling from it would tick the entire week as free and tell the
+   * group this person is available when nothing was ever checked. Being clear
+   * all week is still a real answer, so this is gated on the read succeeding
+   * rather than on the result being non-empty.
    */
-  calendarConnected?: boolean;
+  calendarUsable?: boolean;
+  /**
+   * The end of the week the last read covered. Slots past it were never looked
+   * at, so filling leaves them alone instead of claiming them free.
+   */
+  coveredThrough?: string | null;
 }
 
 /** Background per heat level. Level 0 stays plain so "nobody" reads as empty. */
@@ -59,7 +67,8 @@ export function AvailabilityGrid({
   isHost,
   pollId,
   busySlots = [],
-  calendarConnected = false,
+  calendarUsable = false,
+  coveredThrough = null,
 }: AvailabilityGridProps) {
   const slots = useMemo(() => gridSlots(new Date(), GRID_DAYS), []);
   const countBySlot = useMemo(() => {
@@ -75,6 +84,7 @@ export function AvailabilityGrid({
   const [pending, startTransition] = useTransition();
   const router = useRouter();
   const toast = useToast();
+  const confirm = useConfirm();
 
   const busiest = useMemo(
     () => counts.reduce((most, entry) => Math.max(most, entry.people), 0),
@@ -99,16 +109,37 @@ export function AvailabilityGrid({
    * it silently on load would put answers in the group's count that its owner
    * never gave, which is the one thing this grid has always refused to do.
    *
-   * Only ever runs from a tap, and still needs Save afterwards.
+   * Two limits keep it from overclaiming. Days the last read never reached are
+   * left untouched rather than ticked, because "not checked" is not "free". And
+   * marks the person already made are theirs, so replacing them asks first.
    */
-  function fillFromCalendar() {
+  async function fillFromCalendar() {
+    const coverEnd = coveredThrough ? new Date(coveredThrough).getTime() : 0;
+    const covered = slots.filter((slot) => new Date(slot).getTime() < coverEnd);
+    if (covered.length === 0) {
+      toast.error('Your calendar hasn’t been read for this week yet. Refresh it in Settings.');
+      return;
+    }
+
+    if (mine.size > 0) {
+      const ok = await confirm({
+        title: 'Replace what you’ve marked?',
+        body: 'Filling from your calendar starts again from what it says you have free. What you’ve ticked here will be replaced.',
+        confirmLabel: 'Replace',
+      });
+      if (!ok) return;
+    }
+
     const busy = new Set(busySlots);
-    const free = slots.filter((slot) => !busy.has(slot));
-    setMine(new Set(free));
+    const free = covered.filter((slot) => !busy.has(slot));
+    // Only the covered days are decided. Anything past the end of the read
+    // stays exactly as the person left it.
+    const kept = [...mine].filter((slot) => new Date(slot).getTime() >= coverEnd);
+    setMine(new Set([...free, ...kept]));
     setDirty(true);
     toast.info(
       free.length === 0
-        ? 'Your calendar has the whole week taken — untick anything that is still workable.'
+        ? 'Your calendar has every one of those times taken. Tick anything that still works, then save.'
         : `Filled in ${free.length} free ${free.length === 1 ? 'time' : 'times'}. Take off any that don’t suit, then save.`,
     );
   }
@@ -244,9 +275,10 @@ export function AvailabilityGrid({
         <Button size="sm" onClick={save} disabled={pending || !dirty}>
           {dirty ? 'Save when I’m free' : 'Saved'}
         </Button>
-        {/* Only for people who have connected a calendar — for everyone else
-            this would be a button that appears to do nothing. */}
-        {calendarConnected && (
+        {/* Only when a calendar is connected and actually read. Offering it
+            otherwise is worse than not offering it: it would fill the week with
+            free time nobody checked. */}
+        {calendarUsable && (
           <Button size="sm" variant="secondary" onClick={fillFromCalendar} disabled={pending}>
             Fill from my calendar
           </Button>

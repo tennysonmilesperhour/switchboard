@@ -101,7 +101,9 @@ function wallClockToUtc(
   zone: string | null,
 ): number {
   const naive = Date.UTC(y, mo - 1, d, h, mi, s);
-  if (!zone) return naive;
+  const resolved = resolveZone(zone);
+  if (!resolved) return naive;
+  zone = resolved;
   try {
     const first = zoneOffsetMs(naive, zone);
     const corrected = naive - first;
@@ -154,6 +156,49 @@ function splitLine(line: string): { name: string; params: Map<string, string>; v
 }
 
 const DAY_MS = 86_400_000;
+
+/**
+ * Exchange and Outlook write Windows zone names, which `Intl` has never heard
+ * of. Left untranslated they throw, fall back to UTC, and put a 9am meeting
+ * seven hours out — far enough to move it into a different band and a different
+ * day. These are the names that actually appear in exported calendars; anything
+ * unmapped still falls back to UTC, which is why `unresolvedZone` exists to say
+ * so rather than quietly shifting someone's week.
+ */
+const WINDOWS_ZONES: Record<string, string> = {
+  'pacific standard time': 'America/Los_Angeles',
+  'mountain standard time': 'America/Denver',
+  'us mountain standard time': 'America/Phoenix',
+  'central standard time': 'America/Chicago',
+  'eastern standard time': 'America/New_York',
+  'alaskan standard time': 'America/Anchorage',
+  'hawaiian standard time': 'Pacific/Honolulu',
+  'atlantic standard time': 'America/Halifax',
+  'gmt standard time': 'Europe/London',
+  'greenwich standard time': 'Atlantic/Reykjavik',
+  'w. europe standard time': 'Europe/Berlin',
+  'central europe standard time': 'Europe/Budapest',
+  'central european standard time': 'Europe/Warsaw',
+  'romance standard time': 'Europe/Paris',
+  'e. europe standard time': 'Europe/Bucharest',
+  'fle standard time': 'Europe/Kiev',
+  'russian standard time': 'Europe/Moscow',
+  'india standard time': 'Asia/Kolkata',
+  'china standard time': 'Asia/Shanghai',
+  'tokyo standard time': 'Asia/Tokyo',
+  'korea standard time': 'Asia/Seoul',
+  'singapore standard time': 'Asia/Singapore',
+  'aus eastern standard time': 'Australia/Sydney',
+  'new zealand standard time': 'Pacific/Auckland',
+  'utc': 'UTC',
+};
+
+/** Map a TZID onto something Intl understands, or null if we cannot. */
+function resolveZone(tzid: string | null): string | null {
+  if (!tzid) return null;
+  const mapped = WINDOWS_ZONES[tzid.trim().toLowerCase()];
+  return mapped ?? tzid;
+}
 const WEEKDAYS = ['SU', 'MO', 'TU', 'WE', 'TH', 'FR', 'SA'];
 
 interface RawEvent {
@@ -301,16 +346,24 @@ export function parseBusyIntervals(
   let current: Partial<RawEvent> & { exdates: number[] } = { exdates: [] };
   let inEvent = false;
   let skip = false;
+  // How deep inside a sub-component of the current VEVENT we are. A VALARM
+  // carries its own DURATION, and without this it overwrites the event's: a
+  // three-hour meeting with a reminder attached became a five-minute one, so
+  // almost nothing in a real Google calendar registered as busy. Properties
+  // only count at depth 0.
+  let nested = 0;
 
   for (const line of lines) {
     const upper = line.toUpperCase();
     if (upper.startsWith('BEGIN:VEVENT')) {
       inEvent = true;
       skip = false;
+      nested = 0;
       current = { exdates: [] };
       continue;
     }
-    if (upper.startsWith('END:VEVENT')) {
+    if (!inEvent) continue;
+    if (nested === 0 && upper.startsWith('END:VEVENT')) {
       if (inEvent && !skip && current.start !== undefined) {
         const event: RawEvent = {
           start: current.start,
@@ -327,7 +380,15 @@ export function parseBusyIntervals(
       inEvent = false;
       continue;
     }
-    if (!inEvent || skip) continue;
+    if (upper.startsWith('BEGIN:')) {
+      nested += 1;
+      continue;
+    }
+    if (upper.startsWith('END:')) {
+      nested = Math.max(0, nested - 1);
+      continue;
+    }
+    if (skip || nested > 0) continue;
 
     const parsed = splitLine(line);
     if (!parsed) continue;
@@ -385,13 +446,24 @@ export function busyGridSlots(
   slots: string[],
   slotRange: (slot: string) => { start: number; end: number },
 ): string[] {
+  // Merged first, because summing raw overlaps double-counts: two meetings in
+  // the same hour (an invitation and its duplicate, a call inside a blocked-out
+  // afternoon) counted as two hours, which pushed bands over the threshold when
+  // far less than half of them was really taken.
+  const merged: BusyInterval[] = [];
+  for (const interval of [...intervals].sort((a, b) => a.start - b.start)) {
+    const last = merged[merged.length - 1];
+    if (last && interval.start <= last.end) last.end = Math.max(last.end, interval.end);
+    else merged.push({ start: interval.start, end: interval.end });
+  }
+
   const busy: string[] = [];
   for (const slot of slots) {
     const { start, end } = slotRange(slot);
     const span = end - start;
     if (span <= 0) continue;
     let covered = 0;
-    for (const interval of intervals) {
+    for (const interval of merged) {
       const overlap = Math.min(end, interval.end) - Math.max(start, interval.start);
       if (overlap > 0) covered += overlap;
     }

@@ -7,7 +7,7 @@
 -- never who or when.
 
 begin;
-select plan(6);
+select plan(7);
 
 insert into auth.users (id, email) values
   ('00000000-0000-0000-0000-00000000c301', 'cal-ana@example.com'),
@@ -89,6 +89,21 @@ select throws_ok(
   '42501',
   null,
   'nobody can point someone else''s calendar connection at a feed of their choosing'
+);
+
+-- The address is a bearer credential, and the owner's own browser holds an
+-- `authenticated` session too. RLS scopes the row but not the column, so
+-- without this revoke a client could select its own ics_url straight back out.
+select is(
+  (select count(*)::int
+     from information_schema.column_privileges
+    where table_schema = 'public'
+      and table_name = 'calendar_subscriptions'
+      and column_name = 'ics_url'
+      and grantee in ('authenticated', 'anon')
+      and privilege_type = 'SELECT'),
+  0,
+  'no signed-in session may select the stored calendar address'
 );
 
 select * from finish();

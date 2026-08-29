@@ -24,7 +24,10 @@ import { isFetchableUrl, isPrivateAddress } from '@/lib/net-guard';
  * raises the bar a long way without it.
  */
 
-const MAX_REDIRECTS = 3;
+// Enough for the shortener and consent-page chains real links sit behind, while
+// still bounded. Three was too tight: following redirects by hand replaced a
+// platform default of about twenty, and links that used to import stopped.
+const MAX_REDIRECTS = 8;
 const TIMEOUT_MS = 8000;
 
 export type SafeFetchFailure =
@@ -47,13 +50,54 @@ export interface SafeFetchResult {
 
 /** Resolve a hostname and refuse it if anything it points at is private. */
 async function resolvesPublicly(hostname: string): Promise<boolean> {
+  // URL.hostname keeps the brackets on an IPv6 literal, and dns.lookup does not
+  // accept them — every IPv6 URL would fail the lookup and be refused as
+  // private. A literal needs no lookup anyway: isFetchableUrl already judged
+  // the address itself.
+  const host = hostname.replace(/^\[|\]$/g, '');
+  if (/^[0-9.]+$/.test(host) || host.includes(':')) return !isPrivateAddress(host);
   try {
-    const addresses = await lookup(hostname, { all: true });
+    const addresses = await lookup(host, { all: true });
     if (addresses.length === 0) return false;
     return addresses.every((entry) => !isPrivateAddress(entry.address));
   } catch {
     return false;
   }
+}
+
+/**
+ * Read at most `maxBytes`, then stop pulling.
+ *
+ * `arrayBuffer()` buffers the entire response before any cap can be applied, so
+ * the limit only ever trimmed what had already been held in memory: a hostile
+ * or merely enormous URL could make the server allocate without bound. This
+ * stops reading at the cap and cancels the rest of the stream.
+ */
+async function readCapped(response: Response, maxBytes: number): Promise<string> {
+  if (!response.body) return '';
+  const reader = response.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  try {
+    while (total < maxBytes) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      chunks.push(value);
+      total += value.length;
+    }
+  } finally {
+    await reader.cancel().catch(() => {});
+  }
+  const size = Math.min(total, maxBytes);
+  const merged = new Uint8Array(size);
+  let offset = 0;
+  for (const chunk of chunks) {
+    const take = Math.min(chunk.length, size - offset);
+    if (take <= 0) break;
+    merged.set(chunk.subarray(0, take), offset);
+    offset += take;
+  }
+  return new TextDecoder().decode(merged);
 }
 
 export async function safeFetchText(
@@ -90,16 +134,30 @@ export async function safeFetchText(
     if (response.status >= 300 && response.status < 400) {
       const location = response.headers.get('location');
       if (!location) return { ok: false, reason: 'http-error', status: response.status };
-      target = new URL(location, checked.url).toString();
+      // A malformed Location would throw out of here and escape the caller's
+      // ActionResult contract as an unhandled server error, turning a handled
+      // "we couldn't read that link" into a crashed page transition.
+      try {
+        target = new URL(location, checked.url).toString();
+      } catch {
+        return { ok: false, reason: 'http-error', status: response.status };
+      }
       continue;
     }
 
     if (!response.ok) return { ok: false, reason: 'http-error', status: response.status };
 
-    const buffer = await response.arrayBuffer();
+    let body: string;
+    try {
+      body = await readCapped(response, maxBytes);
+    } catch {
+      // A connection that dies mid-body is the same failure to the caller as
+      // one that never opened.
+      return { ok: false, reason: 'unreachable' };
+    }
     return {
       ok: true,
-      body: new TextDecoder().decode(buffer.slice(0, maxBytes)),
+      body,
       contentType: response.headers.get('content-type') ?? '',
       status: response.status,
     };

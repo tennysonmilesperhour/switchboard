@@ -400,11 +400,13 @@ export default async function EventPage({
   // This viewer's own busy bands, so the grid can be offered pre-filled. Both
   // are private to them: busy slots never reach the counts, and nothing here is
   // written until they press Save.
-  const [calendarBusy, calendarStatus] = await Promise.all([
-    myBusySlots(),
-    getCalendarStatus(),
-  ]);
-  const calendarConnected = calendarStatus.connected;
+  //
+  // Only fetched when the grid will actually render, which is only on a plan
+  // with no fixed time yet. Most plans have one, and on those these were two
+  // extra round trips on every view of a page that never shows the result.
+  const [calendarBusy, calendarStatus] = event.starts_at
+    ? [[] as string[], null]
+    : await Promise.all([myBusySlots(), getCalendarStatus()]);
 
   // What each already-settled question landed on, so the chain can show the
   // answer rather than just "decided".
@@ -1026,7 +1028,8 @@ export default async function EventPage({
               isHost={isHost}
               pollId={poll && poll.phase !== 'decided' ? poll.id : null}
               busySlots={calendarBusy}
-              calendarConnected={calendarConnected}
+              calendarUsable={calendarStatus?.usable ?? false}
+              coveredThrough={calendarStatus?.coveredThrough ?? null}
             />
           </Card>
         )}

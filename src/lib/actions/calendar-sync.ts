@@ -5,6 +5,7 @@ import { revalidatePath } from 'next/cache';
 import type { ActionResult } from '@/lib/errors';
 import { failure } from '@/lib/errors';
 import { requireUser } from '@/lib/server/require-user';
+import { createAdminClient } from '@/lib/supabase/admin';
 import type { createClient } from '@/lib/supabase/server';
 import { reportAndFail } from '@/lib/server/observability';
 import { checkRateLimit } from '@/lib/server/rate-limit';
@@ -32,6 +33,10 @@ export interface CalendarStatus {
   sourceHost: string | null;
   lastSyncedAt: string | null;
   lastStatus: string | null;
+  /** End of the week the last successful read actually covered. */
+  coveredThrough: string | null;
+  /** A calendar that is connected AND last read cleanly. */
+  usable: boolean;
 }
 
 /** How much calendar to read. Generous for a week's grid, far short of a slurp. */
@@ -47,7 +52,10 @@ async function refreshBusy(
   supabase: Awaited<ReturnType<typeof createClient>>,
   userId: string,
   url: string,
-): Promise<{ ok: true; slots: number } | { ok: false; status: string; code: 'SB-CAL-FETCH' | 'SB-CAL-READ' }> {
+): Promise<
+  | { ok: true; slots: number; coveredThrough: string }
+  | { ok: false; status: string; code: 'SB-CAL-FETCH' | 'SB-CAL-READ' | 'SB-CAL-SAVE' }
+> {
   const fetched = await safeFetchText(url, { maxBytes: MAX_ICS_BYTES, accept: 'text/calendar,*/*' });
   if (!fetched.ok || !fetched.body) {
     return {
@@ -75,13 +83,65 @@ async function refreshBusy(
   // Replace rather than merge: the calendar is the source of truth for these
   // rows, and a meeting that was cancelled since the last sync has to be able
   // to disappear. Scoped to this user, whom RLS also confines us to.
-  await supabase.from('calendar_busy').delete().eq('user_id', userId);
+  //
+  // Both writes are checked. They were not, and the cost was the worst kind of
+  // failure: the delete would land, the insert would fail, and the person would
+  // be told "connected, 9 busy slots" over an empty table — then shown a grid
+  // claiming their whole week was free.
+  const { error: clearError } = await supabase
+    .from('calendar_busy')
+    .delete()
+    .eq('user_id', userId);
+  if (clearError) return { ok: false, status: 'unsaved', code: 'SB-CAL-SAVE' };
+
   if (busy.length > 0) {
-    await supabase
+    const { error: insertError } = await supabase
       .from('calendar_busy')
       .insert(busy.map((slot) => ({ user_id: userId, slot })));
+    if (insertError) return { ok: false, status: 'unsaved', code: 'SB-CAL-SAVE' };
   }
-  return { ok: true, slots: busy.length };
+  return { ok: true, slots: busy.length, coveredThrough: windowEnd.toISOString() };
+}
+
+/**
+ * The stored feed address, read with the service role.
+ *
+ * `revoke select (ics_url)` keeps this column away from every `authenticated`
+ * session, which includes the server actions' own session client — that is the
+ * point, since it is also what the person's browser holds. Reading it therefore
+ * needs the admin client, and per docs/SECURITY.md every admin-client call
+ * re-authorizes the specific caller and resource: the caller is already
+ * authenticated above, and the query is pinned to their own row.
+ */
+async function readSubscriptionUrl(userId: string): Promise<string | null> {
+  const admin = createAdminClient();
+  const { data } = await admin
+    .from('calendar_subscriptions')
+    .select('ics_url')
+    .eq('user_id', userId)
+    .maybeSingle();
+  return data?.ics_url ?? null;
+}
+
+/**
+ * Write this person's subscription row, service-role, caller re-authorized.
+ *
+ * The session client cannot do it. Withholding SELECT on the table is what
+ * keeps `ics_url` away from the browser, and `insert ... on conflict do update`
+ * needs SELECT on the table it is updating — so an upsert from the owner's own
+ * session is refused outright. That is the grant working as intended rather
+ * than a reason to loosen it: the credential is written on the server, by the
+ * only role allowed to see it, pinned to the caller's own row.
+ */
+async function writeSubscription(
+  userId: string,
+  fields: Record<string, string | null>,
+): Promise<boolean> {
+  const admin = createAdminClient();
+  const { error } = await admin
+    .from('calendar_subscriptions')
+    .upsert({ user_id: userId, ...fields }, { onConflict: 'user_id' });
+  return !error;
 }
 
 /** Save a calendar feed and read it for the first time. */
@@ -110,17 +170,18 @@ export async function connectCalendar(rawUrl: string): Promise<ActionResult & { 
   const url = checked.url.toString();
   const result = await refreshBusy(supabase, user.id, url);
 
-  const { error } = await supabase.from('calendar_subscriptions').upsert(
-    {
-      user_id: user.id,
-      ics_url: url,
-      source_host: checked.url.hostname,
-      last_synced_at: new Date().toISOString(),
-      last_status: result.ok ? 'ok' : result.status,
-    },
-    { onConflict: 'user_id' },
-  );
-  if (error) return reportAndFail('SB-CAL-SAVE', 'calendar.connect', error);
+  const saved = await writeSubscription(user.id, {
+    ics_url: url,
+    source_host: checked.url.hostname,
+    last_synced_at: new Date().toISOString(),
+    last_status: result.ok ? 'ok' : result.status,
+    // Null on failure, so a connection that never read anything cannot look
+    // like one that covered the week.
+    covered_through: result.ok ? result.coveredThrough : null,
+  });
+  if (!saved) {
+    return reportAndFail('SB-CAL-SAVE', 'calendar.connect', new Error('subscription write failed'));
+  }
 
   revalidatePath('/settings');
   if (!result.ok) return failure(result.code);
@@ -138,22 +199,16 @@ export async function syncCalendar(): Promise<ActionResult & { slots?: number }>
   }
 
   // The one place the stored URL is read, and it stays inside this function.
-  const { data, error } = await supabase
-    .from('calendar_subscriptions')
-    .select('ics_url')
-    .eq('user_id', user.id)
-    .maybeSingle();
-  if (error) return reportAndFail('SB-CAL-SAVE', 'calendar.sync', error);
-  if (!data?.ics_url) return failure('SB-CAL-GONE');
+  const storedUrl = await readSubscriptionUrl(user.id);
+  if (!storedUrl) return failure('SB-CAL-GONE');
 
-  const result = await refreshBusy(supabase, user.id, data.ics_url);
-  await supabase
-    .from('calendar_subscriptions')
-    .update({
-      last_synced_at: new Date().toISOString(),
-      last_status: result.ok ? 'ok' : result.status,
-    })
-    .eq('user_id', user.id);
+  const result = await refreshBusy(supabase, user.id, storedUrl);
+  await writeSubscription(user.id, {
+    ics_url: storedUrl,
+    last_synced_at: new Date().toISOString(),
+    last_status: result.ok ? 'ok' : result.status,
+    covered_through: result.ok ? result.coveredThrough : null,
+  });
 
   revalidatePath('/settings');
   if (!result.ok) return failure(result.code);
@@ -186,17 +241,33 @@ export async function disconnectCalendar(): Promise<ActionResult> {
 }
 
 /** What the app may know about the connection — never the URL. */
+const EMPTY_STATUS: CalendarStatus = {
+  connected: false,
+  sourceHost: null,
+  lastSyncedAt: null,
+  lastStatus: null,
+  coveredThrough: null,
+  usable: false,
+};
+
 export async function getCalendarStatus(): Promise<CalendarStatus> {
   const auth = await requireUser();
-  if (!auth.ok) return { connected: false, sourceHost: null, lastSyncedAt: null, lastStatus: null };
+  if (!auth.ok) return EMPTY_STATUS;
   const { data } = await auth.supabase.rpc('calendar_subscription_status');
   const row = Array.isArray(data) ? data[0] : null;
-  if (!row) return { connected: false, sourceHost: null, lastSyncedAt: null, lastStatus: null };
+  if (!row) return EMPTY_STATUS;
+  const coveredThrough = row.covered_through ?? null;
   return {
     connected: true,
     sourceHost: row.source_host ?? null,
     lastSyncedAt: row.last_synced_at ?? null,
     lastStatus: row.last_status ?? null,
+    coveredThrough,
+    // Connected is not the same as answered. A calendar whose last read failed
+    // has no busy times stored, and offering to fill from it would tick the
+    // whole week as free — telling the group this person is available when
+    // nothing has actually been checked.
+    usable: row.last_status === 'ok' && Boolean(coveredThrough),
   };
 }
 
