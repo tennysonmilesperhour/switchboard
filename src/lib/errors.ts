@@ -375,6 +375,11 @@ const REGISTRY = {
     fix: 'Reload and try again.',
     actor: 'reader',
   },
+  'SB-NOTIFY-CLEAR': {
+    message: 'Switchboard couldn’t clear your notifications.',
+    fix: 'Reload and try again.',
+    actor: 'reader',
+  },
   'SB-VERIFY-START': {
     message: 'Switchboard couldn’t start verifying that contact.',
     fix: 'Check the address or number, then try again.',
