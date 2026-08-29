@@ -230,6 +230,21 @@ export const FEATURE_GROUPS: readonly FeatureGroup[] = [
         href: '/events/new?decide=1',
       },
       {
+        // Shipped in the availability-heatmap migration but never indexed, and
+        // a tester asked "how do we actually coordinate calendars? is this an
+        // option already?" — which is exactly the question this index exists to
+        // answer. The `where` leads with the precondition because the grid only
+        // renders on a plan with no fixed time yet: someone who set a date in
+        // the wizard will not find it on their plan page no matter how hard
+        // they look, and directions that omit that send them hunting.
+        id: 'availability-grid',
+        title: 'When is everyone free',
+        blurb:
+          'Each person taps the parts of the week that work for them, and the plan shows where those overlap — so the dates that reach the poll are ones people can actually make. Your own marks stay private; the group only ever sees how many are free, never who.',
+        where:
+          'Start something → Help me figure it out (leave the date open), then the plan’s page',
+      },
+      {
         id: 'consensus-meter',
         title: 'Consensus meter',
         blurb: 'Watch where the group is actually leaning, as an aggregate and nothing more.',

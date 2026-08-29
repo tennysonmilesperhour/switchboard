@@ -1,5 +1,10 @@
 import { describe, expect, test } from 'vitest';
-import { suggestWindow, paceFromChosenWindows } from './windows';
+import {
+  suggestWindow,
+  paceFromChosenWindows,
+  sharedWindow,
+  windowForNewInvitee,
+} from './windows';
 
 const NOW = new Date('2026-07-03T12:00:00Z');
 
@@ -70,5 +75,50 @@ describe('paceFromChosenWindows', () => {
 
   test('a middling host reads standard', () => {
     expect(paceFromChosenWindows([60, 240, 240])).toBe('standard');
+  });
+});
+
+/**
+ * The wizard's "Everyone gets ..." control. Five people meant five identical
+ * dropdowns, and a host who set four of them and missed one had no way to see
+ * the miss — hence a single control, and these tests for the two ways it could
+ * lie about what the list says.
+ */
+describe('sharedWindow', () => {
+  test('a list that agrees has that window', () => {
+    expect(sharedWindow([1440, 1440, 1440])).toBe(1440);
+  });
+
+  test('one person out of step makes it Mixed, not the majority', () => {
+    // The control must not round to "mostly a day" — the whole reason it exists
+    // is to surface the row the host missed, and a confident number hides it.
+    expect(sharedWindow([1440, 1440, 240])).toBeNull();
+  });
+
+  test('one person is trivially in agreement with themselves', () => {
+    expect(sharedWindow([240])).toBe(240);
+  });
+
+  test('nobody has no shared window rather than a default one', () => {
+    expect(sharedWindow([])).toBeNull();
+  });
+});
+
+describe('windowForNewInvitee', () => {
+  test('someone added to an agreed list inherits that window', () => {
+    // The regression this guards: set everyone to 3 days, add a sixth guest,
+    // and the "everyone" control would flip to Mixed because the newcomer
+    // silently took the suggestion instead.
+    expect(windowForNewInvitee([4320, 4320, 4320], 240)).toBe(4320);
+  });
+
+  test('the first person added takes the suggestion', () => {
+    expect(windowForNewInvitee([], 240)).toBe(240);
+  });
+
+  test('a list that already disagrees falls back to the suggestion', () => {
+    // There is no shared answer to inherit, so the suggestion is the only
+    // defensible guess — and it leaves the list Mixed, which it already was.
+    expect(windowForNewInvitee([1440, 240], 60)).toBe(60);
   });
 });

@@ -11,6 +11,7 @@ import { GettingStarted } from '@/components/home/GettingStarted';
 import { Greeting } from '@/components/home/Greeting';
 import { PillarRow } from '@/components/home/PillarRow';
 import { PassportCard } from '@/components/home/PassportCard';
+import { RecentMatches, type RecentMatch } from '@/components/home/RecentMatches';
 import { loadPassport } from '@/lib/server/passport';
 import { loadFindability } from '@/lib/server/findability';
 import { findabilitySettled } from '@/lib/findability';
@@ -74,12 +75,10 @@ export default async function HomePage() {
       .gte('starts_at', nowIso)
       .order('starts_at')
       .limit(4),
-    supabase
-      .from('matches')
-      .select('id, activity, room_id, created_at, user_a, user_b')
-      .or(`user_a.eq.${user.id},user_b.eq.${user.id}`)
-      .order('created_at', { ascending: false })
-      .limit(3),
+    // Via the function rather than the table: it drops the ones this person
+    // has cleared *before* taking three, so clearing a card promotes the next
+    // match up instead of just leaving a shorter list.
+    supabase.rpc('my_recent_matches', { p_limit: 3 }),
     supabase
       .from('connections')
       .select('id', { count: 'exact', head: true })
@@ -411,30 +410,8 @@ export default async function HomePage() {
           </section>
         )}
 
-        {/* Fresh matches */}
-        {(recentMatches?.length ?? 0) > 0 && (
-          <section>
-            <SectionHeader title="Recent matches ✨" />
-            <div className="space-y-2">
-              {(recentMatches ?? []).map((match) => (
-                <Link
-                  key={match.id}
-                  href={match.room_id ? `/rooms/${match.room_id}` : '/mutual'}
-                  className="block group"
-                >
-                  <Card className="group-hover:border-terracotta transition-colors">
-                    <p className="text-sm">
-                      <strong>{match.activity}</strong> - it’s mutual!{' '}
-                      <span className="text-ink-faint">
-                        {formatRelative(match.created_at)}
-                      </span>
-                    </p>
-                  </Card>
-                </Link>
-              ))}
-            </div>
-          </section>
-        )}
+        {/* Fresh matches — each one clearable, by swipe or by button. */}
+        <RecentMatches matches={(recentMatches ?? []) as RecentMatch[]} />
 
         {/* Quick actions */}
         <section>
