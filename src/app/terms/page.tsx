@@ -26,6 +26,10 @@ const SECTIONS = [
     body: 'You are responsible for profile text, messages, images, invitations, comments, and other content you share. You must have the rights and permission needed to upload or share it. Do not upload sensitive information you would not want visible to the intended audience.',
   },
   {
+    title: 'SMS Notifications',
+    body: 'If you add and verify a mobile phone number and opt in to SMS notifications, you agree that Switchboard may send transactional text messages about phone verification, your account, invitations, RSVPs, reminders, schedule changes, cancellations, and event-related updates. Message frequency varies. Message and data rates may apply. Reply STOP to opt out of SMS notifications or HELP for help.',
+  },
+  {
     title: 'Safety and Enforcement',
     body: 'Meetups involve real people and real-world risk. Use an appropriate public or trusted venue, tell someone you trust where you are going, keep guardians present for kid-inclusive plans, and never publish a child’s name, age, school, contact details, or live location. We may remove content, restrict features, suspend accounts, preserve records, or report activity if needed to protect users, comply with law, prevent abuse, or keep the service reliable.',
   },
@@ -38,7 +42,7 @@ const SECTIONS = [
 export default function TermsPage() {
   return (
     <main className="mx-auto max-w-2xl px-6 py-16 text-ink">
-      <p className="text-sm font-bold text-terracotta">Effective July 29, 2026</p>
+      <p className="text-sm font-bold text-terracotta">Effective August 31, 2026</p>
       <h1 className="mt-2 text-4xl font-black">Terms of Use</h1>
       <p className="mt-4 text-sm leading-relaxed text-ink-soft">
         These terms are the basic rules for using Switchboard. They work together
