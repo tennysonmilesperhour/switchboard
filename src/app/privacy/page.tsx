@@ -24,7 +24,16 @@ const SECTIONS = [
       'Mutual-interest signals are private unless both people independently choose each other for the same context. Unmatched interest is not shown to the other person.',
       'People discovery is opt-in. You choose whether to appear and which categories or contexts can be used.',
       'Contact matching is used to help you find people you already know or invite guests. We do not sell personal information.',
+      'We do not share mobile phone numbers or SMS opt-in information with third parties for marketing or promotional purposes.',
       'Private poll votes and mutual-interest signals are protected by database access policies and should not be visible to other users except as aggregated or matched outcomes.',
+    ],
+  },
+  {
+    title: 'SMS Notifications',
+    body: [
+      'If you add and verify a mobile phone number and opt in to SMS notifications, Switchboard may send text messages about your account, phone verification, invitations, RSVPs, reminders, schedule changes, cancellations, and other event-related updates.',
+      'Message frequency varies based on your activity and notification settings. Message and data rates may apply.',
+      'You can opt out of SMS notifications at any time by replying STOP. Reply HELP for help. You can also manage notification settings from your Switchboard account.',
     ],
   },
   {
@@ -40,7 +49,7 @@ const SECTIONS = [
 export default function PrivacyPage() {
   return (
     <main className="mx-auto max-w-2xl px-6 py-16 text-ink">
-      <p className="text-sm font-bold text-terracotta">Effective July 9, 2026</p>
+      <p className="text-sm font-bold text-terracotta">Effective August 31, 2026</p>
       <h1 className="mt-2 text-4xl font-black">Privacy Notice</h1>
       <p className="mt-4 text-sm leading-relaxed text-ink-soft">
         This notice explains how Switchboard handles information for an early-access
