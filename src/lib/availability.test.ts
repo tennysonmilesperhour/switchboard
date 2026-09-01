@@ -7,6 +7,7 @@ import {
   gridSlots,
   heatLevel,
   isGridSlot,
+  recommendAvailability,
 } from '@/lib/availability';
 
 const FROM = new Date('2026-08-18T09:30:00Z');
@@ -73,6 +74,98 @@ describe('bestSlots', () => {
 
   it('respects the limit', () => {
     expect(bestSlots(counts, 2)).toHaveLength(2);
+  });
+});
+
+describe('recommendAvailability', () => {
+  const counts = [
+    // Tuesday morning, Tuesday evening, and Saturday afternoon.
+    { slot: '2026-09-01T08:00:00.000Z', people: 3, mine: false },
+    { slot: '2026-09-01T17:00:00.000Z', people: 3, mine: true },
+    { slot: '2026-09-05T12:00:00.000Z', people: 3, mine: false },
+  ];
+
+  it('waits when nobody has answered', () => {
+    const result = recommendAvailability({ counts, responders: 0, eligiblePeople: 5 });
+    expect(result.status).toBe('waiting');
+    expect(result.slots).toEqual([]);
+  });
+
+  it('waits when fewer than sixty percent have answered', () => {
+    const result = recommendAvailability({ counts, responders: 2, eligiblePeople: 5 });
+    expect(result.status).toBe('waiting');
+    expect(result.message).toContain('1 more answer');
+  });
+
+  it('shows a clearly provisional answer once the sample is representative', () => {
+    const result = recommendAvailability({ counts, responders: 3, eligiblePeople: 5 });
+    expect(result.status).toBe('provisional');
+    expect(result.message).toContain('3 of 5');
+    expect(result.slots).toHaveLength(3);
+  });
+
+  it('becomes actionable only when everybody has answered', () => {
+    const result = recommendAvailability({ counts, responders: 3, eligiblePeople: 3 });
+    expect(result.status).toBe('ready');
+    expect(result.missing).toBe(0);
+  });
+
+  it('prefers evenings and weekends only when attendance is tied', () => {
+    const result = recommendAvailability({ counts, responders: 3, eligiblePeople: 3 });
+    expect(result.slots.map((entry) => entry.slot)).toEqual([
+      '2026-09-05T12:00:00.000Z',
+      '2026-09-01T17:00:00.000Z',
+      '2026-09-01T08:00:00.000Z',
+    ]);
+  });
+
+  it('never lets a social preference beat one more person', () => {
+    const result = recommendAvailability({
+      responders: 4,
+      eligiblePeople: 4,
+      counts: [
+        { slot: '2026-09-01T08:00:00.000Z', people: 4, mine: false },
+        { slot: '2026-09-05T17:00:00.000Z', people: 3, mine: false },
+      ],
+    });
+    expect(result.slots[0].slot).toBe('2026-09-01T08:00:00.000Z');
+  });
+
+  it('says there is no good answer instead of choosing a one-person slot', () => {
+    const result = recommendAvailability({
+      responders: 4,
+      eligiblePeople: 4,
+      counts: [{ slot: '2026-09-05T17:00:00.000Z', people: 1, mine: false }],
+    });
+    expect(result.status).toBe('none');
+    expect(result.slots).toEqual([]);
+  });
+
+  it('does not pad a good answer with low-attendance alternatives', () => {
+    const result = recommendAvailability({
+      responders: 4,
+      eligiblePeople: 4,
+      counts: [
+        { slot: '2026-09-01T17:00:00.000Z', people: 3, mine: false },
+        { slot: '2026-09-02T17:00:00.000Z', people: 1, mine: false },
+      ],
+    });
+    expect(result.status).toBe('ready');
+    expect(result.slots.map((entry) => entry.people)).toEqual([3]);
+  });
+
+  it('counts an explicit empty answer without inventing a recommendation', () => {
+    const result = recommendAvailability({ counts: [], responders: 2, eligiblePeople: 2 });
+    expect(result.status).toBe('none');
+    expect(result.responders).toBe(2);
+  });
+
+  it('respects the recommendation limit', () => {
+    const result = recommendAvailability(
+      { counts, responders: 3, eligiblePeople: 3 },
+      2,
+    );
+    expect(result.slots).toHaveLength(2);
   });
 });
 

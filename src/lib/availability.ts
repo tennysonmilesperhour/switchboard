@@ -66,6 +66,25 @@ export interface SlotCount {
   mine: boolean;
 }
 
+export interface AvailabilitySnapshot {
+  counts: SlotCount[];
+  /** People who pressed Save, including people who selected no slots. */
+  responders: number;
+  /** Signed-in people who can currently answer for this plan. */
+  eligiblePeople: number;
+}
+
+export type RecommendationStatus = 'waiting' | 'provisional' | 'ready' | 'none';
+
+export interface AvailabilityRecommendation {
+  status: RecommendationStatus;
+  slots: SlotCount[];
+  responders: number;
+  eligiblePeople: number;
+  missing: number;
+  message: string;
+}
+
 /**
  * The slots most people can make, best first.
  *
@@ -80,6 +99,122 @@ export function bestSlots(counts: SlotCount[], limit = 3): SlotCount[] {
         b.people - a.people || new Date(a.slot).getTime() - new Date(b.slot).getTime(),
     )
     .slice(0, limit);
+}
+
+/**
+ * How sociable a tied slot tends to be.
+ *
+ * Attendance always wins first. This score only breaks equal-count ties, so an
+ * evening cannot displace a time that one more person can actually make. Within
+ * a tie, evenings and weekends are less likely to turn "free" into an awkward
+ * Tuesday-morning suggestion.
+ */
+function socialPreference(slot: string): number {
+  const date = new Date(slot);
+  const weekend = date.getUTCDay() === 0 || date.getUTCDay() === 6;
+  const hour = date.getUTCHours();
+  const band = hour === 17 ? 4 : hour === 12 ? 2 : hour === 22 ? 1 : 0;
+  return band + (weekend ? 3 : 0);
+}
+
+function rankedSlots(
+  counts: SlotCount[],
+  limit: number,
+  minimumPeople: number,
+): SlotCount[] {
+  return [...counts]
+    .filter((entry) => entry.people >= minimumPeople)
+    .sort(
+      (a, b) =>
+        b.people - a.people ||
+        socialPreference(b.slot) - socialPreference(a.slot) ||
+        new Date(a.slot).getTime() - new Date(b.slot).getTime(),
+    )
+    .slice(0, limit);
+}
+
+/**
+ * Turn overlap into an answer without pretending missing responses are free.
+ *
+ * Fewer than 60% answered: wait; the sample is too thin to call anything a
+ * recommendation. Partial but representative: show "best so far" and keep it
+ * out of the poll. Everyone answered: the host can act on it. At every stage a
+ * candidate also needs at least half of respondents (and two people in a real
+ * group), otherwise saying "no good overlap" is more honest than choosing the
+ * least-bad cell.
+ */
+export function recommendAvailability(
+  snapshot: Pick<AvailabilitySnapshot, 'counts' | 'responders' | 'eligiblePeople'>,
+  limit = 3,
+): AvailabilityRecommendation {
+  const responders = Math.max(0, Math.floor(snapshot.responders));
+  // A stale aggregate should never make more respondents than eligible people.
+  const eligiblePeople = Math.max(responders, Math.floor(snapshot.eligiblePeople));
+  const missing = Math.max(0, eligiblePeople - responders);
+  const participation = eligiblePeople > 0 ? responders / eligiblePeople : 0;
+
+  if (responders === 0) {
+    return {
+      status: 'waiting',
+      slots: [],
+      responders,
+      eligiblePeople,
+      missing,
+      message: 'Nobody has answered yet.',
+    };
+  }
+
+  const minimumSample = Math.min(2, eligiblePeople);
+  if (responders < minimumSample || participation < 0.6) {
+    const neededToSuggest = Math.max(
+      1,
+      Math.max(minimumSample, Math.ceil(eligiblePeople * 0.6)) - responders,
+    );
+    return {
+      status: 'waiting',
+      slots: [],
+      responders,
+      eligiblePeople,
+      missing,
+      message: `Waiting for ${neededToSuggest} more ${neededToSuggest === 1 ? 'answer' : 'answers'} before suggesting a time.`,
+    };
+  }
+
+  const neededForOverlap = responders === 1 ? 1 : Math.max(2, Math.ceil(responders / 2));
+  const slots = rankedSlots(snapshot.counts, Math.max(1, limit), neededForOverlap);
+  if (slots.length === 0) {
+    return {
+      status: 'none',
+      slots: [],
+      responders,
+      eligiblePeople,
+      missing,
+      message:
+        missing > 0
+          ? `No good overlap yet. ${missing} ${missing === 1 ? 'person has' : 'people have'} not answered.`
+          : 'There isn’t a good overlap in this week. Try another week or add new times.',
+    };
+  }
+
+  if (missing > 0) {
+    return {
+      status: 'provisional',
+      slots,
+      responders,
+      eligiblePeople,
+      missing,
+      message: `Best so far — ${responders} of ${eligiblePeople} people have answered.`,
+    };
+  }
+
+  return {
+    status: 'ready',
+    slots,
+    responders,
+    eligiblePeople,
+    missing,
+    message: `Everyone has answered. These are the strongest overlaps.`,
+  };
 }
 
 /**

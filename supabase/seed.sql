@@ -20,6 +20,12 @@ grant usage on schema public to anon, authenticated;
 grant insert, update, delete on all tables in schema public to anon, authenticated;
 grant usage, select on all sequences in schema public to anon, authenticated;
 
+-- Availability is replaced through one atomic, grid-validating RPC. Re-granting
+-- direct writes here would make local/CI looser than production and let a client
+-- bypass both the response marker and slot validation.
+revoke insert, update, delete on public.event_availability from anon, authenticated;
+revoke insert, update, delete on public.event_availability_responses from anon, authenticated;
+
 -- SELECT everywhere EXCEPT tables with explicit column allowlists.
 --
 -- SB-01 (20260710120000_lock_sensitive_profile_columns.sql) dropped the

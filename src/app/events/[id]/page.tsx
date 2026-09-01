@@ -392,9 +392,9 @@ export default async function EventPage({
   );
   const pendingPolls = allPolls.filter((row) => row.phase === 'pending');
 
-  // When people are free. Counts only — `event_availability_counts` is the sole
-  // door onto this table and returns no user id, so neither this page nor the
-  // host can learn which times any one person picked.
+  // When people are free. Aggregate doors only: per-slot counts plus how many
+  // eligible people submitted an answer. Neither function returns a user id, so
+  // neither this page nor the host can learn which times any one person picked.
   const availability = await loadAvailability(id);
 
   // This viewer's own busy bands, so the grid can be offered pre-filled. Both
@@ -1024,7 +1024,9 @@ export default async function EventPage({
             <AvailabilityGrid
               eventId={id}
               timeZone={event.time_zone ?? null}
-              counts={availability}
+              counts={availability.counts}
+              responders={availability.responders}
+              eligiblePeople={availability.eligiblePeople}
               isHost={isHost}
               pollId={poll && poll.phase !== 'decided' ? poll.id : null}
               busySlots={calendarBusy}

@@ -42,6 +42,11 @@ async function login(page: Page, identifier: string) {
     // running a journey as someone else and failing somewhere unrelated.
     console.log(`[e2e] reused session for ${identifier} did not hold; signing in again`);
     sessionCookies.delete(identifier);
+    // The rejected cache entry is still installed in this browser context.
+    // Without clearing it, /login can immediately redirect the browser back to
+    // the signed-in home page, leaving signIn waiting for a form that can never
+    // appear. A fresh credential check needs a genuinely signed-out context.
+    await page.context().clearCookies();
   }
 
   await signIn(page, identifier);
@@ -352,7 +357,11 @@ test.describe('authenticated surface', () => {
 
     await expect(submit).toBeVisible({ timeout: 5_000 });
     await submit.click();
-    await page.waitForURL(/\/events\/[0-9a-f-]{36}/, { timeout: 15_000 });
+    // The event route streams its loading shell while the plan data resolves.
+    // waitForURL's default waits for the document's full `load` event, which
+    // can outlive the navigation we are asserting. The heading below is
+    // the real readiness check; here we only need to prove the redirect landed.
+    await expect(page).toHaveURL(/\/events\/[0-9a-f-]{36}/, { timeout: 15_000 });
     await expect(page.getByRole('heading', { name: 'E2E guest plan', level: 1 })).toBeVisible();
   });
 
@@ -509,7 +518,9 @@ test.describe('authenticated surface', () => {
     });
     await expect(submit).toBeVisible({ timeout: 5_000 });
     await submit.click();
-    await page.waitForURL(/\/events\/[0-9a-f-]{36}/, { timeout: 15_000 });
+    // This route streams a loading shell, so assert the committed redirect and
+    // let the contact button below prove the plan itself is ready.
+    await expect(page).toHaveURL(/\/events\/[0-9a-f-]{36}/, { timeout: 15_000 });
 
     // Tap them in the invitation flow: their card opens with the address the
     // host typed and a one-tap mail action.
