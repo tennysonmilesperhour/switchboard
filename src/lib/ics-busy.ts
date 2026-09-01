@@ -82,6 +82,35 @@ function zoneOffsetMs(atMs: number, zone: string): number {
   return asUtc - atMs;
 }
 
+interface WallClock {
+  year: number;
+  month: number;
+  day: number;
+  hour: number;
+  minute: number;
+  second: number;
+}
+
+/** Build a UTC timestamp without Date.UTC's special handling of years 0–99. */
+function wallAsUtc(wall: WallClock): number {
+  const date = new Date(0);
+  date.setUTCHours(wall.hour, wall.minute, wall.second, 0);
+  date.setUTCFullYear(wall.year, wall.month - 1, wall.day);
+  return date.getTime();
+}
+
+function instantAsUtcWall(ms: number): WallClock {
+  const date = new Date(ms);
+  return {
+    year: date.getUTCFullYear(),
+    month: date.getUTCMonth() + 1,
+    day: date.getUTCDate(),
+    hour: date.getUTCHours(),
+    minute: date.getUTCMinutes(),
+    second: date.getUTCSeconds(),
+  };
+}
+
 /**
  * A wall-clock reading in a named zone, as a real instant.
  *
@@ -100,7 +129,7 @@ function wallClockToUtc(
   s: number,
   zone: string | null,
 ): number {
-  const naive = Date.UTC(y, mo - 1, d, h, mi, s);
+  const naive = wallAsUtc({ year: y, month: mo, day: d, hour: h, minute: mi, second: s });
   const resolved = resolveZone(zone);
   if (!resolved) return naive;
   zone = resolved;
@@ -121,6 +150,10 @@ interface IcsDate {
   ms: number;
   /** VALUE=DATE — a whole day, with no time of day attached. */
   allDay: boolean;
+  /** The calendar-local reading, retained so recurrence can cross DST safely. */
+  wall: WallClock;
+  /** The resolved recurrence zone. UTC and floating values use null. */
+  zone: string | null;
 }
 
 /** Parse `20260829T140000Z`, `20260829T080000` (+TZID), or `20260829`. */
@@ -129,24 +162,66 @@ function parseIcsDate(value: string, tzid: string | null): IcsDate | null {
   const dateOnly = clean.match(/^(\d{4})(\d{2})(\d{2})$/);
   if (dateOnly) {
     const [, y, mo, d] = dateOnly;
-    return { ms: Date.UTC(Number(y), Number(mo) - 1, Number(d)), allDay: true };
+    const wall = {
+      year: Number(y),
+      month: Number(mo),
+      day: Number(d),
+      hour: 0,
+      minute: 0,
+      second: 0,
+    };
+    return { ms: wallAsUtc(wall), allDay: true, wall, zone: null };
   }
   const full = clean.match(/^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})(Z)?$/);
   if (!full) return null;
   const [, y, mo, d, h, mi, s, utc] = full;
+  const wall = {
+    year: Number(y),
+    month: Number(mo),
+    day: Number(d),
+    hour: Number(h),
+    minute: Number(mi),
+    second: Number(s),
+  };
   const ms = utc
-    ? Date.UTC(Number(y), Number(mo) - 1, Number(d), Number(h), Number(mi), Number(s))
-    : wallClockToUtc(Number(y), Number(mo), Number(d), Number(h), Number(mi), Number(s), tzid);
-  return { ms, allDay: false };
+    ? wallAsUtc(wall)
+    : wallClockToUtc(
+        wall.year,
+        wall.month,
+        wall.day,
+        wall.hour,
+        wall.minute,
+        wall.second,
+        tzid,
+      );
+  return { ms, allDay: false, wall, zone: utc ? null : tzid };
 }
 
 /** `DTSTART;TZID=America/Denver:2026...` → name, params, value. */
 function splitLine(line: string): { name: string; params: Map<string, string>; value: string } | null {
-  const colon = line.indexOf(':');
+  let quoted = false;
+  let colon = -1;
+  for (let index = 0; index < line.length; index += 1) {
+    if (line[index] === '"') quoted = !quoted;
+    else if (line[index] === ':' && !quoted) {
+      colon = index;
+      break;
+    }
+  }
   if (colon === -1) return null;
   const head = line.slice(0, colon);
   const value = line.slice(colon + 1);
-  const [name, ...rawParams] = head.split(';');
+  const headParts: string[] = [];
+  let start = 0;
+  quoted = false;
+  for (let index = 0; index <= head.length; index += 1) {
+    if (head[index] === '"') quoted = !quoted;
+    if ((index === head.length || head[index] === ';') && !quoted) {
+      headParts.push(head.slice(start, index));
+      start = index + 1;
+    }
+  }
+  const [name, ...rawParams] = headParts;
   const params = new Map<string, string>();
   for (const param of rawParams) {
     const eq = param.indexOf('=');
@@ -204,10 +279,71 @@ const WEEKDAYS = ['SU', 'MO', 'TU', 'WE', 'TH', 'FR', 'SA'];
 interface RawEvent {
   start: number;
   end: number;
+  startWall: WallClock;
   allDay: boolean;
   tzid: string | null;
   rrule: string | null;
   exdates: number[];
+}
+
+function addWallDays(wall: WallClock, days: number): WallClock {
+  const shifted = new Date(wallAsUtc({ ...wall, hour: 0, minute: 0, second: 0 }));
+  shifted.setUTCDate(shifted.getUTCDate() + days);
+  return {
+    year: shifted.getUTCFullYear(),
+    month: shifted.getUTCMonth() + 1,
+    day: shifted.getUTCDate(),
+    hour: wall.hour,
+    minute: wall.minute,
+    second: wall.second,
+  };
+}
+
+function wallWeekday(wall: WallClock): number {
+  return new Date(wallAsUtc({ ...wall, hour: 0, minute: 0, second: 0 })).getUTCDay();
+}
+
+function wallToInstant(wall: WallClock, zone: string | null): number {
+  return wallClockToUtc(
+    wall.year,
+    wall.month,
+    wall.day,
+    wall.hour,
+    wall.minute,
+    wall.second,
+    zone,
+  );
+}
+
+function isLeapYear(year: number): boolean {
+  return year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0);
+}
+
+function daysInMonth(year: number, month: number): number {
+  if (month === 2) return isLeapYear(year) ? 29 : 28;
+  return [4, 6, 9, 11].includes(month) ? 30 : 31;
+}
+
+/** A fixed day-of-month recurrence skips months that do not contain that day. */
+function monthlyWall(anchor: WallClock, interval: number, step: number): WallClock | null {
+  const absoluteMonth = anchor.year * 12 + (anchor.month - 1) + step * interval;
+  const year = Math.floor(absoluteMonth / 12);
+  const month = absoluteMonth - year * 12 + 1;
+  if (anchor.day > daysInMonth(year, month)) return null;
+  return { ...anchor, year, month };
+}
+
+function validMonthlyOccurrencesBefore(
+  anchor: WallClock,
+  interval: number,
+  beforeStep: number,
+): number {
+  if (anchor.day <= 28) return beforeStep;
+  let count = 0;
+  for (let step = 0; step < beforeStep; step += 1) {
+    if (monthlyWall(anchor, interval, step)) count += 1;
+  }
+  return count;
 }
 
 /**
@@ -253,13 +389,14 @@ function occurrences(event: RawEvent, windowStart: number, windowEnd: number): B
    * A standup that began in 2020 must not be stepped through a day at a time
    * to reach this week — any sane iteration cap runs out first, and the week
    * would render empty, which is the one failure mode a busy calendar must not
-   * have. With no COUNT the nth occurrence is arithmetic, so we jump straight
-   * to the first one that could touch the window. COUNT is the exception: it
-   * bounds the series itself, so walking from the start is both cheap and the
-   * only way to know where the count runs out.
+   * have. The occurrence index is arithmetic for daily and weekly rules; monthly
+   * rules count the valid fixed-day candidates before the jump. That preserves
+   * COUNT without walking years of already-finished instances.
    */
   const skipSteps = (stepMs: number, origin: number): number =>
-    count !== null ? 0 : Math.max(0, Math.floor((windowStart - duration - origin) / stepMs));
+    // A named-zone series may move by an hour at DST, so retain one preceding
+    // step rather than using fixed milliseconds as an exact calendar index.
+    Math.max(0, Math.floor((windowStart - duration - origin) / stepMs) - 1);
 
   /** Every reason to stop emitting, in one place. */
   const done = (index: number, ms: number): boolean =>
@@ -269,27 +406,27 @@ function occurrences(event: RawEvent, windowStart: number, windowEnd: number): B
     const step = interval * DAY_MS;
     let i = skipSteps(step, event.start);
     for (let guard = 0; guard < MAX_OCCURRENCES; guard += 1, i += 1) {
-      const ms = event.start + i * step;
+      const ms = wallToInstant(addWallDays(event.startWall, i * interval), event.tzid);
       if (done(i, ms)) break;
       push(ms);
     }
   } else if (freq === 'WEEKLY') {
     // Every weekday named by BYDAY, in each active week. A bare WEEKLY repeats
     // on the weekday the series started on.
-    const days = byDay.length > 0 ? byDay : [WEEKDAYS[new Date(event.start).getUTCDay()]];
+    const startWeekday = wallWeekday(event.startWall);
+    const days = byDay.length > 0 ? byDay : [WEEKDAYS[startWeekday]];
     const dayIndices = [...new Set(days.map((d) => WEEKDAYS.indexOf(d)))].sort((a, b) => a - b);
-    const dayStart = Math.floor(event.start / DAY_MS) * DAY_MS;
-    const timeOfDay = event.start - dayStart;
-    const weekOne = dayStart - new Date(event.start).getUTCDay() * DAY_MS;
+    const weekOneWall = addWallDays(event.startWall, -startWeekday);
+    const weekOne = wallToInstant(weekOneWall, event.tzid);
     const step = interval * 7 * DAY_MS;
-    let index = 0;
     let week = skipSteps(step, weekOne);
+    const firstWeekCount = dayIndices.filter((day) => day >= startWeekday).length;
+    let index = week === 0 ? 0 : firstWeekCount + (week - 1) * dayIndices.length;
     for (let guard = 0; guard < MAX_OCCURRENCES; guard += 1, week += 1) {
-      const base = weekOne + week * step;
-      if (base > windowEnd) break;
       let stopped = false;
       for (const day of dayIndices) {
-        const ms = base + day * DAY_MS + timeOfDay;
+        const wall = addWallDays(weekOneWall, week * interval * 7 + day);
+        const ms = wallToInstant(wall, event.tzid);
         // The series cannot start before its own DTSTART, even when BYDAY
         // names a weekday earlier in that first week.
         if (ms < event.start) continue;
@@ -303,20 +440,19 @@ function occurrences(event: RawEvent, windowStart: number, windowEnd: number): B
       if (stopped) break;
     }
   } else if (freq === 'MONTHLY') {
-    const anchor = new Date(event.start);
-    const monthsOf = (ms: number) => {
+    const monthsOf = (ms: number): number => {
       const d = new Date(ms);
       return d.getUTCFullYear() * 12 + d.getUTCMonth();
     };
-    let i =
-      count !== null
-        ? 0
-        : Math.max(0, Math.floor((monthsOf(windowStart) - monthsOf(event.start)) / interval));
+    const anchorMonth = event.startWall.year * 12 + event.startWall.month - 1;
+    let i = Math.max(0, Math.floor((monthsOf(windowStart) - anchorMonth) / interval) - 1);
+    let index = validMonthlyOccurrencesBefore(event.startWall, interval, i);
     for (let guard = 0; guard < MAX_OCCURRENCES; guard += 1, i += 1) {
-      const d = new Date(anchor);
-      d.setUTCMonth(anchor.getUTCMonth() + i * interval);
-      const ms = d.getTime();
-      if (done(i, ms)) break;
+      const wall = monthlyWall(event.startWall, interval, i);
+      if (!wall) continue;
+      const ms = wallToInstant(wall, event.tzid);
+      if (done(index, ms)) break;
+      index += 1;
       push(ms);
     }
   } else {
@@ -370,6 +506,7 @@ export function parseBusyIntervals(
           // No DTEND and no DURATION: an all-day entry covers its day, and a
           // timed one is a moment rather than a span.
           end: current.end ?? (current.allDay ? current.start + DAY_MS : current.start),
+          startWall: current.startWall ?? instantAsUtcWall(current.start),
           allDay: current.allDay ?? false,
           tzid: current.tzid ?? null,
           rrule: current.rrule ?? null,
@@ -401,8 +538,9 @@ export function parseBusyIntervals(
       const date = parseIcsDate(value, tzid);
       if (date) {
         current.start = date.ms;
+        current.startWall = date.wall;
         current.allDay = date.allDay;
-        current.tzid = tzid;
+        current.tzid = date.zone;
       }
     } else if (name === 'DTEND') {
       const date = parseIcsDate(value, tzid);

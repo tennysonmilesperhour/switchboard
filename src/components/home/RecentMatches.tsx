@@ -7,6 +7,12 @@ import { Icon } from '@/components/ui/Icon';
 import { useToast } from '@/components/ui/Toast';
 import { dismissMatch, restoreMatch } from '@/lib/actions/matches';
 import { formatRelative } from '@/lib/format';
+import {
+  swipeAxis,
+  swipeFrame,
+  swipeRelease,
+  type SwipeConfig,
+} from '@/lib/swipe-dismiss';
 
 export interface RecentMatch {
   id: string;
@@ -14,11 +20,6 @@ export interface RecentMatch {
   room_id: string | null;
   created_at: string;
 }
-
-/** Past this much horizontal travel, letting go clears the card. */
-const COMMIT_PX = 96;
-/** Below this, a drag is a tap or the start of a scroll, not a swipe. */
-const SLOP_PX = 10;
 
 /**
  * "Recent matches", with a way to clear one.
@@ -134,13 +135,16 @@ function SwipeableMatch({
   match: RecentMatch;
   onClear: () => void;
 }) {
-  const [offset, setOffset] = useState(0);
-  const [leaving, setLeaving] = useState(false);
+  const card = useRef<HTMLDivElement>(null);
+  const gesture = useRef<{ pointerId: number; x: number; y: number; at: number } | null>(
+    null,
+  );
+  const size = useRef<SwipeConfig>({ width: 0, height: 0 });
+  const [frame, setFrame] = useState({ x: 0, y: 0, opacity: 1 });
   // Whether a swipe is in progress is state, not a ref, because rendering
   // depends on it: the card must follow the finger exactly while held, then
   // animate back or away once released.
   const [dragging, setDragging] = useState(false);
-  const start = useRef<{ x: number; y: number } | null>(null);
   // Set once a drag passes the slop threshold, and read by the click handler to
   // swallow the click the browser fires at the end of a drag. Without it, a
   // swipe that doesn't reach the threshold navigates into the match room.
@@ -155,39 +159,69 @@ function SwipeableMatch({
     // Mouse users get the button, not a drag: pressing and moving with a mouse
     // is how you select text, and hijacking it breaks that.
     if (e.pointerType === 'mouse') return;
-    start.current = { x: e.clientX, y: e.clientY };
+    const rect = card.current?.getBoundingClientRect();
+    size.current = { width: rect?.width ?? 0, height: rect?.height ?? 0 };
+    gesture.current = {
+      pointerId: e.pointerId,
+      x: e.clientX,
+      y: e.clientY,
+      at: Date.now(),
+    };
   }
 
   function onPointerMove(e: React.PointerEvent) {
-    if (!start.current) return;
-    const dx = e.clientX - start.current.x;
-    const dy = e.clientY - start.current.y;
+    const start = gesture.current;
+    if (!start || start.pointerId !== e.pointerId) return;
+    const delta = { dx: e.clientX - start.x, dy: e.clientY - start.y };
     if (!dragged.current) {
       // Not a horizontal swipe until it is more sideways than vertical. A
       // diagonal thumb-flick down the page should scroll, not clear a match.
-      if (Math.abs(dx) < SLOP_PX || Math.abs(dx) <= Math.abs(dy)) return;
+      if (swipeAxis(delta) !== 'x') return;
       dragged.current = true;
       setDragging(true);
-      e.currentTarget.setPointerCapture(e.pointerId);
+      card.current?.setPointerCapture(e.pointerId);
     }
-    setOffset(dx);
+    // This card only dismisses sideways. The shared helper also supports an
+    // upward notification swipe, so lock the already-chosen horizontal axis
+    // instead of letting a curving thumb turn into that other gesture midway.
+    setFrame(swipeFrame({ dx: delta.dx, dy: 0 }, size.current));
   }
 
-  function onPointerUp() {
-    if (!start.current) return;
-    start.current = null;
+  function onPointerUp(e: React.PointerEvent) {
+    const start = gesture.current;
+    if (!start || start.pointerId !== e.pointerId) return;
+    gesture.current = null;
     setDragging(false);
-    if (Math.abs(offset) >= COMMIT_PX) {
+    if (card.current?.hasPointerCapture(e.pointerId)) {
+      card.current.releasePointerCapture(e.pointerId);
+    }
+    if (!dragged.current) return;
+
+    const release = swipeRelease(
+      {
+        dx: e.clientX - start.x,
+        dy: 0,
+        elapsedMs: Date.now() - start.at,
+      },
+      size.current,
+    );
+    if (release.dismiss === 'left' || release.dismiss === 'right') {
       // Finish the journey in the direction it was already going, then clear.
-      setLeaving(true);
-      setOffset(offset > 0 ? 400 : -400);
+      setFrame(release);
       onClear();
       return;
     }
-    setOffset(0);
+    setFrame({ x: 0, y: 0, opacity: 1 });
   }
 
-  const progress = Math.min(1, Math.abs(offset) / COMMIT_PX);
+  function onPointerCancel() {
+    gesture.current = null;
+    dragged.current = false;
+    setDragging(false);
+    setFrame({ x: 0, y: 0, opacity: 1 });
+  }
+
+  const progress = 1 - frame.opacity;
 
   return (
     <div className="relative">
@@ -203,13 +237,14 @@ function SwipeableMatch({
         <Icon name="check" size={18} />
       </div>
       <div
+        ref={card}
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}
-        onPointerCancel={onPointerUp}
+        onPointerCancel={onPointerCancel}
         style={{
-          transform: offset ? `translateX(${offset}px)` : undefined,
-          opacity: leaving ? 0 : 1 - progress * 0.35,
+          transform: `translate3d(${frame.x}px, ${frame.y}px, 0)`,
+          opacity: frame.opacity,
           transition: dragging ? undefined : 'transform 180ms ease, opacity 180ms ease',
           touchAction: 'pan-y',
         }}
@@ -222,6 +257,7 @@ function SwipeableMatch({
               onClick={(e) => {
                 if (dragged.current) e.preventDefault();
               }}
+              draggable={false}
               className="min-w-0 flex-1"
             >
               <p className="text-sm">

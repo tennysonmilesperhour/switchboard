@@ -20,7 +20,7 @@ grant usage on schema public to anon, authenticated;
 grant insert, update, delete on all tables in schema public to anon, authenticated;
 grant usage, select on all sequences in schema public to anon, authenticated;
 
--- SELECT everywhere EXCEPT public.profiles.
+-- SELECT everywhere EXCEPT tables with explicit column allowlists.
 --
 -- SB-01 (20260710120000_lock_sensitive_profile_columns.sql) dropped the
 -- table-level SELECT grant on profiles and replaced it with an explicit column
@@ -46,7 +46,12 @@ grant usage, select on all sequences in schema public to anon, authenticated;
 -- Granting SELECT table by table rather than revoking it afterwards is
 -- deliberate: `REVOKE SELECT ON <table>` also drops the column-level SELECT
 -- grants on that table, so "blanket grant, then revoke on profiles" would leave
--- profiles unreadable in a way production is not.
+-- a protected table unreadable in a way production is not.
+--
+-- `calendar_subscriptions` follows the same pattern: `ics_url` is a bearer
+-- credential, so 20260829140000_calendar_subscriptions.sql revokes the hosted
+-- table-wide default and grants back only the safe status columns. Keep both
+-- carve-outs in one list so the local/CI seed cannot undo either migration.
 do $$
 declare
   relation record;
@@ -57,7 +62,7 @@ begin
       join pg_namespace n on n.oid = c.relnamespace
      where n.nspname = 'public'
        and c.relkind in ('r', 'p', 'v', 'm', 'f')
-       and c.relname <> 'profiles'
+       and c.relname not in ('profiles', 'calendar_subscriptions')
   loop
     execute format(
       'grant select on public.%I to anon, authenticated', relation.relname

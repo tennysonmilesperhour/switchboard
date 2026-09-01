@@ -59,6 +59,25 @@ describe('reading times out of a calendar', () => {
     expect(busy(folded)).toHaveLength(2);
   });
 
+  test('a colon inside a quoted parameter does not split the property early', () => {
+    const [block] = busy(
+      ics(
+        'DTSTART;X-REFERENCE="urn:example:value";TZID=America/Denver:20260902T090000\n' +
+          'DTEND;TZID=America/Denver:20260902T100000',
+      ),
+    );
+    expect(new Date(block.start).toISOString()).toBe('2026-09-02T15:00:00.000Z');
+  });
+
+  test('an all-day DTEND stays exclusive for a multi-day event', () => {
+    const [block] = busy(
+      ics('DTSTART;VALUE=DATE:20260902\nDTEND;VALUE=DATE:20260904'),
+    );
+    expect(new Date(block.start).toISOString()).toBe('2026-09-02T00:00:00.000Z');
+    expect(new Date(block.end).toISOString()).toBe('2026-09-04T00:00:00.000Z');
+    expect(block.end - block.start).toBe(2 * 86_400_000);
+  });
+
   test('events marked free, and cancelled ones, are not busy', () => {
     expect(
       busy(ics('DTSTART:20260902T140000Z\nDTEND:20260902T160000Z\nTRANSP:TRANSPARENT')),
@@ -87,6 +106,19 @@ describe('repeating events', () => {
     ).toHaveLength(7);
   });
 
+  test('a long-running counted series fast-forwards without losing its count', () => {
+    // COUNT used to disable fast-forward entirely, so the 400-iteration guard
+    // stopped in 2021 and this still-live 3,000-day series vanished in 2026.
+    expect(
+      busy(
+        ics(
+          'DTSTART:20200106T140000Z\nDTEND:20200106T150000Z\n' +
+            'RRULE:FREQ=DAILY;COUNT=3000',
+        ),
+      ),
+    ).toHaveLength(7);
+  });
+
   test('a weekly series lands on the weekdays it names', () => {
     // 2026-09-01 is a Tuesday; MO/WE in this window are the 2nd and 7th.
     const blocks = busy(
@@ -96,6 +128,45 @@ describe('repeating events', () => {
       '2026-09-02',
       '2026-09-07',
     ]);
+  });
+
+  test('BYDAY is evaluated in the series zone, not on the UTC date', () => {
+    // Tuesday at 10pm in Denver is already Wednesday in UTC. Treating TU as a
+    // UTC weekday moved every later occurrence to Monday night locally.
+    const blocks = parseBusyIntervals(
+      ics(
+        'DTSTART;TZID=America/Denver:20260901T220000\n' +
+          'DTEND;TZID=America/Denver:20260901T230000\n' +
+          'RRULE:FREQ=WEEKLY;BYDAY=TU;COUNT=2',
+      ),
+      new Date('2026-09-07T00:00:00Z'),
+      new Date('2026-09-10T00:00:00Z'),
+    );
+    expect(blocks.map((block) => new Date(block.start).toISOString())).toEqual([
+      '2026-09-09T04:00:00.000Z',
+    ]);
+  });
+
+  test('a named-zone recurrence keeps its wall time across DST and EXDATE still matches', () => {
+    const event =
+      'DTSTART;TZID=America/Denver:20260301T220000\n' +
+      'DTEND;TZID=America/Denver:20260301T230000\n' +
+      'RRULE:FREQ=WEEKLY;COUNT=2';
+    const from = new Date('2026-03-08T00:00:00Z');
+    const to = new Date('2026-03-10T12:00:00Z');
+
+    const [afterSpringForward] = parseBusyIntervals(ics(event), from, to);
+    expect(new Date(afterSpringForward.start).toISOString()).toBe(
+      '2026-03-09T04:00:00.000Z',
+    );
+
+    expect(
+      parseBusyIntervals(
+        ics(event + '\nEXDATE;TZID=America/Denver:20260308T220000'),
+        from,
+        to,
+      ),
+    ).toHaveLength(0);
   });
 
   test('INTERVAL is measured from where the series began, not from the window', () => {
@@ -111,6 +182,20 @@ describe('repeating events', () => {
     expect(
       busy(ics('DTSTART:20260901T140000Z\nDTEND:20260901T150000Z\nRRULE:FREQ=DAILY;COUNT=3')),
     ).toHaveLength(3);
+  });
+
+  test('a monthly series skips a missing day instead of overflowing into March', () => {
+    const blocks = parseBusyIntervals(
+      ics(
+        'DTSTART:20260131T140000Z\nDTEND:20260131T150000Z\n' +
+          'RRULE:FREQ=MONTHLY;COUNT=3',
+      ),
+      new Date('2026-03-01T00:00:00Z'),
+      new Date('2026-04-02T00:00:00Z'),
+    );
+    expect(blocks.map((block) => new Date(block.start).toISOString())).toEqual([
+      '2026-03-31T14:00:00.000Z',
+    ]);
   });
 
   test('UNTIL ends the series', () => {
