@@ -19,6 +19,7 @@ banner saying what happened to it.
 | [`DOCKET.md`](DOCKET.md) | The living backlog: strategy, queued builds, design threads, and residuals carried forward from archived docs. |
 | [`INNOVATIONS.md`](INNOVATIONS.md) | The idea list. Roadmap entries live here, never in the feature index. |
 | [`WEEKLY-PLAN-2026-08-11.md`](WEEKLY-PLAN-2026-08-11.md) | The current week's plan. Superseded weekly plans move to `archive/`. |
+| [`AUDIT-2026-09-01.md`](AUDIT-2026-09-01.md) | Full audit of code, UX, security, vision, and delivery at `f68181e`. Moves to `archive/` once its action plan is carried into `DOCKET.md`. |
 
 Also load-bearing but not in `docs/`: [`../AGENTS.md`](../AGENTS.md) (the agent
 operating manual), [`../PRODUCT.md`](../PRODUCT.md) (product principles and
