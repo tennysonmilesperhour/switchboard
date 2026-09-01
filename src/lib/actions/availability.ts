@@ -8,15 +8,21 @@ import { createClient } from '@/lib/supabase/server';
 import { requireUser } from '@/lib/server/require-user';
 import { isEventManager } from '@/lib/server/authz';
 import { reportAndFail } from '@/lib/server/observability';
-import { gridSlots, isGridSlot, bestSlots, type SlotCount } from '@/lib/availability';
+import {
+  gridSlots,
+  isGridSlot,
+  recommendAvailability,
+  type AvailabilitySnapshot,
+  type SlotCount,
+} from '@/lib/availability';
 
 /**
  * Replace this person's availability for a plan.
  *
  * Whole-set rather than per-cell: a grid is edited by dragging across it, and
  * a request per cell would be both chatty and half-applied the moment one
- * fails. Delete-then-insert inside one action keeps "what I marked" and "what
- * is stored" the same thing.
+ * fails. Replacing the set in one database transaction keeps "what I marked"
+ * and "what is stored" the same thing.
  *
  * Every slot is checked against the grid the app actually offers. Without that,
  * the column is an arbitrary timestamp store that anyone could write anything
@@ -28,7 +34,7 @@ export async function setAvailability(
 ): Promise<ActionResult> {
   const auth = await requireUser();
   if (!auth.ok) return auth;
-  const { supabase, user } = auth;
+  const { supabase } = auth;
 
   const now = new Date();
   const allowed = new Set(gridSlots(now));
@@ -40,27 +46,15 @@ export async function setAvailability(
     return failure('SB-FREE-SLOT');
   }
 
-  // Clearing your availability is a legitimate answer ("actually, none of
-  // these"), so an empty set is a valid write rather than a no-op.
-  const { error: clearError } = await supabase
-    .from('event_availability')
-    .delete()
-    .eq('event_id', eventId)
-    .eq('user_id', user.id);
-  if (clearError) {
-    return reportAndFail('SB-FREE-SAVE', 'availability.clear', clearError);
-  }
-
-  if (clean.length > 0) {
-    const { error } = await supabase.from('event_availability').insert(
-      clean.map((slot) => ({ event_id: eventId, user_id: user.id, slot })),
-    );
-    if (error) {
-      // The RLS `with check` also requires can_view_event, so this is where a
-      // stranger's write lands. Their availability is gone either way, which is
-      // the safe end state.
-      return reportAndFail('SB-FREE-SAVE', 'availability.save', error);
-    }
+  // One transaction replaces the rows and records that this person answered.
+  // Empty remains meaningful: "none of these work" must not look like silence
+  // when recommendations decide whether enough of the group has replied.
+  const { error } = await supabase.rpc('replace_event_availability', {
+    p_event: eventId,
+    p_slots: clean,
+  });
+  if (error) {
+    return reportAndFail('SB-FREE-SAVE', 'availability.save', error);
   }
 
   revalidatePath(`/events/${eventId}`);
@@ -70,21 +64,31 @@ export async function setAvailability(
 /**
  * Read the group's heatmap.
  *
- * Through `event_availability_counts`, which is the only door: individual rows
- * are owner-only under RLS, and the function returns counts with no user id in
- * any column. See the migration for why the roster is deliberately not
- * available even to the host.
+ * Through two aggregate-only doors: one returns per-slot counts and the other
+ * returns participation totals. Individual rows are owner-only under RLS and
+ * neither function returns a user id, so the roster remains unavailable even
+ * to the host.
  */
-export async function loadAvailability(eventId: string): Promise<SlotCount[]> {
+export async function loadAvailability(eventId: string): Promise<AvailabilitySnapshot> {
   const supabase = await createClient();
-  const { data } = await supabase.rpc('event_availability_counts', {
-    p_event: eventId,
-  });
-  return (data ?? []).map((row: { slot: string; people: number; mine: boolean }) => ({
-    slot: row.slot,
-    people: row.people,
-    mine: row.mine,
-  }));
+  const [countResult, summaryResult] = await Promise.all([
+    supabase.rpc('event_availability_counts', { p_event: eventId }),
+    supabase.rpc('event_availability_summary', { p_event: eventId }).maybeSingle(),
+  ]);
+  const summary = summaryResult.data as
+    | { responders: number; eligible_people: number }
+    | null;
+  return {
+    counts: (countResult.data ?? []).map(
+      (row: { slot: string; people: number; mine: boolean }): SlotCount => ({
+        slot: row.slot,
+        people: row.people,
+        mine: row.mine,
+      }),
+    ),
+    responders: summary?.responders ?? 0,
+    eligiblePeople: summary?.eligible_people ?? 0,
+  };
 }
 
 /**
@@ -110,11 +114,12 @@ export async function slotsToPollOptions(
     return failure('SB-PLAN-ACCESS');
   }
 
-  const counts = await loadAvailability(eventId);
-  const best = bestSlots(counts, limit);
-  if (best.length === 0) {
-    return { ok: false, error: 'Nobody has marked when they’re free yet.' };
+  const snapshot = await loadAvailability(eventId);
+  const recommendation = recommendAvailability(snapshot, limit);
+  if (recommendation.status !== 'ready') {
+    return { ok: false, error: recommendation.message };
   }
+  const best = recommendation.slots;
 
   // The label is the instant, formatted by the client that renders it; storing
   // the ISO string in `detail` keeps the option machine-readable so picking a

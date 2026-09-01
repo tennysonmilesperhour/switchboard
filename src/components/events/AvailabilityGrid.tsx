@@ -8,13 +8,24 @@ import { SectionHeader } from '@/components/ui/Card';
 import { useToast } from '@/components/ui/Toast';
 import { useConfirm } from '@/components/ui/ConfirmDialog';
 import { setAvailability, slotsToPollOptions } from '@/lib/actions/availability';
-import { BANDS, GRID_DAYS, gridSlots, heatLevel, type SlotCount } from '@/lib/availability';
+import {
+  BANDS,
+  GRID_DAYS,
+  gridSlots,
+  heatLevel,
+  recommendAvailability,
+  type SlotCount,
+} from '@/lib/availability';
 
 interface AvailabilityGridProps {
   eventId: string;
   /** The plan's own zone, so everyone reads the same wall-clock time. */
   timeZone: string | null;
   counts: SlotCount[];
+  /** People who saved an answer, including an explicit empty answer. */
+  responders: number;
+  /** Signed-in people currently able to answer for this plan. */
+  eligiblePeople: number;
   isHost: boolean;
   /** The open poll to send the best slots to, when there is one. */
   pollId: string | null;
@@ -64,6 +75,8 @@ export function AvailabilityGrid({
   eventId,
   timeZone,
   counts,
+  responders,
+  eligiblePeople,
   isHost,
   pollId,
   busySlots = [],
@@ -89,6 +102,10 @@ export function AvailabilityGrid({
   const busiest = useMemo(
     () => counts.reduce((most, entry) => Math.max(most, entry.people), 0),
     [counts],
+  );
+  const recommendation = useMemo(
+    () => recommendAvailability({ counts, responders, eligiblePeople }),
+    [counts, responders, eligiblePeople],
   );
 
   const days = useMemo(() => {
@@ -271,6 +288,32 @@ export function AvailabilityGrid({
         </table>
       </div>
 
+      <div className="mt-4 rounded-xl border border-line bg-cream/45 p-3" aria-live="polite">
+        <p className="text-xs font-extrabold uppercase tracking-wide text-ink-faint">
+          {recommendation.status === 'provisional' ? 'Best times so far' : 'Best times'}
+        </p>
+        {recommendation.slots.length > 0 && (
+          <ol className="mt-2 grid gap-1.5 sm:grid-cols-3">
+            {recommendation.slots.map((entry) => {
+              const band = BANDS.find(
+                (candidate) => candidate.startHour === new Date(entry.slot).getUTCHours(),
+              );
+              return (
+                <li key={entry.slot} className="rounded-lg bg-paper px-2.5 py-2 text-sm">
+                  <span className="block font-bold text-ink">
+                    {dayLabel(entry.slot.slice(0, 10))} {band?.label.toLowerCase()}
+                  </span>
+                  <span className="text-xs text-ink-faint">
+                    {entry.people} of {recommendation.responders} free
+                  </span>
+                </li>
+              );
+            })}
+          </ol>
+        )}
+        <p className="mt-2 text-xs text-ink-soft">{recommendation.message}</p>
+      </div>
+
       <div className="mt-3 flex flex-wrap items-center gap-2">
         <Button size="sm" onClick={save} disabled={pending || !dirty}>
           {dirty ? 'Save when I’m free' : 'Saved'}
@@ -284,7 +327,12 @@ export function AvailabilityGrid({
           </Button>
         )}
         {isHost && pollId && (
-          <Button size="sm" variant="secondary" onClick={sendToPoll} disabled={pending}>
+          <Button
+            size="sm"
+            variant="secondary"
+            onClick={sendToPoll}
+            disabled={pending || recommendation.status !== 'ready'}
+          >
             Put the best times on the poll
           </Button>
         )}

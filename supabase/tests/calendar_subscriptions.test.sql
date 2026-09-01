@@ -7,7 +7,7 @@
 -- never who or when.
 
 begin;
-select plan(7);
+select plan(8);
 
 insert into auth.users (id, email) values
   ('00000000-0000-0000-0000-00000000c301', 'cal-ana@example.com'),
@@ -81,14 +81,26 @@ select is(
   'nobody else can read when a person is busy'
 );
 
--- Without `with check`, this would succeed and point Ana's calendar at a feed
--- Ben controls — the hole an UPDATE policy without one always leaves.
+-- This behavioral check alone does not prove the policy declares WITH CHECK:
+-- for a FOR ALL policy Postgres falls back to USING when WITH CHECK is omitted.
 select throws_ok(
   $$ insert into public.calendar_subscriptions (user_id, ics_url)
        values ('00000000-0000-0000-0000-00000000c301', 'https://evil.example/feed.ics') $$,
   '42501',
   null,
   'nobody can point someone else''s calendar connection at a feed of their choosing'
+);
+
+select is(
+  (select pg_get_expr(p.polwithcheck, p.polrelid)
+     from pg_policy p
+     join pg_class c on c.oid = p.polrelid
+     join pg_namespace n on n.oid = c.relnamespace
+    where n.nspname = 'public'
+      and c.relname = 'calendar_subscriptions'
+      and p.polname = 'calendar_subscriptions_own'),
+  '(user_id = auth.uid())',
+  'the subscription policy declares its ownership WITH CHECK explicitly'
 );
 
 -- The address is a bearer credential, and the owner's own browser holds an
