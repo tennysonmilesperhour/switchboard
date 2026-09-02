@@ -28,6 +28,9 @@ export default async function EditProfilePage() {
   const { data: privateProfile } = await supabase
     .rpc('my_private_profile')
     .maybeSingle<{ calendar_token: string; contact_email: string | null; contact_phone: string | null }>();
+  const { data: homePoint } = await supabase
+    .rpc('my_home_point')
+    .maybeSingle<{ latitude: number; longitude: number }>();
 
   const links: ProfileLink[] = Array.isArray(profile?.links) ? profile!.links : [];
   const socials: ProfileSocial[] = (Array.isArray(profile?.socials) ? profile!.socials : []).filter(
@@ -46,6 +49,11 @@ export default async function EditProfilePage() {
         tagline={profile?.tagline ?? ''}
         pronouns={profile?.pronouns ?? ''}
         location={profile?.location ?? ''}
+        homePoint={
+          homePoint
+            ? { lat: homePoint.latitude, lng: homePoint.longitude }
+            : null
+        }
         links={links}
         socials={socials}
         contactEmail={privateProfile?.contact_email ?? ''}
