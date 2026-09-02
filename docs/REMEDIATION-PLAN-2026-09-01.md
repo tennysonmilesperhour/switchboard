@@ -83,11 +83,12 @@ production defect or an exploitable gap today.
 
 ### 2. Schema drift becomes visible
 
-- [ ] **What.** `/api/health` pins `EXPECTED_SCHEMA_VERSION = '20260731201812'`
+- [x] **What.** `/api/health` pins `EXPECTED_SCHEMA_VERSION = '20260731201812'`
   and `app_schema_status()` enumerates versions only through July 31; eighteen
   migrations have shipped since. The parity step compares migration filenames
   to a history table, so a migration recorded as applied without its DDL is
-  invisible. This already happened.
+  invisible. This already happened. Completed in
+  [#162](https://github.com/tennysonmilesperhour/switchboard/pull/162).
 - **Where.** `src/app/api/health/route.ts`, a new migration redefining
   `app_schema_status()`, `src/lib/health.test.ts` (new).
 - **How.**
