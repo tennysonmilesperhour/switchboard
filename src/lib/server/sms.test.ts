@@ -114,6 +114,9 @@ describe('sendSmsWithResult', () => {
       to: '+1 555 555 0100',
       body: 'Hello',
     });
+    await vi.waitFor(() => {
+      expect(timeout).toHaveBeenCalledWith(PROVIDER_TIMEOUT_MS);
+    });
     controller.abort(new DOMException('timed out', 'TimeoutError'));
 
     await expect(delivery).resolves.toEqual({
@@ -121,7 +124,6 @@ describe('sendSmsWithResult', () => {
       provider: 'twilio',
       errorCode: 'timeout',
     });
-    expect(timeout).toHaveBeenCalledWith(PROVIDER_TIMEOUT_MS);
   });
 
   test('refuses an opted-out recipient without calling Twilio', async () => {
