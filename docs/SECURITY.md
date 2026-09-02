@@ -365,7 +365,10 @@ security-definer function that encodes the privacy contract.
   only to a caller who is **themselves** currently sharing ("see and be seen"),
   filters on `are_blocked` and the target's `visibility` scope (`connections`
   requires `are_connected`), bounds by radius, and **rounds returned coordinates
-  to ~110 m** so a fellow sharer never receives an exact fix. The owner's own
+  to ~110 m** so a fellow sharer never receives an exact fix. Its returned
+  distance, radius filter, and ordering are calculated from those same rounded
+  caller and target points; an exact distance or exact boundary test would
+  otherwise undo the rounding through repeated spoofed queries. The owner's own
   precise point stays owner-only.
 - **Opt-in and ephemeral.** Nothing is stored until the user taps "Share my
   location"; every row carries an `expires_at` (clamped 1–8 h), is ignored past
