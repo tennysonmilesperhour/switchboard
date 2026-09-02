@@ -296,7 +296,7 @@ compile errors or test failures.
 
 ### 13. The e2e suite that matters runs in CI
 
-- [ ] **What.** `e2e/invite-links.spec.ts` guards the repo's most repeated
+- [x] **What.** `e2e/invite-links.spec.ts` guards the repo's most repeated
   regression class and is not run by the authenticated CI job.
 - **Where.** `.github/workflows/ci.yml:136`.
 - **How.** Change the run step to `npx playwright test e2e/authed.spec.ts e2e/invite-links.spec.ts`.

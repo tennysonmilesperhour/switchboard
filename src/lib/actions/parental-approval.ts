@@ -408,7 +408,6 @@ async function eventIdForApprovalToken(
     .maybeSingle<{ event_id: string }>();
   return data?.event_id ?? null;
 }
-
 export async function toggleParentalApproval(
   eventId: string,
   enabled: boolean,
