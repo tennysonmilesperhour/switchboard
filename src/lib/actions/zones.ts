@@ -4,8 +4,7 @@ import type { ActionResult } from '@/lib/errors';
 
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
-import { createClient } from '@/lib/supabase/server';
-import { requireUser } from '@/lib/server/require-user';
+import { requireUser, requireUserOrRedirect } from '@/lib/server/require-user';
 import { failure } from '@/lib/errors';
 import { reportAndFail } from '@/lib/server/observability';
 import { zoneJoinUrl } from '@/lib/links';
@@ -21,11 +20,7 @@ function coordField(formData: FormData, name: string): number | null {
 }
 
 export async function createZone(formData: FormData): Promise<void> {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) redirect('/login');
+  const { supabase, user } = await requireUserOrRedirect();
 
   const name = String(formData.get('name') ?? '').trim();
   const description = String(formData.get('description') ?? '').trim();
@@ -136,13 +131,14 @@ export async function joinZoneViaCode(
   code: string,
 ): Promise<{ ok: boolean; slug?: string }> {
   const auth = await requireUser();
-  if (!auth.ok) return { ok: false };
+  if (!auth.ok) return auth;
   const { supabase } = auth;
 
   const { data: slug, error } = await supabase.rpc('join_zone_via_code', {
     p_code: code,
   });
-  if (error || typeof slug !== 'string') return { ok: false };
+  if (error) return reportAndFail('SB-ZONE-SAVE', 'zone.join', error);
+  if (typeof slug !== 'string') return failure('SB-ZONE-UNKNOWN');
   revalidatePath('/zones');
   return { ok: true, slug };
 }

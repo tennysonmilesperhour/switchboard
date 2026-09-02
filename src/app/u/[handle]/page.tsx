@@ -350,7 +350,7 @@ export default async function PublicProfilePage({
                     i > 0 ? 'border-t border-line' : ''
                   }`}
                 >
-                  <span className="text-terracotta">
+                  <span className="text-terracotta-deep">
                     <Icon name="globe" size={20} />
                   </span>
                   <span className="min-w-0 flex-1">

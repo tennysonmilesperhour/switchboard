@@ -71,6 +71,11 @@ const REGISTRY = {
     fix: null,
     actor: 'operator',
   },
+  'SB-CONFIG-CRON': {
+    message: 'The background sweep has stopped reporting successful runs.',
+    fix: null,
+    actor: 'operator',
+  },
   'SB-CONFIG-SCHEMA': {
     message: 'The database is older than this version of the app expects.',
     fix: null,
@@ -93,6 +98,11 @@ const REGISTRY = {
   },
   'SB-CONFIG-PUSH': {
     message: 'Push notifications aren’t configured on this deployment.',
+    fix: null,
+    actor: 'operator',
+  },
+  'SB-CONFIG-AUTH': {
+    message: 'Account management isn’t fully configured on this deployment.',
     fix: null,
     actor: 'operator',
   },
@@ -196,6 +206,11 @@ const REGISTRY = {
     fix: 'Ask the guardian to check their email for the approval link.',
     actor: 'reader',
   },
+  'SB-RSVP-GUARDIAN': {
+    message: 'This guardian request does not belong to your RSVP.',
+    fix: 'Open your own invitation and try again, or ask the host for help.',
+    actor: 'reader',
+  },
 
   // ————————————————————————— identity & permission —————————————————————————
   'SB-AUTH-REQUIRED': {
@@ -233,6 +248,26 @@ const REGISTRY = {
   'SB-AUTH-RESEND': {
     message: 'Switchboard couldn’t send that confirmation email.',
     fix: 'Try again in a few minutes, or use “Forgot password?” — that link confirms the address too.',
+    actor: 'reader',
+  },
+  'SB-AUTH-SIGNIN': {
+    message: 'Switchboard couldn’t sign you in right now.',
+    fix: 'Try again in a moment.',
+    actor: 'reader',
+  },
+  'SB-AUTH-SIGNUP': {
+    message: 'Switchboard couldn’t finish creating that account.',
+    fix: 'Try again. If an account was created, signing in is safe.',
+    actor: 'reader',
+  },
+  'SB-AUTH-RESET': {
+    message: 'Switchboard couldn’t update that password.',
+    fix: 'Request a fresh reset link and try again.',
+    actor: 'reader',
+  },
+  'SB-AUTH-DELETE': {
+    message: 'Switchboard couldn’t delete that account.',
+    fix: 'Try again in a moment.',
     actor: 'reader',
   },
   'SB-PERM-HOST': {
@@ -340,6 +375,11 @@ const REGISTRY = {
     fix: 'Try again, or add them as suggestions by hand.',
     actor: 'reader',
   },
+  'SB-POLL-CLOSED': {
+    message: 'Voting is closed on this poll.',
+    fix: 'Ask the host if the group still needs another option or vote.',
+    actor: 'host',
+  },
   // Clearing a match off Home. Its own code rather than a borrowed save
   // failure: the reader's worry when a dismissed card reappears is "did I just
   // un-match this person?", and the message has to answer that before it
@@ -347,6 +387,16 @@ const REGISTRY = {
   'SB-MATCH-CLEAR': {
     message: 'That match didn’t clear off your Home.',
     fix: 'Try again. Nothing about the match itself changed — it’s still on Mutual, and the other person saw nothing either way.',
+    actor: 'reader',
+  },
+  'SB-MOMENT-ACCESS': {
+    message: 'This shared moment is no longer available to you.',
+    fix: 'Refresh Moments to see who is still open to connecting.',
+    actor: 'reader',
+  },
+  'SB-MOMENT-SAVE': {
+    message: 'That Moments response didn’t save.',
+    fix: 'Refresh Moments and try again.',
     actor: 'reader',
   },
   // Connecting a calendar. Its own area: "we couldn't read your calendar" and
@@ -415,6 +465,141 @@ const REGISTRY = {
   'SB-VERIFY-START': {
     message: 'Switchboard couldn’t start verifying that contact.',
     fix: 'Check the address or number, then try again.',
+    actor: 'reader',
+  },
+  'SB-VERIFY-CHECK': {
+    message: 'Switchboard couldn’t check that verification code.',
+    fix: 'Request a new code and try again.',
+    actor: 'reader',
+  },
+  'SB-ANNOUNCEMENT-SAVE': {
+    message: 'That announcement didn’t save.',
+    fix: 'Try again. Nobody was notified.',
+    actor: 'reader',
+  },
+  'SB-BOARD-SAVE': {
+    message: 'That board change didn’t save.',
+    fix: 'Reload the board and try again.',
+    actor: 'reader',
+  },
+  'SB-BOARD-LINK': {
+    message: 'Switchboard couldn’t make a board invite link.',
+    fix: null,
+    actor: 'operator',
+  },
+  'SB-CAPSULE-SAVE': {
+    message: 'That capsule entry didn’t save.',
+    fix: 'Try again.',
+    actor: 'reader',
+  },
+  'SB-CONNECTION-SAVE': {
+    message: 'That connection change didn’t save.',
+    fix: 'Reload your people list and try again.',
+    actor: 'reader',
+  },
+  'SB-CIRCLE-SAVE': {
+    message: 'That circle change didn’t save.',
+    fix: 'Reload your people list and try again.',
+    actor: 'reader',
+  },
+  'SB-DISCOVERY-RUN': {
+    message: 'Switchboard couldn’t make suggestions right now.',
+    fix: 'Try again in a moment.',
+    actor: 'reader',
+  },
+  'SB-ENERGY-SAVE': {
+    message: 'That reflection didn’t save.',
+    fix: 'Try again.',
+    actor: 'reader',
+  },
+  'SB-THREAD-SAVE': {
+    message: 'That message didn’t save.',
+    fix: 'Try again.',
+    actor: 'reader',
+  },
+  'SB-EXPENSE-SAVE': {
+    message: 'That expense didn’t save.',
+    fix: 'Try again.',
+    actor: 'reader',
+  },
+  'SB-HOUSEHOLD-SAVE': {
+    message: 'That household didn’t save.',
+    fix: 'Try again.',
+    actor: 'reader',
+  },
+  'SB-IDENTITY-SAVE': {
+    message: 'That portrait setting didn’t save.',
+    fix: 'Reload your portrait and try again.',
+    actor: 'reader',
+  },
+  'SB-REFLECTION-SAVE': {
+    message: 'That reflection didn’t save.',
+    fix: 'Try again.',
+    actor: 'reader',
+  },
+  'SB-IMPORT-READ': {
+    message: 'Switchboard couldn’t read that event link.',
+    fix: 'Try the link again, or fill the plan in below.',
+    actor: 'reader',
+  },
+  'SB-LOCATION-SAVE': {
+    message: 'That live location update didn’t save.',
+    fix: 'Try sharing again.',
+    actor: 'reader',
+  },
+  'SB-LOCATION-LOAD': {
+    message: 'Switchboard couldn’t load live locations.',
+    fix: 'Reload the page.',
+    actor: 'reader',
+  },
+  'SB-MAP-LOOKUP': {
+    message: 'Switchboard couldn’t look up that place.',
+    fix: 'Check the place name or address and try again.',
+    actor: 'reader',
+  },
+  'SB-INTRO-SAVE': {
+    message: 'That introduction didn’t send.',
+    fix: 'Try again.',
+    actor: 'reader',
+  },
+  'SB-MODERATION-SAVE': {
+    message: 'That moderation decision didn’t save.',
+    fix: 'Reload the queue and try again.',
+    actor: 'reader',
+  },
+  'SB-MOMENT-CHAT': {
+    message: 'Switchboard couldn’t open that moment chat.',
+    fix: 'Reload and try again while the moment is still live.',
+    actor: 'reader',
+  },
+  'SB-MUTUAL-SAVE': {
+    message: 'That Mutual update didn’t save.',
+    fix: 'Reload Mutual and try again.',
+    actor: 'reader',
+  },
+  'SB-RITUAL-SAVE': {
+    message: 'That ritual didn’t save.',
+    fix: 'Try again.',
+    actor: 'reader',
+  },
+  'SB-ROOM-SAVE': {
+    message: 'That room update didn’t save.',
+    fix: 'Reload the room and try again.',
+    actor: 'reader',
+  },
+  'SB-SIGNAL-SAVE': {
+    message: 'That signal didn’t save.',
+    fix: 'Try again.',
+    actor: 'reader',
+  },
+  'SB-SIGNAL-PAUSED': {
+    message: 'Signals are paused while you’re on sabbatical.',
+    fix: 'End your sabbatical in Settings before turning a signal on.',
+    actor: 'reader',
+  },
+  'SB-VENUE-SAVE': {
+    message: 'That venue change didn’t save.',
+    fix: 'Try again.',
     actor: 'reader',
   },
 
@@ -497,6 +682,23 @@ export interface Failure {
 }
 
 /**
+ * A failure the reader can fix directly from the sentence itself.
+ *
+ * Validation is the one deliberate exception to the error-code rule. Keeping
+ * it behind a named helper makes that exception visible in review and lets the
+ * coverage test reject an uncoded operational failure without mistaking
+ * messages such as "Add your name" for incidents.
+ */
+export interface ValidationFailure {
+  ok: false;
+  error?: string;
+}
+
+export function validation(error?: string): ValidationFailure {
+  return error ? { ok: false, error } : { ok: false };
+}
+
+/**
  * Build a failure from a code, optionally overriding the sentence when a call
  * site has more specific context than the registry can.
  *
@@ -520,6 +722,7 @@ export function failure(code: ErrorCode, message?: string): Failure {
  * breaks the build.
  */
 const AREA_CODES: Record<string, ErrorCode> = {
+  'rate-limit': 'SB-RATE-LIMIT',
   // Deployment can't reach the database at all. These three are the ones that
   // used to render as "your invitation was withdrawn".
   'share-link.lookup': 'SB-CONFIG-DB',
@@ -547,22 +750,35 @@ const AREA_CODES: Record<string, ErrorCode> = {
   'calendar.connect': 'SB-CAL-SAVE',
   'calendar.sync': 'SB-CAL-SAVE',
   'calendar.disconnect': 'SB-CAL-SAVE',
+  'calendar.fetch': 'SB-CAL-FETCH',
+  'calendar.refresh': 'SB-CAL-SAVE',
   'match.dismiss': 'SB-MATCH-CLEAR',
   'match.restore': 'SB-MATCH-CLEAR',
+  'moment.candidate': 'SB-MOMENT-SAVE',
+  'moment.block': 'SB-MOMENT-SAVE',
+  'moment.report': 'SB-MOMENT-SAVE',
   'poll.follow-up': 'SB-PLAN-SAVE',
   'poll.follow-up-remove': 'SB-PLAN-SAVE',
   'event-locate': 'SB-PLAN-SAVE',
   'event.delete': 'SB-PLAN-DELETE',
   'event.delete-room': 'SB-PLAN-DELETE',
+  'event.cohost-add': 'SB-PLAN-SAVE',
 
   // Getting invitations out
   'event-initial-delivery': 'SB-INVITE-SEND',
   'add-people': 'SB-INVITE-SEND',
   'add-people-cascade': 'SB-INVITE-SEND',
+  'remove-invite': 'SB-INVITE-SEND',
   'remove-invite-cascade': 'SB-INVITE-SEND',
+  'resend-invite': 'SB-INVITE-SEND',
   'resend-invite-cascade': 'SB-INVITE-SEND',
+  'invite.move': 'SB-INVITE-SEND',
+  'invite.window': 'SB-INVITE-SEND',
   'invite-connection-now': 'SB-INVITE-SEND',
   'invite-connection-deliver': 'SB-INVITE-SEND',
+  'sms.consent-check': 'SB-CONFIG-SMS',
+  'sms.inbound': 'SB-CONFIG-SMS',
+  'sms.opt-out-check': 'SB-CONFIG-SMS',
   'event-invite-link': 'SB-SHARE-SAVE',
   'event-share-link': 'SB-SHARE-SAVE',
   'event-share-link-rotate': 'SB-SHARE-SAVE',
@@ -574,14 +790,27 @@ const AREA_CODES: Record<string, ErrorCode> = {
   'zone.resolve-request': 'SB-ZONE-SAVE',
   'zone.membership': 'SB-ZONE-SAVE',
   'zone.visibility': 'SB-ZONE-SAVE',
+  'zone.join': 'SB-ZONE-SAVE',
+
+  // Poll input
+  'poll.suggest': 'SB-POLL-SUGGEST',
+  'poll.vote': 'SB-PLAN-SAVE',
 
   // Answering
   'share-rsvp.respond': 'SB-RSVP-SAVE',
   'guest-rsvp.claim': 'SB-RSVP-SAVE',
+  'guest-rsvp.respond': 'SB-RSVP-SAVE',
   'guest-rsvp.decline-note': 'SB-RSVP-SAVE',
+  'invite.respond': 'SB-RSVP-SAVE',
+  'join.request': 'SB-RSVP-SAVE',
+  'join.approve': 'SB-RSVP-SAVE',
+  'join.decline': 'SB-RSVP-SAVE',
   'invite-decline.message': 'SB-RSVP-SAVE',
   'invite-claim.token': 'SB-RSVP-SAVE',
   'parental-approval.create': 'SB-RSVP-SAVE',
+  'parental-approval.invite': 'SB-RSVP-SAVE',
+  'parental-approval.event': 'SB-RSVP-SAVE',
+  'parental-approval.resend': 'SB-RSVP-SAVE',
   'parental-approval.resolve': 'SB-RSVP-SAVE',
   'parental-approval.email': 'SB-RSVP-SAVE',
 
@@ -597,6 +826,70 @@ const AREA_CODES: Record<string, ErrorCode> = {
   'settings.discoverability': 'SB-SETTINGS-SAVE',
   'settings.sabbatical': 'SB-SETTINGS-SAVE',
   'settings.quiet-hours': 'SB-SETTINGS-SAVE',
+  'settings.notifications': 'SB-SETTINGS-SAVE',
+  'settings.calendar-token': 'SB-SETTINGS-SAVE',
+
+  // Social surfaces and personal tools
+  'announcement.save': 'SB-ANNOUNCEMENT-SAVE',
+  'board.create': 'SB-BOARD-SAVE',
+  'board.member-add': 'SB-BOARD-SAVE',
+  'board.member-remove': 'SB-BOARD-SAVE',
+  'board.join': 'SB-BOARD-SAVE',
+  'board.link-create': 'SB-BOARD-LINK',
+  'board.link-rotate': 'SB-BOARD-LINK',
+  'board.post-create': 'SB-BOARD-SAVE',
+  'board.post-respond': 'SB-BOARD-SAVE',
+  'board.post-delete': 'SB-BOARD-SAVE',
+  'board.post-complete': 'SB-BOARD-SAVE',
+  'board.post-update': 'SB-BOARD-SAVE',
+  'capsule.save': 'SB-CAPSULE-SAVE',
+  'connection.request': 'SB-CONNECTION-SAVE',
+  'connection.respond': 'SB-CONNECTION-SAVE',
+  'connection.remove': 'SB-CONNECTION-SAVE',
+  'connection.block': 'SB-CONNECTION-SAVE',
+  'connection.avoid': 'SB-CONNECTION-SAVE',
+  'connection.unavoid': 'SB-CONNECTION-SAVE',
+  'connection.report': 'SB-CONNECTION-SAVE',
+  'circle.create': 'SB-CIRCLE-SAVE',
+  'circle.rename': 'SB-CIRCLE-SAVE',
+  'circle.members': 'SB-CIRCLE-SAVE',
+  'circle.delete': 'SB-CIRCLE-SAVE',
+  'contact.verify-start': 'SB-VERIFY-START',
+  'contact.verify-check': 'SB-VERIFY-CHECK',
+  'discovery.run': 'SB-DISCOVERY-RUN',
+  'energy.save': 'SB-ENERGY-SAVE',
+  'event-thread.send': 'SB-THREAD-SAVE',
+  'event-thread.react': 'SB-THREAD-SAVE',
+  'expense.save': 'SB-EXPENSE-SAVE',
+  'household.save': 'SB-HOUSEHOLD-SAVE',
+  'identity.preference': 'SB-IDENTITY-SAVE',
+  'identity.verdict': 'SB-IDENTITY-SAVE',
+  'identity.operator': 'SB-IDENTITY-SAVE',
+  'identity.reflection': 'SB-REFLECTION-SAVE',
+  'event.import': 'SB-IMPORT-READ',
+  'location.share': 'SB-LOCATION-SAVE',
+  'location.stop': 'SB-LOCATION-SAVE',
+  'location.load': 'SB-LOCATION-LOAD',
+  'location.refresh': 'SB-LOCATION-LOAD',
+  'map.search': 'SB-MAP-LOOKUP',
+  'map.reverse': 'SB-MAP-LOOKUP',
+  'intro.create': 'SB-INTRO-SAVE',
+  'moderation.resolve': 'SB-MODERATION-SAVE',
+  'moment.create': 'SB-MOMENT-SAVE',
+  'moment.update': 'SB-MOMENT-SAVE',
+  'moment.load': 'SB-MOMENT-SAVE',
+  'moment.chat': 'SB-MOMENT-CHAT',
+  'mutual.intent': 'SB-MUTUAL-SAVE',
+  'mutual.respond': 'SB-MUTUAL-SAVE',
+  'ritual.create': 'SB-RITUAL-SAVE',
+  'room.message': 'SB-ROOM-SAVE',
+  'room.image': 'SB-ROOM-SAVE',
+  'signal.add': 'SB-SIGNAL-SAVE',
+  'signal.remove': 'SB-SIGNAL-SAVE',
+  'signal.audience': 'SB-SIGNAL-SAVE',
+  'signal.clear': 'SB-SIGNAL-SAVE',
+  'venue.claim': 'SB-VENUE-SAVE',
+  'venue.review': 'SB-VENUE-SAVE',
 
   // Getting into an account
   'auth.resend-confirmation': 'SB-AUTH-RESEND',

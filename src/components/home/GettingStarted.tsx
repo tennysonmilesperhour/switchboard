@@ -94,7 +94,7 @@ export function GettingStarted({
           type="button"
           aria-label="Dismiss getting started"
           onClick={dismiss}
-          className="shrink-0 rounded-full p-1 text-ink-faint hover:text-ink"
+          className="-m-2 inline-flex size-11 shrink-0 items-center justify-center rounded-full text-ink-faint hover:bg-card/70 hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-terracotta"
         >
           <Icon name="close" size={16} />
         </button>
@@ -133,7 +133,7 @@ export function GettingStarted({
           who'd rather see what's here than be shown it a piece at a time. */}
       <Link
         href="/features"
-        className="mt-3 inline-flex min-h-11 items-center text-sm font-bold text-terracotta"
+        className="mt-3 inline-flex min-h-11 items-center text-sm font-bold text-terracotta-deep"
       >
         See everything Switchboard does →
       </Link>

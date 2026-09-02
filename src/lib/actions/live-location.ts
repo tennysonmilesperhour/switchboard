@@ -1,12 +1,13 @@
 'use server';
 
-import type { ActionResult, ErrorCode } from '@/lib/errors';
+import { failure, validation, type ActionResult, type ErrorCode } from '@/lib/errors';
 
 import { revalidatePath } from 'next/cache';
 import { requireUser } from '@/lib/server/require-user';
 import { checkRateLimit } from '@/lib/server/rate-limit';
 import { isValidCoordinate } from '@/lib/geo';
 import type { LiveLocation, LocationVisibility, NearbyPerson } from '@/lib/types';
+import { reportAndFail } from '@/lib/server/observability';
 
 export interface ShareResult {
   ok: boolean;
@@ -67,15 +68,15 @@ export interface ShareLocationInput {
  */
 export async function shareLocation(input: ShareLocationInput): Promise<ShareResult> {
   const auth = await requireUser();
-  if (!auth.ok) return { ok: false, error: auth.error };
+  if (!auth.ok) return auth;
   const { supabase, user } = auth;
 
   if (!isValidCoordinate(input.lat, input.lng)) {
-    return { ok: false, error: 'Could not read a valid location from your device.' };
+    return failure('SB-LOCATION-DENIED');
   }
   // Position updates fire as the user moves; keep the ceiling generous but real.
   if (!(await checkRateLimit(`live-share:${user.id}`, 300, 60 * 60))) {
-    return { ok: false, error: 'Too many location updates. Try again in a moment.' };
+    return failure('SB-RATE-LIMIT', 'Too many location updates. Try again in a moment.');
   }
 
   const expiresAt = new Date(Date.now() + clampHours(input.hours) * 3_600_000).toISOString();
@@ -100,7 +101,7 @@ export async function shareLocation(input: ShareLocationInput): Promise<ShareRes
     },
     { onConflict: 'user_id' },
   );
-  if (error) return { ok: false, error: error.message };
+  if (error) return reportAndFail('SB-LOCATION-SAVE', 'location.share', error);
 
   revalidatePath('/map');
   return { ok: true, expiresAt };
@@ -117,14 +118,14 @@ export async function refreshLocationPoint(
   accuracyM?: number | null,
 ): Promise<ShareResult> {
   const auth = await requireUser();
-  if (!auth.ok) return { ok: false, error: auth.error };
+  if (!auth.ok) return auth;
   const { supabase, user } = auth;
 
   if (!isValidCoordinate(lat, lng)) {
-    return { ok: false, error: 'Invalid location.' };
+    return failure('SB-LOCATION-DENIED', 'Invalid location.');
   }
   if (!(await checkRateLimit(`live-share:${user.id}`, 300, 60 * 60))) {
-    return { ok: false, error: 'Too many location updates.' };
+    return failure('SB-RATE-LIMIT', 'Too many location updates.');
   }
 
   const accuracy =
@@ -137,19 +138,19 @@ export async function refreshLocationPoint(
     .gt('expires_at', new Date().toISOString())
     .select('user_id')
     .maybeSingle();
-  if (error) return { ok: false, error: error.message };
-  if (!data) return { ok: false, error: 'not_sharing' };
+  if (error) return reportAndFail('SB-LOCATION-SAVE', 'location.share', error);
+  if (!data) return validation('not_sharing');
   return { ok: true };
 }
 
 /** Turn live location off — deletes the caller's row so nobody can discover it. */
 export async function stopSharingLocation(): Promise<ActionResult> {
   const auth = await requireUser();
-  if (!auth.ok) return { ok: false, error: auth.error };
+  if (!auth.ok) return auth;
   const { supabase, user } = auth;
 
   const { error } = await supabase.from('live_locations').delete().eq('user_id', user.id);
-  if (error) return { ok: false, error: error.message };
+  if (error) return reportAndFail('SB-LOCATION-SAVE', 'location.stop', error);
   revalidatePath('/map');
   return { ok: true };
 }
@@ -176,11 +177,11 @@ export async function getMySharing(): Promise<LiveLocation | null> {
  */
 export async function getNearbyPeople(radiusM = DEFAULT_RADIUS_M): Promise<NearbyResult> {
   const auth = await requireUser();
-  if (!auth.ok) return { ok: false, error: auth.error };
+  if (!auth.ok) return auth;
   const { supabase, user } = auth;
 
   if (!(await checkRateLimit(`live-nearby:${user.id}`, 300, 60 * 60))) {
-    return { ok: false, error: 'Too many refreshes. Try again in a moment.' };
+    return failure('SB-RATE-LIMIT', 'Too many refreshes. Try again in a moment.');
   }
 
   const radius = Math.min(
@@ -189,6 +190,6 @@ export async function getNearbyPeople(radiusM = DEFAULT_RADIUS_M): Promise<Nearb
   );
 
   const { data, error } = await supabase.rpc('find_nearby_people', { p_radius_m: radius });
-  if (error) return { ok: false, error: error.message };
+  if (error) return reportAndFail('SB-LOCATION-LOAD', 'location.load', error, { radius });
   return { ok: true, people: data ?? [] };
 }

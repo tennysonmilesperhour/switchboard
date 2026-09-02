@@ -301,7 +301,7 @@ function BannerCard({
           type="button"
           onClick={onDismiss}
           aria-label="Dismiss"
-          className="-mr-1 shrink-0 rounded-full p-1 text-paper/70 hover:text-paper focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-paper/60"
+          className="-my-2 -mr-2 inline-flex size-11 shrink-0 items-center justify-center rounded-full text-paper/70 hover:text-paper focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-paper/60"
         >
           <svg
             width="16"

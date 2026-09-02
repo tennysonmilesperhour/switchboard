@@ -26,9 +26,10 @@ import {
 } from '@/lib/engine/recurrence';
 import { reportAndFail, reportOperationalError } from '@/lib/server/observability';
 import type { ActionResult, ErrorCode } from '@/lib/errors';
-import { failure } from '@/lib/errors';
-import { looksLikeEmail, sendEmails } from '@/lib/server/email';
+import { failure, validation } from '@/lib/errors';
+import { guestEmailHeaders, looksLikeEmail, sendEmails } from '@/lib/server/email';
 import { looksLikePhoneNumber, sendSmsMessages } from '@/lib/server/sms';
+import { inviteIdsSentBySms } from '@/lib/server/sms-opt-out';
 import { normalizePhoneNumber } from '@/lib/phone';
 import { suggestWindow } from '@/lib/engine/windows';
 import { parseInviteEntries, type ParsedInviteEntry } from '@/lib/invite-entry';
@@ -38,6 +39,8 @@ import { geocode } from '@/lib/server/geocode';
 import { hasInviteDetails } from '@/lib/event-details';
 import type { TablesInsert } from '@/lib/supabase/database.types';
 import { toJson } from '@/lib/supabase/json';
+import { canAddInvitees, MAX_INVITEES_PER_EVENT } from '@/lib/invite-limits';
+import { consumeEventOutboundSlot } from '@/lib/server/invite-delivery-limit';
 
 export interface WizardInvitee {
   /** Profile id for members; null for guests. */
@@ -110,13 +113,17 @@ export interface CreateEventResult {
 }
 
 function createEventError(error: string): CreateEventResult {
-  return { ok: false, error };
+  return validation(error);
 }
 
 function deliveryWarning(delivery: InvitationDeliverySummary | undefined): string | undefined {
   if (!delivery) return undefined;
   const count =
-    delivery.notConfigured + delivery.failed + delivery.invalidRecipient + delivery.manual;
+    delivery.notConfigured
+    + delivery.failed
+    + delivery.invalidRecipient
+    + delivery.optedOut
+    + delivery.manual;
   return count > 0
     ? `${count} invitation channel${count === 1 ? '' : 's'} needs attention.`
     : undefined;
@@ -228,6 +235,11 @@ export async function createEvent(input: CreateEventInput): Promise<CreateEventR
   }
   if (input.invitees.length === 0) {
     return createEventError('Add at least one person to invite before sending.');
+  }
+  if (!canAddInvitees(0, input.invitees.length)) {
+    return createEventError(
+      `A plan can include up to ${MAX_INVITEES_PER_EVENT} people.`,
+    );
   }
   // A plan can be undated (Time TBD), but if a start time is given it must be in
   // the future — the client blocks this too, but never trust the client.
@@ -378,11 +390,9 @@ export async function lookupInviteeByHandle(
 ): Promise<{ id: string; name: string; handle: string } | null> {
   const cleaned = handle.trim().toLowerCase().replace(/^@/, '');
   if (!HANDLE_PATTERN.test(cleaned)) return null;
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return null;
+  const auth = await requireUser();
+  if (!auth.ok) return null;
+  const { supabase } = auth;
   const { data } = await supabase
     .from('profiles')
     .select('id, display_name, handle')
@@ -412,16 +422,16 @@ export async function addPeopleToEvent(
   if (!auth.ok) return auth;
   const { supabase, user } = auth;
   if (!(await isEventManager(user.id, eventId))) {
-    return { ok: false, error: 'Only the host can add people.' };
+    return failure('SB-PERM-HOST', 'Only the host can add people.');
   }
 
   const admin = createAdminClient();
   const { data: event } = await admin
     .from('events')
-    .select('id, status, invite_mode, starts_at')
+    .select('id, host_id, status, invite_mode, starts_at')
     .eq('id', eventId)
     .maybeSingle();
-  if (!event) return { ok: false, error: 'Plan not found.' };
+  if (!event) return validation('Plan not found.');
 
   // Match the response window to how soon the event is, like the wizard does,
   // instead of letting these rows fall back to the 24h table default (which
@@ -430,10 +440,7 @@ export async function addPeopleToEvent(
     ? suggestWindow(new Date(event.starts_at), new Date()).windowMinutes
     : 1440;
   if (event.status !== 'inviting') {
-    return {
-      ok: false,
-      error: 'You can only add people while invitations are in motion.',
-    };
+    return validation('You can only add people while invitations are in motion.');
   }
 
   const skipped: Array<{ entry: string; reason: string }> = [];
@@ -446,7 +453,7 @@ export async function addPeopleToEvent(
       resolved: await resolveAddition(supabase, parsed),
     })),
   );
-  const additions: ResolvedAddition[] = [];
+  let additions: ResolvedAddition[] = [];
   for (const { parsed, resolved } of resolutions) {
     if (!resolved) {
       skipped.push({ entry: parsed.display, reason: 'no one with that handle' });
@@ -471,8 +478,54 @@ export async function addPeopleToEvent(
     }
   }
 
+  // Contact resolution already omits blocked profiles, but explicitly-picked
+  // ids and a block created during this request still need an action-time
+  // check. The insert trigger repeats this under the event-row lock.
+  const memberIds = Array.from(new Set(
+    additions
+      .filter((addition): addition is Extract<ResolvedAddition, { kind: 'member' }> =>
+        addition.kind === 'member')
+      .map((addition) => addition.profileId),
+  ));
+  const blockChecks = await Promise.all(
+    memberIds.map(async (profileId) => ({
+      profileId,
+      result: await supabase.rpc('are_blocked', {
+        p_user_a: event.host_id,
+        p_user_b: profileId,
+      }),
+    })),
+  );
+  const failedBlockCheck = blockChecks.find(({ result }) => result.error);
+  if (failedBlockCheck?.result.error) {
+    return {
+      ...(await reportAndFail(
+        'SB-INVITE-SEND',
+        'add-people',
+        failedBlockCheck.result.error,
+        { eventId },
+        'Could not verify those invitees. Try again.',
+      )),
+      skipped,
+    };
+  }
+  const blockedIds = new Set(
+    blockChecks
+      .filter(({ result }) => result.data === true)
+      .map(({ profileId }) => profileId),
+  );
+  if (blockedIds.size > 0) {
+    additions = additions.filter((addition) => {
+      if (addition.kind !== 'member' || !blockedIds.has(addition.profileId)) {
+        return true;
+      }
+      skipped.push({ entry: addition.label, reason: 'blocked relationship' });
+      return false;
+    });
+  }
+
   if (additions.length === 0) {
-    return { ok: false, error: 'Add at least one person.', skipped };
+    return { ...validation('Add at least one person.'), skipped };
   }
 
   // Existing invites: compute append positions/stage and skip anyone already on.
@@ -545,7 +598,15 @@ export async function addPeopleToEvent(
   }
 
   if (toInsert.length === 0) {
-    return { ok: false, error: 'No new people to add.', skipped };
+    return { ...validation('No new people to add.'), skipped };
+  }
+  if (!canAddInvitees(rows.length, toInsert.length)) {
+    return {
+      ...validation(
+        `A plan can include up to ${MAX_INVITEES_PER_EVENT} people. Remove someone before adding more.`,
+      ),
+      skipped,
+    };
   }
 
   const { error } = await admin.from('invites').insert(toInsert);
@@ -615,24 +676,23 @@ export async function inviteConnectionNow(
   const manager = await checkEventManager(user.id, eventId);
   if (!manager.ok) return failure('SB-PLAN-AUTHZ');
   if (!manager.isManager) {
-    return { ok: false, error: 'Only the host can invite people to this plan.' };
+    return failure('SB-PERM-HOST', 'Only the host can invite people to this plan.');
   }
-  if (profileId === user.id) return { ok: false, error: 'That’s you.' };
+  if (profileId === user.id) return validation('That’s you.');
 
   const relationship = await getRelationship(supabase, user.id, profileId);
   if (relationship.status !== 'accepted') {
-    return {
-      ok: false,
-      error: 'You can only send a direct invite to someone you’re connected to.',
-    };
+    return failure(
+      'SB-PERM-DENIED',
+      'You can only send a direct invite to someone you’re connected to.',
+    );
   }
   // A block that was placed without tearing down the connection row would
   // otherwise slip through the check above.
-  const { data: blocked } = await supabase.rpc('are_blocked', {
-    p_user_a: user.id,
-    p_user_b: profileId,
+  const { data: blocked } = await supabase.rpc('is_blocked_with', {
+    p_other: profileId,
   });
-  if (blocked) return { ok: false, error: 'You can’t invite this person.' };
+  if (blocked) return failure('SB-PERM-DENIED', 'You can’t invite this person.');
 
   const admin = createAdminClient();
   const { data: event } = await admin
@@ -640,9 +700,9 @@ export async function inviteConnectionNow(
     .select('id, status, capacity, invite_mode, starts_at')
     .eq('id', eventId)
     .maybeSingle();
-  if (!event) return { ok: false, error: 'Plan not found.' };
+  if (!event) return validation('Plan not found.');
   if (event.status !== 'inviting') {
-    return { ok: false, error: 'This plan isn’t sending invitations right now.' };
+    return validation('This plan isn’t sending invitations right now.');
   }
 
   const { data: profile } = await admin
@@ -658,7 +718,10 @@ export async function inviteConnectionNow(
     .eq('event_id', eventId);
   const rows = existing ?? [];
   if (rows.some((row) => row.invitee_id === profileId)) {
-    return { ok: false, error: `${name} is already on this plan.` };
+    return validation(`${name} is already on this plan.`);
+  }
+  if (!canAddInvitees(rows.length, 1)) {
+    return validation(`A plan can include up to ${MAX_INVITEES_PER_EVENT} people.`);
   }
 
   // Same reasoning as resendInvite: don't send into a full plan.
@@ -666,7 +729,7 @@ export async function inviteConnectionNow(
   const cap =
     event.capacity ?? (event.invite_mode === 'individual' ? 1 : null);
   if (cap !== null && accepted >= cap) {
-    return { ok: false, error: 'This plan is already full.' };
+    return validation('This plan is already full.');
   }
 
   const position = rows.reduce((max, row) => Math.max(max, row.position), -1) + 1;
@@ -729,7 +792,7 @@ export async function removeInvite(
   if (!auth.ok) return auth;
   const { user } = auth;
   if (!(await isEventManager(user.id, eventId))) {
-    return { ok: false, error: 'Only the host can manage invites.' };
+    return failure('SB-PERM-HOST', 'Only the host can manage invites.');
   }
 
   const admin = createAdminClient();
@@ -739,14 +802,16 @@ export async function removeInvite(
     .eq('id', inviteId)
     .maybeSingle();
   if (!invite || invite.event_id !== eventId) {
-    return { ok: false, error: 'Invite not found.' };
+    return validation('Invite not found.');
   }
   if (invite.status === 'accepted') {
-    return { ok: false, error: 'They already accepted - cancel the plan or lower capacity instead.' };
+    return validation('They already accepted - cancel the plan or lower capacity instead.');
   }
 
   const { error } = await admin.from('invites').delete().eq('id', inviteId);
-  if (error) return { ok: false, error: 'Could not remove that invite. Try again.' };
+  if (error) {
+    return reportAndFail('SB-INVITE-SEND', 'remove-invite', error, { eventId, inviteId });
+  }
 
   try {
     await advanceEventCascade(eventId);
@@ -769,7 +834,7 @@ export async function resendInvite(
   if (!auth.ok) return auth;
   const { user } = auth;
   if (!(await isEventManager(user.id, eventId))) {
-    return { ok: false, error: 'Only the host can manage invites.' };
+    return failure('SB-PERM-HOST', 'Only the host can manage invites.');
   }
 
   const admin = createAdminClient();
@@ -779,11 +844,11 @@ export async function resendInvite(
     .eq('id', inviteId)
     .maybeSingle();
   if (!invite || invite.event_id !== eventId) {
-    return { ok: false, error: 'Invite not found.' };
+    return validation('Invite not found.');
   }
   const reopenable = ['expired', 'declined', 'cancelled'];
   if (!reopenable.includes(invite.status)) {
-    return { ok: false, error: 'That invite is still active.' };
+    return validation('That invite is still active.');
   }
 
   // Don't re-queue into a full event — the cascade would immediately cancel it
@@ -802,7 +867,7 @@ export async function resendInvite(
     capacityRow?.capacity ??
     (capacityRow?.invite_mode === 'individual' ? 1 : null);
   if (cap !== null && (acceptedCount ?? 0) >= cap) {
-    return { ok: false, error: 'This plan is already full.' };
+    return validation('This plan is already full.');
   }
 
   const { error } = await admin
@@ -814,7 +879,9 @@ export async function resendInvite(
       decline_note: null,
     })
     .eq('id', inviteId);
-  if (error) return { ok: false, error: 'Could not resend that invite. Try again.' };
+  if (error) {
+    return reportAndFail('SB-INVITE-SEND', 'resend-invite', error, { eventId, inviteId });
+  }
 
   let delivery: InvitationDeliverySummary | undefined;
   try {
@@ -855,7 +922,7 @@ export async function moveQueuedInvite(
   if (!auth.ok) return auth;
   const { supabase, user } = auth;
   if (!(await isEventManager(user.id, eventId))) {
-    return { ok: false, error: 'Only the host can manage invites.' };
+    return failure('SB-PERM-HOST', 'Only the host can manage invites.');
   }
   // Authorization + queued-only + the atomic position swap all live in the
   // security-definer function.
@@ -863,7 +930,9 @@ export async function moveQueuedInvite(
     p_invite: inviteId,
     p_up: up,
   });
-  if (error) return { ok: false, error: error.message };
+  if (error) {
+    return reportAndFail('SB-INVITE-SEND', 'invite.move', error, { eventId, inviteId });
+  }
   revalidatePath(`/events/${eventId}`);
   return { ok: true };
 }
@@ -878,13 +947,15 @@ export async function setInviteWindow(
   if (!auth.ok) return auth;
   const { supabase, user } = auth;
   if (!(await isEventManager(user.id, eventId))) {
-    return { ok: false, error: 'Only the host can manage invites.' };
+    return failure('SB-PERM-HOST', 'Only the host can manage invites.');
   }
   const { error } = await supabase.rpc('set_invite_window', {
     p_invite: inviteId,
     p_minutes: minutes,
   });
-  if (error) return { ok: false, error: error.message };
+  if (error) {
+    return reportAndFail('SB-INVITE-SEND', 'invite.window', error, { eventId, inviteId });
+  }
   revalidatePath(`/events/${eventId}`);
   return { ok: true };
 }
@@ -897,13 +968,13 @@ export async function updateEventDetails(
   if (!auth.ok) return auth;
   const { user } = auth;
   if (!(await isEventManager(user.id, eventId))) {
-    return { ok: false, error: 'Only the host can edit this plan.' };
+    return failure('SB-PERM-HOST', 'Only the host can edit this plan.');
   }
 
   const title = input.title.trim();
-  if (!title) return { ok: false, error: 'Give your plan a name.' };
+  if (!title) return validation('Give your plan a name.');
   if (input.capacity !== null && (!Number.isInteger(input.capacity) || input.capacity < 1)) {
-    return { ok: false, error: 'Capacity must be a whole number of at least 1.' };
+    return validation('Capacity must be a whole number of at least 1.');
   }
 
   const wishlistUrl = safeHttpUrl(input.wishlistUrl);
@@ -914,7 +985,7 @@ export async function updateEventDetails(
     .select('starts_at, location_name, title')
     .eq('id', eventId)
     .maybeSingle();
-  if (!before) return { ok: false, error: 'Plan not found.' };
+  if (!before) return validation('Plan not found.');
 
   const { error } = await admin
     .from('events')
@@ -1019,52 +1090,6 @@ export async function setEventVisibility(
 }
 
 /**
- * Turn the shareable invite link on or off. Enabling marks the plan an "open
- * table" so anyone the host sends the link to can ask to join (the host still
- * approves each request, via the existing join-requests panel); disabling stops
- * new link requests. Host/co-host only — the same authorization gate every other
- * management action uses. Writes through the service-role client after that
- * check, mirroring updateEventDetails/confirmEvent; `open_table` is a plain,
- * non-sensitive flag (no role/rank/ownership state), so there is no new
- * self-writable trust surface here.
- */
-export async function setEventInviteLink(
-  eventId: string,
-  enabled: boolean,
-): Promise<ActionResult> {
-  const auth = await requireUser();
-  if (!auth.ok) return auth;
-  const { user } = auth;
-  if (!(await isEventManager(user.id, eventId))) {
-    return { ok: false, error: 'Only the host can change this.' };
-  }
-
-  const admin = createAdminClient();
-  const { data: event } = await admin
-    .from('events')
-    .select('status')
-    .eq('id', eventId)
-    .maybeSingle();
-  if (!event) return { ok: false, error: 'Plan not found.' };
-  if (event.status === 'cancelled' || event.status === 'past') {
-    return { ok: false, error: 'This plan is closed.' };
-  }
-
-  const { error } = await admin
-    .from('events')
-    .update({ open_table: enabled })
-    .eq('id', eventId);
-  if (error) {
-    await reportOperationalError('event-invite-link', error, { eventId });
-    return { ok: false, error: 'Could not update the invite link. Try again.' };
-  }
-
-  revalidatePath(`/events/${eventId}`);
-  revalidatePath('/discover');
-  return { ok: true };
-}
-
-/**
  * Turn the plan's public share link on or off.
  *
  * This is the kill switch for `/i/<share_token>` — the link a host texts to
@@ -1082,7 +1107,7 @@ export async function setEventShareLink(
   if (!auth.ok) return auth;
   const { user } = auth;
   if (!(await isEventManager(user.id, eventId))) {
-    return { ok: false, error: 'Only the host can change this.' };
+    return failure('SB-PERM-HOST', 'Only the host can change this.');
   }
 
   const admin = createAdminClient();
@@ -1156,11 +1181,7 @@ export async function confirmEvent(eventId: string): Promise<void> {
  *  event to 'past', and retires any invites still in motion. This is what
  *  powers the real-world recap and the one-tap Run It Back. */
 export async function markHappened(eventId: string): Promise<void> {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) redirect('/login');
+  const { user } = await requireUserOrRedirect();
   if (!(await isEventManager(user.id, eventId))) return;
   const admin = createAdminClient();
   // Only close a plan whose start time has actually passed. The UI "elapsed"
@@ -1221,7 +1242,7 @@ export async function cancelEvent(
 
   const { data: event } = await admin
     .from('events')
-    .select('title')
+    .select('title, host_id')
     .eq('id', eventId)
     .maybeSingle();
   await admin
@@ -1245,7 +1266,7 @@ export async function cancelEvent(
   // that it's off, so nobody shows up to a cancelled plan.
   const { data: accepted } = await admin
     .from('invites')
-    .select('invitee_id, guest_contact')
+    .select('id, invitee_id, guest_contact')
     .eq('event_id', eventId)
     .eq('status', 'accepted');
   const rows = accepted ?? [];
@@ -1262,26 +1283,48 @@ export async function cancelEvent(
     });
   }
 
-  const guestContacts = rows
-    .filter((r) => !r.invitee_id)
-    .map((r) => r.guest_contact)
-    .filter((c): c is string => Boolean(c));
+  const guests = rows.filter((r) => !r.invitee_id && Boolean(r.guest_contact));
   const reasonLine = cleanReason ? `\n\nReason: ${cleanReason}` : '';
-  const guestEmails = guestContacts
-    .filter((c) => looksLikeEmail(c))
-    .map((to) => ({
-      to,
+  const guestEmails = guests
+    .filter((invite) => looksLikeEmail(invite.guest_contact))
+    .map((invite) => ({
+      to: invite.guest_contact as string,
       subject: `Cancelled: ${title}`,
       text: `${title} has been cancelled. Apologies for the change of plans.${reasonLine}\n\n- Switchboard`,
+      headers: guestEmailHeaders(),
     }));
-  if (guestEmails.length > 0) await sendEmails(guestEmails);
-  const guestSms = guestContacts
-    .filter((c) => looksLikePhoneNumber(c))
-    .map((to) => ({
-      to,
+  const permittedGuestEmails = (
+    await Promise.all(
+      guestEmails.map(async (message) =>
+        (await consumeEventOutboundSlot(
+          event?.host_id ?? user.id,
+          'cancellation',
+        ))
+          ? message
+          : null),
+    )
+  ).filter((message): message is (typeof guestEmails)[number] => message !== null);
+  if (permittedGuestEmails.length > 0) await sendEmails(permittedGuestEmails);
+  const textableGuests = guests.filter((invite) => looksLikePhoneNumber(invite.guest_contact));
+  const smsInviteIds = await inviteIdsSentBySms(textableGuests.map((invite) => invite.id));
+  const guestSms = textableGuests
+    .filter((invite) => smsInviteIds.has(invite.id))
+    .map((invite) => ({
+      to: invite.guest_contact as string,
       body: `${title} on Switchboard has been cancelled.${cleanReason ? ` Reason: ${cleanReason}` : ''}`,
     }));
-  if (guestSms.length > 0) await sendSmsMessages(guestSms);
+  const permittedGuestSms = (
+    await Promise.all(
+      guestSms.map(async (message) =>
+        (await consumeEventOutboundSlot(
+          event?.host_id ?? user.id,
+          'cancellation',
+        ))
+          ? message
+          : null),
+    )
+  ).filter((message): message is (typeof guestSms)[number] => message !== null);
+  if (permittedGuestSms.length > 0) await sendSmsMessages(permittedGuestSms);
 
   // Retire any invite still in motion so the (now belt-and-suspenders) RSVP
   // guard has nothing live to act on.
@@ -1312,21 +1355,25 @@ export async function deleteEventPermanently(
     { p_event: eventId },
   );
   if (error) {
-    await reportOperationalError('event.delete', error, { eventId, userId: user.id });
-    return { ok: false, error: 'Could not permanently delete this plan.' };
+    return reportAndFail('SB-PLAN-DELETE', 'event.delete', error, {
+      eventId,
+      userId: user.id,
+    });
   }
-  if (outcome === 'not_found') return { ok: false, error: 'That plan was not found.' };
+  if (outcome === 'not_found') return validation('That plan was not found.');
   if (outcome === 'forbidden') {
-    return { ok: false, error: 'Only the primary host can permanently delete this plan.' };
+    return failure('SB-PERM-HOST', 'Only the primary host can permanently delete this plan.');
   }
   if (outcome === 'accepted_guests') {
-    return {
-      ok: false,
-      error: 'Cancel the plan first so everyone who accepted is notified.',
-    };
+    return validation('Cancel the plan first so everyone who accepted is notified.');
   }
   if (outcome !== 'deleted') {
-    return { ok: false, error: 'Could not permanently delete this plan.' };
+    return reportAndFail(
+      'SB-PLAN-DELETE',
+      'event.delete',
+      new Error(`unexpected delete outcome: ${String(outcome)}`),
+      { eventId, userId: user.id },
+    );
   }
 
   revalidatePath('/plans');
@@ -1558,16 +1605,16 @@ export async function addCoHost(
   const { supabase, user } = auth;
 
   const cleanHandle = handle.trim().toLowerCase().replace(/^@/, '');
-  if (!cleanHandle) return { ok: false, error: 'Enter a handle.' };
+  if (!cleanHandle) return validation('Enter a handle.');
 
   const { data: profile } = await supabase
     .from('profiles')
     .select('id')
     .eq('handle', cleanHandle)
     .maybeSingle();
-  if (!profile) return { ok: false, error: 'No one with that handle.' };
+  if (!profile) return validation('No one with that handle.');
   if (profile.id === user.id) {
-    return { ok: false, error: 'You’re already the host.' };
+    return validation('You’re already the host.');
   }
 
   const { error } = await supabase.from('event_cohosts').insert({
@@ -1577,10 +1624,8 @@ export async function addCoHost(
   });
   if (error) {
     const already = error.code === '23505';
-    return {
-      ok: false,
-      error: already ? 'They’re already a co-host.' : error.message,
-    };
+    if (already) return validation('They’re already a co-host.');
+    return reportAndFail('SB-PLAN-SAVE', 'event.cohost-add', error, { eventId });
   }
 
   // Bring them into the Living Room so they can coordinate. Best-effort:

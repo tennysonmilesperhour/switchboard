@@ -55,8 +55,10 @@ export default async function ZonesPage({
         {(zones?.length ?? 0) === 0 && (
           <Card tone="cream">
             <p className="text-sm text-ink-soft leading-relaxed">
-              No zones yet. Running a conference, trip, or gathering? Create one
-              below and share the link so everyone can find each other.
+              A zone is a shared place where people can privately check in and
+              discover who else is there. Join one from a link when an organizer
+              invites you, or create one below for a conference, trip, campus, or
+              gathering you run.
             </p>
           </Card>
         )}

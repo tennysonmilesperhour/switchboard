@@ -7,11 +7,11 @@ test.describe('public surface', () => {
     await expect(page.locator('h1')).toContainText('Make plans.');
   });
 
-  test('landing links to sign in', async ({ page }) => {
+  test('Create account opens the create tab', async ({ page }) => {
     await page.goto('/welcome');
     await page.getByRole('link', { name: 'Create account' }).click();
-    await expect(page).toHaveURL(/\/login/);
-    await expect(page.getByLabel('Email or username')).toBeVisible();
+    await expect(page).toHaveURL(/\/login\?mode=create/);
+    await expect(page.getByLabel('Your name')).toBeVisible();
   });
 
   test('unauthenticated app routes redirect to welcome', async ({ page }) => {

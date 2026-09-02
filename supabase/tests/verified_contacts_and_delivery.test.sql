@@ -1,7 +1,7 @@
 -- Verified contact matching and host-only delivery evidence.
 
 begin;
-select plan(12);
+select plan(14);
 
 insert into auth.users (id, email) values
   ('10000000-0000-0000-0000-000000000001', 'contact-alice@example.com'),
@@ -82,6 +82,28 @@ select is(
   (select id from public.resolve_profile_contact('+1 555 555 0102')),
   '10000000-0000-0000-0000-000000000002'::uuid,
   'verified phone resolves to its profile'
+);
+
+select is(
+  (
+    select count(*)::int
+    from generate_series(1, 6) as attempt(number)
+    cross join lateral public.resolve_profile_contact(
+      case when attempt.number > 0
+        then 'mallory-contact@example.com'
+        else ''
+      end
+    )
+  ),
+  6,
+  'contact matching permits the remainder of ten attempts in an hour'
+);
+
+select is(
+  (select count(*)::int
+   from public.resolve_profile_contact('mallory-contact@example.com')),
+  0,
+  'contact matching rejects the eleventh attempt at the database boundary'
 );
 
 select set_config(

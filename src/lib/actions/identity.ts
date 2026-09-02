@@ -1,8 +1,10 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
-import { createClient } from '@/lib/supabase/server';
+import { failure, validation } from '@/lib/errors';
 import { checkRateLimit } from '@/lib/server/rate-limit';
+import { reportAndFail } from '@/lib/server/observability';
+import { requireUser } from '@/lib/server/require-user';
 import { FACET_KEYS, type FacetKey } from '@/lib/engine/identity';
 import { generateReflection, type ReflectionKind } from '@/lib/ai/reflection';
 
@@ -30,13 +32,11 @@ export async function setFacetPref(
   facetKey: string,
   patch: { hidden?: boolean; sharedWithConnections?: boolean },
 ): Promise<{ ok: boolean }> {
-  if (!isFacetKey(facetKey)) return { ok: false };
+  if (!isFacetKey(facetKey)) return validation();
 
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { ok: false };
+  const auth = await requireUser();
+  if (!auth.ok) return auth;
+  const { supabase, user } = auth;
 
   const row: {
     user_id: string;
@@ -58,8 +58,11 @@ export async function setFacetPref(
     .from('facet_prefs')
     .upsert(row, { onConflict: 'user_id,facet_key' });
 
+  if (error) {
+    return reportAndFail('SB-IDENTITY-SAVE', 'identity.preference', error, { facetKey });
+  }
   revalidatePath('/you');
-  return { ok: !error };
+  return { ok: true };
 }
 
 /**
@@ -71,13 +74,11 @@ export async function setFacetVerdict(
   facetKey: string,
   verdict: 'confirmed' | 'rejected' | null,
 ): Promise<{ ok: boolean }> {
-  if (!isFacetKey(facetKey)) return { ok: false };
+  if (!isFacetKey(facetKey)) return validation();
 
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { ok: false };
+  const auth = await requireUser();
+  if (!auth.ok) return auth;
+  const { supabase, user } = auth;
 
   const { error } = await supabase.from('facet_prefs').upsert(
     {
@@ -89,8 +90,11 @@ export async function setFacetVerdict(
     { onConflict: 'user_id,facet_key' },
   );
 
+  if (error) {
+    return reportAndFail('SB-IDENTITY-SAVE', 'identity.verdict', error, { facetKey });
+  }
   revalidatePath('/you');
-  return { ok: !error };
+  return { ok: true };
 }
 
 /** Turn an operator behavior or optional facet feature on or off. */
@@ -98,13 +102,11 @@ export async function setOperatorSetting(
   key: string,
   enabled: boolean,
 ): Promise<{ ok: boolean }> {
-  if (!OPERATOR_KEYS.has(key)) return { ok: false };
+  if (!OPERATOR_KEYS.has(key)) return validation();
 
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { ok: false };
+  const auth = await requireUser();
+  if (!auth.ok) return auth;
+  const { supabase, user } = auth;
 
   const { error } = await supabase.from('operator_settings').upsert(
     {
@@ -116,8 +118,11 @@ export async function setOperatorSetting(
     { onConflict: 'user_id,setting_key' },
   );
 
+  if (error) {
+    return reportAndFail('SB-IDENTITY-SAVE', 'identity.operator', error, { key });
+  }
   revalidatePath('/you');
-  return { ok: !error };
+  return { ok: true };
 }
 
 /**
@@ -128,18 +133,16 @@ export async function requestReflection(
   kind: string,
 ): Promise<{ ok: boolean; reason?: string }> {
   const k = kind as ReflectionKind;
-  if (!REFLECTION_KINDS.has(k)) return { ok: false, reason: 'unknown' };
+  if (!REFLECTION_KINDS.has(k)) return { ...validation(), reason: 'unknown' };
 
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { ok: false, reason: 'auth' };
+  const auth = await requireUser();
+  if (!auth.ok) return { ...auth, reason: 'auth' };
+  const { supabase, user } = auth;
 
   // Gate the external AI call + row insert, like every other model-invoking
   // action (matchmaker, rituals): 20 an hour is plenty for a human.
   if (!(await checkRateLimit(`reflection:${user.id}`, 20, 60 * 60))) {
-    return { ok: false, reason: 'rate' };
+    return { ...failure('SB-RATE-LIMIT'), reason: 'rate' };
   }
 
   // Reflect only over facets the user hasn't set aside — respect both a "not
@@ -162,7 +165,7 @@ export async function requestReflection(
     .filter((f) => !setAside.has(f.facet_key))
     .map((f) => ({ title: f.title, summary: f.summary }));
 
-  if (facets.length < 3) return { ok: false, reason: 'not_ready' };
+  if (facets.length < 3) return { ...validation(), reason: 'not_ready' };
 
   const { body, source } = await generateReflection(k, facets);
 
@@ -170,6 +173,12 @@ export async function requestReflection(
     .from('identity_reflections')
     .insert({ user_id: user.id, kind: k, body, source });
 
+  if (error) {
+    return {
+      ...(await reportAndFail('SB-REFLECTION-SAVE', 'identity.reflection', error, { kind: k })),
+      reason: 'save',
+    };
+  }
   revalidatePath('/you');
-  return { ok: !error };
+  return { ok: true };
 }

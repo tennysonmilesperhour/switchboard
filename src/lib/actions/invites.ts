@@ -1,13 +1,12 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
-import { createClient } from '@/lib/supabase/server';
 import { requireUser } from '@/lib/server/require-user';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { advanceEventCascade } from '@/lib/server/cascade-runner';
 import { notifyUsers } from '@/lib/server/notify';
 import { reportAndFail, reportOperationalError } from '@/lib/server/observability';
-import { failure, type ErrorCode } from '@/lib/errors';
+import { failure, validation, type ErrorCode } from '@/lib/errors';
 import { capture } from '@/lib/analytics/server';
 import { ANALYTICS_EVENTS } from '@/lib/analytics/events';
 import type { DeclineNote } from '@/lib/types';
@@ -100,7 +99,7 @@ export async function respondToInvite(
     p_accept: accept,
     p_note: note ?? undefined,
   });
-  if (error) return { ok: false, error: error.message };
+  if (error) return reportAndFail('SB-RSVP-SAVE', 'invite.respond', error, { inviteId });
 
   const { data: invite } = await supabase
     .from('invites')
@@ -186,17 +185,16 @@ export async function respondToInvite(
 
 /** Open Table: ask to join a friends-of-friends event. */
 export async function requestToJoin(eventId: string): Promise<RespondResult> {
-  const supabase = await createClient();
+  const auth = await requireUser();
+  if (!auth.ok) {
+    return failure('SB-RSVP-AUTH', 'Sign in to request to join.');
+  }
+  const { supabase } = auth;
   // The request_to_join RPC already keys the row on auth.uid(); this app-layer
   // session check just fails fast (and keeps the admin notify below from firing
   // for an unauthenticated caller) rather than relying on the RPC alone.
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { ok: false, error: 'Sign in to request to join.' };
-
   const { error } = await supabase.rpc('request_to_join', { p_event: eventId });
-  if (error) return { ok: false, error: error.message };
+  if (error) return reportAndFail('SB-RSVP-SAVE', 'join.request', error, { eventId });
 
   // Let the host know a request is waiting — previously this fired nothing at
   // all, so requests sat unseen until the host happened to open the event.
@@ -225,11 +223,13 @@ export async function approveJoinRequest(
   inviteId: string,
   eventId: string,
 ): Promise<RespondResult> {
-  const supabase = await createClient();
+  const auth = await requireUser();
+  if (!auth.ok) return auth;
+  const { supabase } = auth;
   const { data, error } = await supabase.rpc('approve_join_request', {
     p_invite: inviteId,
   });
-  if (error) return { ok: false, error: error.message };
+  if (error) return reportAndFail('SB-RSVP-SAVE', 'join.approve', error, { inviteId, eventId });
 
   if (data === 'accepted') {
     const { data: invite } = await supabase
@@ -255,10 +255,12 @@ export async function declineJoinRequest(
   inviteId: string,
   eventId: string,
 ): Promise<RespondResult> {
-  const supabase = await createClient();
+  const auth = await requireUser();
+  if (!auth.ok) return auth;
+  const { supabase } = auth;
   // Host-only via RLS delete policy on invites.
   const { error } = await supabase.from('invites').delete().eq('id', inviteId);
-  if (error) return { ok: false, error: error.message };
+  if (error) return reportAndFail('SB-RSVP-SAVE', 'join.decline', error, { inviteId, eventId });
   revalidatePath(`/events/${eventId}`);
   return { ok: true };
 }
@@ -275,11 +277,9 @@ export async function declineJoinRequest(
 export async function claimGuestInvite(
   token: string,
 ): Promise<{ ok: boolean; eventId?: string }> {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { ok: false };
+  const auth = await requireUser();
+  if (!auth.ok) return auth;
+  const { supabase } = auth;
 
   const { data: eventId, error } = await supabase.rpc('claim_guest_invite', {
     p_token: token,
@@ -290,10 +290,9 @@ export async function claimGuestInvite(
   // "invites silently never appear in the app". Never log the token: it's the
   // RSVP capability secret.
   if (error) {
-    await reportOperationalError('invite-claim.token', error, {});
-    return { ok: false };
+    return reportAndFail('SB-RSVP-SAVE', 'invite-claim.token', error);
   }
-  if (!eventId) return { ok: false };
+  if (!eventId) return validation();
 
   revalidatePath('/');
   revalidatePath('/plans');
@@ -339,16 +338,14 @@ export async function respondViaShareLink(
   // gate, this is the backstop for a session that expired while the page sat
   // open — and signed-out traffic must not spend the rate-limit budget that
   // belongs to the people who can actually answer.
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) {
+  const auth = await requireUser();
+  if (!auth.ok) {
     return {
       ...failure('SB-RSVP-AUTH', 'Sign in to RSVP - it takes a moment.'),
       outcome: 'auth_required',
     };
   }
+  const { user } = auth;
 
   // Rate-limited per link: the share token is public by design, so this is the
   // one place a stranger can create invite rows (docs/SECURITY.md §9).
@@ -505,16 +502,14 @@ export async function respondToGuestInvite(
 ): Promise<RespondResult> {
   // Session first, then the budget: a signed-out visitor can't answer, and must
   // not be able to burn through the invited guest's rate-limit allowance trying.
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) {
+  const auth = await requireUser();
+  if (!auth.ok) {
     return {
       ...failure('SB-RSVP-AUTH', 'Sign in to RSVP - it takes a moment.'),
       outcome: 'auth_required',
     };
   }
+  const { supabase } = auth;
 
   if (!(await checkRateLimit(`guest-rsvp:${token}`, 10, 60 * 60))) {
     return failure('SB-RATE-LIMIT', 'Too many attempts. Try again later.');
@@ -527,9 +522,12 @@ export async function respondToGuestInvite(
     .select('id, event_id, status, guest_name')
     .eq('guest_token', token)
     .single();
-  if (!invite) return { ok: false, error: 'Invitation not found' };
+  if (!invite) return failure('SB-RSVP-GONE', 'Invitation not found');
   if (invite.status !== 'sent') {
-    return { ok: false, outcome: invite.status, error: 'This invitation is no longer active' };
+    return {
+      ...failure('SB-RSVP-CLOSED', 'This invitation is no longer active'),
+      outcome: invite.status,
+    };
   }
 
   // Atomic capacity-checked accept/decline under a row lock, keyed by the guest
@@ -539,7 +537,7 @@ export async function respondToGuestInvite(
     p_token: token,
     p_accept: accept,
   });
-  if (error) return { ok: false, error: error.message };
+  if (error) return reportAndFail('SB-RSVP-SAVE', 'guest-rsvp.respond', error);
 
   if (outcome === 'accepted') {
     // Only persist answers once accepted, and only for this event's questions.

@@ -8,6 +8,7 @@ import { notifyUsers } from '@/lib/server/notify';
 import {
   looksLikeEmail,
   appUrl,
+  guestEmailHeaders,
   sendEmailWithResult,
   type DeliveryStatus,
 } from '@/lib/server/email';
@@ -21,6 +22,7 @@ import type { Invite, SwitchboardEvent } from '@/lib/types';
 import { directInvitePath } from '@/lib/invite-links';
 import { normalizeInviteStatus } from '@/lib/invite-status';
 import { toJson } from '@/lib/supabase/json';
+import { consumeEventOutboundSlot } from '@/lib/server/invite-delivery-limit';
 
 function toEngineInvite(invite: Invite): CascadeInvite {
   return {
@@ -46,6 +48,7 @@ export interface InvitationDeliverySummary {
   notConfigured: number;
   failed: number;
   invalidRecipient: number;
+  optedOut: number;
   manual: number;
 }
 
@@ -59,13 +62,21 @@ interface DeliveryAttemptRow {
 }
 
 function emptyDeliverySummary(): InvitationDeliverySummary {
-  return { sent: 0, notConfigured: 0, failed: 0, invalidRecipient: 0, manual: 0 };
+  return {
+    sent: 0,
+    notConfigured: 0,
+    failed: 0,
+    invalidRecipient: 0,
+    optedOut: 0,
+    manual: 0,
+  };
 }
 
 function countDelivery(summary: InvitationDeliverySummary, status: DeliveryStatus): void {
   if (status === 'sent') summary.sent += 1;
   else if (status === 'not_configured') summary.notConfigured += 1;
   else if (status === 'invalid_recipient') summary.invalidRecipient += 1;
+  else if (status === 'opted_out') summary.optedOut += 1;
   else summary.failed += 1;
 }
 
@@ -108,41 +119,66 @@ async function deliverInvitations(
 
     if (invite.guest_token && looksLikeEmail(invite.guest_contact)) {
       hasChannel = true;
-      const result = await sendEmailWithResult({
-        to: invite.guest_contact,
-        subject: `You are invited: ${event.title}`,
-        text: invite.invitee_id
-          ? memberInviteText(event, invitePath)
-          : guestInviteText(event, invite.guest_name, invite.guest_token),
-      });
-      countDelivery(summary, result.status);
-      attempts.push({
-        invite_id: invite.id,
-        channel: 'email',
-        status: result.status,
-        provider: result.provider,
-        provider_message_id: result.providerMessageId ?? null,
-        error_code: result.errorCode ?? null,
-      });
+      if (await consumeEventOutboundSlot(event.host_id, 'invitation')) {
+        const result = await sendEmailWithResult({
+          to: invite.guest_contact,
+          subject: `You are invited: ${event.title}`,
+          text: invite.invitee_id
+            ? memberInviteText(event, invitePath)
+            : guestInviteText(event, invite.guest_name, invite.guest_token),
+          ...(invite.invitee_id ? {} : { headers: guestEmailHeaders() }),
+        });
+        countDelivery(summary, result.status);
+        attempts.push({
+          invite_id: invite.id,
+          channel: 'email',
+          status: result.status,
+          provider: result.provider,
+          provider_message_id: result.providerMessageId ?? null,
+          error_code: result.errorCode ?? null,
+        });
+      } else {
+        countDelivery(summary, 'failed');
+        attempts.push({
+          invite_id: invite.id,
+          channel: 'email',
+          status: 'failed',
+          provider: 'switchboard',
+          provider_message_id: null,
+          error_code: 'host_daily_limit',
+        });
+      }
     }
 
     if (invite.guest_token && looksLikePhoneNumber(invite.guest_contact)) {
       hasChannel = true;
-      const result = await sendSmsWithResult({
-        to: invite.guest_contact,
-        body: invite.invitee_id
-          ? `You are invited to ${event.title} on Switchboard: ${appUrl(invitePath)}`
-          : guestInviteSmsText(event.title, invite.guest_token),
-      });
-      countDelivery(summary, result.status);
-      attempts.push({
-        invite_id: invite.id,
-        channel: 'sms',
-        status: result.status,
-        provider: result.provider,
-        provider_message_id: result.providerMessageId ?? null,
-        error_code: result.errorCode ?? null,
-      });
+      if (await consumeEventOutboundSlot(event.host_id, 'invitation')) {
+        const result = await sendSmsWithResult({
+          to: invite.guest_contact,
+          body: invite.invitee_id
+            ? `You are invited to ${event.title} on Switchboard: ${appUrl(invitePath)}`
+            : guestInviteSmsText(event.title, invite.guest_token),
+        });
+        countDelivery(summary, result.status);
+        attempts.push({
+          invite_id: invite.id,
+          channel: 'sms',
+          status: result.status,
+          provider: result.provider,
+          provider_message_id: result.providerMessageId ?? null,
+          error_code: result.errorCode ?? null,
+        });
+      } else {
+        countDelivery(summary, 'failed');
+        attempts.push({
+          invite_id: invite.id,
+          channel: 'sms',
+          status: 'failed',
+          provider: 'switchboard',
+          provider_message_id: null,
+          error_code: 'host_daily_limit',
+        });
+      }
     }
 
     if (!hasChannel) summary.manual += 1;
@@ -289,21 +325,26 @@ export async function sweepCascades(): Promise<number> {
 
   const eventIds = new Set<string>((overdue ?? []).map((row) => row.event_id));
 
-  let advanced = 0;
-  for (const eventId of eventIds) {
-    await advanceEventCascade(eventId);
-    advanced += 1;
-  }
   // Also nudge inviting events with zero live invites (e.g. after restart).
   const { data: stalled } = await admin
     .from('events')
     .select('id')
     .eq('status', 'inviting');
-  for (const event of stalled ?? []) {
-    if (!eventIds.has(event.id)) {
-      await advanceEventCascade(event.id);
-      advanced += 1;
-    }
+  const allEventIds = [
+    ...eventIds,
+    ...(stalled ?? [])
+      .map((event) => event.id as string)
+      .filter((eventId) => !eventIds.has(eventId)),
+  ];
+
+  // Keep enough parallelism to finish a large sweep inside the function cap,
+  // without turning every live event into simultaneous database and provider
+  // work. Provider fan-out has its own tighter bound.
+  const batchSize = 5;
+  for (let start = 0; start < allEventIds.length; start += batchSize) {
+    await Promise.all(
+      allEventIds.slice(start, start + batchSize).map(advanceEventCascade),
+    );
   }
-  return advanced;
+  return allEventIds.length;
 }

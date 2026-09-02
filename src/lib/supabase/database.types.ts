@@ -2459,6 +2459,21 @@ export type Database = {
           },
         ]
       }
+      sms_opt_outs: {
+        Row: {
+          normalized_number: string
+          opted_out_at: string
+        }
+        Insert: {
+          normalized_number: string
+          opted_out_at?: string
+        }
+        Update: {
+          normalized_number?: string
+          opted_out_at?: string
+        }
+        Relationships: []
+      }
       usage_events: {
         Row: {
           area: string
@@ -2814,6 +2829,7 @@ export type Database = {
         Returns: boolean
       }
       are_connected: { Args: { a: string; b: string }; Returns: boolean }
+      auth_user_id_by_email: { Args: { p_email: string }; Returns: string }
       calendar_subscription_status: {
         Args: never
         Returns: {
@@ -2826,6 +2842,14 @@ export type Database = {
       }
       can_access_event_thread: {
         Args: { p_event: string; p_user: string }
+        Returns: boolean
+      }
+      can_current_user_view_event: {
+        Args: { p_event: string }
+        Returns: boolean
+      }
+      can_current_user_view_zone: {
+        Args: { p_zone: string }
         Returns: boolean
       }
       can_view_event: {
@@ -2915,12 +2939,43 @@ export type Database = {
           id: string
         }[]
       }
+      finish_operator_sweep: {
+        Args: { p_counts: Json; p_sweep: string }
+        Returns: undefined
+      }
+      is_blocked_with: { Args: { p_other: string }; Returns: boolean }
       is_board_member: {
         Args: { p_board: string; p_user: string }
         Returns: boolean
       }
       is_board_moderator: {
         Args: { p_board: string; p_user: string }
+        Returns: boolean
+      }
+      is_connected_with: { Args: { p_other: string }; Returns: boolean }
+      is_current_user_board_member: {
+        Args: { p_board: string }
+        Returns: boolean
+      }
+      is_current_user_board_moderator: {
+        Args: { p_board: string }
+        Returns: boolean
+      }
+      is_current_user_event_host: {
+        Args: { p_event: string }
+        Returns: boolean
+      }
+      is_current_user_platform_moderator: { Args: never; Returns: boolean }
+      is_current_user_room_member: {
+        Args: { p_room: string }
+        Returns: boolean
+      }
+      is_current_user_zone_member: {
+        Args: { p_zone: string }
+        Returns: boolean
+      }
+      is_current_user_zone_moderator: {
+        Args: { p_zone: string }
         Returns: boolean
       }
       is_event_host: {
@@ -3038,6 +3093,15 @@ export type Database = {
         }[]
       }
       normalize_phone_number: { Args: { p_value: string }; Returns: string }
+      operator_sweep_status: {
+        Args: { p_sweep: string }
+        Returns: {
+          last_counts: Json
+          last_run_at: string
+          last_started_at: string
+          running_until: string
+        }[]
+      }
       poll_results: {
         Args: { p_poll: string }
         Returns: {
@@ -3124,6 +3188,10 @@ export type Database = {
           summary: string
           title: string
         }[]
+      }
+      try_claim_operator_sweep: {
+        Args: { p_lease_seconds?: number; p_sweep: string }
+        Returns: boolean
       }
       viewer_in_signal_audience: {
         Args: { p_circle_ids: string[]; p_owner: string; p_viewer: string }

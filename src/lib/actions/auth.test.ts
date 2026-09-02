@@ -11,9 +11,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
  * can only ever mail an address the account already claims.
  *
  * `requestPasswordReset`: the recovery email is delivered
- * through the app's own Resend integration (`sendEmailWithResult`) using an admin-minted
- * recovery link — Supabase SMTP is only a fallback when service-role access is
- * absent. These tests pin the two things that matter: a real reset link
+ * through the app's own Resend integration (`sendEmailWithResult`) using an
+ * admin-minted recovery link. These tests pin the two things that matter: a real reset link
  * actually goes out for legitimate accounts (including email sign-ups whose
  * contact row isn't verified yet), and a link is *never* sent to an unverified,
  * merely-typed contact address (docs/SECURITY.md §9).
@@ -108,6 +107,14 @@ const mocks = vi.hoisted(() => {
     data: { user: db.authUsers[id] ?? null },
     error: null,
   }));
+  const rpc = vi.fn(async (name: string, args: Record<string, string>) => {
+    if (name !== 'auth_user_id_by_email') return { data: null, error: null };
+    const email = args.p_email.trim().toLowerCase();
+    const match = Object.entries(db.authUsers).find(
+      ([, user]) => user?.email.trim().toLowerCase() === email,
+    );
+    return { data: match?.[0] ?? null, error: null };
+  });
   const generateLink = vi.fn(async () => ({
     data: {
       properties: { hashed_token: 'HASH', action_link: 'https://example/action' },
@@ -125,7 +132,6 @@ const mocks = vi.hoisted(() => {
       provider: 'resend',
     }),
   );
-  const resetPasswordForEmail = vi.fn(async () => ({ data: {}, error: null }));
   /**
    * Stands in for GoTrue's password grant. Defaults to rejecting, so each test
    * says explicitly which outcome it is exercising. `code` is what the action
@@ -138,17 +144,22 @@ const mocks = vi.hoisted(() => {
       | null,
   }));
   const checkRateLimit = vi.fn(async () => true);
+  const guardAuthAttempt = vi.fn(async () => ({
+    allowed: true,
+    backedOff: false,
+  }));
   const hasAdminCredentials = vi.fn(() => true);
 
   return {
     db,
     makeBuilder,
     getUserById,
+    rpc,
     generateLink,
     sendEmailWithResult,
-    resetPasswordForEmail,
     signInWithPassword,
     checkRateLimit,
+    guardAuthAttempt,
     hasAdminCredentials,
   };
 });
@@ -157,8 +168,12 @@ vi.mock('@/lib/supabase/admin', () => ({
   hasAdminCredentials: mocks.hasAdminCredentials,
   createAdminClient: () => ({
     from: (table: string) => mocks.makeBuilder(table),
+    rpc: mocks.rpc,
     auth: {
-      admin: { getUserById: mocks.getUserById, generateLink: mocks.generateLink },
+      admin: {
+        getUserById: mocks.getUserById,
+        generateLink: mocks.generateLink,
+      },
     },
   }),
 }));
@@ -166,7 +181,6 @@ vi.mock('@/lib/supabase/admin', () => ({
 vi.mock('@/lib/supabase/server', () => ({
   createClient: async () => ({
     auth: {
-      resetPasswordForEmail: mocks.resetPasswordForEmail,
       signInWithPassword: mocks.signInWithPassword,
     },
   }),
@@ -174,6 +188,10 @@ vi.mock('@/lib/supabase/server', () => ({
 
 vi.mock('@/lib/server/rate-limit', () => ({
   checkRateLimit: mocks.checkRateLimit,
+}));
+
+vi.mock('@/lib/server/auth-rate-limit', () => ({
+  guardAuthAttempt: mocks.guardAuthAttempt,
 }));
 
 // Keeps the real module's `server-only` import out of the test runtime.
@@ -212,6 +230,7 @@ afterEach(() => {
   vi.clearAllMocks();
   mocks.hasAdminCredentials.mockReturnValue(true);
   mocks.checkRateLimit.mockResolvedValue(true);
+  mocks.guardAuthAttempt.mockResolvedValue({ allowed: true, backedOff: false });
   mocks.signInWithPassword.mockResolvedValue({
     data: {},
     error: { code: 'invalid_credentials', status: 400, message: 'Invalid login credentials' },
@@ -304,7 +323,7 @@ describe('signInWithPasswordIdentifier', () => {
 
   it('names our own rate limit, and says how long', async () => {
     seed(account);
-    mocks.checkRateLimit.mockResolvedValue(false);
+    mocks.guardAuthAttempt.mockResolvedValue({ allowed: false, backedOff: false });
 
     const result = await signInWithPasswordIdentifier({
       identifier: 'alice@example.com',
@@ -412,6 +431,50 @@ describe('resendEmailConfirmation', () => {
     expect(result.ok).toBe(true);
     expect(mocks.sendEmailWithResult).not.toHaveBeenCalled();
   });
+
+  it('never resolves confirmation through a self-edited profile email', async () => {
+    seed({
+      profiles: [{ id: 'u4', handle: 'mallory', contact_email: 'victim@example.com' }],
+      contacts: [
+        { user_id: 'u4', kind: 'email', normalized_value: 'victim@example.com', verified: false },
+      ],
+      authUsers: {
+        u4: { email: 'mallory@example.com', email_confirmed_at: null },
+      },
+    });
+
+    const result = await resendEmailConfirmation('victim@example.com');
+
+    expect(result.ok).toBe(true);
+    expect(mocks.generateLink).not.toHaveBeenCalled();
+    expect(mocks.sendEmailWithResult).not.toHaveBeenCalled();
+  });
+
+  it('a copied profile email cannot block its canonical account confirmation', async () => {
+    seed({
+      profiles: [{ id: 'attacker', handle: 'mallory', contact_email: 'victim@example.com' }],
+      contacts: [
+        {
+          user_id: 'attacker',
+          kind: 'email',
+          normalized_value: 'victim@example.com',
+          verified: false,
+        },
+      ],
+      authUsers: {
+        victim: { email: 'victim@example.com', email_confirmed_at: null },
+        attacker: { email: 'mallory@example.com', email_confirmed_at: null },
+      },
+    });
+
+    await resendEmailConfirmation('victim@example.com');
+
+    expect(mocks.getUserById).toHaveBeenCalledWith('victim');
+    expect(mocks.generateLink).toHaveBeenCalledWith(
+      expect.objectContaining({ email: 'victim@example.com' }),
+    );
+    expect(mocks.sendEmailWithResult.mock.calls[0][0].to).toBe('victim@example.com');
+  });
 });
 
 describe('requestPasswordReset', () => {
@@ -442,8 +505,6 @@ describe('requestPasswordReset', () => {
     const message = mocks.sendEmailWithResult.mock.calls[0][0];
     expect(message.to).toBe('alice@example.com');
     expect(message.text).toContain('/auth/confirm?token_hash=HASH&type=recovery');
-    // With service-role access we never depend on Supabase SMTP.
-    expect(mocks.resetPasswordForEmail).not.toHaveBeenCalled();
   });
 
   it('emails a reset link to a verified email account', async () => {
@@ -500,21 +561,62 @@ describe('requestPasswordReset', () => {
     expect(mocks.sendEmailWithResult).not.toHaveBeenCalled();
   });
 
+  it('never selects a recovery account through profiles.contact_email', async () => {
+    seed({
+      profiles: [{ id: 'u4', handle: 'mallory', contact_email: 'victim@example.com' }],
+      contacts: [
+        { user_id: 'u4', kind: 'email', normalized_value: 'victim@example.com', verified: false },
+      ],
+      authUsers: { u4: { email: 'mallory@example.com' } },
+    });
+
+    const result = await requestPasswordReset('victim@example.com');
+
+    expect(result).toEqual({ ok: true, identifier: 'victim@example.com' });
+    expect(mocks.generateLink).not.toHaveBeenCalled();
+    expect(mocks.sendEmailWithResult).not.toHaveBeenCalled();
+  });
+
+  it('a copied profile email cannot block its canonical account recovery', async () => {
+    seed({
+      profiles: [{ id: 'attacker', handle: 'mallory', contact_email: 'victim@example.com' }],
+      contacts: [
+        {
+          user_id: 'attacker',
+          kind: 'email',
+          normalized_value: 'victim@example.com',
+          verified: false,
+        },
+      ],
+      authUsers: {
+        victim: { email: 'victim@example.com' },
+        attacker: { email: 'mallory@example.com' },
+      },
+    });
+
+    await requestPasswordReset('victim@example.com');
+
+    expect(mocks.getUserById).toHaveBeenCalledWith('victim');
+    expect(mocks.generateLink).toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'recovery', email: 'victim@example.com' }),
+    );
+    expect(mocks.sendEmailWithResult.mock.calls[0][0].to).toBe('victim@example.com');
+  });
+
   it('reveals nothing and sends nothing for an unknown account', async () => {
     seed({});
     const result = await requestPasswordReset('nobody@example.com');
     expect(result).toEqual({ ok: true, identifier: 'nobody@example.com' });
     expect(mocks.sendEmailWithResult).not.toHaveBeenCalled();
-    expect(mocks.resetPasswordForEmail).not.toHaveBeenCalled();
   });
 
-  it('falls back to Supabase recovery email when service-role access is absent', async () => {
+  it('fails closed when service-role limiter state is unavailable', async () => {
     mocks.hasAdminCredentials.mockReturnValue(false);
-    await requestPasswordReset('alice@example.com');
-    expect(mocks.resetPasswordForEmail).toHaveBeenCalledWith(
-      'alice@example.com',
-      expect.objectContaining({ redirectTo: expect.stringContaining('/auth/callback') }),
-    );
+    mocks.checkRateLimit.mockResolvedValue(false);
+
+    const result = await requestPasswordReset('alice@example.com');
+
+    expect(result).toEqual({ ok: true, identifier: 'alice@example.com' });
     expect(mocks.sendEmailWithResult).not.toHaveBeenCalled();
   });
 

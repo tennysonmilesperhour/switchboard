@@ -4,6 +4,7 @@ import type { ActionResult } from '@/lib/errors';
 
 import { revalidatePath } from 'next/cache';
 import { requireUser } from '@/lib/server/require-user';
+import { reportAndFail } from '@/lib/server/observability';
 
 /**
  * Resolve or dismiss a user report. Authorization is enforced in the database:
@@ -25,7 +26,7 @@ export async function resolveReport(
     p_status: status,
     p_note: note.trim() || undefined,
   });
-  if (error) return { ok: false, error: error.message };
+  if (error) return reportAndFail('SB-MODERATION-SAVE', 'moderation.resolve', error, { reportId });
   revalidatePath('/moderation');
   return { ok: true };
 }

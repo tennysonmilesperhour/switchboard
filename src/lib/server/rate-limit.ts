@@ -1,12 +1,19 @@
 import { createHash } from 'node:crypto';
 import { createAdminClient, hasAdminCredentials } from '@/lib/supabase/admin';
+import { reportOperationalError } from '@/lib/server/observability';
+
+export interface RateLimitOptions {
+  /** Refuse the operation when limiter state cannot be read. */
+  failClosed?: boolean;
+}
 
 export async function checkRateLimit(
   key: string,
   limit: number,
   windowSeconds: number,
+  options: RateLimitOptions = {},
 ): Promise<boolean> {
-  if (!hasAdminCredentials()) return true;
+  if (!hasAdminCredentials()) return !options.failClosed;
 
   const keyHash = createHash('sha256').update(key).digest('hex');
   const admin = createAdminClient();
@@ -17,8 +24,11 @@ export async function checkRateLimit(
   });
 
   if (error) {
-    console.error('[rate-limit:error]', error);
-    return true;
+    await reportOperationalError('rate-limit', error, {
+      scope: key.split(':', 1)[0],
+      failClosed: Boolean(options.failClosed),
+    });
+    return !options.failClosed;
   }
   return data === true;
 }

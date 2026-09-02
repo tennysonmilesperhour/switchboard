@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { Icon } from '@/components/ui/Icon';
 import { enablePush, getPushState, type PushState } from '@/lib/client/push';
+import { useBottomOverlaySlot } from '@/components/system/BottomOverlaySlot';
 
 const DISMISS_KEY = 'sb-push-nudge-dismissed';
 
@@ -19,6 +20,8 @@ export function NotificationNudge() {
   const [state, setState] = useState<PushState | null>(null);
   const [dismissed, setDismissed] = useState(true);
   const [busy, setBusy] = useState(false);
+  const wantsSlot = !dismissed && state === 'default';
+  const ownsSlot = useBottomOverlaySlot('notifications', wantsSlot, 30);
 
   useEffect(() => {
     let cancelled = false;
@@ -32,7 +35,7 @@ export function NotificationNudge() {
     };
   }, []);
 
-  if (dismissed || state !== 'default') return null;
+  if (!wantsSlot || !ownsSlot) return null;
 
   async function turnOn() {
     setBusy(true);
@@ -71,7 +74,7 @@ export function NotificationNudge() {
           type="button"
           disabled={busy}
           onClick={turnOn}
-          className="shrink-0 rounded-pill bg-ink px-3 py-1.5 text-xs font-bold text-paper active:scale-[0.98] transition disabled:opacity-60"
+          className="inline-flex min-h-11 shrink-0 items-center rounded-pill bg-ink px-3 text-xs font-bold text-paper transition active:scale-[0.98] disabled:opacity-60"
         >
           {busy ? 'Enabling…' : 'Turn on'}
         </button>
@@ -79,7 +82,7 @@ export function NotificationNudge() {
           type="button"
           aria-label="Dismiss"
           onClick={dismiss}
-          className="shrink-0 rounded-full p-1 text-ink-faint hover:text-ink"
+          className="inline-flex size-11 shrink-0 items-center justify-center rounded-full text-ink-faint hover:bg-paper/70 hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-terracotta"
         >
           <Icon name="close" size={16} />
         </button>

@@ -1,12 +1,13 @@
 'use server';
 
-import type { ErrorCode } from '@/lib/errors';
+import { failure, validation, type ErrorCode } from '@/lib/errors';
 
 import { revalidatePath } from 'next/cache';
 import { requireUser } from '@/lib/server/require-user';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { notifyUsers } from '@/lib/server/notify';
 import { isValidMediaRef } from '@/lib/server/media';
+import { reportAndFail } from '@/lib/server/observability';
 
 export interface ThreadResult {
   ok: boolean;
@@ -45,10 +46,10 @@ export async function postComment(
       ? Math.max(0, Math.min(600, Math.round(normalized.voiceDurationSeconds)))
       : null;
 
-  if (!trimmed && !voiceUrl) return { ok: false, error: 'Add a message or a voice note.' };
-  if (trimmed.length > 2000) return { ok: false, error: 'That’s a bit long' };
+  if (!trimmed && !voiceUrl) return validation('Add a message or a voice note.');
+  if (trimmed.length > 2000) return validation('That’s a bit long');
   if (voiceUrl && !isValidMediaRef(voiceUrl)) {
-    return { ok: false, error: 'That voice note could not be saved.' };
+    return validation('That voice note could not be saved.');
   }
 
   const auth = await requireUser();
@@ -65,10 +66,10 @@ export async function postComment(
     voice_duration_seconds: voiceUrl ? duration : null,
   });
   if (error) {
-    return {
-      ok: false,
-      error: 'You need to RSVP before you can join the thread.',
-    };
+    if (error.code === '42501') {
+      return failure('SB-PERM-DENIED', 'You need to RSVP before you can join the thread.');
+    }
+    return reportAndFail('SB-THREAD-SAVE', 'event-thread.send', error, { eventId });
   }
 
   // Nudge the people already in the conversation — the host and prior
@@ -98,7 +99,12 @@ export async function deleteComment(
     .delete()
     .eq('id', commentId)
     .eq('event_id', eventId);
-  if (error) return { ok: false, error: error.message };
+  if (error) {
+    return reportAndFail('SB-THREAD-SAVE', 'event-thread.react', error, {
+      eventId,
+      commentId,
+    });
+  }
 
   revalidatePath(`/events/${eventId}`);
   return { ok: true };

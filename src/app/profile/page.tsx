@@ -271,7 +271,7 @@ export default async function ProfilePage() {
                     i > 0 ? 'border-t border-line' : ''
                   }`}
                 >
-                  <span className="text-terracotta">
+                  <span className="text-terracotta-deep">
                     <Icon name="globe" size={20} />
                   </span>
                   <span className="min-w-0 flex-1">
@@ -312,7 +312,7 @@ export default async function ProfilePage() {
                   href={`mailto:${email}`}
                   className="flex items-center gap-3 px-4 py-3.5 hover:bg-cream"
                 >
-                  <span className="text-terracotta">
+                  <span className="text-terracotta-deep">
                     <Icon name="mail" size={20} />
                   </span>
                   <span className="min-w-0 flex-1 truncate font-semibold text-ink">
@@ -327,7 +327,7 @@ export default async function ProfilePage() {
                     email ? 'border-t border-line' : ''
                   }`}
                 >
-                  <span className="text-terracotta">
+                  <span className="text-terracotta-deep">
                     <Icon name="phone" size={20} />
                   </span>
                   <span className="min-w-0 flex-1 truncate font-semibold text-ink">
@@ -373,7 +373,7 @@ export default async function ProfilePage() {
                   i > 0 ? 'border-t border-line' : ''
                 }`}
               >
-                <span className="text-terracotta">
+                <span className="text-terracotta-deep">
                   <Icon name={link.icon} size={22} />
                 </span>
                 <span className="flex-1 font-semibold text-ink">{link.label}</span>
@@ -386,7 +386,7 @@ export default async function ProfilePage() {
               href="/settings"
               className="flex items-center gap-3 border-t border-line px-4 py-3.5 hover:bg-cream"
             >
-              <span className="text-terracotta">
+              <span className="text-terracotta-deep">
                 <Icon name="edit" size={22} />
               </span>
               <span className="flex-1 font-semibold text-ink">Settings</span>

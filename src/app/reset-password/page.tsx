@@ -27,7 +27,7 @@ export default async function ResetPasswordPage() {
           </p>
           <Link
             href="/forgot-password"
-            className="mt-3 inline-block font-bold text-terracotta"
+            className="mt-3 inline-block font-bold text-terracotta-deep"
           >
             Request a fresh reset link →
           </Link>

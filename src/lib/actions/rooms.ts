@@ -1,14 +1,17 @@
 'use server';
 
-import type { ActionResult } from '@/lib/errors';
+import { validation, type ActionResult } from '@/lib/errors';
 
 import { revalidatePath } from 'next/cache';
+import { after } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { requireUser } from '@/lib/server/require-user';
 import { extractItems } from '@/lib/ai/extract';
 import { isOwnPublicStorageUrl } from '@/lib/server/media';
 import { notifyRoomActivity } from '@/lib/server/notify';
+import { reportAndFail } from '@/lib/server/observability';
+import { checkRateLimit } from '@/lib/server/rate-limit';
 
 async function notifyRoom(roomId: string, senderId: string): Promise<void> {
   const admin = createAdminClient();
@@ -25,7 +28,7 @@ export async function sendMessage(
   body: string,
 ): Promise<ActionResult> {
   const trimmed = body.trim();
-  if (!trimmed) return { ok: false, error: 'Empty message' };
+  if (!trimmed) return validation('Empty message');
 
   const auth = await requireUser();
   if (!auth.ok) return auth;
@@ -36,32 +39,37 @@ export async function sendMessage(
     .insert({ room_id: roomId, sender_id: user.id, body: trimmed })
     .select('id')
     .single();
-  if (error) return { ok: false, error: error.message };
+  if (error) return reportAndFail('SB-ROOM-SAVE', 'room.message', error, { roomId });
 
   notifyRoom(roomId, user.id).catch((notifyError) =>
     console.error('Room notification failed', notifyError),
   );
 
-  // Quietly file useful information into the room. Best-effort.
-  try {
-    const items = await extractItems(trimmed);
-    if (items.length > 0) {
-      const admin = createAdminClient();
-      await admin.from('room_items').insert(
-        items.map((item) => ({
-          room_id: roomId,
-          message_id: message.id,
-          kind: item.kind,
-          title: item.title,
-          detail: item.detail,
-          url: item.url,
-          created_by: user.id,
-        })),
-      );
+  // Quietly file useful information after the action response. Next's `after`
+  // keeps the invocation alive for the promise without making the sender wait
+  // for a model call. Organization remains best-effort.
+  after(async () => {
+    try {
+      const canExtract = await checkRateLimit(`ai:extract:${user.id}`, 60, 60 * 60);
+      const items = canExtract ? await extractItems(trimmed) : [];
+      if (items.length > 0) {
+        const admin = createAdminClient();
+        await admin.from('room_items').insert(
+          items.map((item) => ({
+            room_id: roomId,
+            message_id: message.id,
+            kind: item.kind,
+            title: item.title,
+            detail: item.detail,
+            url: item.url,
+            created_by: user.id,
+          })),
+        );
+      }
+    } catch {
+      // Organization is a bonus, never a blocker.
     }
-  } catch {
-    // Organization is a bonus, never a blocker.
-  }
+  });
 
   return { ok: true };
 }
@@ -78,7 +86,7 @@ export async function sendPhotoMessage(
   // Only accept a URL we minted into our own public media bucket — never an
   // arbitrary attacker-chosen origin pasted into the field.
   if (!isOwnPublicStorageUrl(imageUrl, ['media'])) {
-    return { ok: false, error: 'Unsupported image.' };
+    return validation('Unsupported image.');
   }
   const title = caption?.trim().slice(0, 120) || 'Photo';
 
@@ -94,7 +102,7 @@ export async function sendPhotoMessage(
     })
     .select('id')
     .single();
-  if (error) return { ok: false, error: error.message };
+  if (error) return reportAndFail('SB-ROOM-SAVE', 'room.image', error, { roomId });
 
   notifyRoom(roomId, user.id).catch((notifyError) =>
     console.error('Room notification failed', notifyError),

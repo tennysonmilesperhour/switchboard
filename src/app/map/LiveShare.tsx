@@ -44,12 +44,11 @@ function geoErrorMessage(error: GeolocationPositionError): string {
 }
 
 /**
- * How far away someone is now comes from the directory under the map, measured
- * against the coarsened point we were given — deliberately not from the RPC's
- * `distance_m`, which is computed between the two *exact* positions. Showing an
- * exact radius around a ~110 m point would let a viewer refine the very fix the
- * coarsening exists to blur, and it would disagree with the number every other
- * layer shows. One distance, from one source.
+ * How far away someone is comes from the directory under the map, measured
+ * against the coarsened point we were given. The RPC now derives its own
+ * `distance_m` from the same rounded caller and target points, so direct callers
+ * cannot refine a hidden fix; recomputing here keeps every map layer on the one
+ * client-side distance source used by the directory.
  */
 function peopleToMarkers(people: NearbyPerson[]): MapMarker[] {
   return people.map((person) => ({

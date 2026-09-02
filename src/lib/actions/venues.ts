@@ -1,9 +1,10 @@
 'use server';
 
-import type { ActionResult } from '@/lib/errors';
+import { validation, type ActionResult } from '@/lib/errors';
 
 import { revalidatePath } from 'next/cache';
 import { requireUser } from '@/lib/server/require-user';
+import { reportAndFail } from '@/lib/server/observability';
 
 /**
  * Submit a venue claim. The row is born `pending` (the venues_insert policy pins
@@ -21,7 +22,7 @@ export async function claimVenue(
   if (!auth.ok) return auth;
   const { supabase, user } = auth;
   if (!name.trim() || !perk.trim()) {
-    return { ok: false, error: 'Name and perk are required' };
+    return validation('Name and perk are required');
   }
 
   const { error } = await supabase.from('venues').insert({
@@ -31,7 +32,7 @@ export async function claimVenue(
     url: url.trim() || null,
     claimed_by: user.id,
   });
-  if (error) return { ok: false, error: error.message };
+  if (error) return reportAndFail('SB-VENUE-SAVE', 'venue.claim', error);
   revalidatePath('/discover');
   return { ok: true };
 }
@@ -57,7 +58,7 @@ export async function reviewVenue(
     p_decision: decision,
     p_note: note.trim() || undefined,
   });
-  if (error) return { ok: false, error: error.message };
+  if (error) return reportAndFail('SB-VENUE-SAVE', 'venue.review', error, { venueId });
   revalidatePath('/moderation');
   revalidatePath('/discover');
   return { ok: true };
