@@ -3,6 +3,7 @@
 import { validation, type ActionResult } from '@/lib/errors';
 
 import { revalidatePath } from 'next/cache';
+import { after } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { requireUser } from '@/lib/server/require-user';
@@ -43,26 +44,30 @@ export async function sendMessage(
     console.error('Room notification failed', notifyError),
   );
 
-  // Quietly file useful information into the room. Best-effort.
-  try {
-    const items = await extractItems(trimmed);
-    if (items.length > 0) {
-      const admin = createAdminClient();
-      await admin.from('room_items').insert(
-        items.map((item) => ({
-          room_id: roomId,
-          message_id: message.id,
-          kind: item.kind,
-          title: item.title,
-          detail: item.detail,
-          url: item.url,
-          created_by: user.id,
-        })),
-      );
+  // Quietly file useful information after the action response. Next's `after`
+  // keeps the invocation alive for the promise without making the sender wait
+  // for a model call. Organization remains best-effort.
+  after(async () => {
+    try {
+      const items = await extractItems(trimmed);
+      if (items.length > 0) {
+        const admin = createAdminClient();
+        await admin.from('room_items').insert(
+          items.map((item) => ({
+            room_id: roomId,
+            message_id: message.id,
+            kind: item.kind,
+            title: item.title,
+            detail: item.detail,
+            url: item.url,
+            created_by: user.id,
+          })),
+        );
+      }
+    } catch {
+      // Organization is a bonus, never a blocker.
     }
-  } catch {
-    // Organization is a bonus, never a blocker.
-  }
+  });
 
   return { ok: true };
 }

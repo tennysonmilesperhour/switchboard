@@ -266,7 +266,7 @@ compile errors or test failures.
 
 ### 11. Outbound calls have timeouts and bounds
 
-- [ ] **What.** Resend and Twilio `fetch` with no `AbortSignal`; the Anthropic
+- [x] **What.** Resend and Twilio `fetch` with no `AbortSignal`; the Anthropic
   client has no `timeout`; fan-out is unbounded `Promise.all`; message send
   awaits the extraction model call.
 - **Where.** `src/lib/server/email.ts:63`, `src/lib/server/sms.ts:45`,

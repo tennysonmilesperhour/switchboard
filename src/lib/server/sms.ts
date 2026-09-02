@@ -1,5 +1,8 @@
 import { appUrl, type ProviderDeliveryResult } from '@/lib/server/email';
 import { normalizePhoneNumber, looksLikePhoneNumber } from '@/lib/phone';
+import { mapInBatches } from '@/lib/server/batches';
+
+export const PROVIDER_TIMEOUT_MS = 10_000;
 
 export interface SmsMessage {
   to: string;
@@ -41,11 +44,13 @@ export async function sendSmsWithResult(
     Body: message.body,
   });
 
+  const signal = AbortSignal.timeout(PROVIDER_TIMEOUT_MS);
   try {
     const response = await fetch(
       `https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Messages.json`,
       {
         method: 'POST',
+        signal,
         headers: {
           Authorization: `Basic ${authorization}`,
           'Content-Type': 'application/x-www-form-urlencoded',
@@ -74,12 +79,16 @@ export async function sendSmsWithResult(
     };
   } catch (error) {
     console.error('[sms:error]', error);
-    return { status: 'failed', provider: 'twilio', errorCode: 'network_error' };
+    return {
+      status: 'failed',
+      provider: 'twilio',
+      errorCode: signal.aborted ? 'timeout' : 'network_error',
+    };
   }
 }
 
 export async function sendSmsMessages(messages: SmsMessage[]): Promise<number> {
-  const results = await Promise.all(messages.map(sendSms));
+  const results = await mapInBatches(messages, sendSms);
   return results.filter(Boolean).length;
 }
 
