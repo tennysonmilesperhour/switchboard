@@ -16,23 +16,26 @@ emdashes in copy, and copy never hedges.
 - `--color-cream` `#f5f5f6` — quiet surfaces
 - `--color-card` `#ffffff` — card surface
 - `--color-ink` `#191d22` — primary text
-- `--color-ink-soft` `#565a60`, `--color-ink-faint` `#8d8f93` — secondary text
+- `--color-ink-soft` `#565a60`, `--color-ink-faint` `#727377` — secondary text
 - `--color-line` `#ebebeb` — borders/skeletons
 
 **Brand accent — pink (kept under the `terracotta` token name so existing
 utility classes restyle automatically; it is NOT terracotta anymore).**
-- `--color-terracotta` `#f82a63` (the pink brand accent)
-- `--color-terracotta-deep` `#d1318a`, `--color-terracotta-soft` `#ffe3ec`
+- `--color-terracotta` `#dc2558` (the pink brand fill; white text passes AA)
+- `--color-terracotta-deep` `#bd2c7d` (link/text accent on light surfaces),
+  `--color-terracotta-soft` `#ffe3ec`. Use `text-terracotta-deep`, never
+  `text-terracotta`, for readable accent text across every preset.
 
 **Semantic**
-- `--color-sage` `#21af96` (jade) — availability / acceptance; deep `#178a76`, soft `#dff5f0`
+- `--color-sage` `#198472` (jade) — availability / acceptance; deep `#147a69`, soft `#dff5f0`
 - `--color-gold` `#eeae36` — highlight/rewards; soft `#fbefd3`; **`--color-gold-deep` `#8a5300`** for accessible text on light/gold-soft surfaces (added for WCAG AA — never use `text-gold` as text on a light background)
-- `--color-rose-soft` `#ffe1e6`, `--color-rose-deep` `#e5405e` — error / decline
+- `--color-rose-soft` `#ffe1e6`, `--color-rose-deep` `#bc354d` — error / decline
 
 **Plan-card gradients** — each plan card gets one accent, applied via a
 `.plan-*` class (pink, purple, blue, jade, orange, magenta). The classes are
 vivid, top-lit, slightly-deepening linear gradients (see the `.plan-*` rules in
-globals.css). `planColor(i)` in `PlanCard` rotates through them.
+globals.css). `planColor(i)` in `PlanCard` rotates through them. Every plan
+token is dark enough for its white card title to pass WCAG AA.
 
 **Signature CTA gradient** — `.bg-brand-gradient` (`--brand-gradient`), a
 pink → magenta → violet sweep used on primary buttons, the create FAB, progress,
@@ -108,10 +111,11 @@ Rules for adding one, enforced by `src/lib/themes-app.test.ts`:
 - **Redefine every token in `REQUIRED_TOKENS`, in full.** A half-swapped
   palette — new background, inherited ink — is how a theme ends up unreadable
   in the one corner nobody opened while building it.
-- **Meet WCAG AA** on body text, secondary text, accent-as-link, and each
-  semantic pair (`sage-deep` on `sage-soft`, and so on). The test computes the
-  ratios from the CSS itself, so it fails on the real values rather than on an
-  intention.
+- **Meet WCAG AA** on body and secondary text, accent-as-link, every shared
+  `Button` variant, notification badges, inactive bottom-nav labels, every
+  white-on-plan-card title, and each semantic pair (`sage-deep` on
+  `sage-soft`, and so on). The test computes the ratios from the CSS itself, so
+  it fails on the real values rather than on an intention.
 - **Keep semantics semantic.** `sage` still means availability and acceptance,
   `rose` still means decline. A theme changes the register, never the meaning.
 - **Register it in `src/lib/themes-app.ts`** and in the migration's CHECK

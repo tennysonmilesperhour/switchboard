@@ -55,7 +55,7 @@ export function ZoneJoinRequest({ zoneId, zoneName, alreadyAsked }: ZoneJoinRequ
           </p>
           <Link
             href="/zones"
-            className="mt-5 inline-flex min-h-11 items-center text-sm font-bold text-terracotta"
+            className="mt-5 inline-flex min-h-11 items-center text-sm font-bold text-terracotta-deep"
           >
             Back to zones
           </Link>

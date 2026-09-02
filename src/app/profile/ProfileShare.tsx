@@ -67,7 +67,7 @@ export function ProfileShare({
           </button>
           <div className="min-w-0 flex-1">
             <p className="flex items-center gap-1.5 font-bold text-ink">
-              <Icon name="qr" size={16} className="text-terracotta" />
+              <Icon name="qr" size={16} className="text-terracotta-deep" />
               Contact card
             </p>
             <p className="mt-0.5 text-sm text-ink-soft">

@@ -249,7 +249,7 @@ export function MomentsClient({
               Checked in
             </p>
             <p className="font-display text-xl mt-0.5 flex items-center gap-1.5">
-              <Icon name="mapPin" size={20} className="text-terracotta" />
+              <Icon name="mapPin" size={20} className="text-terracotta-deep" />
               {myMoment.place_name}
             </p>
             <p className="text-xs text-ink-soft mt-1">

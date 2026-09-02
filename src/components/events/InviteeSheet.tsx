@@ -193,7 +193,7 @@ export function InviteeSheet({
             {callHref && (
               <a
                 href={callHref}
-                className="inline-flex items-center justify-center gap-2 rounded-btn border border-line bg-card px-4 py-2.5 text-[15px] font-bold text-ink transition-all hover:border-terracotta hover:text-terracotta active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-terracotta"
+                className="inline-flex items-center justify-center gap-2 rounded-btn border border-line bg-card px-4 py-2.5 text-[15px] font-bold text-ink transition-all hover:border-terracotta hover:text-terracotta-deep active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-terracotta"
               >
                 <Icon name="phone" size={16} />
                 Call

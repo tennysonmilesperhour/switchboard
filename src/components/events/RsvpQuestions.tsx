@@ -37,7 +37,7 @@ export function RsvpQuestions({
               className="text-sm font-semibold text-ink"
             >
               {question.prompt}
-              {question.required && <span className="text-terracotta"> *</span>}
+              {question.required && <span className="text-terracotta-deep"> *</span>}
             </label>
             {isChoice ? (
               <div

@@ -86,7 +86,7 @@ export function BottomNav() {
             aria-expanded={sheetOpen}
             onClick={() => setSheetOpen((open) => !open)}
             className={`flex flex-col items-center gap-0.5 py-2.5 text-[10px] font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-terracotta rounded-lg ${
-              moreActive || sheetOpen ? 'text-ink' : 'text-ink-faint hover:text-ink-soft'
+              moreActive || sheetOpen ? 'text-ink' : 'text-ink-soft hover:text-ink'
             }`}
           >
             <Icon name="grid" size={24} className={moreActive ? 'scale-105' : ''} />
@@ -176,7 +176,7 @@ function TabLink({ tab, active }: { tab: Tab; active: boolean }) {
       href={tab.href}
       aria-current={active ? 'page' : undefined}
       className={`flex flex-col items-center gap-0.5 py-2.5 text-[10px] font-semibold transition-colors rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-terracotta ${
-        active ? 'text-ink' : 'text-ink-faint hover:text-ink-soft'
+        active ? 'text-ink' : 'text-ink-soft hover:text-ink'
       }`}
     >
       <Icon name={tab.icon} size={24} className={active ? 'scale-105' : ''} />

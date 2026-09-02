@@ -8,18 +8,18 @@
   --color-card: #ffffff;
   --color-ink: #191d22;
   --color-ink-soft: #565a60;
-  --color-ink-faint: #8d8f93;
+  --color-ink-faint: #727377;
   --color-line: #ebebeb;
 
   /* Brand accent (pink) - kept under the `terracotta` token name so the
      existing utility classes across the app restyle automatically. */
-  --color-terracotta: #f82a63;
-  --color-terracotta-deep: #d1318a;
+  --color-terracotta: #dc2558;
+  --color-terracotta-deep: #bd2c7d;
   --color-terracotta-soft: #ffe3ec;
 
   /* sage = availability / acceptance, semantically reserved (now jade) */
-  --color-sage: #21af96;
-  --color-sage-deep: #178a76;
+  --color-sage: #198472;
+  --color-sage-deep: #147a69;
   --color-sage-soft: #dff5f0;
 
   /* gold = highlight / rewards */
@@ -30,14 +30,14 @@
 
   /* rose = error / decline */
   --color-rose-soft: #ffe1e6;
-  --color-rose-deep: #e5405e;
+  --color-rose-deep: #bc354d;
 
   /* Plan palette - one accent per plan card */
-  --color-plan-pink: #f82a63;
+  --color-plan-pink: #dc2558;
   --color-plan-purple: #8a38f5;
-  --color-plan-blue: #5392ff;
-  --color-plan-jade: #21af96;
-  --color-plan-orange: #eeae36;
+  --color-plan-blue: #4274cb;
+  --color-plan-jade: #198472;
+  --color-plan-orange: #976f22;
   --color-plan-magenta: #d1318a;
 
   --font-display: var(--font-work), system-ui, sans-serif;
@@ -59,7 +59,7 @@
   --duration-normal: 300ms;
 
   /* Signature CTA gradient (pink -> violet) */
-  --brand-gradient: linear-gradient(96deg, #f82a63 0%, #d1318a 55%, #8a38f5 120%);
+  --brand-gradient: linear-gradient(96deg, #dc2558 0%, #bd2c7d 55%, #8a38f5 120%);
 }
 
 /* ----- Appearance presets -----
@@ -108,7 +108,7 @@
   --color-plan-purple: #5b4a7d;
   --color-plan-blue: #2f5d7c;
   --color-plan-jade: #3f7d5c;
-  --color-plan-orange: #b8860b;
+  --color-plan-orange: #986f09;
   --color-plan-magenta: #8a3d5c;
 
   --brand-gradient: linear-gradient(96deg, #9c2f24 0%, #8a3d5c 55%, #5b4a7d 120%);
@@ -124,11 +124,11 @@
   --color-ink-faint: #9c8b78;
   --color-line: #3d3128;
 
-  --color-terracotta: #e8a24b;
+  --color-terracotta: #9b6c32;
   --color-terracotta-deep: #f2b968;
   --color-terracotta-soft: #3a2c1c;
 
-  --color-sage: #6fbfa3;
+  --color-sage: #4b806e;
   --color-sage-deep: #8fd4bc;
   --color-sage-soft: #24322c;
 
@@ -140,14 +140,14 @@
   --color-rose-soft: #3a2226;
   --color-rose-deep: #f08a95;
 
-  --color-plan-pink: #d4657f;
-  --color-plan-purple: #9b7bc4;
-  --color-plan-blue: #6d9ec9;
-  --color-plan-jade: #6fbfa3;
-  --color-plan-orange: #e8a24b;
-  --color-plan-magenta: #c4739b;
+  --color-plan-pink: #b7576e;
+  --color-plan-purple: #8569a8;
+  --color-plan-blue: #54799b;
+  --color-plan-jade: #4b806e;
+  --color-plan-orange: #9b6c32;
+  --color-plan-magenta: #a46182;
 
-  --brand-gradient: linear-gradient(96deg, #e8a24b 0%, #d4657f 55%, #9b7bc4 120%);
+  --brand-gradient: linear-gradient(96deg, #9b6c32 0%, #b7576e 55%, #8569a8 120%);
 
   --shadow-lift: 0 2px 5px rgb(0 0 0 / 0.4), 0 1px 2px rgb(0 0 0 / 0.3);
   --shadow-float: 0 8px 28px rgb(0 0 0 / 0.5), 0 2px 6px rgb(0 0 0 / 0.35);
@@ -164,7 +164,7 @@
   --color-ink-faint: #74747e;
   --color-line: #dedad3;
 
-  --color-terracotta: #d94a00;
+  --color-terracotta: #d14700;
   --color-terracotta-deep: #a33800;
   --color-terracotta-soft: #ffe8dc;
 
@@ -179,14 +179,14 @@
   --color-rose-soft: #ffe0e0;
   --color-rose-deep: #c2281f;
 
-  --color-plan-pink: #d94a00;
+  --color-plan-pink: #d14700;
   --color-plan-purple: #4b3f8f;
   --color-plan-blue: #1c5b96;
   --color-plan-jade: #0f7b5a;
-  --color-plan-orange: #b07500;
+  --color-plan-orange: #a06b00;
   --color-plan-magenta: #9c2b62;
 
-  --brand-gradient: linear-gradient(96deg, #d94a00 0%, #b03a1a 55%, #7a2f2f 120%);
+  --brand-gradient: linear-gradient(96deg, #d14700 0%, #b03a1a 55%, #7a2f2f 120%);
 }
 
 /* Custom: three chosen colors, everything else derived.

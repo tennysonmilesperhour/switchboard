@@ -394,7 +394,7 @@ export default async function SettingsPage({
               hint="Every feature and where to find it"
             />
             <Card>
-              <Link href="/features" className="font-medium text-terracotta">
+              <Link href="/features" className="font-medium text-terracotta-deep">
                 Open the feature index
               </Link>
             </Card>
@@ -441,7 +441,7 @@ export default async function SettingsPage({
               <Card>
                 <Link
                   href="/moderation"
-                  className="flex items-center justify-between rounded-card bg-paper px-3 py-2.5 text-sm font-bold text-terracotta hover:text-terracotta-deep"
+                  className="flex items-center justify-between rounded-card bg-paper px-3 py-2.5 text-sm font-bold text-terracotta-deep hover:text-terracotta-deep"
                 >
                   Open the moderation queue
                   <span aria-hidden>→</span>
@@ -460,7 +460,7 @@ export default async function SettingsPage({
           <section>
             <SectionHeader title="Legal" hint="Privacy, terms, copyright, and community expectations" />
             <Card>
-              <div className="grid grid-cols-2 gap-2 text-sm font-bold text-terracotta">
+              <div className="grid grid-cols-2 gap-2 text-sm font-bold text-terracotta-deep">
                 <Link href="/privacy" className="rounded-card bg-paper px-3 py-2 hover:text-terracotta-deep">
                   Privacy
                 </Link>

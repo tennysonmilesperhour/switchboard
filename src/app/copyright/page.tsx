@@ -5,7 +5,7 @@ export default function CopyrightPage() {
   const email = supportEmail();
   return (
     <main className="mx-auto max-w-2xl px-6 py-16 text-ink">
-      <p className="text-sm font-bold text-terracotta">Effective July 9, 2026</p>
+      <p className="text-sm font-bold text-terracotta-deep">Effective July 9, 2026</p>
       <h1 className="mt-2 text-4xl font-black">Copyright Policy</h1>
       <div className="mt-8 space-y-6 leading-relaxed text-ink-soft">
         <section>
@@ -29,7 +29,7 @@ export default function CopyrightPage() {
           <h2 className="text-xl font-extrabold text-ink">Reports</h2>
           <p className="mt-3">
             If you believe content on Switchboard infringes your rights, email{' '}
-            <a href={`mailto:${email}`} className="font-bold text-terracotta underline">
+            <a href={`mailto:${email}`} className="font-bold text-terracotta-deep underline">
               {email}
             </a>{' '}
             with the content location, your contact information, and a short
@@ -38,7 +38,7 @@ export default function CopyrightPage() {
           </p>
         </section>
       </div>
-      <div className="mt-10 flex flex-wrap gap-4 text-sm font-bold text-terracotta">
+      <div className="mt-10 flex flex-wrap gap-4 text-sm font-bold text-terracotta-deep">
         <Link href="/terms">Terms</Link>
         <Link href="/privacy">Privacy</Link>
         <Link href="/community">Community Covenant</Link>
