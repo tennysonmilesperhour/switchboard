@@ -262,6 +262,15 @@ grant execute on function public.is_current_user_zone_moderator(uuid) to authent
 grant execute on function public.can_current_user_view_zone(uuid) to authenticated;
 grant execute on function public.is_current_user_platform_moderator() to authenticated;
 
+-- The invite insert policy landed after the general policy-helper migration.
+-- Keep its host check, but bind the user side to auth.uid() before the
+-- arbitrary-user helper is revoked below.
+alter policy invites_insert on public.invites
+  with check (
+    public.is_current_user_event_host(event_id)
+    and status in ('queued', 'sent')
+  );
+
 -- This trigger runs with the caller's privileges. Point it at the private
 -- helper before revoking the browser-callable arbitrary-user signature, or a
 -- normal venue edit would fail while checking immutable review fields.
@@ -271,12 +280,33 @@ language plpgsql
 security invoker
 set search_path = ''
 as $$
+declare
+  v_claimant_cleared_for_delete boolean;
+  v_reviewer_cleared_for_delete boolean;
 begin
-  if new.claimed_by is distinct from old.claimed_by then
+  -- PostgreSQL implements ON DELETE SET NULL as an UPDATE. Permit only the FK
+  -- cleanup after the referenced profile has disappeared; caller-driven
+  -- authority edits remain forbidden.
+  v_claimant_cleared_for_delete :=
+    old.claimed_by is not null
+    and new.claimed_by is null
+    and not exists (
+      select 1 from public.profiles p where p.id = old.claimed_by
+    );
+  v_reviewer_cleared_for_delete :=
+    old.reviewed_by is not null
+    and new.reviewed_by is null
+    and not exists (
+      select 1 from public.profiles p where p.id = old.reviewed_by
+    );
+
+  if new.claimed_by is distinct from old.claimed_by
+     and not v_claimant_cleared_for_delete then
     raise exception 'venue owner is immutable';
   end if;
   if (new.status is distinct from old.status
-      or new.reviewed_by is distinct from old.reviewed_by
+      or (new.reviewed_by is distinct from old.reviewed_by
+          and not v_reviewer_cleared_for_delete)
       or new.reviewed_at is distinct from old.reviewed_at
       or new.review_note is distinct from old.review_note)
      and not private.is_platform_moderator(auth.uid()) then
