@@ -58,7 +58,12 @@ export async function requestContactVerification(
   if (!auth.ok) return auth;
   const { user } = auth;
 
-  if (!(await checkRateLimit(`contact-verify-send:${user.id}:${kind}`, 4, 60 * 60))) {
+  if (!(await checkRateLimit(
+    `contact-verify-send:${user.id}:${kind}`,
+    4,
+    60 * 60,
+    { failClosed: true },
+  ))) {
     return failure('SB-RATE-LIMIT', 'Too many verification requests. Try again later.');
   }
 
@@ -169,7 +174,12 @@ export async function confirmPhoneContact(code: string): Promise<ContactVerifica
   const { user } = auth;
   const cleaned = code.replace(/\D/g, '');
   if (cleaned.length !== 6) return validation('Enter the six-digit code.');
-  if (!(await checkRateLimit(`contact-verify-code:${user.id}`, 8, 15 * 60))) {
+  if (!(await checkRateLimit(
+    `contact-verify-code:${user.id}`,
+    8,
+    15 * 60,
+    { failClosed: true },
+  ))) {
     return failure('SB-RATE-LIMIT', 'Too many code attempts. Request a new code later.');
   }
 

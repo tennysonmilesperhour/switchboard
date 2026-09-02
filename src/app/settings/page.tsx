@@ -94,9 +94,9 @@ export default async function SettingsPage({
   );
 
   // Reveal the moderation entry point only to appointed platform moderators.
-  const { data: isModerator } = await supabase.rpc('is_platform_moderator', {
-    p_user: user.id,
-  });
+  const { data: isModerator } = await supabase.rpc(
+    'is_current_user_platform_moderator',
+  );
 
   const interests: string[] = profile?.interests ?? [];
   const downTo: string[] = profile?.down_to ?? [];

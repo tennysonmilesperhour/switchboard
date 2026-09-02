@@ -28,7 +28,7 @@
 begin;
 
 -- One assertion per function, plus the two catch-alls below.
-select plan(15);
+select plan(17);
 
 select ok(
   has_function_privilege('service_role', 'public.is_event_host(uuid, uuid)', 'EXECUTE'),
@@ -83,6 +83,18 @@ select ok(
 select ok(
   has_function_privilege('service_role', 'public.app_schema_status()', 'EXECUTE'),
   'service_role can execute app_schema_status (the health check)'
+);
+
+select ok(
+  has_function_privilege('service_role', 'public.digest_items(uuid)', 'EXECUTE'),
+  'service_role can execute digest_items (the notification sweep)'
+);
+
+select ok(
+  has_function_privilege(
+    'service_role', 'public.auth_user_id_by_email(text)', 'EXECUTE'
+  ),
+  'service_role can resolve canonical auth email ownership for recovery'
 );
 
 select ok(

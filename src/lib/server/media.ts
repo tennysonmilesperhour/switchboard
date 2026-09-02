@@ -37,8 +37,21 @@ export function isValidMediaRef(ref: string): boolean {
  * and capsule validators instead of each re-deriving the path shape.
  */
 export function isOwnPublicStorageUrl(url: string, buckets: string[]): boolean {
-  const alt = buckets.join('|');
-  return new RegExp(`/storage/v1/object/public/(?:${alt})/`).test(url);
+  const configuredUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  if (!configuredUrl) return false;
+  try {
+    const candidate = new URL(url);
+    const configured = new URL(configuredUrl);
+    if (candidate.origin !== configured.origin) return false;
+    const escapedBuckets = buckets.map((bucket) =>
+      bucket.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'),
+    );
+    return new RegExp(
+      `^/storage/v1/object/public/(?:${escapedBuckets.join('|')})/`,
+    ).test(candidate.pathname);
+  } catch {
+    return false;
+  }
 }
 
 /**

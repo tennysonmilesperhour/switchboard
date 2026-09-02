@@ -231,6 +231,31 @@ password reset, reports, uploads, guest RSVP, AI calls, and any
 account-existence oracle (contact matching). Password reset returns a **generic**
 response regardless of whether the account exists (no user enumeration).
 
+- **Auth and uploads fail closed.** Pass `{ failClosed: true }` anywhere an
+  unavailable limiter would otherwise admit credential guessing, account
+  creation, recovery/confirmation mail amplification, or uploads. Limiter
+  faults are reported as `SB-RATE-LIMIT`; they must not silently become an
+  unlimited path.
+- **Connection buckets stop brute force; identifiers only slow it down.**
+  Sign-in permits 30 attempts per Vercel-forwarded client IP per 10 minutes and
+  sign-up permits 12 per IP per hour. An identifier crossing its higher-volume signal
+  threshold (20 sign-ins per 10 minutes; 10 sign-ups per hour) gets a 750 ms
+  backoff, not a denial. A stranger who knows an email or handle must never be
+  able to lock that account out remotely.
+- **Contact matching is limited at the database boundary.**
+  `resolve_profile_contact` consumes an authenticated-user bucket of 10 calls
+  per hour inside the private function body. The action-level limiter is useful
+  defense in depth, but it is not the security boundary because future callers
+  could otherwise omit it.
+- **Recovery trusts proof of ownership, not editable profile text.** Reset and
+  confirmation resend resolve an email sign-up from `auth.users.email`; a
+  username account may recover only through a verified `profile_contacts`
+  email. Never use `profiles.contact_email`, which its owner can edit.
+- **Every AI entry point has its own per-user budget.** Discovery is 20/hour,
+  plan generation is 30/hour, and room-message extraction is 60/hour. If the
+  extraction budget is exhausted, the message still saves and only the AI
+  enrichment is skipped.
+
 ## 10. Diagnostics don't leak configuration
 
 Health/status endpoints return a coarse liveness boolean to anonymous callers.

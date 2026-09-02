@@ -670,9 +670,8 @@ export async function inviteConnectionNow(
   }
   // A block that was placed without tearing down the connection row would
   // otherwise slip through the check above.
-  const { data: blocked } = await supabase.rpc('are_blocked', {
-    p_user_a: user.id,
-    p_user_b: profileId,
+  const { data: blocked } = await supabase.rpc('is_blocked_with', {
+    p_other: profileId,
   });
   if (blocked) return failure('SB-PERM-DENIED', 'You can’t invite this person.');
 

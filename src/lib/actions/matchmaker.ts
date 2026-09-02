@@ -31,8 +31,8 @@ export async function proposeIntroduction(
   // product intent, and stops the endpoint being used to fire push at arbitrary
   // user ids (SB-08).
   const [{ data: connA }, { data: connB }] = await Promise.all([
-    supabase.rpc('are_connected', { a: user.id, b: personA }),
-    supabase.rpc('are_connected', { a: user.id, b: personB }),
+    supabase.rpc('is_connected_with', { p_other: personA }),
+    supabase.rpc('is_connected_with', { p_other: personB }),
   ]);
   if (!connA || !connB) {
     return failure(
