@@ -1,6 +1,6 @@
 import { createAdminClient } from '@/lib/supabase/admin';
 import { notifyUsers } from '@/lib/server/notify';
-import { scoreOptions, type Vote, type Weight } from '@/lib/engine/scoring';
+import { normalizeWeight, scoreOptions, type Vote } from '@/lib/engine/scoring';
 import { pollQuestion } from '@/lib/types';
 
 /**
@@ -92,7 +92,7 @@ export async function resolvePoll(pollId: string): Promise<void> {
   const engineVotes: Vote[] = (votes ?? []).map((v) => ({
     voterId: v.voter_id,
     optionId: v.option_id,
-    weight: v.weight as Weight,
+    weight: normalizeWeight(v.weight),
   }));
   const ranked = scoreOptions((options ?? []).map((o) => o.id), engineVotes);
 

@@ -7,7 +7,6 @@ import { Card, SectionHeader } from '@/components/ui/Card';
 import { NotificationsFeed } from './NotificationsFeed';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { formatDateTime, formatRelative } from '@/lib/format';
-import type { SwitchboardEvent } from '@/lib/types';
 
 export const metadata: Metadata = { title: 'Notifications' };
 
@@ -113,12 +112,7 @@ export default async function NotificationsPage() {
               />
               <div className="space-y-2">
                 {invites.map((invite) => {
-                  const event = (
-                    Array.isArray(invite.event) ? invite.event[0] : invite.event
-                  ) as Pick<
-                    SwitchboardEvent,
-                    'id' | 'title' | 'starts_at' | 'time_zone'
-                  > | null;
+                  const event = Array.isArray(invite.event) ? invite.event[0] : invite.event;
                   if (!event) return null;
                   return (
                     <Link key={invite.id} href={`/events/${event.id}`} className="block group">
@@ -143,11 +137,9 @@ export default async function NotificationsPage() {
               />
               <div className="space-y-2">
                 {requestList.map((request) => {
-                  const requester = (
-                    Array.isArray(request.requester)
-                      ? request.requester[0]
-                      : request.requester
-                  ) as { id: string; display_name: string; handle: string | null } | null;
+                  const requester = Array.isArray(request.requester)
+                    ? request.requester[0]
+                    : request.requester;
                   if (!requester) return null;
                   return (
                     <Link key={request.id} href="/people" className="block group">
@@ -199,11 +191,9 @@ export default async function NotificationsPage() {
               <SectionHeader title="From your hosts 📣" />
               <div className="space-y-2">
                 {announcementList.map((announcement) => {
-                  const event = (
-                    Array.isArray(announcement.event)
-                      ? announcement.event[0]
-                      : announcement.event
-                  ) as Pick<SwitchboardEvent, 'id' | 'title'> | null;
+                  const event = Array.isArray(announcement.event)
+                    ? announcement.event[0]
+                    : announcement.event;
                   return (
                     <Link
                       key={announcement.id}

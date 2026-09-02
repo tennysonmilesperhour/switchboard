@@ -16,7 +16,7 @@ import {
   hostCanShare,
   shareLinkState,
 } from '@/lib/share-link';
-import { INVITE_STATUS_LABEL } from '@/lib/invite-status';
+import { INVITE_STATUS_LABEL, normalizeInviteStatus } from '@/lib/invite-status';
 import {
   appInviteMessage,
   looksLikeContactString,
@@ -598,7 +598,7 @@ export async function loadEventPage(
         avatarUrl: input.avatarUrl,
         seed: input.inviteeId ?? input.inviteId,
         isGuest,
-        statusLabel: INVITE_STATUS_LABEL[input.status],
+        statusLabel: INVITE_STATUS_LABEL[normalizeInviteStatus(input.status)],
         contact: null,
         inviteUrl: null,
         messages: null,
@@ -619,7 +619,7 @@ export async function loadEventPage(
       avatarUrl: input.avatarUrl,
       seed: input.inviteeId ?? input.inviteId,
       isGuest,
-      statusLabel: INVITE_STATUS_LABEL[input.status],
+      statusLabel: INVITE_STATUS_LABEL[normalizeInviteStatus(input.status)],
       contact: input.guestContact?.trim() || null,
       inviteUrl,
       messages: {

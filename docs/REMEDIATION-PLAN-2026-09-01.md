@@ -233,7 +233,7 @@ compile errors or test failures.
 
 ### 9. Generated database types
 
-- [ ] **What.** No `Database` type; `src/lib/types.ts` is a hand mirror that
+- [x] **What (PR #173).** No `Database` type; `src/lib/types.ts` is a hand mirror that
   is stale by three tables and six `profiles` columns; 31 row casts paper over
   it. The audit's production outage is the third bug from this class.
 - **How.**
