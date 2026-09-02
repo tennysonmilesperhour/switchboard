@@ -1,3 +1,5 @@
+import 'server-only';
+
 import webPush from 'web-push';
 import { createAdminClient } from '@/lib/supabase/admin';
 import {

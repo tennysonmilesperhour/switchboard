@@ -1,3 +1,5 @@
+import 'server-only';
+
 import Anthropic from '@anthropic-ai/sdk';
 
 export const AI_TIMEOUT_MS = 10_000;

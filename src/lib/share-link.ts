@@ -154,6 +154,29 @@ export function hostCanShare(state: ShareLinkState): boolean {
 }
 
 /**
+ * Can a host or co-host change the invite list at this point in the plan?
+ *
+ * Invite editing is deliberately narrower than public-link answering: while a
+ * date poll is running the existing invitees can respond, but the cascade has
+ * not started and its ordering is still derived from the wizard. Once the plan
+ * is confirmed, the guest list is locked.
+ */
+export function hostCanEditInvitees(status: string | null | undefined): boolean {
+  return status === 'inviting';
+}
+
+/**
+ * Can a visitor request a seat through the open-table join page?
+ *
+ * Both predicates take the generated `string` (see `ShareLinkSubject`) rather
+ * than `EventStatus`, so callers pass a row's status straight through; an
+ * unknown or corrupted value simply fails the equality and stays closed.
+ */
+export function canRequestOpenTable(status: string | null | undefined): boolean {
+  return status === 'inviting' || status === 'confirmed';
+}
+
+/**
  * Should a link preview unfurl the plan's title, time, and place?
  *
  * Stricter than `canReadPlan` on purpose. The OG image is addressed by event

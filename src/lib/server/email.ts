@@ -1,3 +1,5 @@
+import 'server-only';
+
 /**
  * Off-platform delivery. Switchboard reaches guests who aren't logged in the
  * same way Partiful does - except we use email, not a phone number, so a guest
