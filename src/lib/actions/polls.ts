@@ -229,29 +229,3 @@ export async function addFollowUpPoll(
   revalidatePath(`/events/${eventId}`);
   return { ok: true };
 }
-
-/** Remove a follow-up that hasn't opened yet. Host/co-host only. */
-export async function removeFollowUpPoll(
-  pollId: string,
-  eventId: string,
-): Promise<ActionResult> {
-  const auth = await requireUser();
-  if (!auth.ok) return auth;
-  const { supabase, user } = auth;
-
-  if (!(await isEventManager(user.id, eventId))) {
-    return failure('SB-PLAN-ACCESS');
-  }
-
-  // Only while still pending: once a poll has opened, people may have answered
-  // it, and deleting it would take their input with it.
-  const { error } = await supabase
-    .from('polls')
-    .delete()
-    .eq('id', pollId)
-    .eq('phase', 'pending');
-  if (error) return reportAndFail('SB-PLAN-SAVE', 'poll.follow-up-remove', error);
-
-  revalidatePath(`/events/${eventId}`);
-  return { ok: true };
-}

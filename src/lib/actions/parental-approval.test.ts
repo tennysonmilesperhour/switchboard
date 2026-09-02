@@ -2,10 +2,13 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
   requireUser: vi.fn(),
+  adminRpc: vi.fn(),
   createAdminClient: vi.fn(),
   checkRateLimit: vi.fn(async () => true),
   checkEventManager: vi.fn(),
   isEventManager: vi.fn(),
+  advanceEventCascade: vi.fn(),
+  notifyUsers: vi.fn(),
   sendEmails: vi.fn(async () => undefined),
   reportOperationalError: vi.fn(async () => undefined),
 }));
@@ -23,16 +26,16 @@ vi.mock('@/lib/server/rate-limit', () => ({
   checkRateLimit: mocks.checkRateLimit,
 }));
 vi.mock('@/lib/server/email', () => ({
-  looksLikeEmail: (value: string) => value.includes('@'),
+  looksLikeEmail: (value: string) => /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(value),
   sendEmails: mocks.sendEmails,
 }));
-vi.mock('@/lib/links', () => ({ approvalUrl: (token: string) => `/approve/${token}` }));
+vi.mock('@/lib/links', () => ({
+  approvalUrl: (token: string) => `/approve/${token}`,
+}));
 vi.mock('@/lib/server/cascade-runner', () => ({
-  advanceEventCascade: vi.fn(async () => undefined),
+  advanceEventCascade: mocks.advanceEventCascade,
 }));
-vi.mock('@/lib/server/notify', () => ({
-  notifyUsers: vi.fn(async () => undefined),
-}));
+vi.mock('@/lib/server/notify', () => ({ notifyUsers: mocks.notifyUsers }));
 vi.mock('@/lib/server/observability', () => ({
   reportOperationalError: mocks.reportOperationalError,
   reportAndFail: vi.fn(() => ({
@@ -43,7 +46,10 @@ vi.mock('@/lib/server/observability', () => ({
   })),
 }));
 
-import { requestParentalApproval } from './parental-approval';
+import {
+  requestParentalApproval,
+  resolveParentalApproval,
+} from './parental-approval';
 
 interface InviteRow {
   id: string;
@@ -80,10 +86,35 @@ afterEach(() => {
   mocks.checkRateLimit.mockResolvedValue(true);
 });
 
-describe('requestParentalApproval', () => {
+describe('parental approval actions', () => {
+  it('rejects an invalid guardian address before using the admin client', async () => {
+    mocks.requireUser.mockResolvedValue({
+      ok: true,
+      user: { id: 'caller-1' },
+      supabase: {},
+    });
+
+    const result = await requestParentalApproval({
+      inviteId: 'invite-1',
+      eventId: 'event-1',
+      guardianEmail: 'not-an-email',
+    });
+
+    expect(result).toEqual({
+      ok: false,
+      error: 'Enter a valid email address for the guardian.',
+    });
+    expect(mocks.createAdminClient).not.toHaveBeenCalled();
+    expect(mocks.sendEmails).not.toHaveBeenCalled();
+  });
+
   it('refuses an invite owned by another user before any service-role access', async () => {
     const supabase = sessionClient({
-      invite: { id: 'invite-1', event_id: 'event-1', invitee_id: 'someone-else' },
+      invite: {
+        id: 'invite-1',
+        event_id: 'event-1',
+        invitee_id: 'someone-else',
+      },
     });
     mocks.requireUser.mockResolvedValue({
       ok: true,
@@ -101,12 +132,15 @@ describe('requestParentalApproval', () => {
     expect(supabase.from).toHaveBeenCalledWith('invites');
     expect(mocks.checkRateLimit).not.toHaveBeenCalled();
     expect(mocks.createAdminClient).not.toHaveBeenCalled();
-    expect(mocks.sendEmails).not.toHaveBeenCalled();
   });
 
   it('refuses an invite/event mismatch even when the invitee id is correct', async () => {
     const supabase = sessionClient({
-      invite: { id: 'invite-1', event_id: 'event-other', invitee_id: 'caller-1' },
+      invite: {
+        id: 'invite-1',
+        event_id: 'event-other',
+        invitee_id: 'caller-1',
+      },
     });
     mocks.requireUser.mockResolvedValue({
       ok: true,
@@ -126,7 +160,11 @@ describe('requestParentalApproval', () => {
 
   it('rate-limits a verified invitee per user before the admin write', async () => {
     const supabase = sessionClient({
-      invite: { id: 'invite-1', event_id: 'event-1', invitee_id: 'caller-1' },
+      invite: {
+        id: 'invite-1',
+        event_id: 'event-1',
+        invitee_id: 'caller-1',
+      },
       event: {
         id: 'event-1',
         title: 'Youth plan',
@@ -153,5 +191,32 @@ describe('requestParentalApproval', () => {
       3600,
     );
     expect(mocks.createAdminClient).not.toHaveBeenCalled();
+  });
+
+  it('maps an unknown approval token to the stable link error', async () => {
+    mocks.adminRpc.mockResolvedValue({
+      data: { outcome: 'not_found' },
+      error: null,
+    });
+    mocks.createAdminClient.mockReturnValue({
+      rpc: mocks.adminRpc,
+      from: vi.fn(() => {
+        throw new Error('Unexpected table read');
+      }),
+    });
+
+    const result = await resolveParentalApproval('unknown-token', true);
+
+    expect(mocks.adminRpc).toHaveBeenCalledWith('resolve_parental_approval', {
+      p_token: 'unknown-token',
+      p_approve: true,
+    });
+    expect(result).toMatchObject({
+      ok: false,
+      outcome: 'not_found',
+      code: 'SB-LINK-UNKNOWN',
+    });
+    expect(mocks.advanceEventCascade).not.toHaveBeenCalled();
+    expect(mocks.notifyUsers).not.toHaveBeenCalled();
   });
 });

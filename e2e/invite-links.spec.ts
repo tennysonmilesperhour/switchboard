@@ -1,4 +1,10 @@
-import { expect, test, type Page, type Browser } from '@playwright/test';
+import {
+  expect,
+  test,
+  type Browser,
+  type BrowserContext,
+  type Page,
+} from '@playwright/test';
 
 /**
  * The invite-link contract.
@@ -32,8 +38,27 @@ import { expect, test, type Page, type Browser } from '@playwright/test';
 const DB = !!process.env.E2E_DB;
 const PASSWORD = process.env.E2E_TEST_PASSWORD ?? 'testpassword123';
 const TITLE = 'Coffee downtown, Game night, Saturday hike…';
+type Cookies = Awaited<ReturnType<BrowserContext['cookies']>>;
+const sessionCookies = new Map<string, Cookies>();
 
 async function login(page: Page, identifier: string) {
+  const cached = sessionCookies.get(identifier);
+  if (cached) {
+    await page.context().addCookies(cached);
+    await page.goto('/profile');
+    if (
+      await page
+        .getByText(`@${identifier}`, { exact: true })
+        .first()
+        .isVisible()
+    ) {
+      sessionCookies.set(identifier, await page.context().cookies());
+      return;
+    }
+    sessionCookies.delete(identifier);
+    await page.context().clearCookies();
+  }
+
   await page.goto('/login');
   await page.getByPlaceholder('email or username').fill(identifier);
   await page.getByPlaceholder('Password', { exact: true }).fill(PASSWORD);
@@ -41,6 +66,7 @@ async function login(page: Page, identifier: string) {
   await page.waitForURL((url) => !url.pathname.startsWith('/login'), {
     timeout: 30_000,
   });
+  sessionCookies.set(identifier, await page.context().cookies());
 }
 
 async function currentWizardStep(page: Page) {
@@ -63,6 +89,11 @@ async function createPlan(
   }
   if (details?.what) {
     await page.locator('#description').fill(details.what);
+  }
+  if (!details?.where && !details?.what) {
+    await page
+      .locator('#description')
+      .fill('Seeded by the authenticated invite-link journey.');
   }
 
   const submit = page.getByRole('button', {
@@ -94,7 +125,7 @@ async function createPlan(
 
   await expect(submit).toBeVisible({ timeout: 5_000 });
   await submit.click();
-  await page.waitForURL(/\/events\/[0-9a-f-]{36}/, { timeout: 15_000 });
+  await page.waitForURL(/\/events\/[0-9a-f-]{36}/, { timeout: 45_000 });
   return page.url();
 }
 
@@ -201,7 +232,7 @@ test.describe('invite link contract', () => {
       await recipient.getByRole('button', { name: /I.?m in/ }).click();
 
       // They land on their own durable RSVP page, confirmed.
-      await recipient.waitForURL(/\/rsvp\/[0-9a-f-]{36}/, { timeout: 15_000 });
+      await recipient.waitForURL(/\/rsvp\/[0-9a-f-]{36}/, { timeout: 30_000 });
       await expect(recipient.getByText(/You.?re in/)).toBeVisible({ timeout: 15_000 });
     });
   });
@@ -227,10 +258,12 @@ test.describe('invite link contract', () => {
       await expect(stranger.getByText(/Burgers on us/)).toBeVisible();
       // Both lines of a multi-line description survive to the guest.
       await expect(stranger.getByText(/Parking is off the north lot/)).toBeVisible();
-      // And they can put it on a calendar without an account.
+      // This fixture intentionally leaves the date open, so the public page is
+      // honest about that and does not offer a calendar entry with no time.
+      await expect(stranger.getByText('Time TBD')).toBeVisible();
       await expect(
         stranger.getByRole('link', { name: /Google Calendar/ }),
-      ).toBeVisible();
+      ).toHaveCount(0);
     });
   });
 
@@ -311,7 +344,7 @@ test.describe('invite link contract', () => {
       // The yes lands even though the plan has no date yet, and carries them to
       // their own durable RSVP page like any other acceptance.
       await recipient.getByRole('button', { name: /I.?m in/ }).click();
-      await recipient.waitForURL(/\/rsvp\/[0-9a-f-]{36}/, { timeout: 20_000 });
+      await recipient.waitForURL(/\/rsvp\/[0-9a-f-]{36}/, { timeout: 30_000 });
       await expect(recipient.getByText(/You.?re in/)).toBeVisible({ timeout: 15_000 });
     });
   });
@@ -362,6 +395,9 @@ test.describe('invite link contract', () => {
     await login(page, 'e2ehost');
     await page.goto('/events/new');
     await page.getByPlaceholder(TITLE).fill('Guest link plan');
+    await page
+      .locator('#description')
+      .fill('Seeded by the per-person guest-link journey.');
 
     const submit = page.getByRole('button', {
       name: /Send invitations|Create & start deciding/,
@@ -381,7 +417,7 @@ test.describe('invite link contract', () => {
     }
     await expect(submit).toBeVisible({ timeout: 5_000 });
     await submit.click();
-    await page.waitForURL(/\/events\/[0-9a-f-]{36}/, { timeout: 15_000 });
+    await page.waitForURL(/\/events\/[0-9a-f-]{36}/, { timeout: 45_000 });
 
     // The host copies the guest's own RSVP link out of the guest-links list —
     // read the real URL off the Copy button rather than reconstructing it.

@@ -1072,51 +1072,6 @@ export async function setEventVisibility(
 }
 
 /**
- * Turn the shareable invite link on or off. Enabling marks the plan an "open
- * table" so anyone the host sends the link to can ask to join (the host still
- * approves each request, via the existing join-requests panel); disabling stops
- * new link requests. Host/co-host only — the same authorization gate every other
- * management action uses. Writes through the service-role client after that
- * check, mirroring updateEventDetails/confirmEvent; `open_table` is a plain,
- * non-sensitive flag (no role/rank/ownership state), so there is no new
- * self-writable trust surface here.
- */
-export async function setEventInviteLink(
-  eventId: string,
-  enabled: boolean,
-): Promise<ActionResult> {
-  const auth = await requireUser();
-  if (!auth.ok) return auth;
-  const { user } = auth;
-  if (!(await isEventManager(user.id, eventId))) {
-    return failure('SB-PERM-HOST', 'Only the host can change this.');
-  }
-
-  const admin = createAdminClient();
-  const { data: event } = await admin
-    .from('events')
-    .select('status')
-    .eq('id', eventId)
-    .maybeSingle();
-  if (!event) return validation('Plan not found.');
-  if (event.status === 'cancelled' || event.status === 'past') {
-    return validation('This plan is closed.');
-  }
-
-  const { error } = await admin
-    .from('events')
-    .update({ open_table: enabled })
-    .eq('id', eventId);
-  if (error) {
-    return reportAndFail('SB-SHARE-SAVE', 'event-invite-link', error, { eventId });
-  }
-
-  revalidatePath(`/events/${eventId}`);
-  revalidatePath('/discover');
-  return { ok: true };
-}
-
-/**
  * Turn the plan's public share link on or off.
  *
  * This is the kill switch for `/i/<share_token>` — the link a host texts to
