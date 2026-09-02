@@ -247,7 +247,7 @@ compile errors or test failures.
 
 ### 10. Error registry everywhere
 
-- [ ] **What.** 23 of 35 action files never use `failure()` or
+- [x] **What (PR #174).** 23 of 35 action files never use `failure()` or
   `reportAndFail()`; 164 codeless `{ ok: false }` returns; `errors.test.ts`
   only scans `reportOperationalError` areas so it cannot see this.
 - **How.**
