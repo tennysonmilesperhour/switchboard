@@ -3,13 +3,11 @@ import { createAdminClient, hasAdminCredentials } from '@/lib/supabase/admin';
 import { smsEnabled } from '@/lib/server/sms';
 import { bearerMatches } from '@/lib/server/secret';
 import type { ErrorCode } from '@/lib/errors';
+import {
+  evaluateSchemaStatus,
+  EXPECTED_SCHEMA_VERSION,
+} from '@/lib/health';
 
-// Bump this in the SAME commit as any migration that bumps app_schema_version().
-// It went stale for four migrations, which left /api/health reporting
-// `schema:false, ok:false` regardless of reality — so the one alarm built to
-// catch "the guest link is reading a database missing this migration" stopped
-// meaning anything, and drift kept surfacing as broken invite links instead.
-const EXPECTED_SCHEMA_VERSION = '20260731201812';
 const REQUIRED_PRIVATE_BUCKET = 'media-private';
 
 /**
@@ -75,7 +73,7 @@ export async function GET(request: Request) {
   let database = false;
   let schema = false;
   let schemaVersion: string | null = null;
-  let missingMigrations: string[] = [];
+  let missingSchemaObjects: string[] = [];
   let storage = false;
   if (checks.supabaseAdmin) {
     const admin = createAdminClient();
@@ -90,21 +88,10 @@ export async function GET(request: Request) {
         admin.rpc('app_schema_status'),
         admin.storage.listBuckets(),
       ]);
-    const schemaStatus = status as {
-      current?: unknown;
-      complete?: unknown;
-      missing?: unknown;
-    } | null;
-    schemaVersion =
-      typeof schemaStatus?.current === 'string' ? schemaStatus.current : null;
-    missingMigrations = Array.isArray(schemaStatus?.missing)
-      ? schemaStatus.missing.filter((value): value is string => typeof value === 'string')
-      : [];
-    schema =
-      !schemaError &&
-      schemaStatus?.complete === true &&
-      schemaVersion === EXPECTED_SCHEMA_VERSION &&
-      missingMigrations.length === 0;
+    const schemaStatus = evaluateSchemaStatus(status, schemaError);
+    schemaVersion = schemaStatus.current;
+    missingSchemaObjects = schemaStatus.missing;
+    schema = schemaStatus.healthy;
     storage =
       !storageError &&
       Boolean(buckets?.some((bucket) => bucket.id === REQUIRED_PRIVATE_BUCKET && !bucket.public));
@@ -159,7 +146,10 @@ export async function GET(request: Request) {
       schema,
       schemaVersion,
       expectedSchemaVersion: EXPECTED_SCHEMA_VERSION,
-      missingMigrations,
+      missingSchemaObjects,
+      // Kept for operator clients deployed before the schema probe switched
+      // from migration-history gaps to actual missing objects.
+      missingMigrations: missingSchemaObjects,
       storage,
       services: checks,
       config,
