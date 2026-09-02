@@ -28,7 +28,7 @@
 begin;
 
 -- One assertion per function, plus the two catch-alls below.
-select plan(12);
+select plan(15);
 
 select ok(
   has_function_privilege('service_role', 'public.is_event_host(uuid, uuid)', 'EXECUTE'),
@@ -85,6 +85,24 @@ select ok(
   'service_role can execute app_schema_status (the health check)'
 );
 
+select ok(
+  has_function_privilege(
+    'service_role', 'public.try_claim_operator_sweep(text, integer)', 'EXECUTE'),
+  'service_role can claim cron sweep leases'
+);
+
+select ok(
+  has_function_privilege(
+    'service_role', 'public.finish_operator_sweep(text, jsonb)', 'EXECUTE'),
+  'service_role can write successful cron heartbeats'
+);
+
+select ok(
+  has_function_privilege(
+    'service_role', 'public.operator_sweep_status(text)', 'EXECUTE'),
+  'service_role can read cron heartbeats for health'
+);
+
 -- The rule the hardening migration left behind, stated once: no function
 -- anywhere in `public` may be executable by `anon` while being one of the
 -- service-role entry points above. Guards against a future grant that widens
@@ -97,7 +115,8 @@ select is(
       and p.proname in (
         'is_event_host', 'apply_cascade_updates', 'consume_rate_limit',
         'respond_to_guest_invite', 'rotate_event_share_token',
-        'resolve_poll_children'
+        'resolve_poll_children', 'try_claim_operator_sweep',
+        'finish_operator_sweep', 'operator_sweep_status'
       )
       and has_function_privilege('anon', p.oid, 'EXECUTE')),
   0,

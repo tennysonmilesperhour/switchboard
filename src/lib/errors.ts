@@ -71,6 +71,11 @@ const REGISTRY = {
     fix: null,
     actor: 'operator',
   },
+  'SB-CONFIG-CRON': {
+    message: 'The background sweep has stopped reporting successful runs.',
+    fix: null,
+    actor: 'operator',
+  },
   'SB-CONFIG-SCHEMA': {
     message: 'The database is older than this version of the app expects.',
     fix: null,
