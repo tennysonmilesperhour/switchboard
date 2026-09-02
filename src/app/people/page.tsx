@@ -6,7 +6,8 @@ import { AppShell } from '@/components/shell/AppShell';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { FindableNudge } from '@/components/profile/FindableNudge';
 import { loadFindability } from '@/lib/server/findability';
-import { PeopleClient, type FriendRow, type RequestRow, type CircleRow } from './PeopleClient';
+import { PeopleClient } from './PeopleClient';
+import type { CircleRow, FriendRow, RequestRow } from './sections/types';
 import { loadVisibleSignals } from '@/lib/server/signals';
 
 export const metadata: Metadata = { title: 'People' };

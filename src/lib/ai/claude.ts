@@ -1,3 +1,5 @@
+import 'server-only';
+
 import Anthropic from '@anthropic-ai/sdk';
 
 /** AI features degrade gracefully when no key is configured. */

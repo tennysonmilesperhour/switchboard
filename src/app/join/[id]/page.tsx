@@ -7,7 +7,12 @@ import { reportOperationalError } from '@/lib/server/observability';
 import { formatDateTime } from '@/lib/format';
 import { resolveEventZone } from '@/lib/server/event-zone';
 import { eventSharePath } from '@/lib/links';
-import { canReadPlan, shareLinkNotice, shareLinkState } from '@/lib/share-link';
+import {
+  canReadPlan,
+  canRequestOpenTable,
+  shareLinkNotice,
+  shareLinkState,
+} from '@/lib/share-link';
 import { errorRef } from '@/lib/errors';
 import type { EventStatus } from '@/lib/types';
 import { Button } from '@/components/ui/Button';
@@ -166,7 +171,7 @@ export default async function JoinPage({
       : null;
 
   const shareable = Boolean(event?.open_table);
-  const accepting = event?.status === 'inviting' || event?.status === 'confirmed';
+  const accepting = canRequestOpenTable(event?.status);
   // Why this page has nothing to show, in the plan's own terms rather than one
   // catch-all sentence. Anyone reaching the dead-end branch got here because the
   // canonical share link couldn't take them, so its reason is the right one.
