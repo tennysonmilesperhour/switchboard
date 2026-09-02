@@ -460,7 +460,7 @@ coordinate straight off the table?*
 
 The Around pillar appears only when a viewer's city has an anchored zone they
 may access or another active live-location sharer. That decision is made by
-`home_around_available` (`20260902120000_home_density_signal_default.sql`):
+`home_around_available` (`20260902123000_home_density_signal_default.sql`):
 
 - **Home receives one boolean.** The private definer body evaluates a
   city-sized 50 km radius and returns no row, identity, count, or coordinate.
