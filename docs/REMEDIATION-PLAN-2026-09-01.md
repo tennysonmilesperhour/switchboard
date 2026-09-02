@@ -132,9 +132,9 @@ production defect or an exploitable gap today.
 
 ### 4. Security H2: live location cannot be trilaterated
 
-- [ ] **What.** `distance_m` is computed from raw coordinates while lat/lng
+- [x] **What.** `distance_m` is computed from raw coordinates while lat/lng
   are rounded to three decimals; three spoofed caller positions recover a
-  sharer to the metre.
+  sharer to the metre. Fixed in PR #164.
 - **Where.** `supabase/migrations/20260718120000_live_location.sql:87-105`
   (redefine in a new migration), `supabase/tests/live_location.test.sql`.
 - **How.** Compute `distance_m` from the already-rounded coordinates, or
