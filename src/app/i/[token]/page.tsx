@@ -195,7 +195,7 @@ export default async function SharedInvitePage({
     <div className="mx-auto max-w-lg min-h-dvh flex flex-col px-6">
       <header className="py-6">
         <span className="font-extrabold tracking-tight text-xl">
-          Switch<span className="text-terracotta">board</span>
+          Switch<span className="text-terracotta-deep">board</span>
         </span>
       </header>
       <main className="flex-1 flex flex-col justify-center pb-24">

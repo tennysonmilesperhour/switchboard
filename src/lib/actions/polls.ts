@@ -4,12 +4,11 @@ import type { ActionResult } from '@/lib/errors';
 
 import { revalidatePath } from 'next/cache';
 import { after } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
 import { requireUser } from '@/lib/server/require-user';
 import { isEventManager } from '@/lib/server/authz';
 import { openFollowUpPolls, resolvePoll } from '@/lib/server/poll-runner';
 import { notifySuggestionAdded } from '@/lib/server/notify';
-import { failure } from '@/lib/errors';
+import { failure, validation } from '@/lib/errors';
 import { reportAndFail } from '@/lib/server/observability';
 import { capture } from '@/lib/analytics/server';
 import { ANALYTICS_EVENTS } from '@/lib/analytics/events';
@@ -36,7 +35,7 @@ export async function addSuggestion(
   detail?: string,
 ): Promise<SuggestionResult> {
   const trimmed = label.trim();
-  if (!trimmed) return { ok: false, error: 'Suggestion is empty' };
+  if (!trimmed) return validation('Suggestion is empty');
 
   const auth = await requireUser();
   if (!auth.ok) return auth;
@@ -48,12 +47,12 @@ export async function addSuggestion(
     .eq('id', pollId)
     .single();
   if (!poll || poll.phase === 'decided') {
-    return { ok: false, error: 'Voting has closed' };
+    return failure('SB-POLL-CLOSED', 'Voting has closed');
   }
 
   const isHost = await isEventManager(user.id, poll.event_id);
   if (!poll.allow_suggestions && !isHost) {
-    return { ok: false, error: 'Only the host can add options' };
+    return failure('SB-PERM-HOST', 'Only the host can add options');
   }
 
   const { data: option, error } = await supabase
@@ -66,7 +65,7 @@ export async function addSuggestion(
     })
     .select('*')
     .single<PollOption>();
-  if (error) return { ok: false, error: error.message };
+  if (error) return reportAndFail('SB-POLL-SUGGEST', 'poll.suggest', error, { pollId });
 
   // Tell the people who already ranked this poll that the list they ranked has
   // changed. Best-effort: the idea is saved either way.
@@ -106,11 +105,11 @@ export async function castVote(
     supabase.from('polls').select('phase').eq('id', pollId).maybeSingle(),
   ]);
   if (!option || option.poll_id !== pollId) {
-    return { ok: false, error: 'That option is not on this poll.' };
+    return validation('That option is not on this poll.');
   }
   const OPEN_PHASES = ['suggesting', 'voting', 'runoff'];
   if (!pollRow || !OPEN_PHASES.includes(pollRow.phase)) {
-    return { ok: false, error: 'Voting is not open on this poll.' };
+    return failure('SB-POLL-CLOSED', 'Voting is not open on this poll.');
   }
 
   const { error } = await supabase.from('poll_votes').upsert({
@@ -120,7 +119,7 @@ export async function castVote(
     weight,
     updated_at: new Date().toISOString(),
   });
-  if (error) return { ok: false, error: error.message };
+  if (error) return reportAndFail('SB-PLAN-SAVE', 'poll.vote', error, { pollId, eventId });
   // The event only, never the weight or option — individual votes stay private.
   //
   // Scheduled after the response rather than awaited: capture() allows itself up
@@ -133,11 +132,9 @@ export async function castVote(
 }
 
 export async function openVoting(pollId: string, eventId: string): Promise<void> {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return;
+  const auth = await requireUser();
+  if (!auth.ok) return;
+  const { supabase, user } = auth;
   // Host/co-host only (parity with closeVoting); RLS also enforces this, but
   // check here so a non-host gets a clean no-op rather than relying on it.
   const isHost = await isEventManager(user.id, eventId);
@@ -152,11 +149,9 @@ export async function openVoting(pollId: string, eventId: string): Promise<void>
  * Host-only; the actual resolution logic is shared with the cron sweep.
  */
 export async function closeVoting(pollId: string, eventId: string): Promise<void> {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return;
+  const auth = await requireUser();
+  if (!auth.ok) return;
+  const { user } = auth;
 
   // Co-hosts share host powers (is_event_host covers both).
   const isHost = await isEventManager(user.id, eventId);
@@ -171,11 +166,9 @@ export async function pickWinner(
   eventId: string,
   optionId: string,
 ): Promise<void> {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return;
+  const auth = await requireUser();
+  if (!auth.ok) return;
+  const { supabase, user } = auth;
   // Host/co-host only (parity with closeVoting); RLS also enforces this.
   const isHost = await isEventManager(user.id, eventId);
   if (!isHost) return;
@@ -217,7 +210,7 @@ export async function addFollowUpPoll(
     .eq('id', parentPollId)
     .maybeSingle();
   if (!parent || parent.event_id !== eventId) {
-    return { ok: false, error: 'That decision is not on this plan.' };
+    return validation('That decision is not on this plan.');
   }
 
   const { error } = await supabase.from('polls').insert({
@@ -232,32 +225,6 @@ export async function addFollowUpPoll(
     phase: 'pending',
   });
   if (error) return reportAndFail('SB-PLAN-SAVE', 'poll.follow-up', error);
-
-  revalidatePath(`/events/${eventId}`);
-  return { ok: true };
-}
-
-/** Remove a follow-up that hasn't opened yet. Host/co-host only. */
-export async function removeFollowUpPoll(
-  pollId: string,
-  eventId: string,
-): Promise<ActionResult> {
-  const auth = await requireUser();
-  if (!auth.ok) return auth;
-  const { supabase, user } = auth;
-
-  if (!(await isEventManager(user.id, eventId))) {
-    return failure('SB-PLAN-ACCESS');
-  }
-
-  // Only while still pending: once a poll has opened, people may have answered
-  // it, and deleting it would take their input with it.
-  const { error } = await supabase
-    .from('polls')
-    .delete()
-    .eq('id', pollId)
-    .eq('phase', 'pending');
-  if (error) return reportAndFail('SB-PLAN-SAVE', 'poll.follow-up-remove', error);
 
   revalidatePath(`/events/${eventId}`);
   return { ok: true };

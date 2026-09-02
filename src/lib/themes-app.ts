@@ -53,7 +53,7 @@ export const APP_THEMES: readonly AppTheme[] = [
     id: 'default',
     name: 'Switchboard',
     blurb: 'Bright, warm, and loud in the right places.',
-    swatches: ['#f9fbfd', '#ffffff', '#f82a63'],
+    swatches: ['#f9fbfd', '#ffffff', '#dc2558'],
   },
   {
     id: 'almanac',
@@ -65,13 +65,13 @@ export const APP_THEMES: readonly AppTheme[] = [
     id: 'dusk',
     name: 'Dusk',
     blurb: 'Warm dark, candle amber. For evening people.',
-    swatches: ['#1e1712', '#2a211a', '#e8a24b'],
+    swatches: ['#1e1712', '#2a211a', '#9b6c32'],
   },
   {
     id: 'transit',
     name: 'Transit',
     blurb: 'Departure-board discipline. One signal color, nothing spare.',
-    swatches: ['#faf8f5', '#ffffff', '#ff5c00'],
+    swatches: ['#faf8f5', '#ffffff', '#d14700'],
     earned: true,
   },
   {

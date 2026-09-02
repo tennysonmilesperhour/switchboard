@@ -128,12 +128,13 @@ jobs:
                       /usr/local/share/boost "$AGENT_TOOLSDIRECTORY" || true
           df -h /
 
-      # Only chromium: authed.spec.ts skips the mobile project outright.
+      # This job is the desktop authenticated contract; the verify job above
+      # already runs the public smoke contract against both desktop and mobile.
       - name: Install Playwright browsers
         run: npx playwright install --with-deps chromium
 
       - name: Run authenticated journey tests
-        run: npx playwright test e2e/authed.spec.ts
+        run: npx playwright test --project=desktop e2e/authed.spec.ts e2e/invite-links.spec.ts
         env:
           PLAYWRIGHT_WEB_SERVER: npm run start
 

@@ -28,7 +28,7 @@ interface CascadeProgressProps {
       invitee_name: string;
       deliveries?: Array<{
         channel: 'in_app' | 'email' | 'sms';
-        status: 'sent' | 'not_configured' | 'invalid_recipient' | 'failed';
+        status: 'sent' | 'not_configured' | 'invalid_recipient' | 'opted_out' | 'failed';
       }>;
     }
   >;
@@ -191,6 +191,7 @@ export function CascadeProgress({
                     if (delivery.status === 'sent') return `${channel} sent`;
                     if (delivery.status === 'not_configured') return `${channel} not configured`;
                     if (delivery.status === 'invalid_recipient') return `${channel} address invalid`;
+                    if (delivery.status === 'opted_out') return `${channel} opted out`;
                     return `${channel} failed`;
                   })
                   .join(' · ');

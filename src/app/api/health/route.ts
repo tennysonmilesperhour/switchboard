@@ -2,6 +2,11 @@ import { NextResponse } from 'next/server';
 import { createAdminClient, hasAdminCredentials } from '@/lib/supabase/admin';
 import { smsEnabled } from '@/lib/server/sms';
 import { bearerMatches } from '@/lib/server/secret';
+import {
+  CRON_HEARTBEAT_MAX_AGE_MS,
+  getCronSweepStatus,
+  isCronHeartbeatFresh,
+} from '@/lib/server/cron-runtime';
 import type { ErrorCode } from '@/lib/errors';
 import {
   evaluateSchemaStatus,
@@ -75,6 +80,7 @@ export async function GET(request: Request) {
   let schemaVersion: string | null = null;
   let missingSchemaObjects: string[] = [];
   let storage = false;
+  let cronLastRunAt: string | null = null;
   if (checks.supabaseAdmin) {
     const admin = createAdminClient();
     const { error } = await admin
@@ -83,10 +89,18 @@ export async function GET(request: Request) {
       .limit(1);
     database = !error;
 
-    const [{ data: status, error: schemaError }, { data: buckets, error: storageError }] =
+    const [
+      { data: status, error: schemaError },
+      { data: buckets, error: storageError },
+      cronStatus,
+    ] =
       await Promise.all([
         admin.rpc('app_schema_status'),
         admin.storage.listBuckets(),
+        getCronSweepStatus('cascade', admin).catch((error) => {
+          console.error('[health:cron-heartbeat]', error);
+          return null;
+        }),
       ]);
     const schemaStatus = evaluateSchemaStatus(status, schemaError);
     schemaVersion = schemaStatus.current;
@@ -95,6 +109,10 @@ export async function GET(request: Request) {
     storage =
       !storageError &&
       Boolean(buckets?.some((bucket) => bucket.id === REQUIRED_PRIVATE_BUCKET && !bucket.public));
+    cronLastRunAt = cronStatus?.lastRunAt ?? null;
+    checks.cron = checks.cron && isCronHeartbeatFresh(cronLastRunAt);
+  } else {
+    checks.cron = false;
   }
 
   // SMS is intentionally not launch-blocking while text delivery is shelved.
@@ -132,6 +150,7 @@ export async function GET(request: Request) {
   const problems: ErrorCode[] = [];
   if (!checks.supabaseAdmin || !database) problems.push('SB-CONFIG-DB');
   if (!checks.appUrl) problems.push('SB-CONFIG-ORIGIN');
+  if (!checks.cron) problems.push('SB-CONFIG-CRON');
   if (!schema) problems.push('SB-CONFIG-SCHEMA');
   if (!storage) problems.push('SB-CONFIG-STORAGE');
   if (!checks.email) problems.push('SB-CONFIG-EMAIL');
@@ -152,6 +171,10 @@ export async function GET(request: Request) {
       missingMigrations: missingSchemaObjects,
       storage,
       services: checks,
+      cronHeartbeat: {
+        lastRunAt: cronLastRunAt,
+        staleAfterSeconds: CRON_HEARTBEAT_MAX_AGE_MS / 1000,
+      },
       config,
     },
     {

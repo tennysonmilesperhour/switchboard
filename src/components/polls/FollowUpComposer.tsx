@@ -56,7 +56,7 @@ export function FollowUpComposer({
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="inline-flex min-h-11 items-center text-sm font-bold text-terracotta focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-terracotta"
+        className="inline-flex min-h-11 items-center text-sm font-bold text-terracotta-deep focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-terracotta"
       >
         {hasPending ? 'Queue another question' : 'Decide something after this →'}
       </button>

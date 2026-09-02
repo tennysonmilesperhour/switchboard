@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from 'next';
+import { cache } from 'react';
 import { Work_Sans } from 'next/font/google';
 import './globals.css';
 import { VersionWatcher } from '@/components/system/VersionWatcher';
@@ -10,13 +11,14 @@ import { ToastProvider } from '@/components/ui/Toast';
 import { ConfirmProvider } from '@/components/ui/ConfirmDialog';
 import { LiveNotifications } from '@/components/system/LiveNotifications';
 import { createClient, getRenderUser } from '@/lib/supabase/server';
-import { resolveTheme, type AppThemeId } from '@/lib/themes-app';
+import { resolveTheme, themeById, type AppThemeId } from '@/lib/themes-app';
 import {
   customThemeVars,
   hasWallpaper,
   parseCustomAppearance,
 } from '@/lib/theme-custom';
 import { reportOperationalError } from '@/lib/server/observability';
+import { BottomOverlayProvider } from '@/components/system/BottomOverlaySlot';
 
 const workSans = Work_Sans({
   subsets: ['latin'],
@@ -65,15 +67,9 @@ export const metadata: Metadata = {
   },
 };
 
-export const viewport: Viewport = {
-  themeColor: '#f9fbfd',
-  width: 'device-width',
-  initialScale: 1,
-  viewportFit: 'cover',
-};
-
 interface Shell {
-  theme: AppThemeId;
+  /** Null means no saved preference; CSS follows the operating-system scheme. */
+  theme: AppThemeId | null;
   /** Token overrides for the custom preset; empty for every other theme. */
   themeVars: Record<string, string>;
   wallpaper: boolean;
@@ -81,7 +77,7 @@ interface Shell {
 }
 
 const SIGNED_OUT: Shell = {
-  theme: 'default',
+  theme: null,
   themeVars: {},
   wallpaper: false,
   userId: null,
@@ -107,7 +103,7 @@ const SIGNED_OUT: Shell = {
  * but cannot select fails the whole query, and the last time that happened the
  * only symptom was that Settings appeared to ignore the theme you picked.
  */
-async function resolveShell(): Promise<Shell> {
+const resolveShell = cache(async (): Promise<Shell> => {
   try {
     const supabase = await createClient();
     const user = await getRenderUser();
@@ -122,7 +118,10 @@ async function resolveShell(): Promise<Shell> {
       return { ...SIGNED_OUT, userId: user.id };
     }
 
-    const theme = resolveTheme(data?.appearance_theme);
+    const theme = data?.appearance_theme
+      ? resolveTheme(data.appearance_theme)
+      : null;
+    if (!theme) return { ...SIGNED_OUT, userId: user.id };
     if (theme !== 'custom') {
       return { theme, themeVars: {}, wallpaper: false, userId: user.id };
     }
@@ -136,6 +135,22 @@ async function resolveShell(): Promise<Shell> {
   } catch {
     return SIGNED_OUT;
   }
+});
+
+export async function generateViewport(): Promise<Viewport> {
+  const shell = await resolveShell();
+  const themeColor = shell.theme
+    ? shell.themeVars['--color-paper'] ?? themeById(shell.theme).swatches[0]
+    : [
+        { media: '(prefers-color-scheme: light)', color: '#f9fbfd' },
+        { media: '(prefers-color-scheme: dark)', color: '#1e1712' },
+      ];
+  return {
+    themeColor,
+    width: 'device-width',
+    initialScale: 1,
+    viewportFit: 'cover',
+  };
 }
 
 export default async function RootLayout({
@@ -145,7 +160,7 @@ export default async function RootLayout({
   return (
     <html
       lang="en"
-      data-theme={theme}
+      data-theme={theme ?? undefined}
       data-wallpaper={wallpaper ? 'on' : undefined}
       style={themeVars as React.CSSProperties}
       className={`${workSans.variable} antialiased`}
@@ -153,16 +168,19 @@ export default async function RootLayout({
       <body className="min-h-[100svh]">
         <PostHogProvider>
           <ToastProvider>
-            <ConfirmProvider>
-              {children}
-              {userId && <LiveNotifications userId={userId} />}
-              <VersionWatcher />
-              <InstallPrompt />
-              <PmfSurvey />
-              <ServiceWorkerRegistrar />
-            </ConfirmProvider>
+            <BottomOverlayProvider>
+              <ConfirmProvider>
+                {children}
+                {userId && <LiveNotifications userId={userId} />}
+                <VersionWatcher />
+                <InstallPrompt />
+                <PmfSurvey />
+                <ServiceWorkerRegistrar />
+              </ConfirmProvider>
+            </BottomOverlayProvider>
           </ToastProvider>
         </PostHogProvider>
+        <div id="dialog-root" />
       </body>
     </html>
   );

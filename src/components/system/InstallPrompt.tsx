@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { Icon } from '@/components/ui/Icon';
+import { useBottomOverlaySlot } from '@/components/system/BottomOverlaySlot';
 
 interface BeforeInstallPromptEvent extends Event {
   prompt: () => Promise<void>;
@@ -19,6 +20,7 @@ const DISMISSED_KEY = 'sb-install-dismissed';
  */
 export function InstallPrompt() {
   const [deferred, setDeferred] = useState<BeforeInstallPromptEvent | null>(null);
+  const ownsSlot = useBottomOverlaySlot('install', Boolean(deferred), 20);
 
   useEffect(() => {
     if (localStorage.getItem(DISMISSED_KEY)) return;
@@ -42,7 +44,7 @@ export function InstallPrompt() {
     };
   }, []);
 
-  if (!deferred) return null;
+  if (!deferred || !ownsSlot) return null;
 
   function dismiss() {
     localStorage.setItem(DISMISSED_KEY, '1');
@@ -77,13 +79,13 @@ export function InstallPrompt() {
     >
       <div className="pointer-events-auto flex items-center gap-3 rounded-pill bg-ink text-paper px-4 py-2.5 shadow-lift animate-rise">
         <span className="flex items-center gap-2 text-sm font-medium">
-          <Icon name="sparkle" size={16} className="text-terracotta" />
+          <Icon name="sparkle" size={16} className="text-terracotta-deep" />
           Add Switchboard to your home screen
         </span>
         <button
           type="button"
           onClick={install}
-          className="rounded-pill bg-paper text-ink text-xs font-semibold px-3 py-1.5 active:scale-[0.98] transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-terracotta"
+          className="inline-flex min-h-11 items-center rounded-pill bg-paper px-3 text-xs font-semibold text-ink transition active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-terracotta"
         >
           Add
         </button>
@@ -91,7 +93,7 @@ export function InstallPrompt() {
           type="button"
           onClick={dismiss}
           aria-label="Not now"
-          className="text-paper/70 hover:text-paper active:scale-[0.98] transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-terracotta rounded-full"
+          className="inline-flex size-11 items-center justify-center rounded-full text-paper/70 transition hover:text-paper active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-terracotta"
         >
           <Icon name="close" size={16} />
         </button>

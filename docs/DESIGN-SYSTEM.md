@@ -16,23 +16,26 @@ emdashes in copy, and copy never hedges.
 - `--color-cream` `#f5f5f6` — quiet surfaces
 - `--color-card` `#ffffff` — card surface
 - `--color-ink` `#191d22` — primary text
-- `--color-ink-soft` `#565a60`, `--color-ink-faint` `#8d8f93` — secondary text
+- `--color-ink-soft` `#565a60`, `--color-ink-faint` `#727377` — secondary text
 - `--color-line` `#ebebeb` — borders/skeletons
 
 **Brand accent — pink (kept under the `terracotta` token name so existing
 utility classes restyle automatically; it is NOT terracotta anymore).**
-- `--color-terracotta` `#f82a63` (the pink brand accent)
-- `--color-terracotta-deep` `#d1318a`, `--color-terracotta-soft` `#ffe3ec`
+- `--color-terracotta` `#dc2558` (the pink brand fill; white text passes AA)
+- `--color-terracotta-deep` `#bd2c7d` (link/text accent on light surfaces),
+  `--color-terracotta-soft` `#ffe3ec`. Use `text-terracotta-deep`, never
+  `text-terracotta`, for readable accent text across every preset.
 
 **Semantic**
-- `--color-sage` `#21af96` (jade) — availability / acceptance; deep `#178a76`, soft `#dff5f0`
+- `--color-sage` `#198472` (jade) — availability / acceptance; deep `#147a69`, soft `#dff5f0`
 - `--color-gold` `#eeae36` — highlight/rewards; soft `#fbefd3`; **`--color-gold-deep` `#8a5300`** for accessible text on light/gold-soft surfaces (added for WCAG AA — never use `text-gold` as text on a light background)
-- `--color-rose-soft` `#ffe1e6`, `--color-rose-deep` `#e5405e` — error / decline
+- `--color-rose-soft` `#ffe1e6`, `--color-rose-deep` `#bc354d` — error / decline
 
 **Plan-card gradients** — each plan card gets one accent, applied via a
 `.plan-*` class (pink, purple, blue, jade, orange, magenta). The classes are
 vivid, top-lit, slightly-deepening linear gradients (see the `.plan-*` rules in
-globals.css). `planColor(i)` in `PlanCard` rotates through them.
+globals.css). `planColor(i)` in `PlanCard` rotates through them. Every plan
+token is dark enough for its white card title to pass WCAG AA.
 
 **Signature CTA gradient** — `.bg-brand-gradient` (`--brand-gradient`), a
 pink → magenta → violet sweep used on primary buttons, the create FAB, progress,
@@ -60,7 +63,12 @@ and sliders.
 - Reuse the shared primitives in `src/components/ui/`: `Button` (variants
   primary/secondary/ghost/accept/danger), `Card` + `SectionHeader`, `Chip`,
   `Avatar`/`AvatarCluster`, `PlanCard`, `EmptyState`, `Icon`, `Skeleton`,
-  `Toast` (`useToast`), `ConfirmDialog` (`useConfirm`).
+  `Toast` (`useToast`), `Dialog`/`Sheet`/`Popover`, and `ConfirmDialog`
+  (`useConfirm`). `Dialog` is the only modal primitive: it owns the native top
+  layer, focus entry and trapping, Escape/backdrop dismissal, background inert
+  state, scroll lock, and focus return. Do not hand-roll those behaviors in a
+  feature component. A suggestion list that must leave its text input active is
+  a non-modal `Popover`, not a dialog.
 - Wall-clock times use `TimeSelect`, never `<input type="time">`: iOS ignores
   `step` on a time input and offers a minute-by-minute wheel, so hosts aiming
   for 5:20 landed on 5:19. `TimeSelect` asks for the time the way people say
@@ -77,6 +85,13 @@ and sliders.
   listing the rest of the features.
 - Every query-heavy route has a `loading.tsx` built on `PageSkeleton`; the app
   has root `error.tsx` and `not-found.tsx`.
+- Bottom prompts share `BottomOverlayProvider`. Notification permission has
+  priority over installation, which has priority over the PMF survey, so only
+  one prompt can cover the bottom navigation at a time. The notification prompt
+  is not eligible until the person has sent or received an invite.
+- The service worker precaches `/offline.html` and serves it when a document
+  navigation fails. Never use an online route such as `/welcome` as an offline
+  fallback: middleware and rendering still need the network there.
 
 ## Appearance presets (the token layer, swapped at runtime)
 
@@ -85,6 +100,12 @@ preset in Settings → Appearance; it is stored on their profile
 (`profiles.appearance_theme`) and applied as `data-theme` on `<html>` by the
 root layout, server-side — never by a client effect, which would flash the
 default palette on every navigation.
+
+When there is no saved appearance, the operating-system color scheme chooses
+the default light palette or Dusk through `prefers-color-scheme`. A saved
+preference always wins. The root layout also emits a matching
+`viewport.themeColor` (including the derived paper color for a custom theme),
+so browser chrome changes with the active surface instead of staying light.
 
 Both of those columns are read through the session client, which means both
 need an explicit SELECT grant: `profiles` has a column allowlist rather than a
@@ -108,10 +129,11 @@ Rules for adding one, enforced by `src/lib/themes-app.test.ts`:
 - **Redefine every token in `REQUIRED_TOKENS`, in full.** A half-swapped
   palette — new background, inherited ink — is how a theme ends up unreadable
   in the one corner nobody opened while building it.
-- **Meet WCAG AA** on body text, secondary text, accent-as-link, and each
-  semantic pair (`sage-deep` on `sage-soft`, and so on). The test computes the
-  ratios from the CSS itself, so it fails on the real values rather than on an
-  intention.
+- **Meet WCAG AA** on body and secondary text, accent-as-link, every shared
+  `Button` variant, notification badges, inactive bottom-nav labels, every
+  white-on-plan-card title, and each semantic pair (`sage-deep` on
+  `sage-soft`, and so on). The test computes the ratios from the CSS itself, so
+  it fails on the real values rather than on an intention.
 - **Keep semantics semantic.** `sage` still means availability and acceptance,
   `rose` still means decline. A theme changes the register, never the meaning.
 - **Register it in `src/lib/themes-app.ts`** and in the migration's CHECK

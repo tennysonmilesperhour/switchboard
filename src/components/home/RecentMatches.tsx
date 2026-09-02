@@ -109,7 +109,7 @@ export function RecentMatches({ matches }: { matches: RecentMatch[] }) {
               <button
                 type="button"
                 onClick={() => undo(match.id)}
-                className="shrink-0 text-sm font-semibold text-terracotta underline underline-offset-2 hover:text-terracotta-deep"
+                className="shrink-0 text-sm font-semibold text-terracotta-deep underline underline-offset-2 hover:text-terracotta-deep"
               >
                 Undo
               </button>

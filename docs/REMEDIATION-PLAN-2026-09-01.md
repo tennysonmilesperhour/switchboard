@@ -63,9 +63,10 @@ production defect or an exploitable gap today.
 
 ### 1. Deploys can no longer outrun their schema
 
-- [ ] **What.** The app auto-deploys on push to `main` while the migration
+- [x] **What.** The app auto-deploys on push to `main` while the migration
   workflow runs in parallel with no lock and no gate. Code that reads new
-  columns goes live before, or without, the columns.
+  columns goes live before, or without, the columns. Completed in
+  [#161](https://github.com/tennysonmilesperhour/switchboard/pull/161).
 - **Where.** `.github/workflows/deploy-migrations.yml`, `vercel.json`,
   `docs/DEPLOYMENT.md`.
 - **How.**
@@ -110,9 +111,10 @@ production defect or an exploitable gap today.
 
 ### 3. Security H1: parental approval is bound to the caller
 
-- [ ] **What.** `requestParentalApproval` never checks that the invite belongs
+- [x] **What.** `requestParentalApproval` never checks that the invite belongs
   to the caller or the named event; a youth can approve themselves and
   pre-empt the real guardian; any account can email arbitrary addresses.
+  Fixed in PR #163.
 - **Where.** `src/lib/actions/parental-approval.ts:22-104`,
   `resolve_parental_approval` in
   `supabase/migrations/20260811120000_parental_approval.sql`, new migration,
@@ -131,9 +133,9 @@ production defect or an exploitable gap today.
 
 ### 4. Security H2: live location cannot be trilaterated
 
-- [ ] **What.** `distance_m` is computed from raw coordinates while lat/lng
+- [x] **What.** `distance_m` is computed from raw coordinates while lat/lng
   are rounded to three decimals; three spoofed caller positions recover a
-  sharer to the metre.
+  sharer to the metre. Fixed in PR #164.
 - **Where.** `supabase/migrations/20260718120000_live_location.sql:87-105`
   (redefine in a new migration), `supabase/tests/live_location.test.sql`.
 - **How.** Compute `distance_m` from the already-rounded coordinates, or
@@ -144,9 +146,9 @@ production defect or an exploitable gap today.
 
 ### 5. Security H3: moments reveal nobody before consent
 
-- [ ] **What.** `src/app/moments/page.tsx:70-112` ships every candidate's
+- [x] **What.** `src/app/moments/page.tsx:70-112` ships every candidate's
   `user_id` regardless of stage, `find_shared_moments` applies no block
-  filter, and `expressCuriosity` pings any owner.
+  filter, and `expressCuriosity` pings any owner. Fixed in PR #165.
 - **Where.** `src/app/moments/page.tsx`, `src/app/moments/MomentsClient.tsx`,
   `src/lib/actions/moments.ts`, new migration redefining
   `find_shared_moments`, `supabase/tests/moments_anonymity.test.sql` (new).
@@ -163,10 +165,11 @@ production defect or an exploitable gap today.
 
 ### 6. Security H4: invites honour blocks and hosts cannot forge attendance
 
-- [ ] **What.** `create_event_atomic` and `addPeopleToEvent` apply no
+- [x] **What.** `create_event_atomic` and `addPeopleToEvent` apply no
   `are_blocked` check and no invitee cap; `deliverInvitations` and
   `cancelEvent` send host text to any `guest_contact`; the `invites_insert`
-  policy lets a host insert `status = 'accepted'` for any profile.
+  policy lets a host insert `status = 'accepted'` for any profile. Fixed in
+  PR #166.
 - **Where.** `src/lib/actions/events.ts:393-567`, `private.create_event_atomic`
   (latest definition is in `20260811120000_parental_approval.sql`), the
   `invites_insert` policy from `20260710123000_cohost_policy_parity.sql`,
@@ -186,7 +189,8 @@ production defect or an exploitable gap today.
 
 ### 7. Front door: create account, signal bar, contrast
 
-- [ ] **What.** Three user-visible defects on the first screens.
+- [x] **What.** Three user-visible defects on the first screens. Fixed in
+  PR #167.
 - **Where and how.**
   1. `src/app/welcome/page.tsx:67,111,117`: the "Create account" links must
      carry `mode=create` (build the href the way `RsvpSignInGate.tsx:39` does).
@@ -207,12 +211,14 @@ production defect or an exploitable gap today.
 
 ### 8. Three one-liners
 
-- [ ] **Digest cron.** Add `{ "path": "/api/cron/digest", "schedule": "0 * * * *" }`
+*Fixed in PR #168.*
+
+- [x] **Digest cron.** Add `{ "path": "/api/cron/digest", "schedule": "0 * * * *" }`
   to `vercel.json`. Mention it in `docs/DEPLOYMENT.md`.
-- [ ] **Legal re-acceptance.** Set `LEGAL_VERSION` in `src/lib/legal.ts` to
+- [x] **Legal re-acceptance.** Set `LEGAL_VERSION` in `src/lib/legal.ts` to
   `'2026-08-31'` to match the effective date on `/privacy` and `/terms`, so
   the SMS clause is re-accepted.
-- [ ] **Moderators can delete their accounts.** New migration:
+- [x] **Moderators can delete their accounts.** New migration:
   `alter table user_reports alter column resolved_by ... on delete set null`
   and the same for `venues.reviewed_by` (drop and re-add the FK constraints).
   Add a pgTAP test that deletes a user who has rows in every FK-bearing
@@ -242,7 +248,7 @@ compile errors or test failures.
 
 ### 10. Error registry everywhere
 
-- [ ] **What.** 23 of 35 action files never use `failure()` or
+- [x] **What (PR #174).** 23 of 35 action files never use `failure()` or
   `reportAndFail()`; 164 codeless `{ ok: false }` returns; `errors.test.ts`
   only scans `reportOperationalError` areas so it cannot see this.
 - **How.**
@@ -261,9 +267,9 @@ compile errors or test failures.
 
 ### 11. Outbound calls have timeouts and bounds
 
-- [ ] **What.** Resend and Twilio `fetch` with no `AbortSignal`; the Anthropic
+- [x] **What.** Resend and Twilio `fetch` with no `AbortSignal`; the Anthropic
   client has no `timeout`; fan-out is unbounded `Promise.all`; message send
-  awaits the extraction model call.
+  awaits the extraction model call. Fixed in PR #169.
 - **Where.** `src/lib/server/email.ts:63`, `src/lib/server/sms.ts:45`,
   `src/lib/ai/claude.ts`, `src/lib/actions/rooms.ts:46-62`.
 - **How.** `AbortSignal.timeout(10_000)` on both provider fetches; `timeout`
@@ -276,8 +282,10 @@ compile errors or test failures.
 
 ### 12. Cron heartbeat and overlap guard
 
-- [ ] **What.** Nothing records that a sweep ran; five sweeps can overlap;
-  sweeps are sequential under a 60 second cap and die silently at scale.
+- [x] **What.** Nothing records that a sweep ran; five sweeps can overlap;
+  sweeps are sequential under a 60 second cap and die silently at scale. Fixed
+  in PR #171; runtime state lives in `private.operator_sweep_state` because
+  `public.operator_settings` is per-person consent data.
 - **Where.** `src/app/api/cron/cascade/route.ts`, `src/app/api/cron/digest/route.ts`,
   `src/lib/server/cascade-runner.ts`, `src/app/api/health/route.ts`.
 - **How.** Take `pg_try_advisory_lock` at the start of each sweep and exit
@@ -289,8 +297,9 @@ compile errors or test failures.
 
 ### 13. The e2e suite that matters runs in CI
 
-- [ ] **What.** `e2e/invite-links.spec.ts` guards the repo's most repeated
-  regression class and is not run by the authenticated CI job.
+- [x] **What.** `e2e/invite-links.spec.ts` guards the repo's most repeated
+  regression class and is not run by the authenticated CI job. Fixed in PR
+  #170.
 - **Where.** `.github/workflows/ci.yml:136`.
 - **How.** Change the run step to `npx playwright test e2e/authed.spec.ts e2e/invite-links.spec.ts`.
   Then add vitest coverage, using the mocking pattern in
@@ -304,30 +313,32 @@ compile errors or test failures.
 
 ### 14. Security M1 to M7
 
-- [ ] **M1.** Revoke `execute` on `digest_items(uuid)` from `authenticated`
+Implemented in PR #172.
+
+- [x] **M1.** Revoke `execute` on `digest_items(uuid)` from `authenticated`
   (`20260818160000_daily_digest.sql:66`); add it to
   `service_role_grants.test.sql`.
-- [ ] **M2.** Revoke `authenticated` execute on the pair oracles
+- [x] **M2.** Revoke `authenticated` execute on the pair oracles
   (`are_blocked`, `are_connected`, `is_event_host`, `is_board_member`,
   `is_board_moderator`, `is_room_member`, `is_zone_member`,
   `is_zone_moderator`, `can_view_event`, `can_view_zone`,
   `is_platform_moderator`). Policies and definers keep working; any
   TypeScript caller (`events.ts:617` uses `are_blocked`) moves to a wrapper
   that takes no user argument and uses `auth.uid()`.
-- [ ] **M3.** Move the 10 per hour throttle into `resolve_profile_contact`
+- [x] **M3.** Move the 10 per hour throttle into `resolve_profile_contact`
   itself via `consume_rate_limit` keyed on `auth.uid()`.
-- [ ] **M4.** In `src/lib/actions/auth.ts:419-452`, resolve the reset and
+- [x] **M4.** In `src/lib/actions/auth.ts:419-452`, resolve the reset and
   resend targets through `auth.users.email` (admin `listUsers` filtered by
   email, or `getUserByEmail`) and never through `profiles.contact_email`.
   Add the case to the blocked-account table in `auth.test.ts`.
-- [ ] **M5.** `checkRateLimit('ai:discovery:<user>')`, `ai:plan`, and
+- [x] **M5.** `checkRateLimit('ai:discovery:<user>')`, `ai:plan`, and
   `ai:extract` on the three unlimited model calls.
-- [ ] **M6.** Add an IP dimension (`x-forwarded-for`) to sign-in and sign-up
+- [x] **M6.** Add an IP dimension (`x-forwarded-for`) to sign-in and sign-up
   limits alongside the identifier key, with a higher per-identifier ceiling
   and backoff instead of a hard lock.
-- [ ] **M7.** In `src/lib/server/media.ts:40-43`, parse with `new URL()` and
+- [x] **M7.** In `src/lib/server/media.ts:40-43`, parse with `new URL()` and
   require `origin === new URL(process.env.NEXT_PUBLIC_SUPABASE_URL).origin`.
-- [ ] **Rate limiter fails closed** for auth and upload keys
+- [x] **Rate limiter fails closed** for auth and upload keys
   (`src/lib/server/rate-limit.ts:9-22`); page via `reportOperationalError`
   when the RPC errors.
 - **Accept.** Each item has a pgTAP or vitest assertion; `SECURITY.md` §9
@@ -335,7 +346,7 @@ compile errors or test failures.
 
 ### 15. SMS opt-out that exists
 
-- [ ] **What.** The terms describe STOP/HELP handling; there is no inbound
+- [x] **What.** (PR #175) The terms describe STOP/HELP handling; there is no inbound
   webhook, no opt-out record, and non-users get texted.
 - **How.** `POST /api/sms/inbound` validating Twilio's signature; an
   `sms_opt_outs` table keyed by normalised number; `sendSmsWithResult`
@@ -346,19 +357,19 @@ compile errors or test failures.
 
 ### 16. Dialogs, loading, offline
 
-- [ ] `src/components/ui/ConfirmDialog.tsx`: move focus in on open, close on
+- [x] (PR #176) `src/components/ui/ConfirmDialog.tsx`: move focus in on open, close on
   Escape, `aria-labelledby` the title, return focus on close. Then extract one
   `Dialog`/`Sheet` primitive with a focus trap and `inert` on the background,
   and migrate the other three hand-rolled overlays (More sheet, InviteeSheet,
   ProfileShare, PlaceSearch).
-- [ ] `loading.tsx` for `/settings`, `/you`, `/zones`, `/map`, `/features`,
+- [x] `loading.tsx` for `/settings`, `/you`, `/zones`, `/map`, `/features`,
   `/u/[handle]`, `/create`, `/events/new`, `/profile/edit`, using
   `PageSkeleton`.
-- [ ] `public/sw.js`: an offline page instead of falling back to `/welcome`.
-- [ ] One bottom-overlay slot: `InstallPrompt`, `PmfSurvey`, and
+- [x] `public/sw.js`: an offline page instead of falling back to `/welcome`.
+- [x] One bottom-overlay slot: `InstallPrompt`, `PmfSurvey`, and
   `NotificationNudge` never render at once; the notification nudge waits until
   the user has sent or received an invite.
-- [ ] Dismiss buttons reach 44px; `viewport.themeColor` follows the active
+- [x] Dismiss buttons reach 44px; `viewport.themeColor` follows the active
   theme; `prefers-color-scheme: dark` selects Dusk when no theme is saved.
 - **Accept.** Keyboard-only walk through delete-plan and delete-account works;
   no route flashes blank; offline shows a real offline page.

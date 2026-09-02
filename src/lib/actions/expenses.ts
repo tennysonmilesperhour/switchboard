@@ -1,10 +1,10 @@
 'use server';
 
-import type { ActionResult } from '@/lib/errors';
+import { validation, type ActionResult } from '@/lib/errors';
 
 import { revalidatePath } from 'next/cache';
-import { createClient } from '@/lib/supabase/server';
 import { requireUser } from '@/lib/server/require-user';
+import { reportAndFail } from '@/lib/server/observability';
 
 /**
  * Split the Bill — a shared ledger inside a Living Room. Switchboard only
@@ -22,11 +22,11 @@ export async function addExpense(
   const { supabase, user } = auth;
 
   const trimmed = description.trim();
-  if (!trimmed) return { ok: false, error: 'What was it for?' };
+  if (!trimmed) return validation('What was it for?');
 
   const dollars = Number(amount);
   if (!Number.isFinite(dollars) || dollars <= 0) {
-    return { ok: false, error: 'Enter an amount greater than zero.' };
+    return validation('Enter an amount greater than zero.');
   }
   const amountCents = Math.round(dollars * 100);
 
@@ -40,7 +40,7 @@ export async function addExpense(
     settle_url: url || null,
     created_by: user.id,
   });
-  if (error) return { ok: false, error: error.message };
+  if (error) return reportAndFail('SB-EXPENSE-SAVE', 'expense.save', error, { roomId });
 
   revalidatePath(`/rooms/${roomId}`);
   return { ok: true };
@@ -50,11 +50,9 @@ export async function deleteExpense(
   expenseId: string,
   roomId: string,
 ): Promise<void> {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return;
+  const auth = await requireUser();
+  if (!auth.ok) return;
+  const { supabase } = auth;
   await supabase.from('expenses').delete().eq('id', expenseId);
   revalidatePath(`/rooms/${roomId}`);
 }

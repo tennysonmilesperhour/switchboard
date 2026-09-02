@@ -58,8 +58,9 @@ select is(
 );
 
 select ok(
-  not public.can_view_zone('00000000-0000-0000-0000-0000000f0002'::uuid,
-                           '00000000-0000-0000-0000-00000000203c'),
+  not public.can_current_user_view_zone(
+    '00000000-0000-0000-0000-0000000f0002'::uuid
+  ),
   'can_view_zone denies a non-member on a private zone'
 );
 
