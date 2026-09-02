@@ -1,8 +1,10 @@
 # Deploying Switchboard
 
 Two things run in production: the **app** (on Vercel) and the **database** (on
-Supabase). The app is deployed automatically by Vercel on every push. The
-database needs its migration scripts applied — this doc covers how.
+Supabase). A push to `main` first applies and verifies the database migrations,
+then triggers exactly one Vercel production build. Vercel's direct Git deploy
+for `main` is disabled in `vercel.json`, so app code cannot outrun the schema it
+expects.
 
 ## What a "migration" is
 
@@ -17,21 +19,31 @@ the live database** or the feature has no backend.
 
 ### Option A — automatic (recommended)
 
-`.github/workflows/deploy-migrations.yml` runs `supabase db push` on every merge
-to `main`, so new migrations apply themselves. It requires three repository
-secrets (Settings → Secrets and variables → Actions):
+`.github/workflows/deploy-migrations.yml` is the only production release path.
+On every push to `main`, it:
+
+1. verifies every required secret before changing production;
+2. serializes with any earlier database push instead of cancelling it;
+3. applies migrations and checks that none remain pending; and
+4. calls the Vercel deploy hook only after schema parity passes.
+
+The job uses the GitHub `production` environment and requires three repository
+or environment secrets (Settings → Secrets and variables → Actions):
 
 | Secret | Where to get it |
 |---|---|
 | `SUPABASE_ACCESS_TOKEN` | https://supabase.com/dashboard/account/tokens |
 | `SUPABASE_PROJECT_ID` | your project ref — the subdomain of your project URL (e.g. `cuzgighqdzypntmhxrqc`) |
-| `SUPABASE_DB_PASSWORD` | Project Settings → Database → Connection info |
+| `VERCEL_DEPLOY_HOOK_URL` | Vercel Project → Settings → Git → Deploy Hooks; create one named `production-after-schema` for `main` |
 
-**The job fails closed.** If any of those secrets is missing, the workflow errors
-(with the missing names) instead of passing — so a merge can never report a green
-deploy while the database is left behind. After a push it also verifies schema
-parity (no committed migration still pending). Until you set the secrets, expect
-this workflow to be red on `main`; that is the intended signal, not a break.
+**The job fails closed.** If any secret is missing, it errors before touching the
+database. A failed migration or parity check never calls Vercel. A failed deploy
+hook leaves the workflow red and visible rather than pretending the release
+finished. The hook URL is a bearer credential: never print it, put it in source,
+or reuse it outside this workflow.
+
+Preview deployments are unchanged. Pushes to non-`main` branches still use the
+Vercel Git integration; only the production branch is gated.
 
 **First-run note:** `supabase db push` only applies migrations the database
 doesn't already have (it tracks them in a `supabase_migrations` table). If your
@@ -47,6 +59,31 @@ In the dashboard SQL Editor
 (`https://supabase.com/dashboard/project/<ref>/sql/new`), open each not-yet-applied
 file in `supabase/migrations/` on GitHub, copy its contents, paste, and Run —
 oldest to newest. Use this to clear a backlog; Option A handles everything after.
+
+Do not trigger the production deploy hook after a partial or failed manual
+migration. First run the workflow (or perform the same parity check) so the app
+and schema cannot separate again.
+
+## Rollback and recovery
+
+Database migrations are forward-only. Do not edit or delete a migration that
+has reached production, and do not try to reverse it by changing migration
+history alone.
+
+- **Migration or parity fails:** the deploy hook has not run, so production is
+  still serving the previous compatible app. Fix the migration in a new commit
+  (or add a forward repair migration) and let the workflow retry.
+- **The new app is faulty but the schema is safe:** use Vercel's deployment
+  history to roll back or promote the previous known-good deployment. Prefer a
+  code rollback that remains compatible with the now-current schema.
+- **The migration damaged production data or cannot be repaired forward:** stop
+  releases, restore through Supabase Point-in-Time Recovery, then reconcile the
+  restored schema and `supabase_migrations.schema_migrations` before deploying
+  an app. Treat this as an incident; verify `/api/health` and the affected user
+  journey before reopening releases.
+
+After any rollback, rerun the migration workflow. A release is recovered only
+when schema parity passes and the intended Vercel deployment is healthy.
 
 ## App environment variables
 
