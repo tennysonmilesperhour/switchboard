@@ -41,7 +41,7 @@ Drawn from what shipped, so new names inherit the same voice:
 | Name | Where it appears | Legacy / alternates | Decision |
 |---|---|---|---|
 | Home | Bottom bar tab 1, `/` | — | keep |
-| Explore | Bottom bar tab 2, routes to `/discover` | "Discover" (route name, and the Home tile still says Discover) | **decide** — the tab says Explore, the route and the Home tile say Discover. Pick one word and make all three agree. Recommend **Explore** for the tab and heading, since the route can stay `/discover` without a user ever reading it. |
+| Explore | Bottom bar tab 2, routes to `/discover` | "Discover" (route name; the Home tile that also said Discover was removed with the quick-action grid in #177) | **decide** — the tab says Explore, the route says Discover. Pick one word and make both agree. Recommend **Explore** for the tab and heading, since the route can stay `/discover` without a user ever reading it. |
 | (create FAB) | Bottom bar center, `/create` | "New plan", "Start something" | **decide** — the FAB has `aria-label="Create a plan"`, the index calls the destination "Start something", Home said "New plan". Recommend **Start something** everywhere (it covers all three doors: a plan you have, one to figure out, or ideas to browse). |
 | Calendar | Bottom bar tab 4, `/plans` | "Plans", "Coming up" | keep — "Calendar" as the tab, "Coming up" as the section inside it, is working |
 | More | Bottom bar tab 5 (sheet) | — | keep |
@@ -104,7 +104,7 @@ Resolving them is most of the value of this page.
 |---|---|---|
 | The thing you organize | plan, event, gathering | **Plan** in all copy. `events` stays as the table/route; a user never reads it. Audit: the wizard, plan page, and notifications. |
 | The place people talk | room, living room, chat, thread | **Room** for the space; **thread** only for the plan-page comments (a genuinely different surface). |
-| Discovery surface | Explore, Discover | Pick one (recommend Explore) — currently disagreeing between the tab and the Home tile. |
+| Discovery surface | Explore, Discover | Pick one (recommend Explore) — currently disagreeing between the tab and the route name; the Home tile is gone (#177). |
 | The link you send | invite link, guest link, share link | **Invite link.** |
 | People you know | friends, connections, people | **People** as the place, **friends** in prose, `connections` internal only. |
 | A private group of people | circle, household, board, zone | Already distinct concepts; keep, but never use the bare word "group" in UI copy, since it maps to four different things here. |
