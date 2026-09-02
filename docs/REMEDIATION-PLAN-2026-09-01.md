@@ -312,30 +312,32 @@ compile errors or test failures.
 
 ### 14. Security M1 to M7
 
-- [ ] **M1.** Revoke `execute` on `digest_items(uuid)` from `authenticated`
+Implemented in PR #172.
+
+- [x] **M1.** Revoke `execute` on `digest_items(uuid)` from `authenticated`
   (`20260818160000_daily_digest.sql:66`); add it to
   `service_role_grants.test.sql`.
-- [ ] **M2.** Revoke `authenticated` execute on the pair oracles
+- [x] **M2.** Revoke `authenticated` execute on the pair oracles
   (`are_blocked`, `are_connected`, `is_event_host`, `is_board_member`,
   `is_board_moderator`, `is_room_member`, `is_zone_member`,
   `is_zone_moderator`, `can_view_event`, `can_view_zone`,
   `is_platform_moderator`). Policies and definers keep working; any
   TypeScript caller (`events.ts:617` uses `are_blocked`) moves to a wrapper
   that takes no user argument and uses `auth.uid()`.
-- [ ] **M3.** Move the 10 per hour throttle into `resolve_profile_contact`
+- [x] **M3.** Move the 10 per hour throttle into `resolve_profile_contact`
   itself via `consume_rate_limit` keyed on `auth.uid()`.
-- [ ] **M4.** In `src/lib/actions/auth.ts:419-452`, resolve the reset and
+- [x] **M4.** In `src/lib/actions/auth.ts:419-452`, resolve the reset and
   resend targets through `auth.users.email` (admin `listUsers` filtered by
   email, or `getUserByEmail`) and never through `profiles.contact_email`.
   Add the case to the blocked-account table in `auth.test.ts`.
-- [ ] **M5.** `checkRateLimit('ai:discovery:<user>')`, `ai:plan`, and
+- [x] **M5.** `checkRateLimit('ai:discovery:<user>')`, `ai:plan`, and
   `ai:extract` on the three unlimited model calls.
-- [ ] **M6.** Add an IP dimension (`x-forwarded-for`) to sign-in and sign-up
+- [x] **M6.** Add an IP dimension (`x-forwarded-for`) to sign-in and sign-up
   limits alongside the identifier key, with a higher per-identifier ceiling
   and backoff instead of a hard lock.
-- [ ] **M7.** In `src/lib/server/media.ts:40-43`, parse with `new URL()` and
+- [x] **M7.** In `src/lib/server/media.ts:40-43`, parse with `new URL()` and
   require `origin === new URL(process.env.NEXT_PUBLIC_SUPABASE_URL).origin`.
-- [ ] **Rate limiter fails closed** for auth and upload keys
+- [x] **Rate limiter fails closed** for auth and upload keys
   (`src/lib/server/rate-limit.ts:9-22`); page via `reportOperationalError`
   when the RPC errors.
 - **Accept.** Each item has a pgTAP or vitest assertion; `SECURITY.md` §9
