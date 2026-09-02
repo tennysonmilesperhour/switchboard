@@ -16,10 +16,10 @@ vi.mock('@/lib/supabase/admin', () => ({
 }));
 vi.mock('@/lib/server/sms', () => ({ smsEnabled: () => false }));
 
+import { EXPECTED_SCHEMA_VERSION } from '@/lib/health';
 import { GET } from './route';
 
 const NOW = new Date('2026-09-02T04:00:00.000Z');
-const EXPECTED_SCHEMA_VERSION = '20260731201812';
 
 function healthRequest() {
   return new Request('http://localhost/api/health', {
@@ -27,17 +27,25 @@ function healthRequest() {
   });
 }
 
-function heartbeatAt(value: string | null) {
+type SchemaStatus = {
+  complete: boolean;
+  current: string;
+  missing: string[];
+};
+
+const COMPLETE_SCHEMA: SchemaStatus = {
+  complete: true,
+  current: EXPECTED_SCHEMA_VERSION,
+  missing: [],
+};
+
+function heartbeatAt(
+  value: string | null,
+  schemaStatus: SchemaStatus = COMPLETE_SCHEMA,
+) {
   mocks.rpc.mockImplementation(async (name: string) => {
     if (name === 'app_schema_status') {
-      return {
-        data: {
-          complete: true,
-          current: EXPECTED_SCHEMA_VERSION,
-          missing: [],
-        },
-        error: null,
-      };
+      return { data: schemaStatus, error: null };
     }
     if (name === 'operator_sweep_status') {
       return {
@@ -116,5 +124,58 @@ describe('privileged health cron heartbeat', () => {
     expect(body.ok).toBe(true);
     expect(body.services.cron).toBe(true);
     expect(body.cronHeartbeat.lastRunAt).toBe(lastRunAt);
+  });
+});
+
+describe('privileged health schema probe', () => {
+  it('names the missing schema objects and goes red', async () => {
+    heartbeatAt(new Date(NOW.getTime() - 60 * 1000).toISOString(), {
+      complete: false,
+      current: EXPECTED_SCHEMA_VERSION,
+      missing: ['public.profiles.notify_plans', 'public.calendar_busy'],
+    });
+
+    const response = await GET(healthRequest());
+    const body = await response.json();
+
+    expect(response.status).toBe(503);
+    expect(body.ok).toBe(false);
+    expect(body.schema).toBe(false);
+    expect(body.problems).toContain('SB-CONFIG-SCHEMA');
+    expect(body.missingSchemaObjects).toEqual([
+      'public.profiles.notify_plans',
+      'public.calendar_busy',
+    ]);
+  });
+
+  it('goes red when the database is behind the app', async () => {
+    heartbeatAt(new Date(NOW.getTime() - 60 * 1000).toISOString(), {
+      ...COMPLETE_SCHEMA,
+      current: '20260731201812',
+    });
+
+    const response = await GET(healthRequest());
+    const body = await response.json();
+
+    expect(response.status).toBe(503);
+    expect(body.schema).toBe(false);
+    expect(body.schemaVersion).toBe('20260731201812');
+    expect(body.expectedSchemaVersion).toBe(EXPECTED_SCHEMA_VERSION);
+    expect(body.problems).toContain('SB-CONFIG-SCHEMA');
+  });
+});
+
+describe('anonymous health', () => {
+  it('returns only a liveness boolean and never probes the database', async () => {
+    heartbeatAt(NOW.toISOString());
+
+    const response = await GET(new Request('http://localhost/api/health'));
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body).toEqual({ ok: true });
+    expect(mocks.rpc).not.toHaveBeenCalled();
+    expect(mocks.from).not.toHaveBeenCalled();
+    expect(mocks.listBuckets).not.toHaveBeenCalled();
   });
 });
