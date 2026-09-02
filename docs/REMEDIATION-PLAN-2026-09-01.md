@@ -381,7 +381,7 @@ Target: this quarter. These are the product and structure decisions.
 
 ### 17. Home shows one thing
 
-- [ ] **What.** Up to thirteen stacked sections; "Waiting on you" renders
+- [x] **What.** (PR #177) Up to thirteen stacked sections; "Waiting on you" renders
   tenth; four equal pillars by design.
 - **Where.** `src/app/page.tsx`, `src/components/home/PillarRow.tsx`.
 - **How.** Order: greeting, "Waiting on you", plan feed, one guidance card,

@@ -109,6 +109,13 @@ describe('the catalogue', () => {
     const titles = FEATURES.map((feature) => feature.title.toLowerCase());
     expect(new Set(titles).size).toBe(titles.length);
   });
+
+  it('points the three Home pillars at the labels people can follow', () => {
+    const where = (id: string) => FEATURES.find((feature) => feature.id === id)?.where;
+    expect(where('mutual')).toBe('Home → Mutual');
+    expect(where('zones')).toBe('Home → Zones');
+    expect(where('availability-signals')).toBe('Home → I’m free');
+  });
 });
 
 describe('every link goes somewhere real', () => {
