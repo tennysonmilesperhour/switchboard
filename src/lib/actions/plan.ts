@@ -1,6 +1,6 @@
 'use server';
 
-import type { ActionResult } from '@/lib/errors';
+import { validation, type ActionResult } from '@/lib/errors';
 
 import { requireUser } from '@/lib/server/require-user';
 import { parsePlan, type ParsedPlan } from '@/lib/ai/plan-parser';
@@ -14,7 +14,7 @@ export async function parsePlanDescription(
   text: string,
 ): Promise<ActionResult & { draft?: PlanDraft }> {
   const trimmed = text.trim();
-  if (!trimmed) return { ok: false, error: 'Say or type a plan first' };
+  if (!trimmed) return validation('Say or type a plan first');
 
   const auth = await requireUser();
   if (!auth.ok) return auth;

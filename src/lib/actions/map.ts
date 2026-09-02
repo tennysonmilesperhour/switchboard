@@ -1,12 +1,13 @@
 'use server';
 
-import type { ErrorCode } from '@/lib/errors';
+import { failure, type ErrorCode } from '@/lib/errors';
 
 import { revalidatePath } from 'next/cache';
 import { requireUser } from '@/lib/server/require-user';
 import { checkRateLimit } from '@/lib/server/rate-limit';
 import { geocode, searchPlaces as nominatimSearch } from '@/lib/server/geocode';
 import type { PlaceResult } from '@/lib/geo';
+import { reportAndFail } from '@/lib/server/observability';
 
 export interface LocateResult {
   ok: boolean;
@@ -38,17 +39,21 @@ export interface PlaceSearchResult {
  */
 export async function searchPlaces(query: string): Promise<PlaceSearchResult> {
   const auth = await requireUser();
-  if (!auth.ok) return { ok: false, error: auth.error };
+  if (!auth.ok) return auth;
   const { user } = auth;
 
   const trimmed = query.trim();
   if (trimmed.length < 3) return { ok: true, results: [] };
 
   if (!(await checkRateLimit(`place-search:${user.id}`, 60, 60))) {
-    return { ok: false, error: 'Too many searches. Try again in a moment.' };
+    return failure('SB-RATE-LIMIT', 'Too many searches. Try again in a moment.');
   }
 
-  return { ok: true, results: await nominatimSearch(trimmed) };
+  try {
+    return { ok: true, results: await nominatimSearch(trimmed) };
+  } catch (error) {
+    return reportAndFail('SB-MAP-LOOKUP', 'map.search', error, { queryLength: trimmed.length });
+  }
 }
 
 // Bound latency and respect Nominatim's ~1 req/sec policy: geocode at most this
@@ -68,11 +73,11 @@ type Pending = { table: 'events' | 'zones' | 'moments'; id: string; query: strin
  */
 export async function locateMyPlaces(): Promise<LocateResult> {
   const auth = await requireUser();
-  if (!auth.ok) return { ok: false, error: auth.error };
+  if (!auth.ok) return auth;
   const { supabase, user } = auth;
 
   if (!(await checkRateLimit(`geocode:${user.id}`, 40, 60 * 60))) {
-    return { ok: false, error: 'Too many location lookups. Try again shortly.' };
+    return failure('SB-RATE-LIMIT', 'Too many location lookups. Try again shortly.');
   }
 
   const [{ data: events }, { data: zones }, { data: moments }] = await Promise.all([

@@ -1,13 +1,13 @@
 'use server';
 
-import type { ActionResult } from '@/lib/errors';
+import { failure, validation, type ActionResult } from '@/lib/errors';
 
 import { revalidatePath } from 'next/cache';
-import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { notifyUsers, sendPushToUsers } from '@/lib/server/notify';
 import { checkRateLimit } from '@/lib/server/rate-limit';
 import { requireUser } from '@/lib/server/require-user';
+import { reportAndFail } from '@/lib/server/observability';
 
 export async function proposeIntroduction(
   personA: string,
@@ -18,13 +18,13 @@ export async function proposeIntroduction(
   const auth = await requireUser();
   if (!auth.ok) return auth;
   const { supabase, user } = auth;
-  if (personA === personB) return { ok: false, error: 'Pick two different friends' };
+  if (personA === personB) return validation('Pick two different friends');
 
   const cleanActivity = activity.trim().slice(0, 80);
-  if (!cleanActivity) return { ok: false, error: 'What would they do together?' };
+  if (!cleanActivity) return validation('What would they do together?');
 
   if (!(await checkRateLimit(`matchmaker:${user.id}`, 20, 60 * 60))) {
-    return { ok: false, error: 'You’ve sent a lot of intros. Try again later.' };
+    return failure('SB-RATE-LIMIT', 'You’ve sent a lot of intros. Try again later.');
   }
 
   // You can only introduce people you're actually connected to — matches the
@@ -35,7 +35,10 @@ export async function proposeIntroduction(
     supabase.rpc('are_connected', { a: user.id, b: personB }),
   ]);
   if (!connA || !connB) {
-    return { ok: false, error: 'You can only introduce people you’re connected to.' };
+    return failure(
+      'SB-PERM-DENIED',
+      'You can only introduce people you’re connected to.',
+    );
   }
 
   // Don't propose anyone who's taking a quiet season.
@@ -45,7 +48,7 @@ export async function proposeIntroduction(
     .in('id', [personA, personB])
     .eq('sabbatical', true);
   if (resting && resting.length > 0) {
-    return { ok: false, error: 'One of them is on a sabbatical right now.' };
+    return validation('One of them is on a sabbatical right now.');
   }
 
   const { error } = await supabase.from('matchmaker_proposals').insert({
@@ -55,7 +58,9 @@ export async function proposeIntroduction(
     activity: cleanActivity,
     note: note.trim().slice(0, 280) || null,
   });
-  if (error) return { ok: false, error: error.message };
+  if (error) {
+    return reportAndFail('SB-INTRO-SAVE', 'intro.create', error, { personA, personB });
+  }
 
   await sendPushToUsers(
     [personA, personB],
@@ -74,12 +79,19 @@ export async function respondToIntroduction(
   proposalId: string,
   accept: boolean,
 ): Promise<ActionResult & { matched: boolean }> {
-  const supabase = await createClient();
+  const auth = await requireUser();
+  if (!auth.ok) return { ...auth, matched: false };
+  const { supabase } = auth;
   const { data, error } = await supabase.rpc('respond_to_matchmaker', {
     p_proposal: proposalId,
     p_accept: accept,
   });
-  if (error) return { ok: false, matched: false, error: error.message };
+  if (error) {
+    return {
+      ...(await reportAndFail('SB-INTRO-SAVE', 'intro.create', error, { proposalId })),
+      matched: false,
+    };
+  }
 
   const matched = data === 'matched';
   if (matched) {

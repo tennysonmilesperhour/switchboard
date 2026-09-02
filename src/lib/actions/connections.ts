@@ -1,13 +1,14 @@
 'use server';
 
-import type { ErrorCode } from '@/lib/errors';
+import { failure, validation, type ErrorCode } from '@/lib/errors';
 
 import { revalidatePath } from 'next/cache';
-import { createClient } from '@/lib/supabase/server';
+import type { createClient } from '@/lib/supabase/server';
 import { requireUser } from '@/lib/server/require-user';
 import { notifyUsers } from '@/lib/server/notify';
 import { normalizePhoneNumber } from '@/lib/phone';
 import { checkRateLimit } from '@/lib/server/rate-limit';
+import { reportAndFail } from '@/lib/server/observability';
 
 /** PostgREST `.or()` filters are built by string interpolation below; only ever
  *  feed them DB-issued UUIDs. Assert that before interpolating (SB-29). */
@@ -118,11 +119,11 @@ export async function sendConnectionRequest(identifier: string): Promise<Connect
   const { supabase, user } = auth;
 
   if (!(await checkRateLimit(`connect-request:${user.id}`, 30, 60 * 60))) {
-    return { ok: false, error: 'You’re sending a lot of requests. Try again later.' };
+    return failure('SB-RATE-LIMIT', 'You’re sending a lot of requests. Try again later.');
   }
 
   const cleaned = identifier.trim();
-  if (!cleaned) return { ok: false, error: 'Enter a handle, email, or phone number.' };
+  if (!cleaned) return validation('Enter a handle, email, or phone number.');
   const target = await resolveProfile(supabase, cleaned);
   if (!target) {
     // Not "no such person". A handle always matches; an email or phone only
@@ -131,21 +132,21 @@ export async function sendConnectionRequest(identifier: string): Promise<Connect
     // as "your friend isn't on Switchboard" — and the invite card directly
     // below then confirms it — when they may be one search away under their
     // handle. Name both routes out, in the order the reader can act on them.
-    return {
-      ok: false,
-      error:
+    return validation(
         'No account matched. An email or phone only finds someone who verified it — ask for their @handle, or send them the app just below.',
-    };
+    );
   }
-  if (target.id === user.id) return { ok: false, error: 'That is you.' };
+  if (target.id === user.id) return validation('That is you.');
 
   const { error } = await supabase.from('connections').insert({
     requester_id: user.id,
     addressee_id: target.id,
   });
   if (error) {
-    if (error.code === '23505') return { ok: false, error: 'Request already sent' };
-    return { ok: false, error: error.message };
+    if (error.code === '23505') return validation('Request already sent');
+    return reportAndFail('SB-CONNECTION-SAVE', 'connection.request', error, {
+      targetId: target.id,
+    });
   }
 
   await notifyConnectionRequested(supabase, user.id, target.id);
@@ -165,11 +166,11 @@ export async function sendConnectionRequestToId(
   if (!auth.ok) return auth;
   const { supabase, user } = auth;
 
-  if (!UUID_RE.test(targetId)) return { ok: false, error: 'Unknown person.' };
-  if (targetId === user.id) return { ok: false, error: 'That is you.' };
+  if (!UUID_RE.test(targetId)) return validation('Unknown person.');
+  if (targetId === user.id) return validation('That is you.');
 
   if (!(await checkRateLimit(`connect-request:${user.id}`, 30, 60 * 60))) {
-    return { ok: false, error: 'You’re sending a lot of requests. Try again later.' };
+    return failure('SB-RATE-LIMIT', 'You’re sending a lot of requests. Try again later.');
   }
 
   // Confirm the target actually exists before inserting; a bad id would
@@ -179,15 +180,15 @@ export async function sendConnectionRequestToId(
     .select('id')
     .eq('id', targetId)
     .maybeSingle();
-  if (!target) return { ok: false, error: 'That account no longer exists.' };
+  if (!target) return validation('That account no longer exists.');
 
   const { error } = await supabase.from('connections').insert({
     requester_id: user.id,
     addressee_id: targetId,
   });
   if (error) {
-    if (error.code === '23505') return { ok: false, error: 'Request already sent' };
-    return { ok: false, error: error.message };
+    if (error.code === '23505') return validation('Request already sent');
+    return reportAndFail('SB-CONNECTION-SAVE', 'connection.request', error, { targetId });
   }
 
   await notifyConnectionRequested(supabase, user.id, targetId);
@@ -210,7 +211,7 @@ export async function resendConnectionRequest(
   if (!auth.ok) return auth;
   const { supabase, user } = auth;
 
-  if (!UUID_RE.test(connectionId)) return { ok: false, error: 'Unknown request.' };
+  if (!UUID_RE.test(connectionId)) return validation('Unknown request.');
 
   // RLS lets the requester read their own row; the explicit ownership/status
   // checks turn "not yours / already accepted / gone" into a clear message
@@ -221,16 +222,16 @@ export async function resendConnectionRequest(
     .eq('id', connectionId)
     .maybeSingle();
   if (!connection || connection.requester_id !== user.id) {
-    return { ok: false, error: 'That request is no longer available.' };
+    return validation('That request is no longer available.');
   }
   if (connection.status !== 'pending') {
-    return { ok: false, error: 'You’re already connected.' };
+    return validation('You’re already connected.');
   }
 
   // Per-request cooldown (keyed by the connection, i.e. the specific addressee)
   // so a resend can't be used to hammer one person's notifications.
   if (!(await checkRateLimit(`resend-request:${connectionId}`, 3, 60 * 60))) {
-    return { ok: false, error: 'You nudged them recently. Give it a little while.' };
+    return failure('SB-RATE-LIMIT', 'You nudged them recently. Give it a little while.');
   }
 
   await notifyConnectionRequested(supabase, user.id, connection.addressee_id);
@@ -241,11 +242,9 @@ export async function resendConnectionRequest(
 export async function resolveContactMatches(
   contacts: ContactCandidate[],
 ): Promise<ContactMatch[]> {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return [];
+  const auth = await requireUser();
+  if (!auth.ok) return [];
+  const { supabase, user } = auth;
 
   // resolveProfile is an account-existence oracle; throttle bulk lookups so a
   // contact list can't be used to enumerate who's on Switchboard (SB-12).
@@ -313,12 +312,14 @@ export async function acceptConnection(connectionId: string): Promise<Connection
     .eq('id', connectionId)
     .select('requester_id')
     .maybeSingle();
-  if (error) return { ok: false, error: error.message };
+  if (error) {
+    return reportAndFail('SB-CONNECTION-SAVE', 'connection.respond', error, { connectionId });
+  }
   // RLS restricts this update to the addressee; a null row means nothing was
   // updated (not the addressee, or already gone) — report it instead of a
   // false success (SB-18).
   if (!updated) {
-    return { ok: false, error: 'That request is no longer available.' };
+    return validation('That request is no longer available.');
   }
 
   if (updated?.requester_id) {
@@ -339,9 +340,13 @@ export async function acceptConnection(connectionId: string): Promise<Connection
 }
 
 export async function removeConnection(connectionId: string): Promise<ConnectionResult> {
-  const supabase = await createClient();
+  const auth = await requireUser();
+  if (!auth.ok) return auth;
+  const { supabase } = auth;
   const { error } = await supabase.from('connections').delete().eq('id', connectionId);
-  if (error) return { ok: false, error: error.message };
+  if (error) {
+    return reportAndFail('SB-CONNECTION-SAVE', 'connection.remove', error, { connectionId });
+  }
   revalidatePath('/people');
   return { ok: true };
 }
@@ -353,13 +358,15 @@ export async function blockProfile(
   const auth = await requireUser();
   if (!auth.ok) return auth;
   const { supabase, user } = auth;
-  if (profileId === user.id) return { ok: false, error: 'You cannot block yourself.' };
+  if (profileId === user.id) return validation('You cannot block yourself.');
 
   const { error } = await supabase.from('profile_blocks').insert({
     blocker_id: user.id,
     blocked_id: profileId,
   });
-  if (error && error.code !== '23505') return { ok: false, error: error.message };
+  if (error && error.code !== '23505') {
+    return reportAndFail('SB-CONNECTION-SAVE', 'connection.block', error, { profileId });
+  }
   if (connectionId) {
     await supabase.from('connections').delete().eq('id', connectionId);
   }
@@ -377,14 +384,16 @@ export async function giveSpace(profileId: string): Promise<ConnectionResult> {
   const auth = await requireUser();
   if (!auth.ok) return auth;
   const { supabase, user } = auth;
-  if (!UUID_RE.test(profileId)) return { ok: false, error: 'Unknown person.' };
-  if (profileId === user.id) return { ok: false, error: 'That is you.' };
+  if (!UUID_RE.test(profileId)) return validation('Unknown person.');
+  if (profileId === user.id) return validation('That is you.');
 
   const { error } = await supabase
     .from('profile_avoids')
     .insert({ avoider_id: user.id, avoided_id: profileId });
   // Already on the list is a no-op success, not an error.
-  if (error && error.code !== '23505') return { ok: false, error: error.message };
+  if (error && error.code !== '23505') {
+    return reportAndFail('SB-CONNECTION-SAVE', 'connection.avoid', error, { profileId });
+  }
   revalidatePath('/people');
   return { ok: true };
 }
@@ -399,7 +408,9 @@ export async function stopGivingSpace(profileId: string): Promise<ConnectionResu
     .delete()
     .eq('avoider_id', user.id)
     .eq('avoided_id', profileId);
-  if (error) return { ok: false, error: error.message };
+  if (error) {
+    return reportAndFail('SB-CONNECTION-SAVE', 'connection.unavoid', error, { profileId });
+  }
   revalidatePath('/people');
   return { ok: true };
 }
@@ -409,14 +420,14 @@ export async function reportProfile(
   reason: string,
 ): Promise<ConnectionResult> {
   const cleanReason = reason.trim().slice(0, 500);
-  if (!cleanReason) return { ok: false, error: 'Add a short reason.' };
+  if (!cleanReason) return validation('Add a short reason.');
   const auth = await requireUser();
   if (!auth.ok) return auth;
   const { supabase, user } = auth;
 
   // Throttle so reports can't be used to flood moderation / mass-target a user.
   if (!(await checkRateLimit(`report:${user.id}`, 10, 60 * 60))) {
-    return { ok: false, error: 'You’ve filed several reports. Try again later.' };
+    return failure('SB-RATE-LIMIT', 'You’ve filed several reports. Try again later.');
   }
 
   const { error } = await supabase.from('user_reports').insert({
@@ -424,7 +435,7 @@ export async function reportProfile(
     reported_id: profileId,
     reason: cleanReason,
   });
-  if (error) return { ok: false, error: error.message };
+  if (error) return reportAndFail('SB-CONNECTION-SAVE', 'connection.report', error, { profileId });
   return { ok: true };
 }
 
@@ -433,7 +444,9 @@ export async function toggleCircleMember(
   memberId: string,
   add: boolean,
 ): Promise<ConnectionResult> {
-  const supabase = await createClient();
+  const auth = await requireUser();
+  if (!auth.ok) return auth;
+  const { supabase } = auth;
   const { error } = add
     ? await supabase.from('circle_members').insert({ circle_id: circleId, member_id: memberId })
     : await supabase
@@ -441,7 +454,9 @@ export async function toggleCircleMember(
         .delete()
         .eq('circle_id', circleId)
         .eq('member_id', memberId);
-  if (error && error.code !== '23505') return { ok: false, error: error.message };
+  if (error && error.code !== '23505') {
+    return reportAndFail('SB-CIRCLE-SAVE', 'circle.members', error, { circleId, memberId });
+  }
   revalidatePath('/people');
   return { ok: true };
 }
@@ -451,11 +466,11 @@ export async function createCircle(name: string, emoji: string): Promise<Connect
   if (!auth.ok) return auth;
   const { supabase, user } = auth;
   const trimmed = name.trim();
-  if (!trimmed) return { ok: false, error: 'Circle needs a name' };
+  if (!trimmed) return validation('Circle needs a name');
   const { error } = await supabase
     .from('circles')
     .insert({ owner_id: user.id, name: trimmed.slice(0, 40), emoji: emoji.trim().slice(0, 8) || '👥' });
-  if (error) return { ok: false, error: error.message };
+  if (error) return reportAndFail('SB-CIRCLE-SAVE', 'circle.create', error);
   revalidatePath('/people');
   return { ok: true };
 }
@@ -469,7 +484,7 @@ export async function renameCircle(
   if (!auth.ok) return auth;
   const { supabase, user } = auth;
   const trimmed = name.trim();
-  if (!trimmed) return { ok: false, error: 'Circle needs a name' };
+  if (!trimmed) return validation('Circle needs a name');
   const patch: { name: string; emoji?: string } = { name: trimmed.slice(0, 40) };
   const cleanEmoji = emoji?.trim().slice(0, 8);
   if (cleanEmoji) patch.emoji = cleanEmoji;
@@ -480,7 +495,7 @@ export async function renameCircle(
     .update(patch)
     .eq('id', circleId)
     .eq('owner_id', user.id);
-  if (error) return { ok: false, error: error.message };
+  if (error) return reportAndFail('SB-CIRCLE-SAVE', 'circle.rename', error, { circleId });
   revalidatePath('/people');
   return { ok: true };
 }
@@ -496,7 +511,7 @@ export async function deleteCircle(circleId: string): Promise<ConnectionResult> 
     .delete()
     .eq('id', circleId)
     .eq('owner_id', user.id);
-  if (error) return { ok: false, error: error.message };
+  if (error) return reportAndFail('SB-CIRCLE-SAVE', 'circle.delete', error, { circleId });
   revalidatePath('/people');
   return { ok: true };
 }

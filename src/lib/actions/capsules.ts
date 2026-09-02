@@ -1,10 +1,11 @@
 'use server';
 
-import type { ActionResult } from '@/lib/errors';
+import { validation, type ActionResult } from '@/lib/errors';
 
 import { revalidatePath } from 'next/cache';
 import { requireUser } from '@/lib/server/require-user';
 import { isStoredMediaPath, isOwnPublicStorageUrl } from '@/lib/server/media';
+import { reportAndFail } from '@/lib/server/observability';
 
 export async function addCapsuleEntry(
   eventId: string,
@@ -12,7 +13,7 @@ export async function addCapsuleEntry(
   photoUrl: string,
 ): Promise<ActionResult> {
   const trimmed = line.trim();
-  if (!trimmed) return { ok: false, error: 'Write one line first' };
+  if (!trimmed) return validation('Write one line first');
 
   const auth = await requireUser();
   if (!auth.ok) return auth;
@@ -23,7 +24,7 @@ export async function addCapsuleEntry(
   // attacker-supplied URL (SB-28).
   const photo = photoUrl.trim() || null;
   if (photo && !isStoredMediaPath(photo) && !isOwnPublicStorageUrl(photo, ['media'])) {
-    return { ok: false, error: 'Unexpected image location - please re-upload.' };
+    return validation('Unexpected image location - please re-upload.');
   }
 
   const { error } = await supabase.from('capsule_entries').upsert(
@@ -35,7 +36,7 @@ export async function addCapsuleEntry(
     },
     { onConflict: 'event_id,user_id' },
   );
-  if (error) return { ok: false, error: error.message };
+  if (error) return reportAndFail('SB-CAPSULE-SAVE', 'capsule.save', error, { eventId });
   revalidatePath(`/events/${eventId}/capsule`);
   return { ok: true };
 }

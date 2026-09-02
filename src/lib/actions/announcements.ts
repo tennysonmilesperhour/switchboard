@@ -1,12 +1,13 @@
 'use server';
 
-import type { ErrorCode } from '@/lib/errors';
+import { validation, type ErrorCode } from '@/lib/errors';
 
 import { revalidatePath } from 'next/cache';
 import { requireUser } from '@/lib/server/require-user';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { notifyUsers } from '@/lib/server/notify';
 import { sendEmails, looksLikeEmail, appUrl } from '@/lib/server/email';
+import { reportAndFail } from '@/lib/server/observability';
 import type { Invite, SwitchboardEvent } from '@/lib/types';
 
 export interface AnnouncementResult {
@@ -28,8 +29,8 @@ export async function postAnnouncement(
   body: string,
 ): Promise<AnnouncementResult> {
   const trimmed = body.trim();
-  if (!trimmed) return { ok: false, error: 'Write something first' };
-  if (trimmed.length > 2000) return { ok: false, error: 'That’s a bit long' };
+  if (!trimmed) return validation('Write something first');
+  if (trimmed.length > 2000) return validation('That’s a bit long');
 
   const auth = await requireUser();
   if (!auth.ok) return auth;
@@ -39,7 +40,9 @@ export async function postAnnouncement(
   const { error } = await supabase
     .from('announcements')
     .insert({ event_id: eventId, author_id: user.id, body: trimmed });
-  if (error) return { ok: false, error: error.message };
+  if (error) {
+    return reportAndFail('SB-ANNOUNCEMENT-SAVE', 'announcement.save', error, { eventId });
+  }
 
   // Fan-out is best-effort - the announcement is already saved.
   try {

@@ -2,8 +2,9 @@
 
 import type { ErrorCode } from '@/lib/errors';
 
-import { failure } from '@/lib/errors';
+import { failure, validation } from '@/lib/errors';
 import { reportAndFail } from '@/lib/server/observability';
+import { requireUser } from '@/lib/server/require-user';
 
 import { createAdminClient, hasAdminCredentials } from '@/lib/supabase/admin';
 import { createClient } from '@/lib/supabase/server';
@@ -54,10 +55,6 @@ export interface AuthActionResult {
 
 /** How long the per-account sign-in bucket takes to refill, in minutes. */
 const SIGNIN_WINDOW_MINUTES = 10;
-
-function authError(message: string): AuthActionResult {
-  return { ok: false, error: message };
-}
 
 /**
  * Why Supabase refused a sign-in whose password may well have been right.
@@ -144,10 +141,10 @@ export async function signInWithPasswordIdentifier({
 }): Promise<AuthActionResult> {
   const normalized = normalizeIdentifier(identifier);
   if (!normalized || password.length === 0) {
-    return authError('Enter your email or username and password.');
+    return validation('Enter your email or username and password.');
   }
   if (!isEmailIdentifier(normalized) && !isValidUsername(normalized)) {
-    return authError('That email, username, or password did not work.');
+    return validation('That email, username, or password did not work.');
   }
 
   try {
@@ -198,10 +195,13 @@ export async function signInWithPasswordIdentifier({
     console.info(
       JSON.stringify({ level: 'info', area: 'auth.signin', outcome: 'rejected', reason: lastReason }),
     );
-    return authError('That email, username, or password did not work.');
+    return validation('That email, username, or password did not work.');
   } catch (error) {
     console.error('[auth:signin:error]', error);
-    return authError('Sign-in is temporarily unavailable. Please try again in a moment.');
+    return failure(
+      'SB-AUTH-SIGNIN',
+      'Sign-in is temporarily unavailable. Please try again in a moment.',
+    );
   }
 }
 
@@ -217,31 +217,34 @@ export async function createPasswordAccount(
   const acceptedTerms = formData.get('terms_agreement') === 'on';
   const acceptedCovenant = formData.get('community_agreement') === 'on';
 
-  if (!displayName) return authError('Add your name.');
+  if (!displayName) return validation('Add your name.');
   if (!isEmailIdentifier(identifier) && !isValidUsername(identifier)) {
-    return authError('Use a valid email or a username with 3-24 letters, numbers, or underscores.');
+    return validation('Use a valid email or a username with 3-24 letters, numbers, or underscores.');
   }
   if (password.length < PASSWORD_MIN_LENGTH) {
-    return authError(`Password must be at least ${PASSWORD_MIN_LENGTH} characters.`);
+    return validation(`Password must be at least ${PASSWORD_MIN_LENGTH} characters.`);
   }
   if (!acceptedTerms || !acceptedCovenant) {
-    return authError('Please acknowledge the Terms, Privacy Notice, and Community Covenant.');
+    return validation('Please acknowledge the Terms, Privacy Notice, and Community Covenant.');
   }
 
   if (!hasAdminCredentials()) {
-    return authError('Account creation is not configured on this server yet.');
+    return failure('SB-CONFIG-AUTH', 'Account creation is not configured on this server yet.');
   }
 
   try {
     const allowed = await checkRateLimit(`signup:${identifier}`, 4, 60 * 60);
     if (!allowed) {
-      return authError('Too many account attempts. Wait a while and try again.');
+      return failure('SB-RATE-LIMIT', 'Too many account attempts. Wait a while and try again.');
     }
 
     const admin = createAdminClient();
     const usesRealEmail = isEmailIdentifier(identifier);
     if (usesRealEmail && !emailEnabled()) {
-      return authError('Email account creation is not configured on this server yet.');
+      return failure(
+        'SB-CONFIG-EMAIL',
+        'Email account creation is not configured on this server yet.',
+      );
     }
     const email = usesRealEmail
       ? identifier
@@ -250,7 +253,9 @@ export async function createPasswordAccount(
       ? await uniqueHandle(emailToHandleCandidate(identifier))
       : normalizeUsername(identifier);
 
-    if (!username) return authError('Could not create a unique username for that email.');
+    if (!username) {
+      return failure('SB-AUTH-SIGNUP', 'Could not create a unique username for that email.');
+    }
 
     const { data: existingProfile } = await admin
       .from('profiles')
@@ -258,7 +263,7 @@ export async function createPasswordAccount(
       .eq('handle', username)
       .maybeSingle();
 
-    if (existingProfile) return authError('That username is already taken.');
+    if (existingProfile) return validation('That username is already taken.');
 
     const userMetadata = {
       full_name: displayName.slice(0, 80),
@@ -299,12 +304,12 @@ export async function createPasswordAccount(
 
     if (createError) {
       if (/already|registered|exists/i.test(createError.message)) {
-        return authError('That email or username is already taken.');
+        return validation('That email or username is already taken.');
       }
-      return authError(createError.message);
+      return failure('SB-AUTH-SIGNUP', createError.message);
     }
 
-    if (!userId) return authError('Could not create that account.');
+    if (!userId) return failure('SB-AUTH-SIGNUP', 'Could not create that account.');
 
     // Essential profile fields. Upsert (not update) so signup still succeeds
     // when the `handle_new_user` trigger has not been applied to the project
@@ -327,9 +332,9 @@ export async function createPasswordAccount(
     if (profileError) {
       await admin.auth.admin.deleteUser(userId);
       if (profileError.code === '23505') {
-        return authError('That username is already taken.');
+        return validation('That username is already taken.');
       }
-      return authError('Could not finish creating your profile.');
+      return failure('SB-AUTH-SIGNUP', 'Could not finish creating your profile.');
     }
 
     // The profile trigger mirrors this into profile_contacts as unverified;
@@ -341,14 +346,20 @@ export async function createPasswordAccount(
         .eq('id', userId);
       if (contactError) {
         await admin.auth.admin.deleteUser(userId);
-        return authError('Could not attach that email to the new account. No account was created.');
+        return failure(
+          'SB-AUTH-SIGNUP',
+          'Could not attach that email to the new account. No account was created.',
+        );
       }
     }
 
     if (usesRealEmail) {
       if (!confirmationUrl) {
         await admin.auth.admin.deleteUser(userId);
-        return authError('Could not create a verification link for that email.');
+        return failure(
+          'SB-AUTH-SIGNUP',
+          'Could not create a verification link for that email.',
+        );
       }
       const delivery = await sendEmailWithResult({
         to: email,
@@ -359,7 +370,10 @@ export async function createPasswordAccount(
       });
       if (delivery.status !== 'sent') {
         await admin.auth.admin.deleteUser(userId);
-        return authError('The confirmation email could not be sent. No account was created.');
+        return failure(
+          'SB-AUTH-SIGNUP',
+          'The confirmation email could not be sent. No account was created.',
+        );
       }
     }
 
@@ -403,7 +417,10 @@ export async function createPasswordAccount(
     };
   } catch (error) {
     console.error('[auth:signup:error]', error);
-    return authError('Account creation is temporarily unavailable. Please try again.');
+    return failure(
+      'SB-AUTH-SIGNUP',
+      'Account creation is temporarily unavailable. Please try again.',
+    );
   }
 }
 
@@ -470,7 +487,7 @@ export async function resendEmailConfirmation(
   const normalized = normalizeIdentifier(identifier);
   const generic: AuthActionResult = { ok: true, identifier: normalized };
   if (!isEmailIdentifier(normalized)) {
-    return authError('Enter the email address you signed up with.');
+    return validation('Enter the email address you signed up with.');
   }
   if (!hasAdminCredentials() || !emailEnabled()) {
     return failure('SB-CONFIG-EMAIL');
@@ -550,7 +567,7 @@ export async function requestPasswordReset(
 ): Promise<AuthActionResult> {
   const normalized = normalizeIdentifier(identifier);
   const generic: AuthActionResult = { ok: true, identifier: normalized };
-  if (!normalized) return authError('Enter your email or username.');
+  if (!normalized) return validation('Enter your email or username.');
 
   try {
     if (!(await checkRateLimit(`reset:${normalized}`, 3, 60 * 60))) {
@@ -654,38 +671,43 @@ export async function requestPasswordReset(
 
 export async function updatePassword(password: string): Promise<AuthActionResult> {
   if (password.length < PASSWORD_MIN_LENGTH) {
-    return authError(`Password must be at least ${PASSWORD_MIN_LENGTH} characters.`);
+    return validation(`Password must be at least ${PASSWORD_MIN_LENGTH} characters.`);
   }
   try {
     const supabase = await createClient();
     const { error } = await supabase.auth.updateUser({ password });
-    if (error) return authError('Could not update your password. Request a fresh reset link.');
+    if (error) {
+      return failure(
+        'SB-AUTH-RESET',
+        'Could not update your password. Request a fresh reset link.',
+      );
+    }
     return { ok: true };
   } catch (error) {
     console.error('[auth:password-update:error]', error);
-    return authError('Could not update your password right now.');
+    return failure('SB-AUTH-RESET', 'Could not update your password right now.');
   }
 }
 
 export async function deleteAccount(confirmation: string): Promise<AuthActionResult> {
   if (confirmation.trim().toUpperCase() !== 'DELETE') {
-    return authError('Type DELETE to confirm.');
+    return validation('Type DELETE to confirm.');
   }
   if (!hasAdminCredentials()) {
-    return authError('Account deletion is not configured on this server.');
+    return failure('SB-CONFIG-AUTH', 'Account deletion is not configured on this server.');
   }
 
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return authError('Sign in again before deleting your account.');
+  const auth = await requireUser();
+  if (!auth.ok) {
+    return failure('SB-AUTH-EXPIRED', 'Sign in again before deleting your account.');
+  }
+  const { supabase, user } = auth;
 
   const admin = createAdminClient();
   const { error } = await admin.auth.admin.deleteUser(user.id);
   if (error) {
     console.error('[auth:delete-account:error]', error);
-    return authError('Could not delete your account right now.');
+    return failure('SB-AUTH-DELETE', 'Could not delete your account right now.');
   }
   await supabase.auth.signOut();
   redirect('/welcome?account=deleted');
