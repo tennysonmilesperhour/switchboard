@@ -15,6 +15,7 @@ import {
   startInviting,
 } from '@/lib/actions/events';
 import { uploadAudio } from '@/lib/client/upload-audio';
+import { hostCanEditInvitees } from '@/lib/share-link';
 import type { SwitchboardEvent } from '@/lib/types';
 
 interface HostControlsProps {
@@ -116,7 +117,7 @@ export function HostControls({ event, pollDecided, isPrimaryHost }: HostControls
                 : 'Waiting for the group to decide…'}
             </Button>
           )}
-          {event.status === 'inviting' && (
+          {hostCanEditInvitees(event.status) && (
             <Button
               variant="accept"
               size="lg"
