@@ -46,15 +46,22 @@ Drawn from what shipped, so new names inherit the same voice:
 | Calendar | Bottom bar tab 4, `/plans` | "Plans", "Coming up" | keep — "Calendar" as the tab, "Coming up" as the section inside it, is working |
 | More | Bottom bar tab 5 (sheet) | — | keep |
 | Everything | More sheet → `/features` | "Feature index" (internal) | keep |
+| Around | More sheet → `/map`, with Map, Zones, and Moments as tabs; a Home pillar only when the viewer's city has an anchored zone or a live sharer | "Map", "Zones", "Moments" as three separate More entries | keep — one door for the three serendipity surfaces (remediation 18), so a person with no local density meets one closed door instead of three empty rooms |
 
-## The four pillars (Home)
+## The Home pillars
+
+The row is gated (remediation 18): Make a plan, People, and Plans always;
+Mutual and I'm free once a connection exists; Around only with local density.
 
 | Name | Where it appears | Legacy / alternates | Decision |
 |---|---|---|---|
 | Make a plan | Home pillar row → `/create` | "New plan", "Float an idea" | keep — "Float an idea to your people" stays as the empty-state copy, which is warmer for a first plan |
 | Mutual | Home pillar row, More sheet, `/mutual` | "Mutual Mode", "Down to Connect" | keep **Mutual** as the place; "Down to connect" stays as the action inside it |
 | I'm free | Home pillar row → the signal composer | "Availability signals", "Signals", "Coffee Break?" | **decide** — the feature is "Availability signals" in the index, the composer is a chip row with no title, and the pillar says "I'm free". Recommend keeping **I'm free** as the tap and **Availability signals** as the catalogue name; they serve different readers. |
-| Zones | Home pillar row, More sheet, `/zones` | "Serendipity Zones" | **decide** — README and the index say "Serendipity zones", nav says "Zones". Recommend **Zones** in nav, **Serendipity zones** on first introduction only. |
+| People | Home pillar row → `/people` | "Friends" | keep — same word as the More sheet entry |
+| Plans | Home pillar row → `/plans` | "Calendar" (the bottom-bar tab for the same route) | **decide** — the pillar says Plans and the tab says Calendar for one destination. Recommend **Plans** for both, since "plan" is the word the product uses everywhere else. |
+| Around | Home pillar row → `/map`, only with local density | — | keep; see Navigation |
+| Zones | More → Around → Zones tab, `/zones` | "Serendipity Zones"; formerly a Home pillar | **decide** — README and the index say "Serendipity zones", nav says "Zones". Recommend **Zones** in nav, **Serendipity zones** on first introduction only. |
 
 ## Core mechanics
 
@@ -89,8 +96,8 @@ Drawn from what shipped, so new names inherit the same voice:
 |---|---|---|---|
 | Boards | More sheet, `/boards` | "Neighborhood boards" | keep both: **Boards** in nav, **Neighborhood boards** in the index |
 | Zones | See pillars above | "Serendipity zones" | see above |
-| Moments | More sheet, `/moments` | "Shared Moments" | keep both, same pattern as Boards |
-| Map | More sheet, `/map` | "Live on the map" | keep — "Live on the map" names the opt-in sharing, not the page |
+| Moments | More → Around → Moments tab, `/moments` | "Shared Moments" | keep both, same pattern as Boards |
+| Map | More → Around → Map tab, `/map` | "Live on the map" | keep — "Live on the map" names the opt-in sharing, not the page |
 | Rooms | More sheet, `/rooms` | "Digital Living Rooms", "Living rooms" | keep **Rooms** in nav; "Digital living rooms" is the index/marketing name |
 | Community | `/community` | — | keep |
 | Partner perks | Explore | "Venue Perks" (INNOVATIONS) | keep |
