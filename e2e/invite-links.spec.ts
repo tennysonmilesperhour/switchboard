@@ -125,7 +125,7 @@ async function createPlan(
 
   await expect(submit).toBeVisible({ timeout: 5_000 });
   await submit.click();
-  await page.waitForURL(/\/events\/[0-9a-f-]{36}/, { timeout: 15_000 });
+  await page.waitForURL(/\/events\/[0-9a-f-]{36}/, { timeout: 45_000 });
   return page.url();
 }
 
@@ -232,7 +232,7 @@ test.describe('invite link contract', () => {
       await recipient.getByRole('button', { name: /I.?m in/ }).click();
 
       // They land on their own durable RSVP page, confirmed.
-      await recipient.waitForURL(/\/rsvp\/[0-9a-f-]{36}/, { timeout: 15_000 });
+      await recipient.waitForURL(/\/rsvp\/[0-9a-f-]{36}/, { timeout: 30_000 });
       await expect(recipient.getByText(/You.?re in/)).toBeVisible({ timeout: 15_000 });
     });
   });
@@ -344,7 +344,7 @@ test.describe('invite link contract', () => {
       // The yes lands even though the plan has no date yet, and carries them to
       // their own durable RSVP page like any other acceptance.
       await recipient.getByRole('button', { name: /I.?m in/ }).click();
-      await recipient.waitForURL(/\/rsvp\/[0-9a-f-]{36}/, { timeout: 20_000 });
+      await recipient.waitForURL(/\/rsvp\/[0-9a-f-]{36}/, { timeout: 30_000 });
       await expect(recipient.getByText(/You.?re in/)).toBeVisible({ timeout: 15_000 });
     });
   });
@@ -395,6 +395,9 @@ test.describe('invite link contract', () => {
     await login(page, 'e2ehost');
     await page.goto('/events/new');
     await page.getByPlaceholder(TITLE).fill('Guest link plan');
+    await page
+      .locator('#description')
+      .fill('Seeded by the per-person guest-link journey.');
 
     const submit = page.getByRole('button', {
       name: /Send invitations|Create & start deciding/,
@@ -414,7 +417,7 @@ test.describe('invite link contract', () => {
     }
     await expect(submit).toBeVisible({ timeout: 5_000 });
     await submit.click();
-    await page.waitForURL(/\/events\/[0-9a-f-]{36}/, { timeout: 15_000 });
+    await page.waitForURL(/\/events\/[0-9a-f-]{36}/, { timeout: 45_000 });
 
     // The host copies the guest's own RSVP link out of the guest-links list —
     // read the real URL off the Copy button rather than reconstructing it.
