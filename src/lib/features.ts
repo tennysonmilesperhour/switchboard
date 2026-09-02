@@ -339,7 +339,7 @@ export const FEATURE_GROUPS: readonly FeatureGroup[] = [
         title: 'Mutual',
         blurb:
           'Say you’re down to connect with someone and it stays private unless they say it too. A no is never observable by anyone.',
-        where: 'More → Mutual',
+        where: 'Home → Mutual',
         href: '/mutual',
       },
       {
@@ -426,7 +426,7 @@ export const FEATURE_GROUPS: readonly FeatureGroup[] = [
         title: 'Serendipity zones',
         blurb:
           'Named places you check into — a conference, a cruise, a campus, a festival — so “who else is here?” has an answer.',
-        where: 'More → Zones',
+        where: 'Home → Zones',
         href: '/zones',
       },
       {
@@ -547,7 +547,7 @@ export const FEATURE_GROUPS: readonly FeatureGroup[] = [
         title: 'Availability signals',
         blurb:
           'One tap says “coffee?” to just the circles you choose. No broadcast, and it expires on its own.',
-        where: 'The signal row at the top of Home',
+        where: 'Home → I’m free',
         href: '/',
       },
       {

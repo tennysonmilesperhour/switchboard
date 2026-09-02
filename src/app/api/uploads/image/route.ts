@@ -60,7 +60,12 @@ export async function POST(request: Request) {
   if (!hasAdminCredentials()) {
     return jsonError('Image uploads are not configured on this server yet.', 503);
   }
-  if (!(await checkRateLimit(`upload:${user.id}`, 30, 60 * 60))) {
+  if (!(await checkRateLimit(
+    `upload:${user.id}`,
+    30,
+    60 * 60,
+    { failClosed: true },
+  ))) {
     return jsonError('Upload limit reached. Try again later.', 429);
   }
 

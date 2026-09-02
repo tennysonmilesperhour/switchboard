@@ -96,7 +96,7 @@ export function InvitePlanDetails({
 
       {(where || address) && (
         <div className="mt-2 flex items-start gap-1.5 text-sm">
-          <Icon name="mapPin" size={15} className="mt-0.5 shrink-0 text-terracotta" />
+          <Icon name="mapPin" size={15} className="mt-0.5 shrink-0 text-terracotta-deep" />
           <span>
             {mapUrl ? (
               <a

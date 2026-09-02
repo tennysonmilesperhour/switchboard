@@ -3,7 +3,7 @@
 import { revalidatePath } from 'next/cache';
 
 import type { ActionResult } from '@/lib/errors';
-import { failure } from '@/lib/errors';
+import { failure, validation } from '@/lib/errors';
 import { requireUser } from '@/lib/server/require-user';
 import { createAdminClient } from '@/lib/supabase/admin';
 import type { createClient } from '@/lib/supabase/server';
@@ -58,15 +58,19 @@ async function refreshBusy(
   const fetched = await safeFetchText(url, { maxBytes: MAX_ICS_BYTES, accept: 'text/calendar,*/*' });
   if (!fetched.ok || !fetched.body) {
     return {
-      ok: false,
+      ...(await reportAndFail(
+        'SB-CAL-FETCH',
+        'calendar.fetch',
+        new Error(`calendar fetch failed: ${fetched.reason ?? 'unknown'}`),
+      )),
       status: fetched.reason === 'private' ? 'refused' : 'unreachable',
-      code: 'SB-CAL-FETCH',
+      code: 'SB-CAL-FETCH' as const,
     };
   }
   if (!fetched.body.toUpperCase().includes('BEGIN:VCALENDAR')) {
     // A link that resolves to a login page is the common case here, and saying
     // "we couldn't read a calendar there" is more use than a parse error.
-    return { ok: false, status: 'unreadable', code: 'SB-CAL-READ' };
+    return { ...failure('SB-CAL-READ'), status: 'unreadable', code: 'SB-CAL-READ' };
   }
 
   const now = new Date();
@@ -91,13 +95,25 @@ async function refreshBusy(
     .from('calendar_busy')
     .delete()
     .eq('user_id', userId);
-  if (clearError) return { ok: false, status: 'unsaved', code: 'SB-CAL-SAVE' };
+  if (clearError) {
+    return {
+      ...(await reportAndFail('SB-CAL-SAVE', 'calendar.refresh', clearError)),
+      status: 'unsaved',
+      code: 'SB-CAL-SAVE' as const,
+    };
+  }
 
   if (busy.length > 0) {
     const { error: insertError } = await supabase
       .from('calendar_busy')
       .insert(busy.map((slot) => ({ user_id: userId, slot })));
-    if (insertError) return { ok: false, status: 'unsaved', code: 'SB-CAL-SAVE' };
+    if (insertError) {
+      return {
+        ...(await reportAndFail('SB-CAL-SAVE', 'calendar.refresh', insertError)),
+        status: 'unsaved',
+        code: 'SB-CAL-SAVE' as const,
+      };
+    }
   }
   return { ok: true, slots: busy.length, coveredThrough: windowEnd.toISOString() };
 }
@@ -153,17 +169,15 @@ export async function connectCalendar(rawUrl: string): Promise<ActionResult & { 
   if (!checked.ok) {
     // Validation, so no code: the sentence already names the cause and the fix,
     // and a reference number beside it would only teach people to ignore them.
-    return {
-      ok: false,
-      error:
+    return validation(
         checked.reason === 'private'
           ? 'That address is on a private network, so it isn’t a calendar Switchboard can reach.'
           : 'That doesn’t look like a calendar link. Copy the secret iCal address from your calendar’s settings.',
-    };
+    );
   }
 
   if (!(await checkRateLimit(`calendar-connect:${user.id}`, 10, 60 * 60))) {
-    return { ok: false, error: 'Give it a moment before trying another calendar.' };
+    return failure('SB-RATE-LIMIT', 'Give it a moment before trying another calendar.');
   }
 
   const url = checked.url.toString();
@@ -194,7 +208,7 @@ export async function syncCalendar(): Promise<ActionResult & { slots?: number }>
   const { supabase, user } = auth;
 
   if (!(await checkRateLimit(`calendar-sync:${user.id}`, 30, 60 * 60))) {
-    return { ok: false, error: 'That calendar was just checked. Try again shortly.' };
+    return failure('SB-RATE-LIMIT', 'That calendar was just checked. Try again shortly.');
   }
 
   // The one place the stored URL is read, and it stays inside this function.
@@ -202,12 +216,19 @@ export async function syncCalendar(): Promise<ActionResult & { slots?: number }>
   if (!storedUrl) return failure('SB-CAL-GONE');
 
   const result = await refreshBusy(supabase, user.id, storedUrl);
-  await writeSubscription(user.id, {
+  const saved = await writeSubscription(user.id, {
     ics_url: storedUrl,
     last_synced_at: new Date().toISOString(),
     last_status: result.ok ? 'ok' : result.status,
     covered_through: result.ok ? result.coveredThrough : null,
   });
+  if (!saved) {
+    return reportAndFail(
+      'SB-CAL-SAVE',
+      'calendar.sync',
+      new Error('subscription status write failed'),
+    );
+  }
 
   revalidatePath('/settings');
   if (!result.ok) return failure(result.code);

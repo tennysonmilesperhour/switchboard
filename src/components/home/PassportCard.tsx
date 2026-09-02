@@ -33,7 +33,7 @@ export function PassportCard({ earned, total, nextLabel }: PassportCardProps) {
           </strong>{' '}
           {nextLabel ? `Next up if you want it: ${nextLabel.toLowerCase()}.` : ''}
         </span>
-        <span aria-hidden className="shrink-0 text-terracotta">
+        <span aria-hidden className="shrink-0 text-terracotta-deep">
           →
         </span>
       </Link>

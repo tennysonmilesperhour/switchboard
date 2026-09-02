@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/Button';
 import { Icon } from '@/components/ui/Icon';
 import { claimGuestInvite, respondToGuestInvite } from '@/lib/actions/invites';
 import { requestParentalApproval } from '@/lib/actions/parental-approval';
+import { errorRef, type ErrorCode } from '@/lib/errors';
 import {
   googleCalendarUrl,
   outlookCalendarUrl,
@@ -72,6 +73,7 @@ export function GuestRsvpClient({
   // the moment someone says yes — even on an invite that arrived unclaimed.
   const [planId, setPlanId] = useState<string | null>(eventId);
   const [error, setError] = useState('');
+  const [code, setCode] = useState<ErrorCode | null>(null);
   const [signInNeeded, setSignInNeeded] = useState(false);
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [needsApproval, setNeedsApproval] = useState(false);
@@ -171,7 +173,16 @@ export function GuestRsvpClient({
             className="w-full rounded-card border border-line bg-paper px-3.5 py-2.5 text-base text-ink placeholder:text-ink-faint focus:border-terracotta focus:outline-none focus:ring-2 focus:ring-terracotta/30"
           />
         </label>
-        {error && <p role="alert" className="text-sm text-rose-deep mt-3">{error}</p>}
+        {error && (
+          <p role="alert" className="text-sm text-rose-deep mt-3">
+            {error}
+            {code && (
+              <span className="ml-1.5 font-mono text-[11px] uppercase tracking-wide text-ink-faint">
+                {errorRef(code)}
+              </span>
+            )}
+          </p>
+        )}
         <Button
           variant="accept"
           size="lg"
@@ -179,6 +190,7 @@ export function GuestRsvpClient({
           disabled={pending || !guardianEmail.trim()}
           onClick={() => {
             setError('');
+            setCode(null);
             startTransition(async () => {
               const res = await requestParentalApproval({
                 inviteId,
@@ -188,6 +200,7 @@ export function GuestRsvpClient({
               });
               if (!res.ok) {
                 setError(res.error ?? 'Could not send the approval request.');
+                setCode(res.code ?? null);
                 return;
               }
               setApprovalSent(true);

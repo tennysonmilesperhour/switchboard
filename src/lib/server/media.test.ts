@@ -1,5 +1,13 @@
-import { describe, it, expect } from 'vitest';
-import { isStoredMediaPath, isValidMediaRef } from './media';
+import { afterEach, describe, it, expect } from 'vitest';
+import {
+  isOwnPublicStorageUrl,
+  isStoredMediaPath,
+  isValidMediaRef,
+} from './media';
+
+afterEach(() => {
+  delete process.env.NEXT_PUBLIC_SUPABASE_URL;
+});
 
 describe('isStoredMediaPath', () => {
   it('accepts a per-user private-bucket path', () => {
@@ -31,5 +39,41 @@ describe('isValidMediaRef', () => {
     expect(isValidMediaRef('http://example.com/x')).toBe(false);
     expect(isValidMediaRef('javascript:alert(1)')).toBe(false);
     expect(isValidMediaRef('../../etc/passwd')).toBe(false);
+  });
+});
+
+describe('isOwnPublicStorageUrl', () => {
+  it('requires both the configured Supabase origin and an allowed bucket', () => {
+    process.env.NEXT_PUBLIC_SUPABASE_URL = 'https://switchboard.supabase.co';
+
+    expect(
+      isOwnPublicStorageUrl(
+        'https://switchboard.supabase.co/storage/v1/object/public/media/user/photo.jpg',
+        ['media'],
+      ),
+    ).toBe(true);
+    expect(
+      isOwnPublicStorageUrl(
+        'https://switchboard.supabase.co/storage/v1/object/public/avatars/user/photo.jpg',
+        ['media'],
+      ),
+    ).toBe(false);
+  });
+
+  it('rejects an attacker origin carrying a lookalike storage path', () => {
+    process.env.NEXT_PUBLIC_SUPABASE_URL = 'https://switchboard.supabase.co';
+
+    expect(
+      isOwnPublicStorageUrl(
+        'https://evil.example/storage/v1/object/public/media/user/photo.jpg',
+        ['media'],
+      ),
+    ).toBe(false);
+    expect(
+      isOwnPublicStorageUrl(
+        'not a url/storage/v1/object/public/media/user/photo.jpg',
+        ['media'],
+      ),
+    ).toBe(false);
   });
 });

@@ -50,7 +50,7 @@ export function Passport({ state }: { state: PassportState }) {
         <p className="text-sm leading-relaxed text-ink-soft">
           Every part of Switchboard, met at least once. There’s a theme waiting
           for you in{' '}
-          <Link href="/settings" className="font-bold text-terracotta">
+          <Link href="/settings" className="font-bold text-terracotta-deep">
             Appearance
           </Link>
           .
@@ -58,7 +58,7 @@ export function Passport({ state }: { state: PassportState }) {
       ) : next ? (
         <p className="text-sm leading-relaxed text-ink-soft">
           Not tried yet:{' '}
-          <Link href={next.href} className="font-bold text-terracotta">
+          <Link href={next.href} className="font-bold text-terracotta-deep">
             {next.label.toLowerCase()}
           </Link>
           . {next.hint}

@@ -4,7 +4,6 @@ import { createClient, getRenderUser } from '@/lib/supabase/server';
 import { AppShell } from '@/components/shell/AppShell';
 import { Card, SectionHeader } from '@/components/ui/Card';
 import { Avatar } from '@/components/ui/Avatar';
-import { Icon } from '@/components/ui/Icon';
 import { PlanCard, planColor } from '@/components/ui/PlanCard';
 import { SignalBar } from '@/components/signals/SignalBar';
 import { GettingStarted } from '@/components/home/GettingStarted';
@@ -188,33 +187,38 @@ export default async function HomePage() {
         <div>
           <Greeting name={firstName} initial={greeting} />
           <p className="text-sm text-ink-faint mt-1">
-            Feeling social? Let people know.
+            Your invitations and plans, in the order they need you.
           </p>
         </div>
 
-        {/* The four pillars, equal weight, above anything conditional. */}
-        <PillarRow />
-
-        <div id="signals" className="scroll-mt-20">
-          <SignalBar active={mySignals ?? []} circles={circles ?? []} />
-        </div>
-
-        {/* The single first-run guidance card — checks itself off live. Once
-            it retires, the passport takes over as the quiet way to find the
-            parts of the app you haven't met. Never both at once. */}
-        {gettingStartedDone ? (
-          <PassportCard
-            earned={passportSummary.earned}
-            total={passportSummary.total}
-            nextLabel={passportSummary.next?.label ?? null}
-          />
-        ) : (
-          <GettingStarted
-            friendDone={(friendCount ?? 0) > 0}
-            planDone={(upcoming?.length ?? 0) > 0}
-            signalDone={(mySignals?.length ?? 0) > 0}
-            findableDone={findableDone}
-          />
+        {/* Invitations are the only time-sensitive thing on Home. Keep them
+            directly below the greeting so a 390px viewport never buries the
+            response behind discovery or setup UI. */}
+        {(pendingInvites?.length ?? 0) > 0 && (
+          <section>
+            <SectionHeader title="Waiting on you 💌" />
+            <div className="space-y-2">
+              {(pendingInvites ?? []).map((invite) => {
+                const event = (
+                  Array.isArray(invite.event) ? invite.event[0] : invite.event
+                ) as Pick<
+                  SwitchboardEvent,
+                  'id' | 'title' | 'starts_at' | 'time_zone'
+                > | null;
+                if (!event) return null;
+                return (
+                  <Link key={invite.id} href={`/events/${event.id}`} className="block group">
+                    <Card tone="gold" className="group-hover:shadow-lift transition-shadow">
+                      <p className="font-medium">{event.title}</p>
+                      <p className="text-xs text-ink-soft mt-0.5">
+                        {formatDateTime(event.starts_at, event.time_zone)} · respond soon
+                      </p>
+                    </Card>
+                  </Link>
+                );
+              })}
+            </div>
+          </section>
         )}
 
         {/* Plan feed - the heart of Home */}
@@ -242,7 +246,7 @@ export default async function HomePage() {
                 attendeesLabel="Pick something below, or start from scratch. Switchboard sorts out the details."
                 actions={
                   <span className="rounded-btn bg-white/25 px-5 py-2.5 text-sm font-bold backdrop-blur-sm">
-                    Start something
+                    Create a plan
                   </span>
                 }
               />
@@ -266,6 +270,30 @@ export default async function HomePage() {
             </p>
           </div>
         )}
+
+        {/* Exactly one guidance card. Once first-run setup retires, the
+            passport takes its place rather than stacking another explainer. */}
+        {gettingStartedDone ? (
+          <PassportCard
+            earned={passportSummary.earned}
+            total={passportSummary.total}
+            nextLabel={passportSummary.next?.label ?? null}
+          />
+        ) : (
+          <GettingStarted
+            friendDone={(friendCount ?? 0) > 0}
+            planDone={(upcoming?.length ?? 0) > 0}
+            signalDone={(mySignals?.length ?? 0) > 0}
+            findableDone={findableDone}
+          />
+        )}
+
+        {/* The four equal product doors follow what needs attention now. */}
+        <PillarRow />
+
+        <div id="signals" className="scroll-mt-20">
+          <SignalBar active={mySignals ?? []} circles={circles ?? []} />
+        </div>
 
         {/* Matchmaker introductions */}
         {proposals.length > 0 && (
@@ -382,77 +410,8 @@ export default async function HomePage() {
           </section>
         )}
 
-        {/* Invitations waiting */}
-        {(pendingInvites?.length ?? 0) > 0 && (
-          <section>
-            <SectionHeader title="Waiting on you 💌" />
-            <div className="space-y-2">
-              {(pendingInvites ?? []).map((invite) => {
-                const event = (
-                  Array.isArray(invite.event) ? invite.event[0] : invite.event
-                ) as Pick<
-                  SwitchboardEvent,
-                  'id' | 'title' | 'starts_at' | 'time_zone'
-                > | null;
-                if (!event) return null;
-                return (
-                  <Link key={invite.id} href={`/events/${event.id}`} className="block group">
-                    <Card tone="gold" className="group-hover:shadow-lift transition-shadow">
-                      <p className="font-medium">{event.title}</p>
-                      <p className="text-xs text-ink-soft mt-0.5">
-                        {formatDateTime(event.starts_at, event.time_zone)} · respond soon
-                      </p>
-                    </Card>
-                  </Link>
-                );
-              })}
-            </div>
-          </section>
-        )}
-
         {/* Fresh matches — each one clearable, by swipe or by button. */}
         <RecentMatches matches={(recentMatches ?? []) as RecentMatch[]} />
-
-        {/* Quick actions */}
-        <section>
-          <SectionHeader title="Make something happen" />
-          <div className="space-y-3">
-            <Link href="/people" className="group block">
-              <Card
-                tone="cream"
-                className="group-hover:border-terracotta group-hover:shadow-lift transition-all"
-              >
-                <div className="flex items-center gap-3">
-                  <span className="text-2xl" aria-hidden>👋</span>
-                  <span className="flex-1">
-                    <span className="block font-medium">Find &amp; add friends</span>
-                    <span className="block text-xs text-ink-faint mt-0.5">
-                      By handle, email, phone, or contacts
-                    </span>
-                  </span>
-                  <Icon name="back" size={18} className="rotate-180 text-ink-faint" />
-                </div>
-              </Card>
-            </Link>
-            {/* The four pillars moved to the top of the page as an
-                equal-weight row; what remains here are the two surfaces that
-                answer "I don't know who or what yet". */}
-            <div className="grid grid-cols-2 gap-3">
-              {[
-                { href: '/discover', emoji: '🧭', title: 'Explore', body: 'What should we do?' },
-                { href: '/moments', emoji: '✨', title: 'Moments', body: 'Who’s nearby' },
-              ].map((action) => (
-                <Link key={action.href} href={action.href} className="group">
-                  <Card className="h-full group-hover:border-terracotta group-hover:shadow-lift transition-all">
-                    <span className="text-2xl" aria-hidden>{action.emoji}</span>
-                    <p className="font-medium mt-2">{action.title}</p>
-                    <p className="text-xs text-ink-faint mt-0.5">{action.body}</p>
-                  </Card>
-                </Link>
-              ))}
-            </div>
-          </div>
-        </section>
       </div>
     </AppShell>
   );

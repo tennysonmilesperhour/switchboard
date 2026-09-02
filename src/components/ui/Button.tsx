@@ -12,12 +12,12 @@ const VARIANTS: Record<Variant, string> = {
   primary:
     'bg-brand-gradient text-white shadow-lift hover:brightness-105 active:scale-[0.98]',
   secondary:
-    'bg-card text-ink border border-line hover:border-terracotta hover:text-terracotta active:scale-[0.98]',
+    'bg-card text-ink border border-line hover:border-terracotta hover:text-terracotta-deep active:scale-[0.98]',
   ghost: 'text-ink-soft hover:text-ink hover:bg-cream',
   accept:
     'bg-sage text-white hover:bg-sage-deep active:scale-[0.98] shadow-lift',
   danger:
-    'bg-rose-soft text-rose-deep hover:bg-rose-deep hover:text-white active:scale-[0.98]',
+    'bg-rose-soft text-rose-deep hover:brightness-95 active:scale-[0.98]',
 };
 
 const SIZES: Record<Size, string> = {

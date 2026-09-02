@@ -42,7 +42,7 @@ const SECTIONS = [
 export default function TermsPage() {
   return (
     <main className="mx-auto max-w-2xl px-6 py-16 text-ink">
-      <p className="text-sm font-bold text-terracotta">Effective August 31, 2026</p>
+      <p className="text-sm font-bold text-terracotta-deep">Effective August 31, 2026</p>
       <h1 className="mt-2 text-4xl font-black">Terms of Use</h1>
       <p className="mt-4 text-sm leading-relaxed text-ink-soft">
         These terms are the basic rules for using Switchboard. They work together
@@ -56,7 +56,7 @@ export default function TermsPage() {
           </section>
         ))}
       </div>
-      <div className="mt-10 flex flex-wrap gap-4 text-sm font-bold text-terracotta">
+      <div className="mt-10 flex flex-wrap gap-4 text-sm font-bold text-terracotta-deep">
         <Link href="/privacy">Privacy</Link>
         <Link href="/community">Community Covenant</Link>
         <Link href="/copyright">Copyright</Link>

@@ -1,13 +1,13 @@
 'use server';
 
-import type { ErrorCode } from '@/lib/errors';
+import { failure, validation, type ErrorCode } from '@/lib/errors';
 
 import { revalidatePath } from 'next/cache';
-import { createClient } from '@/lib/supabase/server';
 import { notifyInterestReceived, notifyUsers } from '@/lib/server/notify';
 import { checkRateLimit } from '@/lib/server/rate-limit';
 import { requireUser } from '@/lib/server/require-user';
 import type { IntentKind } from '@/lib/types';
+import { reportAndFail } from '@/lib/server/observability';
 
 export interface MutualResult {
   ok: boolean;
@@ -35,10 +35,10 @@ export async function downToConnect(
   const { supabase, user } = auth;
 
   const cleanActivity = activity.trim().slice(0, 80);
-  if (!cleanActivity) return { ok: false, error: 'What are you down to do?' };
+  if (!cleanActivity) return validation('What are you down to do?');
 
   if (!(await checkRateLimit(`down-to:${user.id}`, 40, 60 * 60))) {
-    return { ok: false, error: 'Give it a moment before sending more.' };
+    return failure('SB-RATE-LIMIT', 'Give it a moment before sending more.');
   }
 
   const { data: intent, error } = await supabase
@@ -56,7 +56,14 @@ export async function downToConnect(
     )
     .select('id')
     .single();
-  if (error || !intent) return { ok: false, error: error?.message ?? 'save failed' };
+  if (error || !intent) {
+    return reportAndFail(
+      'SB-MUTUAL-SAVE',
+      'mutual.intent',
+      error ?? new Error('upsert returned no intent'),
+      { targetId, kind },
+    );
+  }
 
   // The trigger flips both intents to 'matched' when interest is mutual -
   // re-read to observe its result (RETURNING predates the AFTER trigger).
@@ -102,12 +109,14 @@ export async function downToConnect(
 }
 
 export async function withdrawIntent(intentId: string): Promise<MutualResult> {
-  const supabase = await createClient();
+  const auth = await requireUser();
+  if (!auth.ok) return auth;
+  const { supabase } = auth;
   const { error } = await supabase
     .from('mutual_intents')
     .update({ status: 'withdrawn' })
     .eq('id', intentId);
-  if (error) return { ok: false, error: error.message };
+  if (error) return reportAndFail('SB-MUTUAL-SAVE', 'mutual.respond', error, { intentId });
   revalidatePath('/mutual');
   return { ok: true };
 }

@@ -1,7 +1,9 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
-import { createClient } from '@/lib/supabase/server';
+import type { ActionResult } from '@/lib/errors';
+import { reportAndFail } from '@/lib/server/observability';
+import { requireUser } from '@/lib/server/require-user';
 
 export type Feeling = 'filled' | 'neutral' | 'drained';
 
@@ -9,18 +11,17 @@ export type Feeling = 'filled' | 'neutral' | 'drained';
 export async function logEnergy(
   eventId: string,
   feeling: Feeling,
-): Promise<{ ok: boolean }> {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { ok: false };
+): Promise<ActionResult> {
+  const auth = await requireUser();
+  if (!auth.ok) return auth;
+  const { supabase, user } = auth;
 
   const { error } = await supabase.from('energy_logs').upsert({
     user_id: user.id,
     event_id: eventId,
     feeling,
   });
+  if (error) return reportAndFail('SB-ENERGY-SAVE', 'energy.save', error, { eventId });
   revalidatePath('/');
-  return { ok: !error };
+  return { ok: true };
 }

@@ -54,7 +54,7 @@ export default async function ZonePage({
 
   const point = toMapPoint(zone.latitude, zone.longitude);
   const canManage = await supabase
-    .rpc('is_zone_moderator', { p_zone: zone.id, p_user: user.id })
+    .rpc('is_current_user_zone_moderator', { p_zone: zone.id })
     .then(({ data }) => data === true);
 
   // Only fetched for someone who can act on them; RLS returns nothing to
