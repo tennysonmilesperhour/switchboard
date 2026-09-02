@@ -74,7 +74,7 @@ export default async function SettingsPage({
   // caller's own value through the security-definer accessor (see SB-01).
   const { data: privateProfile } = await supabase
     .rpc('my_private_profile')
-    .maybeSingle<{ calendar_token: string; contact_email: string | null; contact_phone: string | null }>();
+    .maybeSingle();
   const calendarToken = privateProfile?.calendar_token ?? null;
   // Whether a calendar is connected, and where it points — never the address
   // itself, which is a bearer credential the server keeps to itself.

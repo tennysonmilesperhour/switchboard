@@ -61,11 +61,7 @@ export default async function MomentsPage() {
     );
 
     const admin = createAdminClient();
-    const foundList = (found ?? []) as Array<{
-      id: string;
-      experiences: string[];
-      headline: string | null;
-    }>;
+    const foundList = found ?? [];
 
     const userIdByMoment = new Map<string, string>();
     if (foundList.length > 0) {
@@ -106,7 +102,14 @@ export default async function MomentsPage() {
 
     candidates = foundList
       .map((candidate) => {
-        const stage = (stageByOther.get(candidate.id) ?? 'none') as Candidate['stage'];
+        const rawStage = stageByOther.get(candidate.id);
+        const stage: Candidate['stage'] =
+          rawStage === 'curious' ||
+          rawStage === 'revealed' ||
+          rawStage === 'accepted' ||
+          rawStage === 'passed'
+            ? rawStage
+            : 'none';
         return {
           id: candidate.id,
           userId: userIdByMoment.get(candidate.id) ?? null,

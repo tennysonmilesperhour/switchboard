@@ -32,6 +32,28 @@ export interface NotificationRow {
   url?: string | null;
 }
 
+/** Validate the untyped payload supplied by Supabase Realtime. */
+export function parseNotificationRow(
+  value: Record<string, unknown>,
+): NotificationRow | null {
+  if (
+    typeof value.id !== 'string' ||
+    typeof value.kind !== 'string' ||
+    typeof value.title !== 'string' ||
+    (value.body !== undefined && value.body !== null && typeof value.body !== 'string') ||
+    (value.url !== undefined && value.url !== null && typeof value.url !== 'string')
+  ) {
+    return null;
+  }
+  return {
+    id: value.id,
+    kind: value.kind,
+    title: value.title,
+    body: value.body ?? null,
+    url: value.url ?? null,
+  };
+}
+
 const EMOJI_BY_CATEGORY: Record<NotificationCategory, string> = Object.fromEntries(
   NOTIFICATION_CATEGORIES.map((c) => [c.key, c.emoji]),
 ) as Record<NotificationCategory, string>;

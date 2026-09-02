@@ -10,6 +10,7 @@ import { reportAndFail, reportOperationalError } from '@/lib/server/observabilit
 import { failure, type ActionResult, type ErrorCode } from '@/lib/errors';
 import { looksLikeEmail, sendEmails } from '@/lib/server/email';
 import { approvalUrl } from '@/lib/links';
+import { isJsonObject } from '@/lib/supabase/json';
 
 export interface RequestApprovalInput {
   inviteId: string;
@@ -35,7 +36,7 @@ export async function requestParentalApproval(
     .from('events')
     .select('id, title, parental_approval')
     .eq('id', input.eventId)
-    .maybeSingle<{ id: string; title: string; parental_approval: boolean }>();
+    .maybeSingle();
   if (!event) return { ok: false, error: 'Plan not found.' };
   if (!event.parental_approval) {
     return { ok: false, error: 'This plan does not require parental approval.' };
@@ -59,7 +60,7 @@ export async function requestParentalApproval(
       guardian_name: input.guardianName?.trim() || null,
     })
     .select('id, token')
-    .single<{ id: string; token: string }>();
+    .single();
 
   if (error || !approval) {
     return reportAndFail(
@@ -131,9 +132,9 @@ export async function resolveParentalApproval(
     );
   }
 
-  const row = typeof data === 'object' && data !== null ? data : {};
-  const outcome = (row as Record<string, unknown>).outcome as string | undefined;
-  const eventTitle = (row as Record<string, unknown>).event_title as string | undefined;
+  const row = isJsonObject(data) ? data : {};
+  const outcome = typeof row.outcome === 'string' ? row.outcome : undefined;
+  const eventTitle = typeof row.event_title === 'string' ? row.event_title : undefined;
 
   if (outcome === 'not_found') {
     return {
@@ -143,7 +144,7 @@ export async function resolveParentalApproval(
   }
 
   if (outcome === 'already_resolved') {
-    const status = (row as Record<string, unknown>).status as string;
+    const status = typeof row.status === 'string' ? row.status : 'resolved';
     return {
       ok: true,
       outcome: 'already_resolved',
@@ -161,7 +162,7 @@ export async function resolveParentalApproval(
         .from('events')
         .select('host_id')
         .eq('id', eventId)
-        .maybeSingle<{ host_id: string }>();
+        .maybeSingle();
       if (event) {
         await notifyUsers([event.host_id], {
           kind: 'parental_approval',
@@ -183,7 +184,7 @@ export async function resolveParentalApproval(
         .from('events')
         .select('host_id')
         .eq('id', eventId)
-        .maybeSingle<{ host_id: string }>();
+        .maybeSingle();
       if (event) {
         await notifyUsers([event.host_id], {
           kind: 'parental_approval_denied',
@@ -207,7 +208,7 @@ async function eventIdForApprovalToken(
     .from('parental_approvals')
     .select('event_id')
     .eq('token', token)
-    .maybeSingle<{ event_id: string }>();
+    .maybeSingle();
   return data?.event_id ?? null;
 }
 

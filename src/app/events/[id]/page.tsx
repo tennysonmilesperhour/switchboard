@@ -44,21 +44,35 @@ import { resolveEventZone } from '@/lib/server/event-zone';
 import { googleCalendarUrl } from '@/lib/calendar-links';
 import { appOrigin, eventShareUrl, guestRsvpUrl } from '@/lib/links';
 import { hostCanShare, shareLinkState } from '@/lib/share-link';
-import { INVITE_STATUS_LABEL } from '@/lib/invite-status';
+import { INVITE_STATUS_LABEL, normalizeInviteStatus } from '@/lib/invite-status';
 import {
   appInviteMessage,
   looksLikeContactString,
   planInviteMessage,
 } from '@/lib/invitee-contact';
 import type {
-  EventQuestion,
   Invite,
-  Poll,
   PollOption,
   SwitchboardEvent,
 } from '@/lib/types';
-import { pollQuestion } from '@/lib/types';
-import type { Weight } from '@/lib/engine/scoring';
+import { normalizePollTopic, pollQuestion } from '@/lib/types';
+import { normalizeWeight, type Weight } from '@/lib/engine/scoring';
+
+type DeliveryChannel = 'in_app' | 'email' | 'sms';
+type DeliveryState = 'sent' | 'not_configured' | 'invalid_recipient' | 'failed';
+
+function isDeliveryChannel(value: string): value is DeliveryChannel {
+  return value === 'in_app' || value === 'email' || value === 'sms';
+}
+
+function isDeliveryState(value: string): value is DeliveryState {
+  return (
+    value === 'sent' ||
+    value === 'not_configured' ||
+    value === 'invalid_recipient' ||
+    value === 'failed'
+  );
+}
 
 /** Rich unfurl card for directly-shared event links (iMessage/WhatsApp/Slack). */
 export async function generateMetadata({
@@ -124,7 +138,7 @@ export default async function EventPage({
     .from('events')
     .select('*')
     .eq('id', id)
-    .single<SwitchboardEvent>();
+    .single();
   // A signed-in visitor who isn't the host or an invitee can't read this event
   // row through RLS, so `event` is null here both for a plan that doesn't exist
   // and for a real plan they just haven't been let into (e.g. someone who
@@ -154,7 +168,7 @@ export default async function EventPage({
     .from('event_cohosts')
     .select('cohost_id')
     .eq('event_id', id);
-  const cohostIds = (cohostRows ?? []).map((row) => row.cohost_id as string);
+  const cohostIds = (cohostRows ?? []).map((row) => row.cohost_id);
   const isCoHost = cohostIds.includes(user.id);
   const canManage = isHost || isCoHost;
 
@@ -166,8 +180,8 @@ export default async function EventPage({
       .select('id, display_name')
       .in('id', cohostIds);
     cohosts = (data ?? []).map((p) => ({
-      id: p.id as string,
-      name: (p.display_name as string) ?? 'Co-host',
+      id: p.id,
+      name: p.display_name ?? 'Co-host',
     }));
   }
 
@@ -184,7 +198,7 @@ export default async function EventPage({
       .from('profiles')
       .select('id, display_name, handle, avatar_url, tagline')
       .eq('id', event.host_id)
-      .maybeSingle<HostCardData>();
+      .maybeSingle();
     if (hostProfile) {
       const [relationship, mutuals] = await Promise.all([
         getRelationship(supabase, user.id, event.host_id),
@@ -217,10 +231,10 @@ export default async function EventPage({
     hostInvites = (data ?? []).map((row) => {
       const profile = Array.isArray(row.invitee) ? row.invitee[0] : row.invitee;
       return {
-        ...(row as Invite),
+        ...row,
         invitee_name: profile?.display_name ?? row.guest_name ?? 'Guest',
-        invitee_handle: (profile?.handle as string | null) ?? null,
-        invitee_avatar_url: (profile?.avatar_url as string | null) ?? null,
+        invitee_handle: profile?.handle ?? null,
+        invitee_avatar_url: profile?.avatar_url ?? null,
       };
     });
 
@@ -239,15 +253,14 @@ export default async function EventPage({
         }
       >();
       for (const attempt of attempts ?? []) {
+        if (!isDeliveryChannel(attempt.channel) || !isDeliveryState(attempt.status)) {
+          continue;
+        }
         const key = `${attempt.invite_id}:${attempt.channel}`;
         if (latestByChannel.has(key)) continue;
         latestByChannel.set(key, {
-          channel: attempt.channel as 'in_app' | 'email' | 'sms',
-          status: attempt.status as
-            | 'sent'
-            | 'not_configured'
-            | 'invalid_recipient'
-            | 'failed',
+          channel: attempt.channel,
+          status: attempt.status,
         });
       }
       hostInvites = hostInvites.map((invite) => ({
@@ -263,7 +276,7 @@ export default async function EventPage({
       .select('*')
       .eq('event_id', id)
       .eq('invitee_id', user.id)
-      .maybeSingle<Invite>();
+      .maybeSingle();
     myInvite = data;
   }
 
@@ -330,14 +343,14 @@ export default async function EventPage({
       const profile = Array.isArray(row.invitee) ? row.invitee[0] : row.invitee;
       return {
         id: row.invitee_id ?? row.id,
-        inviteId: row.id as string,
-        inviteeId: (row.invitee_id as string | null) ?? null,
+        inviteId: row.id,
+        inviteeId: row.invitee_id,
         name: profile?.display_name ?? row.guest_name ?? 'Guest',
-        handle: (profile?.handle as string | null) ?? null,
-        avatarUrl: (profile?.avatar_url as string | null) ?? null,
-        guestToken: (row.guest_token as string | null) ?? null,
-        guestContact: (row.guest_contact as string | null) ?? null,
-        status: row.status as Invite['status'],
+        handle: profile?.handle ?? null,
+        avatarUrl: profile?.avatar_url ?? null,
+        guestToken: row.guest_token,
+        guestContact: row.guest_contact,
+        status: row.status,
       };
     });
   }
@@ -351,7 +364,7 @@ export default async function EventPage({
       .from('profile_avoids')
       .select('avoided_id')
       .eq('avoider_id', user.id);
-    const avoidedSet = new Set((avoids ?? []).map((row) => row.avoided_id as string));
+    const avoidedSet = new Set((avoids ?? []).map((row) => row.avoided_id));
     avoidedGoing = attendees
       .filter((attendee) => avoidedSet.has(attendee.id))
       .map((attendee) => attendee.name);
@@ -377,8 +390,7 @@ export default async function EventPage({
     .select('*')
     .eq('event_id', id)
     .order('created_at')
-    .order('id')
-    .returns<Poll[]>();
+    .order('id');
 
   const allPolls = pollRows ?? [];
   const poll =
@@ -404,9 +416,14 @@ export default async function EventPage({
   // Only fetched when the grid will actually render, which is only on a plan
   // with no fixed time yet. Most plans have one, and on those these were two
   // extra round trips on every view of a page that never shows the result.
-  const [calendarBusy, calendarStatus] = event.starts_at
-    ? [[] as string[], null]
-    : await Promise.all([myBusySlots(), getCalendarStatus()]);
+  let calendarBusy: string[] = [];
+  let calendarStatus: Awaited<ReturnType<typeof getCalendarStatus>> | null = null;
+  if (!event.starts_at) {
+    [calendarBusy, calendarStatus] = await Promise.all([
+      myBusySlots(),
+      getCalendarStatus(),
+    ]);
+  }
 
   // What each already-settled question landed on, so the chain can show the
   // answer rather than just "decided".
@@ -439,9 +456,9 @@ export default async function EventPage({
           .eq('voter_id', user.id),
       ]);
     options = optionRows ?? [];
-    results = (resultRows ?? []) as OptionResult[];
+    results = resultRows ?? [];
     myVotes = Object.fromEntries(
-      (voteRows ?? []).map((v) => [v.option_id, v.weight as Weight]),
+      (voteRows ?? []).map((v) => [v.option_id, normalizeWeight(v.weight)]),
     );
   }
 
@@ -463,8 +480,7 @@ export default async function EventPage({
     .from('event_questions')
     .select('*')
     .eq('event_id', id)
-    .order('position')
-    .returns<EventQuestion[]>();
+    .order('position');
   const questions = questionRows ?? [];
 
   // Announcements (host broadcasts) with author names.
@@ -476,9 +492,9 @@ export default async function EventPage({
   const announcements: AnnouncementView[] = (announcementRows ?? []).map((row) => {
     const author = Array.isArray(row.author) ? row.author[0] : row.author;
     return {
-      id: row.id as string,
-      body: row.body as string,
-      created_at: row.created_at as string,
+      id: row.id,
+      body: row.body,
+      created_at: row.created_at,
       author_name: author?.display_name ?? 'Host',
     };
   });
@@ -510,14 +526,14 @@ export default async function EventPage({
       (commentRows ?? []).map(async (row) => {
         const author = Array.isArray(row.author) ? row.author[0] : row.author;
         return {
-          id: row.id as string,
-          body: (row.body as string | null) ?? null,
+          id: row.id,
+          body: row.body,
           // voice_url is a private-bucket path; mint a short-lived signed URL
           // for this authorized viewer (they already passed the thread gate).
-          voice_url: await signMediaRef((row.voice_url as string | null) ?? null),
-          voice_duration_seconds: (row.voice_duration_seconds as number | null) ?? null,
-          created_at: row.created_at as string,
-          author_id: row.author_id as string,
+          voice_url: await signMediaRef(row.voice_url),
+          voice_duration_seconds: row.voice_duration_seconds,
+          created_at: row.created_at,
+          author_id: row.author_id,
           author_name: author?.display_name ?? 'Guest',
         };
       }),
@@ -550,8 +566,8 @@ export default async function EventPage({
       const name = profile?.display_name ?? invite?.guest_name ?? 'Guest';
       const list = grouped.get(name) ?? [];
       list.push({
-        prompt: promptById.get(row.question_id as string) ?? '',
-        answer: row.answer as string,
+        prompt: promptById.get(row.question_id) ?? '',
+        answer: row.answer,
       });
       grouped.set(name, list);
     }
@@ -618,7 +634,7 @@ export default async function EventPage({
       .from('profiles')
       .select('display_name')
       .eq('id', event.host_id)
-      .maybeSingle<{ display_name: string | null }>();
+      .maybeSingle();
     hostName = data?.display_name ?? null;
   }
   const planWhen = formatDateTimeRange(event.starts_at, event.ends_at, eventZone);
@@ -648,7 +664,7 @@ export default async function EventPage({
         avatarUrl: input.avatarUrl,
         seed: input.inviteeId ?? input.inviteId,
         isGuest,
-        statusLabel: INVITE_STATUS_LABEL[input.status],
+        statusLabel: INVITE_STATUS_LABEL[normalizeInviteStatus(input.status)],
         contact: null,
         inviteUrl: null,
         messages: null,
@@ -682,7 +698,7 @@ export default async function EventPage({
       // between the row and the card it opens.
       seed: input.inviteeId ?? input.inviteId,
       isGuest,
-      statusLabel: INVITE_STATUS_LABEL[input.status],
+      statusLabel: INVITE_STATUS_LABEL[normalizeInviteStatus(input.status)],
       contact: input.guestContact?.trim() || null,
       inviteUrl,
       messages: {
@@ -817,7 +833,7 @@ export default async function EventPage({
             variant="full"
             title={event.title}
             color={themeColor(event.theme) ?? planColor(heroIndex)}
-            status={statusLabel[event.status]}
+            status={statusLabel[event.status] ?? 'Plan'}
             when={formatDateTimeRange(event.starts_at, event.ends_at, eventZone)}
             where={event.location_name ?? undefined}
             attendees={attendees.map((attendee) => ({
@@ -983,7 +999,7 @@ export default async function EventPage({
               id: q.id,
               prompt: q.prompt,
               required: q.required,
-              kind: q.kind,
+              kind: q.kind === 'choice' ? 'choice' : 'text',
               options: q.options,
             }))}
             expiresAtIso={
@@ -1068,7 +1084,7 @@ export default async function EventPage({
               <FollowUpComposer
                 parentPollId={poll.id}
                 eventId={event.id}
-                parentTopic={poll.topic}
+                parentTopic={normalizePollTopic(poll.topic)}
                 hasPending={pendingPolls.length > 0}
               />
             )}

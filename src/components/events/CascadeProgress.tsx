@@ -21,6 +21,8 @@ import { INVITE_STATUS_LABEL } from '@/lib/invite-status';
 import { inviteExpiresAt } from '@/lib/engine/cascade';
 import { WINDOW_CHOICES } from '@/lib/engine/windows';
 import type { Invite } from '@/lib/types';
+import type { InviteStatus } from '@/lib/engine/cascade';
+import { normalizeInviteStatus } from '@/lib/invite-status';
 
 interface CascadeProgressProps {
   invites: Array<
@@ -32,7 +34,7 @@ interface CascadeProgressProps {
       }>;
     }
   >;
-  mode: 'individual' | 'group' | 'all_at_once';
+  mode: string;
   /** Host/co-host view: show per-invite manage controls. */
   eventId?: string;
   editable?: boolean;
@@ -46,7 +48,7 @@ interface CascadeProgressProps {
 
 // Colour and motion per status; the wording itself comes from the shared label
 // map so this row and the contact card it opens never disagree.
-const STATUS_STYLE: Record<Invite['status'], { className: string; dot: string }> = {
+const STATUS_STYLE: Record<InviteStatus, { className: string; dot: string }> = {
   queued: { className: 'text-ink-faint', dot: 'bg-line' },
   sent: { className: 'text-gold-deep', dot: 'bg-gold animate-pulse-soft' },
   accepted: { className: 'text-sage-deep', dot: 'bg-sage' },
@@ -57,7 +59,7 @@ const STATUS_STYLE: Record<Invite['status'], { className: string; dot: string }>
   requested: { className: 'text-terracotta-deep', dot: 'bg-terracotta' },
 };
 
-const REOPENABLE: ReadonlySet<Invite['status']> = new Set([
+const REOPENABLE: ReadonlySet<string> = new Set([
   'expired',
   'declined',
   'cancelled',
@@ -162,8 +164,9 @@ export function CascadeProgress({
             )}
             <ol className="space-y-1.5">
               {stageInvites.map((invite) => {
-                const style = STATUS_STYLE[invite.status];
-                const statusLabel = INVITE_STATUS_LABEL[invite.status];
+                const status = normalizeInviteStatus(invite.status);
+                const style = STATUS_STYLE[status];
+                const statusLabel = INVITE_STATUS_LABEL[status];
                 const expiresAt =
                   invite.status === 'sent'
                     ? inviteExpiresAt({

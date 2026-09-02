@@ -4,7 +4,6 @@ import { requireUserOrRedirect } from '@/lib/server/require-user';
 import { isEventManager } from '@/lib/server/authz';
 import { AppShell } from '@/components/shell/AppShell';
 import { EventEditForm } from './EventEditForm';
-import type { SwitchboardEvent } from '@/lib/types';
 
 export const metadata: Metadata = { title: 'Edit plan' };
 
@@ -20,7 +19,7 @@ export default async function EditEventPage({
     .from('events')
     .select('*')
     .eq('id', id)
-    .single<SwitchboardEvent>();
+    .single();
   if (!event) notFound();
 
   // Host or co-host only — same authorization as the server actions.

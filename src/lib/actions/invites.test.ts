@@ -21,8 +21,19 @@ const mocks = vi.hoisted(() => {
     /** The session `auth.getUser()` resolves to, or null for signed out. */
     user: { id: string } | null;
     profiles: Record<string, { display_name: string | null }>;
-    invites: Record<string, { id: string; event_id: string; status: string; guest_name: string }>;
-    events: Record<string, { id: string; title: string; host_id: string }>;
+    invites: Record<string, {
+      id: string;
+      event_id: string;
+      status: string;
+      guest_name: string;
+      invitee_id?: string | null;
+    }>;
+    events: Record<string, {
+      id: string;
+      title: string;
+      host_id: string;
+      parental_approval?: boolean;
+    }>;
     /** share_token → event id, the way `/i/<token>` resolves a plan. */
     shareTokens: Record<string, string>;
   } = { user: null, profiles: {}, invites: {}, events: {}, shareTokens: {} };
@@ -32,7 +43,14 @@ const mocks = vi.hoisted(() => {
       return { data: db.profiles[String(eqs.id)] ?? null, error: null };
     }
     if (table === 'invites') {
-      return { data: db.invites[String(eqs.guest_token)] ?? null, error: null };
+      const invite = eqs.guest_token != null
+        ? db.invites[String(eqs.guest_token)]
+        : Object.values(db.invites).find(
+            (row) =>
+              row.event_id === eqs.event_id &&
+              row.invitee_id === eqs.invitee_id,
+          );
+      return { data: invite ?? null, error: null };
     }
     if (table === 'events') {
       const id =
@@ -163,7 +181,9 @@ describe('respondViaShareLink', () => {
       p_user: 'user-1',
       // The profile's name wins over whatever the browser posted.
       p_name: 'Dana Ross',
-      p_contact: null,
+      // Blank is the generated-type-safe representation of no contact; the
+      // RPC normalizes it back to NULL.
+      p_contact: '',
       p_accept: true,
     });
     expect(mocks.notifyUsers).toHaveBeenCalledWith(
@@ -184,6 +204,34 @@ describe('respondViaShareLink', () => {
       'rsvp_via_share_token',
       expect.objectContaining({ p_user: 'user-2', p_name: 'Jordan' }),
     );
+  });
+
+  it('resolves the accepted invite id for a parental-approval follow-up', async () => {
+    mocks.db.user = { id: 'user-4' };
+    mocks.db.profiles['user-4'] = { display_name: 'Avery' };
+    mocks.db.events['event-1'] = {
+      id: 'event-1',
+      title: 'Taco night',
+      host_id: 'host-1',
+      parental_approval: true,
+    };
+    mocks.db.shareTokens['share-token'] = 'event-1';
+    mocks.db.invites['accepted-user-4'] = {
+      id: 'invite-4',
+      event_id: 'event-1',
+      status: 'accepted',
+      guest_name: 'Avery',
+      invitee_id: 'user-4',
+    };
+
+    const result = await respondViaShareLink('share-token', true, 'Avery');
+
+    expect(result).toMatchObject({
+      ok: true,
+      needsApproval: true,
+      inviteId: 'invite-4',
+      eventId: 'event-1',
+    });
   });
 });
 

@@ -22,11 +22,16 @@ import { capture } from '@/lib/analytics/server';
 import { ANALYTICS_EVENTS } from '@/lib/analytics/events';
 import { sanitizeUrl } from '@/lib/url';
 import type { ProfileLink, ProfileSocial } from '@/lib/types';
+import { toJson } from '@/lib/supabase/json';
 import type { NotificationPrefs } from '@/lib/notifications';
 
 const HANDLE_PATTERN = USERNAME_PATTERN;
 const MAX_LINKS = 15;
 const MAX_SOCIALS = 15;
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
 
 export interface ActionResult {
   ok: boolean;
@@ -62,7 +67,7 @@ export async function acceptLatestTerms(formData: FormData): Promise<void> {
       { onConflict: 'id' },
     )
     .select('legal_terms_version')
-    .maybeSingle<{ legal_terms_version: string | null }>();
+    .maybeSingle();
   if (error || saved?.legal_terms_version !== LEGAL_VERSION) {
     redirect(`/legal-update?error=save&next=${encodeURIComponent(nextPath)}`);
   }
@@ -79,10 +84,10 @@ function parseLinks(raw: string): ProfileLink[] {
   if (!Array.isArray(parsed)) return [];
   const links: ProfileLink[] = [];
   for (const item of parsed) {
-    if (!item || typeof item !== 'object') continue;
-    const url = sanitizeUrl(String((item as ProfileLink).url ?? ''));
+    if (!isRecord(item)) continue;
+    const url = sanitizeUrl(String(item.url ?? ''));
     if (!url) continue;
-    const label = String((item as ProfileLink).label ?? '').trim().slice(0, 60);
+    const label = String(item.label ?? '').trim().slice(0, 60);
     let host = '';
     try {
       host = new URL(url).hostname.replace(/^www\./, '');
@@ -105,9 +110,9 @@ function parseSocials(raw: string): ProfileSocial[] {
   if (!Array.isArray(parsed)) return [];
   const socials: ProfileSocial[] = [];
   for (const item of parsed) {
-    if (!item || typeof item !== 'object') continue;
-    const platform = String((item as ProfileSocial).platform ?? '');
-    const value = String((item as ProfileSocial).value ?? '').trim().slice(0, 200);
+    if (!isRecord(item)) continue;
+    const platform = String(item.platform ?? '');
+    const value = String(item.value ?? '').trim().slice(0, 200);
     if (!SOCIAL_BY_ID[platform] || !value) continue;
     socials.push({ platform, value });
     if (socials.length >= MAX_SOCIALS) break;
@@ -168,8 +173,8 @@ export async function updateProfileDetails(
       pronouns: nullableText(formData.get('pronouns'), 40),
       location: nullableText(formData.get('location'), 80),
       bio: nullableText(formData.get('bio'), 600),
-      links: parseLinks(String(formData.get('links') ?? '[]')),
-      socials: parseSocials(String(formData.get('socials') ?? '[]')),
+      links: toJson(parseLinks(String(formData.get('links') ?? '[]'))),
+      socials: toJson(parseSocials(String(formData.get('socials') ?? '[]'))),
       contact_email: email,
       contact_phone: phone,
       contact_public: formData.get('contact_public') === 'on',
@@ -249,7 +254,7 @@ export async function completeOnboarding(formData: FormData): Promise<void> {
     .from('profiles')
     .upsert({ id: user.id, ...profileUpdate }, { onConflict: 'id' })
     .select('onboarded')
-    .single<{ onboarded: boolean }>();
+    .single();
 
   if (profileError || !savedProfile?.onboarded) {
     onboardingError(profileError?.code === '23505' ? 'handle_taken' : 'save');
@@ -387,7 +392,7 @@ export async function updateAppearanceTheme(theme: string): Promise<ActionResult
     .update({ appearance_theme: resolved })
     .eq('id', user.id)
     .select('appearance_theme')
-    .maybeSingle<{ appearance_theme: string | null }>();
+    .maybeSingle();
   if (error || saved?.appearance_theme !== resolved) {
     return reportAndFail('SB-SETTINGS-SAVE', 'settings.appearance', error ?? {
       message: 'appearance_theme did not read back after a successful update',
@@ -430,10 +435,10 @@ export async function updateCustomAppearance(
 
   const { data: saved, error } = await supabase
     .from('profiles')
-    .update({ appearance_theme: 'custom', appearance_custom: appearance })
+    .update({ appearance_theme: 'custom', appearance_custom: toJson(appearance) })
     .eq('id', user.id)
     .select('appearance_theme')
-    .maybeSingle<{ appearance_theme: string | null }>();
+    .maybeSingle();
   if (error || saved?.appearance_theme !== 'custom') {
     return reportAndFail('SB-SETTINGS-SAVE', 'settings.appearance', error ?? {
       message: 'appearance_custom did not read back after a successful update',

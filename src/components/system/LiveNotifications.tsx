@@ -6,8 +6,8 @@ import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import {
   bannerFromRow,
+  parseNotificationRow,
   type NotificationBanner,
-  type NotificationRow,
 } from '@/lib/notification-banner';
 import {
   swipeAxis,
@@ -86,7 +86,7 @@ export function LiveNotifications({ userId }: LiveNotificationsProps) {
             filter: `user_id=eq.${userId}`,
           },
           (payload) => {
-            const row = payload.new as NotificationRow;
+            const row = parseNotificationRow(payload.new);
             if (!row?.id || seen.current.has(row.id)) return;
             seen.current.add(row.id);
 

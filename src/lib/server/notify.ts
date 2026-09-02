@@ -183,7 +183,7 @@ export async function notifySuggestionAdded(
     .from('events')
     .select('id, title, host_id')
     .eq('id', eventId)
-    .maybeSingle<{ id: string; title: string; host_id: string }>();
+    .maybeSingle();
   if (!event) return;
 
   const [{ data: cohosts }, { data: voters }] = await Promise.all([
@@ -193,10 +193,10 @@ export async function notifySuggestionAdded(
 
   const recipients = new Set<string>([event.host_id]);
   for (const row of cohosts ?? []) {
-    if (row.cohost_id) recipients.add(row.cohost_id as string);
+    if (row.cohost_id) recipients.add(row.cohost_id);
   }
   for (const row of voters ?? []) {
-    if (row.voter_id) recipients.add(row.voter_id as string);
+    if (row.voter_id) recipients.add(row.voter_id);
   }
   recipients.delete(suggesterId);
   if (recipients.size === 0) return;

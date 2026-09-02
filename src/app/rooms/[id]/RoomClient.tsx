@@ -69,6 +69,25 @@ interface RoomClientProps {
   expenses: ExpenseRow[];
 }
 
+function parseRoomMessage(value: Record<string, unknown>): RoomMessage | null {
+  if (
+    typeof value.id !== 'string' ||
+    typeof value.sender_id !== 'string' ||
+    typeof value.body !== 'string' ||
+    typeof value.created_at !== 'string' ||
+    (value.image_url !== null && typeof value.image_url !== 'string')
+  ) {
+    return null;
+  }
+  return {
+    id: value.id,
+    sender_id: value.sender_id,
+    body: value.body,
+    image_url: value.image_url,
+    created_at: value.created_at,
+  };
+}
+
 function formatMoney(cents: number): string {
   return (cents / 100).toLocaleString('en-US', {
     style: 'currency',
@@ -185,7 +204,8 @@ export function RoomClient({
           filter: `room_id=eq.${roomId}`,
         },
         (payload) => {
-          const incoming = payload.new as RoomMessage;
+          const incoming = parseRoomMessage(payload.new);
+          if (!incoming) return;
           setMessages((current) => {
             // Already have the real row (e.g. duplicate delivery) — ignore.
             if (current.some((m) => m.id === incoming.id)) return current;

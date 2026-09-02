@@ -84,7 +84,7 @@ jobs:
       - name: Set up Supabase CLI
         uses: supabase/setup-cli@v1
         with:
-          version: 2.109.1
+          version: 2.116.0
         env:
           GITHUB_TOKEN: ${{ github.token }}
 
@@ -94,6 +94,11 @@ jobs:
 
       - name: Start local Supabase
         run: supabase start
+
+      - name: Verify generated database types
+        run: |
+          supabase gen types typescript --local > "$RUNNER_TEMP/database.types.ts"
+          diff -u src/lib/supabase/database.types.ts "$RUNNER_TEMP/database.types.ts"
 
       - name: Export local Supabase env
         run: |

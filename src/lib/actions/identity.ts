@@ -156,11 +156,11 @@ export async function requestReflection(
   const setAside = new Set(
     (prefRows ?? [])
       .filter((p) => p.verdict === 'rejected' || p.hidden === true)
-      .map((p) => p.facet_key as string),
+      .map((p) => p.facet_key),
   );
   const facets = (facetRows ?? [])
-    .filter((f) => !setAside.has(f.facet_key as string))
-    .map((f) => ({ title: f.title as string, summary: f.summary as string }));
+    .filter((f) => !setAside.has(f.facet_key))
+    .map((f) => ({ title: f.title, summary: f.summary }));
 
   if (facets.length < 3) return { ok: false, reason: 'not_ready' };
 

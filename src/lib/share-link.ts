@@ -63,7 +63,8 @@ export type ShareLinkState =
 
 /** The fields of an event this module needs. Anything wider is fine. */
 export interface ShareLinkSubject {
-  status: EventStatus;
+  /** Generated database types expose CHECK-constrained text as `string`. */
+  status: string;
   share_link_active: boolean;
 }
 
@@ -107,6 +108,9 @@ export function shareLinkState(event: ShareLinkSubject | null | undefined): Shar
       return 'cancelled';
     case 'past':
       return 'past';
+    default:
+      // A newly introduced or corrupted state must never make a link usable.
+      return 'unpublished';
   }
 }
 

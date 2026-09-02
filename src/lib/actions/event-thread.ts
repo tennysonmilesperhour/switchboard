@@ -7,7 +7,6 @@ import { requireUser } from '@/lib/server/require-user';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { notifyUsers } from '@/lib/server/notify';
 import { isValidMediaRef } from '@/lib/server/media';
-import type { SwitchboardEvent } from '@/lib/types';
 
 export interface ThreadResult {
   ok: boolean;
@@ -116,7 +115,7 @@ async function notifyThreadParticipants(
     .from('events')
     .select('id, title, host_id')
     .eq('id', eventId)
-    .single<Pick<SwitchboardEvent, 'id' | 'title'> & { host_id: string }>();
+    .single();
   if (!event) return;
 
   const { data: priorComments } = await admin
@@ -126,7 +125,7 @@ async function notifyThreadParticipants(
 
   const participants = new Set<string>([event.host_id]);
   for (const row of priorComments ?? []) {
-    if (row.author_id) participants.add(row.author_id as string);
+    if (row.author_id) participants.add(row.author_id);
   }
   participants.delete(authorId);
   if (participants.size === 0) return;

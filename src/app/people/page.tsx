@@ -43,7 +43,7 @@ export default async function PeoplePage() {
   ]);
 
   const avoidedIds = new Set(
-    (avoidRows ?? []).map((row) => row.avoided_id as string),
+    (avoidRows ?? []).map((row) => row.avoided_id),
   );
 
   const friends: FriendRow[] = [];

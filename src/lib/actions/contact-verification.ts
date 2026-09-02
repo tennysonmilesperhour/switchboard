@@ -67,7 +67,7 @@ export async function requestContactVerification(
     .select('normalized_value, verified_at')
     .eq('user_id', user.id)
     .eq('kind', kind)
-    .maybeSingle<{ normalized_value: string; verified_at: string | null }>();
+    .maybeSingle();
 
   if (!contact) {
     return { ok: false, error: `Add a ${kind === 'email' ? 'contact email' : 'phone number'} first.` };
@@ -165,13 +165,8 @@ export async function confirmPhoneContact(code: string): Promise<ContactVerifica
     .select('normalized_value, code_hash, attempts, expires_at')
     .eq('user_id', user.id)
     .eq('kind', 'phone')
-    .maybeSingle<{
-      normalized_value: string;
-      code_hash: string;
-      attempts: number;
-      expires_at: string;
-    }>();
-  if (!request || new Date(request.expires_at).getTime() <= Date.now()) {
+    .maybeSingle();
+  if (!request || !request.code_hash || new Date(request.expires_at).getTime() <= Date.now()) {
     return { ok: false, error: 'That code expired. Request a new one.' };
   }
 
@@ -220,7 +215,7 @@ export async function confirmEmailContact(formData: FormData): Promise<never> {
     .eq('user_id', auth.user.id)
     .eq('kind', 'email')
     .eq('token_hash', tokenHash(token))
-    .maybeSingle<{ normalized_value: string; expires_at: string }>();
+    .maybeSingle();
   if (!request || new Date(request.expires_at).getTime() <= Date.now()) {
     redirect('/settings?contact=expired');
   }

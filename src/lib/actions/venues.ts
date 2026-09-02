@@ -55,7 +55,7 @@ export async function reviewVenue(
   const { error } = await supabase.rpc('review_venue', {
     p_venue: venueId,
     p_decision: decision,
-    p_note: note.trim() || null,
+    p_note: note.trim() || undefined,
   });
   if (error) return { ok: false, error: error.message };
   revalidatePath('/moderation');

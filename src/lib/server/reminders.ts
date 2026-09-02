@@ -3,7 +3,7 @@ import { notifyUsers } from '@/lib/server/notify';
 import { sendEmails, looksLikeEmail, appUrl } from '@/lib/server/email';
 import { sendSmsMessages, looksLikePhoneNumber } from '@/lib/server/sms';
 import { formatDateTime } from '@/lib/format';
-import type { Invite, SwitchboardEvent } from '@/lib/types';
+import type { SwitchboardEvent } from '@/lib/types';
 
 export type ReminderKind = 'day_before' | 'soon';
 
@@ -57,11 +57,15 @@ async function remindOneEvent(
   // both see a null marker; the conditional `is null` update lets exactly one
   // win, and the loser affects no rows and bails, so a reminder never fires
   // twice.
-  const column =
-    kind === 'soon' ? 'reminded_soon_at' : 'reminded_day_before_at';
+  const column = kind === 'soon' ? 'reminded_soon_at' : 'reminded_day_before_at';
+  const claimedAt = new Date().toISOString();
+  const update =
+    kind === 'soon'
+      ? { reminded_soon_at: claimedAt }
+      : { reminded_day_before_at: claimedAt };
   const { data: claimed } = await admin
     .from('events')
-    .update({ [column]: new Date().toISOString() })
+    .update(update)
     .eq('id', event.id)
     .is(column, null)
     .select('id');
@@ -70,10 +74,7 @@ async function remindOneEvent(
   const { data: invites } = await admin
     .from('invites')
     .select('invitee_id, guest_name, guest_contact, guest_token, status')
-    .eq('event_id', event.id)
-    .returns<
-      Pick<Invite, 'invitee_id' | 'guest_name' | 'guest_contact' | 'guest_token' | 'status'>[]
-    >();
+    .eq('event_id', event.id);
   const rows = invites ?? [];
 
   const accepted = rows.filter((i) => i.status === 'accepted');
@@ -183,8 +184,7 @@ export async function sweepReminders(now: Date = new Date()): Promise<number> {
     .eq('reminders_enabled', true)
     .not('starts_at', 'is', null)
     .gt('starts_at', now.toISOString())
-    .lt('starts_at', horizon)
-    .returns<SwitchboardEvent[]>();
+    .lt('starts_at', horizon);
 
   let sent = 0;
   for (const event of events ?? []) {

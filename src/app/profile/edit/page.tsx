@@ -3,7 +3,7 @@ import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
 import { AppShell } from '@/components/shell/AppShell';
 import { SOCIAL_BY_ID } from '@/lib/socials';
-import type { ProfileLink, ProfileSocial } from '@/lib/types';
+import { parseProfileLinks, parseProfileSocials } from '@/lib/supabase/json';
 import { ProfileEditForm } from './ProfileEditForm';
 
 export const metadata: Metadata = { title: 'Edit profile' };
@@ -27,10 +27,10 @@ export default async function EditProfilePage() {
   // surface; the owner reads their own via the security-definer accessor (SB-01).
   const { data: privateProfile } = await supabase
     .rpc('my_private_profile')
-    .maybeSingle<{ calendar_token: string; contact_email: string | null; contact_phone: string | null }>();
+    .maybeSingle();
 
-  const links: ProfileLink[] = Array.isArray(profile?.links) ? profile!.links : [];
-  const socials: ProfileSocial[] = (Array.isArray(profile?.socials) ? profile!.socials : []).filter(
+  const links = parseProfileLinks(profile?.links ?? []);
+  const socials = parseProfileSocials(profile?.socials ?? []).filter(
     (s) => SOCIAL_BY_ID[s.platform],
   );
 

@@ -19,3 +19,20 @@ export const INVITE_STATUS_LABEL: Record<InviteStatus, string> = {
   waitlisted: 'Waitlisted',
   requested: 'Asked to join',
 };
+
+/** Fail closed if a database CHECK value is newer than this application. */
+export function normalizeInviteStatus(status: string): InviteStatus {
+  switch (status) {
+    case 'queued':
+    case 'sent':
+    case 'accepted':
+    case 'declined':
+    case 'expired':
+    case 'cancelled':
+    case 'waitlisted':
+    case 'requested':
+      return status;
+    default:
+      return 'cancelled';
+  }
+}

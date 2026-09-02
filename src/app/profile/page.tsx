@@ -8,7 +8,8 @@ import { Icon, type IconName } from '@/components/ui/Icon';
 import { signOut } from '@/lib/actions/profile';
 import { SOCIAL_BY_ID, hrefFor, displayHandle } from '@/lib/socials';
 import { buildVCard, qrSvg } from '@/lib/vcard';
-import type { SwitchboardEvent, ProfileLink, ProfileSocial } from '@/lib/types';
+import type { SwitchboardEvent } from '@/lib/types';
+import { parseProfileLinks, parseProfileSocials } from '@/lib/supabase/json';
 import { ProfileTabs, type ProfileEvent } from './ProfileTabs';
 import { ProfileShare } from './ProfileShare';
 import { ProfileStrength } from '@/components/profile/ProfileStrength';
@@ -62,7 +63,7 @@ export default async function ProfilePage() {
   // surface; the owner reads their own via the security-definer accessor (SB-01).
   const { data: privateProfile } = await supabase
     .rpc('my_private_profile')
-    .maybeSingle<{ calendar_token: string; contact_email: string | null; contact_phone: string | null }>();
+    .maybeSingle();
 
   const [{ data: created }, { data: attendedRows }] = await Promise.all([
     supabase
@@ -78,7 +79,7 @@ export default async function ProfilePage() {
   ]);
 
   const attended = (attendedRows ?? [])
-    .map((row) => (Array.isArray(row.event) ? row.event[0] : row.event) as SwitchboardEvent | null)
+    .map((row) => row.event)
     .filter((event): event is SwitchboardEvent => event !== null && event.host_id !== user.id)
     .map(toProfileEvent);
 
@@ -88,8 +89,8 @@ export default async function ProfilePage() {
 
   const displayName = profile?.display_name || 'You';
   const handle = profile?.handle ?? '';
-  const links: ProfileLink[] = Array.isArray(profile?.links) ? profile!.links : [];
-  const socials: ProfileSocial[] = (Array.isArray(profile?.socials) ? profile!.socials : []).filter(
+  const links = parseProfileLinks(profile?.links ?? []);
+  const socials = parseProfileSocials(profile?.socials ?? []).filter(
     (s) => SOCIAL_BY_ID[s.platform],
   );
   const contactPublic = Boolean(profile?.contact_public);

@@ -27,8 +27,8 @@ export default async function ModerationPage() {
     supabase.rpc('list_open_reports'),
     supabase.rpc('list_pending_venues'),
   ]);
-  const openReports = (reports ?? []) as OpenReport[];
-  const pendingVenues = (venues ?? []) as PendingVenue[];
+  const openReports: OpenReport[] = reports ?? [];
+  const pendingVenues: PendingVenue[] = venues ?? [];
 
   const nothingToReview = openReports.length === 0 && pendingVenues.length === 0;
 

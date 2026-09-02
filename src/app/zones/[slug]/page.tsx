@@ -73,9 +73,11 @@ export default async function ZonePage({
       ])
     : [{ data: null }, { data: null }];
 
-  function nameOf(row: { profile: unknown }): string {
+  function nameOf(row: {
+    profile: { display_name: string | null } | { display_name: string | null }[] | null;
+  }): string {
     const profile = Array.isArray(row.profile) ? row.profile[0] : row.profile;
-    return (profile as { display_name?: string } | null)?.display_name ?? 'Someone';
+    return profile?.display_name ?? 'Someone';
   }
 
   // Two different questions, and only one of them can be asked of the table.

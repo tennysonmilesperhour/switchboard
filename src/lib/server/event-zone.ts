@@ -31,6 +31,6 @@ export async function resolveEventZone(
     .from('profiles')
     .select('timezone')
     .eq('id', event.host_id)
-    .maybeSingle<{ timezone: string | null }>();
+    .maybeSingle();
   return isValidTimeZone(host?.timezone) ? host.timezone : null;
 }

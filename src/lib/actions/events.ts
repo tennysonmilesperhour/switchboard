@@ -22,6 +22,7 @@ import type { EventTheme, InviteMode, RecurrenceKind } from '@/lib/types';
 import {
   nextOccurrenceAfter,
   normalizeCustomInterval,
+  normalizeRecurrenceKind,
 } from '@/lib/engine/recurrence';
 import { reportAndFail, reportOperationalError } from '@/lib/server/observability';
 import type { ActionResult, ErrorCode } from '@/lib/errors';
@@ -35,6 +36,8 @@ import { isValidCoordinate } from '@/lib/geo';
 import { safeHttpUrl } from '@/lib/security';
 import { geocode } from '@/lib/server/geocode';
 import { hasInviteDetails } from '@/lib/event-details';
+import type { TablesInsert } from '@/lib/supabase/database.types';
+import { toJson } from '@/lib/supabase/json';
 
 export interface WizardInvitee {
   /** Profile id for members; null for guests. */
@@ -144,7 +147,7 @@ async function resolveProfileByContact(
 ): Promise<{ id: string; name: string } | null> {
   const { data } = await supabase
     .rpc('resolve_profile_contact', { p_identifier: identifier })
-    .maybeSingle<{ id: string; display_name: string | null; handle: string | null }>();
+    .maybeSingle();
   if (!data?.id) return null;
   return { id: data.id, name: data.display_name ?? data.handle ?? 'Friend' };
 }
@@ -191,8 +194,12 @@ async function persistEventCoordinates(
   input: CreateEventInput,
 ): Promise<void> {
   let point: { lat: number; lng: number } | null = null;
-  if (isValidCoordinate(input.latitude, input.longitude)) {
-    point = { lat: input.latitude as number, lng: input.longitude as number };
+  if (
+    typeof input.latitude === 'number' &&
+    typeof input.longitude === 'number' &&
+    isValidCoordinate(input.latitude, input.longitude)
+  ) {
+    point = { lat: input.latitude, lng: input.longitude };
   } else if (input.locationName?.trim()) {
     const query = [input.locationName, input.locationAddress]
       .map((part) => part?.trim())
@@ -256,7 +263,14 @@ export async function createEvent(input: CreateEventInput): Promise<CreateEventR
   const coverUrl = safeHttpUrl(input.coverUrl);
 
   const { data: eventId, error } = await supabase.rpc('create_event_atomic', {
-    p_input: { ...input, title, wishlistUrl, coverUrl, invitees, parentalApproval: input.parentalApproval ?? false },
+    p_input: toJson({
+      ...input,
+      title,
+      wishlistUrl,
+      coverUrl,
+      invitees,
+      parentalApproval: input.parentalApproval ?? false,
+    }),
   });
   if (error || typeof eventId !== 'string') {
     return reportAndFail(
@@ -376,9 +390,9 @@ export async function lookupInviteeByHandle(
     .maybeSingle();
   if (!data) return null;
   return {
-    id: data.id as string,
-    name: (data.display_name as string) ?? cleaned,
-    handle: (data.handle as string) ?? cleaned,
+    id: data.id,
+    name: data.display_name ?? cleaned,
+    handle: data.handle ?? cleaned,
   };
 }
 
@@ -451,8 +465,8 @@ export async function addPeopleToEvent(
     for (const profile of picked ?? []) {
       additions.push({
         kind: 'member',
-        profileId: profile.id as string,
-        label: (profile.display_name as string) ?? 'Friend',
+        profileId: profile.id,
+        label: profile.display_name ?? 'Friend',
       });
     }
   }
@@ -489,7 +503,7 @@ export async function addPeopleToEvent(
       ? nextStage
       : 0;
 
-  const toInsert: Array<Record<string, unknown>> = [];
+  const toInsert: TablesInsert<'invites'>[] = [];
   for (const addition of additions) {
     if (addition.kind === 'member') {
       if (addition.profileId === user.id) {
@@ -615,8 +629,8 @@ export async function inviteConnectionNow(
   // A block that was placed without tearing down the connection row would
   // otherwise slip through the check above.
   const { data: blocked } = await supabase.rpc('are_blocked', {
-    a: user.id,
-    b: profileId,
+    p_user_a: user.id,
+    p_user_b: profileId,
   });
   if (blocked) return { ok: false, error: 'You can’t invite this person.' };
 
@@ -625,13 +639,7 @@ export async function inviteConnectionNow(
     .from('events')
     .select('id, status, capacity, invite_mode, starts_at')
     .eq('id', eventId)
-    .maybeSingle<{
-      id: string;
-      status: string;
-      capacity: number | null;
-      invite_mode: InviteMode;
-      starts_at: string | null;
-    }>();
+    .maybeSingle();
   if (!event) return { ok: false, error: 'Plan not found.' };
   if (event.status !== 'inviting') {
     return { ok: false, error: 'This plan isn’t sending invitations right now.' };
@@ -641,7 +649,7 @@ export async function inviteConnectionNow(
     .from('profiles')
     .select('display_name')
     .eq('id', profileId)
-    .maybeSingle<{ display_name: string | null }>();
+    .maybeSingle();
   const name = profile?.display_name?.trim() || 'They';
 
   const { data: existing } = await admin
@@ -684,7 +692,7 @@ export async function inviteConnectionNow(
       sent_at: new Date().toISOString(),
     })
     .select('id')
-    .single<{ id: string }>();
+    .single();
   if (error || !inserted) {
     return reportAndFail(
       'SB-INVITE-SEND',
@@ -774,7 +782,7 @@ export async function resendInvite(
     return { ok: false, error: 'Invite not found.' };
   }
   const reopenable = ['expired', 'declined', 'cancelled'];
-  if (!reopenable.includes(invite.status as string)) {
+  if (!reopenable.includes(invite.status)) {
     return { ok: false, error: 'That invite is still active.' };
   }
 
@@ -947,7 +955,7 @@ export async function updateEventDetails(
       .eq('status', 'accepted')
       .not('invitee_id', 'is', null);
     const recipients = (accepted ?? [])
-      .map((row) => row.invitee_id as string | null)
+      .map((row) => row.invitee_id)
       .filter((id): id is string => Boolean(id) && id !== user.id);
     if (recipients.length > 0) {
       const changed = whenChanged && whereChanged ? 'time and place' : whenChanged ? 'time' : 'place';
@@ -992,9 +1000,15 @@ export async function setEventVisibility(
   }
 
   const admin = createAdminClient();
+  const update =
+    field === 'show_invite_list'
+      ? { show_invite_list: enabled }
+      : field === 'show_accepted'
+        ? { show_accepted: enabled }
+        : { show_expired: enabled };
   const { error } = await admin
     .from('events')
-    .update({ [field]: enabled })
+    .update(update)
     .eq('id', eventId);
   if (error) {
     return reportAndFail('SB-PLAN-SAVE', 'event-visibility', error, { eventId });
@@ -1237,7 +1251,7 @@ export async function cancelEvent(
   const rows = accepted ?? [];
 
   const memberIds = rows
-    .map((r) => r.invitee_id as string | null)
+    .map((r) => r.invitee_id)
     .filter((id): id is string => Boolean(id));
   if (memberIds.length > 0) {
     await notifyUsers(memberIds, {
@@ -1250,7 +1264,7 @@ export async function cancelEvent(
 
   const guestContacts = rows
     .filter((r) => !r.invitee_id)
-    .map((r) => r.guest_contact as string | null)
+    .map((r) => r.guest_contact)
     .filter((c): c is string => Boolean(c));
   const reasonLine = cleanReason ? `\n\nReason: ${cleanReason}` : '';
   const guestEmails = guestContacts
@@ -1426,7 +1440,7 @@ async function cloneEventForReuse(
     console.error('Failed to start cascade for reused plan', cascadeError);
   }
 
-  return clone.id as string;
+  return clone.id;
 }
 
 /**
@@ -1461,7 +1475,7 @@ export async function scheduleNextOccurrence(eventId: string): Promise<never> {
   if (source.starts_at && source.recurrence && source.recurrence !== 'none') {
     const next = nextOccurrenceAfter(
       new Date(source.starts_at),
-      source.recurrence as RecurrenceKind,
+      normalizeRecurrenceKind(source.recurrence),
       normalizeCustomInterval(source.recurrence_interval_days),
       new Date(),
     );
@@ -1502,12 +1516,7 @@ async function notifyDateSettled(
     .from('events')
     .select('id, title, starts_at, time_zone')
     .eq('id', eventId)
-    .maybeSingle<{
-      id: string;
-      title: string;
-      starts_at: string | null;
-      time_zone: string | null;
-    }>();
+    .maybeSingle();
   if (!event) return;
 
   const { data: accepted } = await admin
@@ -1518,7 +1527,7 @@ async function notifyDateSettled(
     .not('invitee_id', 'is', null);
 
   const recipients = (accepted ?? [])
-    .map((row) => row.invitee_id as string | null)
+    .map((row) => row.invitee_id)
     .filter((id): id is string => Boolean(id));
   if (recipients.length === 0) return;
 

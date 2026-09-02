@@ -23,7 +23,7 @@ export async function resolveReport(
   const { error } = await supabase.rpc('resolve_report', {
     p_report: reportId,
     p_status: status,
-    p_note: note.trim() || null,
+    p_note: note.trim() || undefined,
   });
   if (error) return { ok: false, error: error.message };
   revalidatePath('/moderation');

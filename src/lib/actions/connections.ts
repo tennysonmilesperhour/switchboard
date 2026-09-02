@@ -46,21 +46,26 @@ export interface ContactMatch {
   smsTarget: string | null;
 }
 
-interface ResolvedProfile {
-  id: string;
-  display_name: string;
-  handle: string;
-  match_kind: ContactMatch['kind'];
-}
-
 async function resolveProfile(
   supabase: Awaited<ReturnType<typeof createClient>>,
   identifier: string,
-): Promise<ResolvedProfile | null> {
+) {
   const { data } = await supabase
     .rpc('resolve_profile_contact', { p_identifier: identifier })
-    .maybeSingle<ResolvedProfile>();
+    .maybeSingle();
   return data ?? null;
+}
+
+function contactMatchKind(value: string | undefined): ContactMatch['kind'] {
+  switch (value) {
+    case 'handle':
+    case 'email':
+    case 'account_email':
+    case 'phone':
+      return value;
+    default:
+      return 'phone';
+  }
 }
 
 async function connectionStatusFor(
@@ -263,7 +268,7 @@ export async function resolveContactMatches(
   const rows: ContactMatch[] = [];
   for (const contact of cleanedContacts) {
     const identifiers = [...contact.emails, ...contact.phones];
-    let resolved: ResolvedProfile | null = null;
+    let resolved: Awaited<ReturnType<typeof resolveProfile>> = null;
     let matchedIdentifier = identifiers[0] ?? '';
     for (const identifier of identifiers) {
       resolved = await resolveProfile(supabase, identifier);
@@ -284,7 +289,7 @@ export async function resolveContactMatches(
       key: contact.key,
       name: contact.name,
       identifier: matchedIdentifier || smsTarget || '',
-      kind: resolved?.match_kind ?? 'phone',
+      kind: contactMatchKind(resolved?.match_kind),
       profile: resolved
         ? {
             id: resolved.id,

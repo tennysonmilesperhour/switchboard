@@ -25,7 +25,7 @@ export default async function LegalUpdatePage({
     .from('profiles')
     .select('legal_terms_version')
     .eq('id', user.id)
-    .maybeSingle<{ legal_terms_version: string | null }>();
+    .maybeSingle();
   if (profile?.legal_terms_version === LEGAL_VERSION) redirect(destination);
 
   return (

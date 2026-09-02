@@ -92,7 +92,7 @@ export function LiveShare({
   const [sharing, setSharing] = useState(Boolean(mySharing));
   const [busy, setBusy] = useState(false);
   const [visibility, setVisibility] = useState<LocationVisibility>(
-    mySharing?.visibility ?? 'sharers',
+    mySharing?.visibility === 'connections' ? 'connections' : 'sharers',
   );
   const [radius, setRadius] = useState(RADIUS_CHOICES[1].meters);
   const [note, setNote] = useState(mySharing?.headline ?? '');

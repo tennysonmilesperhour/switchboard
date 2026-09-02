@@ -77,6 +77,7 @@ export async function getReconnectionSuggestions(
         .in('host_id', friendIds),
     ]);
     for (const row of sharedInvites ?? []) {
+      if (!row.invitee_id) continue;
       const event = Array.isArray(row.event) ? row.event[0] : row.event;
       const when = new Date(event?.starts_at ?? event?.created_at ?? 0).getTime();
       const prev = lastSeen.get(row.invitee_id) ?? 0;

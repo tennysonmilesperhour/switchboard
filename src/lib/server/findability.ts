@@ -16,10 +16,11 @@ export async function loadFindability(): Promise<FindabilityState> {
   const { data } = await supabase.from('profile_contacts').select('kind, verified_at');
 
   return findabilityState({
-    contacts: (data ?? []).map((row) => ({
-      kind: row.kind as 'email' | 'phone',
-      verified: Boolean(row.verified_at),
-    })),
+    contacts: (data ?? []).flatMap((row) =>
+      row.kind === 'email' || row.kind === 'phone'
+        ? [{ kind: row.kind, verified: Boolean(row.verified_at) }]
+        : [],
+    ),
     canDeliver: { email: emailEnabled(), phone: smsEnabled() },
   });
 }

@@ -123,7 +123,7 @@ export async function expressCuriosity(
     .from('moments')
     .select('user_id')
     .eq('id', otherMomentId)
-    .maybeSingle<{ user_id: string }>();
+    .maybeSingle();
 
   if (reverse && reverse.stage !== 'passed') {
     // Mutual curiosity → both sides may now see a gentle introduction.
