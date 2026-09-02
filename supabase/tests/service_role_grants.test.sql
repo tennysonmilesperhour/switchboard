@@ -28,7 +28,7 @@
 begin;
 
 -- One assertion per function, plus the two catch-alls below.
-select plan(17);
+select plan(18);
 
 select ok(
   has_function_privilege('service_role', 'public.is_event_host(uuid, uuid)', 'EXECUTE'),
@@ -86,6 +86,11 @@ select ok(
 );
 
 select ok(
+  has_function_privilege('service_role', 'public.sweep_retention(timestamptz)', 'EXECUTE'),
+  'service_role can execute sweep_retention (the retention cron)'
+);
+
+select ok(
   has_function_privilege('service_role', 'public.digest_items(uuid)', 'EXECUTE'),
   'service_role can execute digest_items (the notification sweep)'
 );
@@ -128,7 +133,7 @@ select is(
         'is_event_host', 'apply_cascade_updates', 'consume_rate_limit',
         'respond_to_guest_invite', 'rotate_event_share_token',
         'resolve_poll_children', 'try_claim_operator_sweep',
-        'finish_operator_sweep', 'operator_sweep_status'
+        'finish_operator_sweep', 'operator_sweep_status', 'sweep_retention'
       )
       and has_function_privilege('anon', p.oid, 'EXECUTE')),
   0,
