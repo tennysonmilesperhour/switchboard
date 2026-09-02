@@ -722,6 +722,7 @@ export function failure(code: ErrorCode, message?: string): Failure {
  * breaks the build.
  */
 const AREA_CODES: Record<string, ErrorCode> = {
+  'rate-limit': 'SB-RATE-LIMIT',
   // Deployment can't reach the database at all. These three are the ones that
   // used to render as "your invitation was withdrawn".
   'share-link.lookup': 'SB-CONFIG-DB',

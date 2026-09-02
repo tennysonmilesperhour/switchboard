@@ -44,9 +44,8 @@ select is(
   'a direct invite can be accepted'
 );
 select ok(
-  public.is_room_member(
-    '20000000-0000-0000-0000-000000000011',
-    '20000000-0000-0000-0000-000000000002'
+  public.is_current_user_room_member(
+    '20000000-0000-0000-0000-000000000011'
   ),
   'accepting a direct invite atomically joins its Living Room'
 );
@@ -60,10 +59,16 @@ select is(
   'accepted',
   'a claimed guest invite can be accepted'
 );
+
+set local role authenticated;
+select set_config(
+  'request.jwt.claims',
+  '{"sub":"20000000-0000-0000-0000-000000000003","role":"authenticated"}',
+  true
+);
 select ok(
-  public.is_room_member(
-    '20000000-0000-0000-0000-000000000012',
-    '20000000-0000-0000-0000-000000000003'
+  public.is_current_user_room_member(
+    '20000000-0000-0000-0000-000000000012'
   ),
   'accepting a claimed guest invite atomically joins its Living Room'
 );

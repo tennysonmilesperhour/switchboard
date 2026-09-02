@@ -130,29 +130,33 @@ also live in the proxy.
    rows (no profile row) or filtered by RLS bounced the reader between the two
    pages indefinitely while the form reported success each time. Now upserts and
    reads the version back — the same fix as finding 3, for the same reason.
+9. **The per-account sign-in limit was a remotely triggerable lockout.** The
+   hard boundary is now a forwarded-client-IP bucket (30 sign-ins per 10
+   minutes; sign-up is 12 per hour). Identifier buckets remain only as soft
+   abuse signals: after 20 sign-ins per 10 minutes or 10 sign-ups per hour they
+   add 750 ms of backoff but never reject the request. Auth limiter failures
+   fail closed and report `SB-RATE-LIMIT`, so losing limiter state cannot open an
+   unlimited credential path.
+10. **Editable profile email could select another account for recovery.** Reset
+    and confirmation resend now look up a real login address only in
+    `auth.users.email`. Username accounts may fall back to a verified email in
+    `profile_contacts`; `profiles.contact_email` is never a recovery authority.
+    Regression tests prove that changing that profile field cannot redirect
+    either flow.
 
 ### Open decisions — not changed here
 
 These need a product or security call rather than a unilateral fix.
 
-9. **The per-account sign-in limit is a remotely triggerable lockout.**
-   `checkRateLimit('signin:<identifier>', 8, 10min)` is keyed only on the
-   identifier and is consumed *before* credentials are checked. Anyone who knows
-   a user's email can burn all 8 every 10 minutes and keep them out
-   indefinitely. It also means a person fumbling their own password 8 times is
-   locked out — plausible for exactly the users this incident involved.
-   *Recommendation:* add a per-IP bucket as the primary brute-force defence and
-   loosen the per-account one. Raising the per-account limit alone trades one
-   risk for the other; the two buckets are what resolve it.
-10. **Username sign-in silently breaks without service-role credentials.**
+11. **Username sign-in silently breaks without service-role credentials.**
    `resolveIdentifierEmails` resolves a handle to its real login email via the
    admin client. Without it, it falls back to the synthetic
    `<handle>@users.switchboard.local`, which is wrong for anyone who signed up
    with an email — so their username stops working. Production has the
    credentials; a misconfigured deployment fails silently.
-11. **Username-only accounts have no recovery path** (see §2 above). Consider
+12. **Username-only accounts have no recovery path** (see §2 above). Consider
     prompting for a recovery email during onboarding.
-12. **`/auth/confirm` drops `next` when a link fails**, so an expired link taken
+13. **`/auth/confirm` drops `next` when a link fails**, so an expired link taken
     from a deep link loses the destination. Cosmetic next to the rest.
 
 ## Guards (keep them green)

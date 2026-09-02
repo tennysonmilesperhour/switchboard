@@ -30,6 +30,7 @@ import { LEGAL_VERSION } from '@/lib/legal';
 import { capture } from '@/lib/analytics/server';
 import { ANALYTICS_EVENTS } from '@/lib/analytics/events';
 import { safeNextPath } from '@/lib/security';
+import { guardAuthAttempt } from '@/lib/server/auth-rate-limit';
 
 export interface AuthActionResult {
   ok: boolean;
@@ -148,14 +149,14 @@ export async function signInWithPasswordIdentifier({
   }
 
   try {
-    const allowed = await checkRateLimit(`signin:${normalized}`, 8, SIGNIN_WINDOW_MINUTES * 60);
-    if (!allowed) {
+    const throttle = await guardAuthAttempt('signin', normalized);
+    if (!throttle.allowed) {
       // Carries the code so a screenshot of this is distinguishable from a
       // wrong password — they read almost identically to someone who is simply
       // being told "no" for the fourth time.
       return failure(
         'SB-RATE-LIMIT',
-        `Too many sign-in attempts for this account. Wait ${SIGNIN_WINDOW_MINUTES} minutes and try again.`,
+        `Too many sign-in attempts from this connection. Wait ${SIGNIN_WINDOW_MINUTES} minutes and try again.`,
       );
     }
 
@@ -233,8 +234,8 @@ export async function createPasswordAccount(
   }
 
   try {
-    const allowed = await checkRateLimit(`signup:${identifier}`, 4, 60 * 60);
-    if (!allowed) {
+    const throttle = await guardAuthAttempt('signup', identifier);
+    if (!throttle.allowed) {
       return failure('SB-RATE-LIMIT', 'Too many account attempts. Wait a while and try again.');
     }
 
@@ -425,19 +426,34 @@ export async function createPasswordAccount(
 }
 
 /**
- * Resolve the account a password-reset request refers to, using the service
- * role. An email identifier resolves to the account whose own login email is
- * that address — first via a verified contact row, then via the profile's
- * stored contact email so email sign-ups still resolve before they've confirmed
- * (their contact row exists but isn't marked verified yet). A username resolves
- * by handle. Returns null when nothing matches; the caller still answers
- * generically, so this never reveals whether an account exists.
+ * Find the auth account whose canonical login email exactly matches. Profiles
+ * are user-writable, so `profiles.contact_email` must never decide which auth
+ * account receives a confirmation or recovery token.
+ */
+async function authUserIdByEmail(
+  admin: ReturnType<typeof createAdminClient>,
+  email: string,
+): Promise<string | null> {
+  const { data, error } = await admin.rpc('auth_user_id_by_email', {
+    p_email: email,
+  });
+  if (error) throw error;
+  return typeof data === 'string' ? data : null;
+}
+
+/**
+ * Resolve a recovery request without trusting a self-writable profile email.
+ * Canonical auth email wins; a verified contact remains a valid recovery path
+ * for username accounts whose auth email is intentionally synthetic.
  */
 async function resolveResetUserId(
   admin: ReturnType<typeof createAdminClient>,
   normalized: string,
 ): Promise<string | null> {
   if (isEmailIdentifier(normalized)) {
+    const authUserId = await authUserIdByEmail(admin, normalized);
+    if (authUserId) return authUserId;
+
     const { data: verified } = await admin
       .from('profile_contacts')
       .select('user_id')
@@ -445,18 +461,7 @@ async function resolveResetUserId(
       .eq('normalized_value', normalized)
       .not('verified_at', 'is', null)
       .maybeSingle();
-    if (verified?.user_id) return verified.user_id;
-
-    // `contact_email` is stored normalized (lower-cased) for email sign-ups, so
-    // an exact match finds the account before its contact row is verified —
-    // without the wildcard pitfalls of `ilike` on an address that may contain
-    // `_`/`%`.
-    const { data: profile } = await admin
-      .from('profiles')
-      .select('id')
-      .eq('contact_email', normalized)
-      .maybeSingle();
-    return profile?.id ?? null;
+    return verified?.user_id ?? null;
   }
 
   if (!isValidUsername(normalized)) return null;
@@ -494,7 +499,12 @@ export async function resendEmailConfirmation(
   }
 
   try {
-    if (!(await checkRateLimit(`resend-confirm:${normalized}`, 3, 60 * 60))) {
+    if (!(await checkRateLimit(
+      `resend-confirm:${normalized}`,
+      3,
+      60 * 60,
+      { failClosed: true },
+    ))) {
       return generic;
     }
 
@@ -570,20 +580,20 @@ export async function requestPasswordReset(
   if (!normalized) return validation('Enter your email or username.');
 
   try {
-    if (!(await checkRateLimit(`reset:${normalized}`, 3, 60 * 60))) {
+    if (!(await checkRateLimit(
+      `reset:${normalized}`,
+      3,
+      60 * 60,
+      { failClosed: true },
+    ))) {
       return generic;
     }
 
-    // Without service-role access we can't mint our own recovery link, so lean
-    // on Supabase's built-in recovery email. Real deployments configure admin
-    // credentials + Resend and take the reliable, self-delivered path below.
+    // The durable limiter and the canonical auth-email resolver both require
+    // the service role. `checkRateLimit(..., { failClosed: true })` already
+    // refuses this state; keep the explicit guard so a future limiter refactor
+    // cannot accidentally bypass the recovery security boundary.
     if (!hasAdminCredentials()) {
-      if (isEmailIdentifier(normalized)) {
-        const supabase = await createClient();
-        await supabase.auth.resetPasswordForEmail(normalized, {
-          redirectTo: appUrl('/auth/callback?next=/reset-password'),
-        });
-      }
       return generic;
     }
 

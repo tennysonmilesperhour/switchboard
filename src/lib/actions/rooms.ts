@@ -11,6 +11,7 @@ import { extractItems } from '@/lib/ai/extract';
 import { isOwnPublicStorageUrl } from '@/lib/server/media';
 import { notifyRoomActivity } from '@/lib/server/notify';
 import { reportAndFail } from '@/lib/server/observability';
+import { checkRateLimit } from '@/lib/server/rate-limit';
 
 async function notifyRoom(roomId: string, senderId: string): Promise<void> {
   const admin = createAdminClient();
@@ -49,7 +50,8 @@ export async function sendMessage(
   // for a model call. Organization remains best-effort.
   after(async () => {
     try {
-      const items = await extractItems(trimmed);
+      const canExtract = await checkRateLimit(`ai:extract:${user.id}`, 60, 60 * 60);
+      const items = canExtract ? await extractItems(trimmed) : [];
       if (items.length > 0) {
         const admin = createAdminClient();
         await admin.from('room_items').insert(
