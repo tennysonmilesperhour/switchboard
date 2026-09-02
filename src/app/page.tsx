@@ -25,6 +25,7 @@ import {
 import { getReconnectionSuggestions } from '@/lib/server/radar';
 import { formatDateTime, formatRelative } from '@/lib/format';
 import { greetingFor } from '@/lib/greeting';
+import { resolveDefaultSignalCircle } from '@/lib/signal-audience';
 import type { SwitchboardEvent } from '@/lib/types';
 
 export default async function HomePage() {
@@ -48,6 +49,8 @@ export default async function HomePage() {
     { data: upcoming },
     { data: recentMatches },
     { count: friendCount },
+    { data: aroundAvailable },
+    { data: rememberedSignalCircle },
   ] = await Promise.all([
     supabase
       .from('availability_signals')
@@ -55,7 +58,12 @@ export default async function HomePage() {
       .eq('user_id', user.id)
       .gt('expires_at', nowIso)
       .order('created_at'),
-    supabase.from('circles').select('id, name, emoji').eq('owner_id', user.id),
+    supabase
+      .from('circles')
+      .select('id, name, emoji')
+      .eq('owner_id', user.id)
+      .order('created_at')
+      .order('id'),
     supabase
       .from('availability_signals')
       .select('id, emoji, label, expires_at, user_id, profile:profiles(display_name, handle)')
@@ -83,7 +91,15 @@ export default async function HomePage() {
       .select('id', { count: 'exact', head: true })
       .eq('status', 'accepted')
       .or(`requester_id.eq.${user.id},addressee_id.eq.${user.id}`),
+    supabase.rpc('home_around_available'),
+    supabase.rpc('my_signal_default_circle'),
   ]);
+
+  const hasConnections = (friendCount ?? 0) > 0;
+  const defaultSignalCircleId = resolveDefaultSignalCircle(
+    (circles ?? []).map((circle) => circle.id),
+    typeof rememberedSignalCircle === 'string' ? rememberedSignalCircle : null,
+  );
 
   // Innovations: matchmaker proposals, rituals, radar, energy prompts.
   const nowMs = new Date(nowIso).getTime();
@@ -167,7 +183,7 @@ export default async function HomePage() {
   // cards at once.
   const findableDone = findabilitySettled(await loadFindability());
   const gettingStartedDone =
-    (friendCount ?? 0) > 0 &&
+    hasConnections &&
     (upcoming?.length ?? 0) > 0 &&
     (mySignals?.length ?? 0) > 0 &&
     findableDone;
@@ -281,19 +297,33 @@ export default async function HomePage() {
           />
         ) : (
           <GettingStarted
-            friendDone={(friendCount ?? 0) > 0}
+            friendDone={hasConnections}
             planDone={(upcoming?.length ?? 0) > 0}
             signalDone={(mySignals?.length ?? 0) > 0}
             findableDone={findableDone}
           />
         )}
 
-        {/* The four equal product doors follow what needs attention now. */}
-        <PillarRow />
+        {/* The product doors follow what needs attention now. A new account
+            gets the three useful ones; Mutual and I'm free arrive with the
+            first connection, and Around only when the city has something
+            behind it (one boolean from the database, never a row). */}
+        <PillarRow
+          hasConnections={hasConnections}
+          showAround={aroundAvailable === true}
+        />
 
-        <div id="signals" className="scroll-mt-20">
-          <SignalBar active={mySignals ?? []} circles={circles ?? []} />
-        </div>
+        {/* Signals reach only people you know, so the composer waits for the
+            first connection rather than offering a broadcast to nobody. */}
+        {hasConnections && (
+          <div id="signals" className="scroll-mt-20">
+            <SignalBar
+              active={mySignals ?? []}
+              circles={circles ?? []}
+              defaultCircleId={defaultSignalCircleId}
+            />
+          </div>
+        )}
 
         {/* Matchmaker introductions */}
         {proposals.length > 0 && (
