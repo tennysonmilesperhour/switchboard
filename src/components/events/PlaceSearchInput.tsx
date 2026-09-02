@@ -188,7 +188,7 @@ export function PlaceSearchInput({
                   index === activeIndex ? 'bg-terracotta-soft' : 'hover:bg-cream'
                 }`}
               >
-                <Icon name="mapPin" size={16} className="mt-0.5 shrink-0 text-terracotta" />
+                <Icon name="mapPin" size={16} className="mt-0.5 shrink-0 text-terracotta-deep" />
                 <span className="min-w-0">
                   <span className="block truncate text-sm font-semibold text-ink">
                     {place.label}

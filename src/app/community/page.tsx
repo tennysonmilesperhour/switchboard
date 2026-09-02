@@ -38,7 +38,7 @@ export default async function CommunityPage() {
               action={
                 <Link
                   href="/boards"
-                  className="text-xs font-bold text-terracotta hover:underline"
+                  className="text-xs font-bold text-terracotta-deep hover:underline"
                 >
                   See all →
                 </Link>
@@ -83,7 +83,7 @@ export default async function CommunityPage() {
             <ul className="space-y-2.5 text-sm leading-relaxed text-ink-soft">
               {COMMUNITY_COVENANT_SUMMARY.map((item) => (
                 <li key={item} className="flex gap-3">
-                  <span aria-hidden className="font-bold text-terracotta">•</span>
+                  <span aria-hidden className="font-bold text-terracotta-deep">•</span>
                   <span>{item}</span>
                 </li>
               ))}
@@ -116,7 +116,7 @@ export default async function CommunityPage() {
           </Card>
         </section>
 
-        <div className="flex flex-wrap gap-4 text-sm font-bold text-terracotta">
+        <div className="flex flex-wrap gap-4 text-sm font-bold text-terracotta-deep">
           <Link href="/terms">Terms</Link>
           <Link href="/privacy">Privacy</Link>
           <Link href="/copyright">Copyright</Link>
@@ -129,7 +129,7 @@ export default async function CommunityPage() {
 function CommunityCovenantStandalone() {
   return (
     <main className="mx-auto max-w-2xl px-6 py-16 text-ink">
-      <p className="text-sm font-bold text-terracotta">Switchboard social contract</p>
+      <p className="text-sm font-bold text-terracotta-deep">Switchboard social contract</p>
       <h1 className="mt-2 text-4xl font-black">Community Covenant</h1>
       <p className="mt-4 leading-relaxed text-ink-soft">
         Switchboard exists to help people make and deepen real human connection.
@@ -139,7 +139,7 @@ function CommunityCovenantStandalone() {
         <ul className="space-y-3 leading-relaxed text-ink-soft">
           {COMMUNITY_COVENANT_SUMMARY.map((item) => (
             <li key={item} className="flex gap-3">
-              <span aria-hidden className="font-bold text-terracotta">•</span>
+              <span aria-hidden className="font-bold text-terracotta-deep">•</span>
               <span>{item}</span>
             </li>
           ))}
@@ -169,7 +169,7 @@ function CommunityCovenantStandalone() {
           live location.
         </p>
       </section>
-      <div className="mt-10 flex flex-wrap gap-4 text-sm font-bold text-terracotta">
+      <div className="mt-10 flex flex-wrap gap-4 text-sm font-bold text-terracotta-deep">
         <Link href="/terms">Terms</Link>
         <Link href="/privacy">Privacy</Link>
         <Link href="/copyright">Copyright</Link>

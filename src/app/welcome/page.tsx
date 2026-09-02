@@ -65,15 +65,18 @@ export default async function WelcomePage({
   // links so they land back on it once signed in. Validated to a same-site path.
   const nextPath = safeNextPath(next, '');
   const loginHref = nextPath ? `/login?next=${encodeURIComponent(nextPath)}` : '/login';
+  const createHref = nextPath
+    ? `/login?mode=create&next=${encodeURIComponent(nextPath)}`
+    : '/login?mode=create';
   return (
     <div className="mx-auto max-w-lg min-h-dvh flex flex-col px-6">
       <header className="flex items-center justify-between py-6">
-        <span className="text-xl font-extrabold lowercase tracking-tight text-terracotta">
+        <span className="text-xl font-extrabold lowercase tracking-tight text-terracotta-deep">
           switchboard
         </span>
         <Link
           href={loginHref}
-          className="inline-flex min-h-11 items-center text-sm font-bold text-ink hover:text-terracotta"
+          className="inline-flex min-h-11 items-center text-sm font-bold text-ink hover:text-terracotta-deep"
         >
           Sign in
         </Link>
@@ -108,14 +111,14 @@ export default async function WelcomePage({
         </p>
         <div className="mt-8 flex flex-col gap-3">
           <Link
-            href={loginHref}
+            href={createHref}
             className="inline-flex items-center justify-center rounded-btn bg-brand-gradient px-7 py-4 text-white font-bold shadow-lift hover:brightness-105 transition"
           >
             Create account
           </Link>
           <Link
             href={loginHref}
-            className="inline-flex items-center justify-center rounded-btn border border-line bg-card px-7 py-4 font-bold text-ink hover:border-terracotta hover:text-terracotta transition"
+            className="inline-flex items-center justify-center rounded-btn border border-line bg-card px-7 py-4 font-bold text-ink hover:border-terracotta hover:text-terracotta-deep transition"
           >
             Sign in
           </Link>
@@ -153,7 +156,7 @@ export default async function WelcomePage({
           to find one another.
         </p>
         <Link
-          href={loginHref}
+          href={createHref}
           className="mt-8 inline-flex items-center rounded-btn bg-ink px-7 py-4 text-paper font-bold hover:opacity-90 transition-opacity"
         >
           Join Switchboard

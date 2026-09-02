@@ -133,7 +133,7 @@ export function GettingStarted({
           who'd rather see what's here than be shown it a piece at a time. */}
       <Link
         href="/features"
-        className="mt-3 inline-flex min-h-11 items-center text-sm font-bold text-terracotta"
+        className="mt-3 inline-flex min-h-11 items-center text-sm font-bold text-terracotta-deep"
       >
         See everything Switchboard does →
       </Link>

@@ -141,7 +141,7 @@ export function TimeSelect({
                   className={`rounded-pill px-2.5 py-2 text-xs font-bold tracking-wide outline-none transition-colors focus-visible:ring-2 focus-visible:ring-terracotta ${
                     selected
                       ? 'bg-terracotta text-white shadow-lift'
-                      : 'text-ink-soft hover:text-terracotta'
+                      : 'text-ink-soft hover:text-terracotta-deep'
                   }`}
                 >
                   {meridiem}

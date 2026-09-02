@@ -57,7 +57,7 @@ export function HostSuggestions({
         <button
           type="button"
           onClick={turnOn}
-          className="font-semibold text-terracotta underline underline-offset-2 hover:text-terracotta-deep"
+          className="font-semibold text-terracotta-deep underline underline-offset-2 hover:text-terracotta-deep"
         >
           Turn them back on
         </button>
@@ -77,7 +77,7 @@ export function HostSuggestions({
     >
       <div className="flex items-center justify-between gap-3">
         <p className="flex items-center gap-1.5 text-sm font-extrabold text-ink">
-          <Icon name="sparkle" size={16} className="text-terracotta" />
+          <Icon name="sparkle" size={16} className="text-terracotta-deep" />
           A couple of thoughts
         </p>
         <button

@@ -77,7 +77,7 @@ export function InstallPrompt() {
     >
       <div className="pointer-events-auto flex items-center gap-3 rounded-pill bg-ink text-paper px-4 py-2.5 shadow-lift animate-rise">
         <span className="flex items-center gap-2 text-sm font-medium">
-          <Icon name="sparkle" size={16} className="text-terracotta" />
+          <Icon name="sparkle" size={16} className="text-terracotta-deep" />
           Add Switchboard to your home screen
         </span>
         <button

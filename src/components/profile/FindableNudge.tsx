@@ -68,7 +68,7 @@ export function FindableNudge({ state }: { state: FindabilityState }) {
       </p>
       <Link
         href={verifying ? '/settings' : '/profile/edit'}
-        className="mt-3 inline-flex min-h-11 items-center text-sm font-bold text-terracotta"
+        className="mt-3 inline-flex min-h-11 items-center text-sm font-bold text-terracotta-deep"
       >
         {verifying ? `Verify your ${detail} →` : 'Add an email or phone →'}
       </Link>

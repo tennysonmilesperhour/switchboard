@@ -38,7 +38,7 @@ export function AppShell({ title, back, action, children }: AppShellProps) {
         ) : (
           <Link
             href="/"
-            className="flex-1 text-2xl font-extrabold lowercase tracking-tight text-terracotta"
+            className="flex-1 text-2xl font-extrabold lowercase tracking-tight text-terracotta-deep"
           >
             switchboard
           </Link>

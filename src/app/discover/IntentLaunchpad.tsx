@@ -41,7 +41,7 @@ export function IntentLaunchpad() {
                     <span className="block font-bold">{intent.title}</span>
                     <span className="block text-xs text-ink-faint">{intent.subtitle}</span>
                   </span>
-                  <span className="text-sm font-bold text-terracotta whitespace-nowrap">→</span>
+                  <span className="text-sm font-bold text-terracotta-deep whitespace-nowrap">→</span>
                 </div>
               </Card>
             </Link>
@@ -64,7 +64,7 @@ export function IntentLaunchpad() {
                     <span className="block font-bold">{intent.title}</span>
                     <span className="block text-xs text-ink-faint">{intent.subtitle}</span>
                   </span>
-                  <span className="text-sm font-bold text-terracotta whitespace-nowrap">↓</span>
+                  <span className="text-sm font-bold text-terracotta-deep whitespace-nowrap">↓</span>
                 </div>
               </Card>
             </button>

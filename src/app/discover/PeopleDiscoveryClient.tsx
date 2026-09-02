@@ -114,7 +114,7 @@ export function PeopleDiscoveryClient({
         title="People discovery"
         hint="Opt-in, context-specific, and private until both people choose each other"
         action={
-          <Link href="/settings" className="text-sm font-bold text-terracotta hover:text-terracotta-deep">
+          <Link href="/settings" className="text-sm font-bold text-terracotta-deep hover:text-terracotta-deep">
             Settings
           </Link>
         }
@@ -130,7 +130,7 @@ export function PeopleDiscoveryClient({
                 Add friends directly by handle, email, phone, or contacts.
               </span>
             </span>
-            <span className="text-sm font-bold text-terracotta whitespace-nowrap">Add →</span>
+            <span className="text-sm font-bold text-terracotta-deep whitespace-nowrap">Add →</span>
           </div>
         </Card>
       </Link>
@@ -140,7 +140,7 @@ export function PeopleDiscoveryClient({
           Marking interest means you are open to connecting for the selected
           context. Nothing is sent unless it is mutual. If it matches, show up
           for that context with curiosity, kindness, and generous assumptions.
-          <Link href="/community" className="ml-1 font-bold text-terracotta">
+          <Link href="/community" className="ml-1 font-bold text-terracotta-deep">
             Read the covenant.
           </Link>
         </p>
@@ -171,7 +171,7 @@ export function PeopleDiscoveryClient({
           </div>
           <p className="mt-2 text-xs text-ink-faint">
             Fine-tune what people see - location, interests, mutual friends - anytime in{' '}
-            <Link href="/settings" className="font-bold text-terracotta">
+            <Link href="/settings" className="font-bold text-terracotta-deep">
               Settings
             </Link>
             .

@@ -47,7 +47,7 @@ export function RsvpSignInGate({
         </Link>
         <Link
           href={`/login?next=${encodedNext}`}
-          className="inline-flex flex-1 items-center justify-center rounded-btn border border-line bg-card px-5 py-3 font-bold text-ink transition hover:border-terracotta hover:text-terracotta"
+          className="inline-flex flex-1 items-center justify-center rounded-btn border border-line bg-card px-5 py-3 font-bold text-ink transition hover:border-terracotta hover:text-terracotta-deep"
         >
           Sign in
         </Link>

@@ -862,7 +862,7 @@ export function EventWizard({
 
       <header key={step} className="animate-rise">
         <div className="flex items-center gap-3">
-          <p className="text-xs font-bold uppercase tracking-[0.16em] text-terracotta">
+          <p className="text-xs font-bold uppercase tracking-[0.16em] text-terracotta-deep">
             Step {step + 1} of {STEPS.length}
           </p>
           {step > 0 && (
@@ -872,7 +872,7 @@ export function EventWizard({
             <button
               type="button"
               onClick={() => goToStep(previousStep(step))}
-              className="inline-flex items-center gap-1 rounded-pill text-xs font-bold text-ink-soft outline-none transition-colors hover:text-terracotta focus-visible:ring-2 focus-visible:ring-terracotta"
+              className="inline-flex items-center gap-1 rounded-pill text-xs font-bold text-ink-soft outline-none transition-colors hover:text-terracotta-deep focus-visible:ring-2 focus-visible:ring-terracotta"
             >
               <svg
                 viewBox="0 0 24 24"
@@ -1188,7 +1188,7 @@ export function EventWizard({
                               options: [...question.options, ''],
                             })
                           }
-                          className="pl-6 text-xs font-semibold text-terracotta hover:text-terracotta-deep"
+                          className="pl-6 text-xs font-semibold text-terracotta-deep hover:text-terracotta-deep"
                         >
                           + Add option
                         </button>
@@ -1455,7 +1455,7 @@ export function EventWizard({
                 <span className="flex-1 text-left text-sm font-bold text-ink">
                   Friends · {friends.length}
                   {selectedFriendCount > 0 && (
-                    <span className="text-terracotta"> · {selectedFriendCount} selected</span>
+                    <span className="text-terracotta-deep"> · {selectedFriendCount} selected</span>
                   )}
                 </span>
                 <Icon
@@ -1683,7 +1683,7 @@ export function EventWizard({
                   <button
                     type="button"
                     onClick={() => setWindowForEveryone(suggested.windowMinutes)}
-                    className="rounded-pill border border-line px-3 py-1.5 text-sm font-semibold text-terracotta transition-colors hover:border-terracotta"
+                    className="rounded-pill border border-line px-3 py-1.5 text-sm font-semibold text-terracotta-deep transition-colors hover:border-terracotta"
                   >
                     Use suggested ({suggested.label})
                   </button>
@@ -1963,7 +1963,7 @@ export function EventWizard({
                       key={entry.id}
                       className="flex items-center gap-3 text-sm rounded-card bg-cream px-3.5 py-2.5"
                     >
-                      <span className="text-terracotta" aria-hidden>→</span>
+                      <span className="text-terracotta-deep" aria-hidden>→</span>
                       <span className="font-bold flex-1">{invitee?.name}</span>
                       <span className="text-ink-faint text-xs">
                         {new Intl.DateTimeFormat('en-US', {
