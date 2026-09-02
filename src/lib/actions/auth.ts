@@ -2,7 +2,7 @@
 
 import type { ErrorCode } from '@/lib/errors';
 
-import { failure } from '@/lib/errors';
+import { failure, validation } from '@/lib/errors';
 import { reportAndFail } from '@/lib/server/observability';
 
 import { createAdminClient, hasAdminCredentials } from '@/lib/supabase/admin';
@@ -28,6 +28,7 @@ import { LEGAL_VERSION } from '@/lib/legal';
 import { capture } from '@/lib/analytics/server';
 import { ANALYTICS_EVENTS } from '@/lib/analytics/events';
 import { safeNextPath } from '@/lib/security';
+import { guardAuthAttempt } from '@/lib/server/auth-rate-limit';
 
 export interface AuthActionResult {
   ok: boolean;
@@ -53,10 +54,6 @@ export interface AuthActionResult {
 
 /** How long the per-account sign-in bucket takes to refill, in minutes. */
 const SIGNIN_WINDOW_MINUTES = 10;
-
-function authError(message: string): AuthActionResult {
-  return { ok: false, error: message };
-}
 
 /**
  * Why Supabase refused a sign-in whose password may well have been right.
@@ -143,21 +140,21 @@ export async function signInWithPasswordIdentifier({
 }): Promise<AuthActionResult> {
   const normalized = normalizeIdentifier(identifier);
   if (!normalized || password.length === 0) {
-    return authError('Enter your email or username and password.');
+    return validation('Enter your email or username and password.');
   }
   if (!isEmailIdentifier(normalized) && !isValidUsername(normalized)) {
-    return authError('That email, username, or password did not work.');
+    return validation('That email, username, or password did not work.');
   }
 
   try {
-    const allowed = await checkRateLimit(`signin:${normalized}`, 8, SIGNIN_WINDOW_MINUTES * 60);
-    if (!allowed) {
+    const throttle = await guardAuthAttempt('signin', normalized);
+    if (!throttle.allowed) {
       // Carries the code so a screenshot of this is distinguishable from a
       // wrong password — they read almost identically to someone who is simply
       // being told "no" for the fourth time.
       return failure(
         'SB-RATE-LIMIT',
-        `Too many sign-in attempts for this account. Wait ${SIGNIN_WINDOW_MINUTES} minutes and try again.`,
+        `Too many sign-in attempts from this connection. Wait ${SIGNIN_WINDOW_MINUTES} minutes and try again.`,
       );
     }
 
@@ -197,10 +194,13 @@ export async function signInWithPasswordIdentifier({
     console.info(
       JSON.stringify({ level: 'info', area: 'auth.signin', outcome: 'rejected', reason: lastReason }),
     );
-    return authError('That email, username, or password did not work.');
+    return validation('That email, username, or password did not work.');
   } catch (error) {
     console.error('[auth:signin:error]', error);
-    return authError('Sign-in is temporarily unavailable. Please try again in a moment.');
+    return failure(
+      'SB-AUTH-SIGNIN',
+      'Sign-in is temporarily unavailable. Please try again in a moment.',
+    );
   }
 }
 
@@ -216,31 +216,34 @@ export async function createPasswordAccount(
   const acceptedTerms = formData.get('terms_agreement') === 'on';
   const acceptedCovenant = formData.get('community_agreement') === 'on';
 
-  if (!displayName) return authError('Add your name.');
+  if (!displayName) return validation('Add your name.');
   if (!isEmailIdentifier(identifier) && !isValidUsername(identifier)) {
-    return authError('Use a valid email or a username with 3-24 letters, numbers, or underscores.');
+    return validation('Use a valid email or a username with 3-24 letters, numbers, or underscores.');
   }
   if (password.length < PASSWORD_MIN_LENGTH) {
-    return authError(`Password must be at least ${PASSWORD_MIN_LENGTH} characters.`);
+    return validation(`Password must be at least ${PASSWORD_MIN_LENGTH} characters.`);
   }
   if (!acceptedTerms || !acceptedCovenant) {
-    return authError('Please acknowledge the Terms, Privacy Notice, and Community Covenant.');
+    return validation('Please acknowledge the Terms, Privacy Notice, and Community Covenant.');
   }
 
   if (!hasAdminCredentials()) {
-    return authError('Account creation is not configured on this server yet.');
+    return failure('SB-CONFIG-AUTH', 'Account creation is not configured on this server yet.');
   }
 
   try {
-    const allowed = await checkRateLimit(`signup:${identifier}`, 4, 60 * 60);
-    if (!allowed) {
-      return authError('Too many account attempts. Wait a while and try again.');
+    const throttle = await guardAuthAttempt('signup', identifier);
+    if (!throttle.allowed) {
+      return failure('SB-RATE-LIMIT', 'Too many account attempts. Wait a while and try again.');
     }
 
     const admin = createAdminClient();
     const usesRealEmail = isEmailIdentifier(identifier);
     if (usesRealEmail && !emailEnabled()) {
-      return authError('Email account creation is not configured on this server yet.');
+      return failure(
+        'SB-CONFIG-EMAIL',
+        'Email account creation is not configured on this server yet.',
+      );
     }
     const email = usesRealEmail
       ? identifier
@@ -249,7 +252,9 @@ export async function createPasswordAccount(
       ? await uniqueHandle(emailToHandleCandidate(identifier))
       : normalizeUsername(identifier);
 
-    if (!username) return authError('Could not create a unique username for that email.');
+    if (!username) {
+      return failure('SB-AUTH-SIGNUP', 'Could not create a unique username for that email.');
+    }
 
     const { data: existingProfile } = await admin
       .from('profiles')
@@ -257,7 +262,7 @@ export async function createPasswordAccount(
       .eq('handle', username)
       .maybeSingle();
 
-    if (existingProfile) return authError('That username is already taken.');
+    if (existingProfile) return validation('That username is already taken.');
 
     const userMetadata = {
       full_name: displayName.slice(0, 80),
@@ -298,12 +303,12 @@ export async function createPasswordAccount(
 
     if (createError) {
       if (/already|registered|exists/i.test(createError.message)) {
-        return authError('That email or username is already taken.');
+        return validation('That email or username is already taken.');
       }
-      return authError(createError.message);
+      return failure('SB-AUTH-SIGNUP', createError.message);
     }
 
-    if (!userId) return authError('Could not create that account.');
+    if (!userId) return failure('SB-AUTH-SIGNUP', 'Could not create that account.');
 
     // Essential profile fields. Upsert (not update) so signup still succeeds
     // when the `handle_new_user` trigger has not been applied to the project
@@ -326,9 +331,9 @@ export async function createPasswordAccount(
     if (profileError) {
       await admin.auth.admin.deleteUser(userId);
       if (profileError.code === '23505') {
-        return authError('That username is already taken.');
+        return validation('That username is already taken.');
       }
-      return authError('Could not finish creating your profile.');
+      return failure('SB-AUTH-SIGNUP', 'Could not finish creating your profile.');
     }
 
     // The profile trigger mirrors this into profile_contacts as unverified;
@@ -340,14 +345,20 @@ export async function createPasswordAccount(
         .eq('id', userId);
       if (contactError) {
         await admin.auth.admin.deleteUser(userId);
-        return authError('Could not attach that email to the new account. No account was created.');
+        return failure(
+          'SB-AUTH-SIGNUP',
+          'Could not attach that email to the new account. No account was created.',
+        );
       }
     }
 
     if (usesRealEmail) {
       if (!confirmationUrl) {
         await admin.auth.admin.deleteUser(userId);
-        return authError('Could not create a verification link for that email.');
+        return failure(
+          'SB-AUTH-SIGNUP',
+          'Could not create a verification link for that email.',
+        );
       }
       const delivery = await sendEmailWithResult({
         to: email,
@@ -358,7 +369,10 @@ export async function createPasswordAccount(
       });
       if (delivery.status !== 'sent') {
         await admin.auth.admin.deleteUser(userId);
-        return authError('The confirmation email could not be sent. No account was created.');
+        return failure(
+          'SB-AUTH-SIGNUP',
+          'The confirmation email could not be sent. No account was created.',
+        );
       }
     }
 
@@ -402,24 +416,42 @@ export async function createPasswordAccount(
     };
   } catch (error) {
     console.error('[auth:signup:error]', error);
-    return authError('Account creation is temporarily unavailable. Please try again.');
+    return failure(
+      'SB-AUTH-SIGNUP',
+      'Account creation is temporarily unavailable. Please try again.',
+    );
   }
 }
 
 /**
- * Resolve the account a password-reset request refers to, using the service
- * role. An email identifier resolves to the account whose own login email is
- * that address — first via a verified contact row, then via the profile's
- * stored contact email so email sign-ups still resolve before they've confirmed
- * (their contact row exists but isn't marked verified yet). A username resolves
- * by handle. Returns null when nothing matches; the caller still answers
- * generically, so this never reveals whether an account exists.
+ * Find the auth account whose canonical login email exactly matches. Profiles
+ * are user-writable, so `profiles.contact_email` must never decide which auth
+ * account receives a confirmation or recovery token.
+ */
+async function authUserIdByEmail(
+  admin: ReturnType<typeof createAdminClient>,
+  email: string,
+): Promise<string | null> {
+  const { data, error } = await admin.rpc('auth_user_id_by_email', {
+    p_email: email,
+  });
+  if (error) throw error;
+  return typeof data === 'string' ? data : null;
+}
+
+/**
+ * Resolve a recovery request without trusting a self-writable profile email.
+ * Canonical auth email wins; a verified contact remains a valid recovery path
+ * for username accounts whose auth email is intentionally synthetic.
  */
 async function resolveResetUserId(
   admin: ReturnType<typeof createAdminClient>,
   normalized: string,
 ): Promise<string | null> {
   if (isEmailIdentifier(normalized)) {
+    const authUserId = await authUserIdByEmail(admin, normalized);
+    if (authUserId) return authUserId;
+
     const { data: verified } = await admin
       .from('profile_contacts')
       .select('user_id')
@@ -427,18 +459,7 @@ async function resolveResetUserId(
       .eq('normalized_value', normalized)
       .not('verified_at', 'is', null)
       .maybeSingle();
-    if (verified?.user_id) return verified.user_id;
-
-    // `contact_email` is stored normalized (lower-cased) for email sign-ups, so
-    // an exact match finds the account before its contact row is verified —
-    // without the wildcard pitfalls of `ilike` on an address that may contain
-    // `_`/`%`.
-    const { data: profile } = await admin
-      .from('profiles')
-      .select('id')
-      .eq('contact_email', normalized)
-      .maybeSingle();
-    return profile?.id ?? null;
+    return verified?.user_id ?? null;
   }
 
   if (!isValidUsername(normalized)) return null;
@@ -469,14 +490,19 @@ export async function resendEmailConfirmation(
   const normalized = normalizeIdentifier(identifier);
   const generic: AuthActionResult = { ok: true, identifier: normalized };
   if (!isEmailIdentifier(normalized)) {
-    return authError('Enter the email address you signed up with.');
+    return validation('Enter the email address you signed up with.');
   }
   if (!hasAdminCredentials() || !emailEnabled()) {
     return failure('SB-CONFIG-EMAIL');
   }
 
   try {
-    if (!(await checkRateLimit(`resend-confirm:${normalized}`, 3, 60 * 60))) {
+    if (!(await checkRateLimit(
+      `resend-confirm:${normalized}`,
+      3,
+      60 * 60,
+      { failClosed: true },
+    ))) {
       return generic;
     }
 
@@ -549,23 +575,23 @@ export async function requestPasswordReset(
 ): Promise<AuthActionResult> {
   const normalized = normalizeIdentifier(identifier);
   const generic: AuthActionResult = { ok: true, identifier: normalized };
-  if (!normalized) return authError('Enter your email or username.');
+  if (!normalized) return validation('Enter your email or username.');
 
   try {
-    if (!(await checkRateLimit(`reset:${normalized}`, 3, 60 * 60))) {
+    if (!(await checkRateLimit(
+      `reset:${normalized}`,
+      3,
+      60 * 60,
+      { failClosed: true },
+    ))) {
       return generic;
     }
 
-    // Without service-role access we can't mint our own recovery link, so lean
-    // on Supabase's built-in recovery email. Real deployments configure admin
-    // credentials + Resend and take the reliable, self-delivered path below.
+    // The durable limiter and the canonical auth-email resolver both require
+    // the service role. `checkRateLimit(..., { failClosed: true })` already
+    // refuses this state; keep the explicit guard so a future limiter refactor
+    // cannot accidentally bypass the recovery security boundary.
     if (!hasAdminCredentials()) {
-      if (isEmailIdentifier(normalized)) {
-        const supabase = await createClient();
-        await supabase.auth.resetPasswordForEmail(normalized, {
-          redirectTo: appUrl('/auth/callback?next=/reset-password'),
-        });
-      }
       return generic;
     }
 
@@ -653,15 +679,20 @@ export async function requestPasswordReset(
 
 export async function updatePassword(password: string): Promise<AuthActionResult> {
   if (password.length < PASSWORD_MIN_LENGTH) {
-    return authError(`Password must be at least ${PASSWORD_MIN_LENGTH} characters.`);
+    return validation(`Password must be at least ${PASSWORD_MIN_LENGTH} characters.`);
   }
   try {
     const supabase = await createClient();
     const { error } = await supabase.auth.updateUser({ password });
-    if (error) return authError('Could not update your password. Request a fresh reset link.');
+    if (error) {
+      return failure(
+        'SB-AUTH-RESET',
+        'Could not update your password. Request a fresh reset link.',
+      );
+    }
     return { ok: true };
   } catch (error) {
     console.error('[auth:password-update:error]', error);
-    return authError('Could not update your password right now.');
+    return failure('SB-AUTH-RESET', 'Could not update your password right now.');
   }
 }

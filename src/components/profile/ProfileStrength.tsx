@@ -124,7 +124,7 @@ export function ProfileStrength({ input }: { input: ProfileStrengthInput }) {
           <button
             type="button"
             onClick={() => setExpanded((v) => !v)}
-            className="mt-3 text-xs font-bold text-terracotta hover:text-terracotta-deep"
+            className="mt-3 text-xs font-bold text-terracotta-deep hover:text-terracotta-deep"
           >
             {expanded
               ? 'Show fewer'

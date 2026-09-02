@@ -40,7 +40,7 @@ export default async function OnboardingPage({
 
   return (
     <div className="mx-auto max-w-lg min-h-dvh px-6 py-8">
-      <p className="text-sm font-bold tracking-wide uppercase text-terracotta">
+      <p className="text-sm font-bold tracking-wide uppercase text-terracotta-deep">
         Welcome to Switchboard
       </p>
       <h1 className="text-4xl font-black tracking-tight text-ink mt-2">

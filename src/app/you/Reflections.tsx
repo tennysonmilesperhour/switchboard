@@ -68,9 +68,9 @@ export function Reflections({
             >
               <span className="flex items-center gap-1.5 text-sm font-bold text-ink">
                 {busyKind === k.key ? (
-                  <Icon name="sparkle" size={14} className="animate-pulse text-terracotta" />
+                  <Icon name="sparkle" size={14} className="animate-pulse text-terracotta-deep" />
                 ) : (
-                  <Icon name="sparkle" size={14} className="text-terracotta" />
+                  <Icon name="sparkle" size={14} className="text-terracotta-deep" />
                 )}
                 {k.label}
               </span>

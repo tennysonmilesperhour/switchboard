@@ -1,16 +1,33 @@
-import { afterEach, describe, expect, test, vi } from 'vitest';
-import { sendSmsWithResult, guestInviteSmsText } from './sms';
+import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
+
+const optOutStatus = vi.hoisted(() => vi.fn());
+
+vi.mock('@/lib/server/sms-opt-out', () => ({
+  smsOptOutStatus: optOutStatus,
+}));
+
+import {
+  sendSmsWithResult,
+  guestInviteSmsText,
+  PROVIDER_TIMEOUT_MS,
+} from './sms';
 
 // These asserted against Plivo until #94 moved delivery back to Twilio, so the
 // suite has been red ever since — which is its own problem: a permanently
 // failing test is a test nobody reads, on the exact path that kept shipping
 // broken invite links.
 afterEach(() => {
+  vi.restoreAllMocks();
   vi.unstubAllGlobals();
   vi.unstubAllEnvs();
   delete process.env.TWILIO_ACCOUNT_SID;
   delete process.env.TWILIO_AUTH_TOKEN;
   delete process.env.TWILIO_FROM_NUMBER;
+});
+
+beforeEach(() => {
+  optOutStatus.mockReset();
+  optOutStatus.mockResolvedValue('allowed');
 });
 
 describe('sendSmsWithResult', () => {
@@ -69,6 +86,60 @@ describe('sendSmsWithResult', () => {
       provider: 'twilio',
       errorCode: 'provider_error',
     });
+  });
+
+  test('aborts a stalled provider at the configured timeout', async () => {
+    process.env.TWILIO_ACCOUNT_SID = 'ACtest';
+    process.env.TWILIO_AUTH_TOKEN = 'test-auth-token';
+    process.env.TWILIO_FROM_NUMBER = '+15555550199';
+    const controller = new AbortController();
+    const timeout = vi
+      .spyOn(AbortSignal, 'timeout')
+      .mockReturnValue(controller.signal);
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((_url: string | URL | Request, init?: RequestInit) =>
+        new Promise<Response>((_resolve, reject) => {
+          init?.signal?.addEventListener(
+            'abort',
+            () => reject(init?.signal?.reason),
+            { once: true },
+          );
+        }),
+      ),
+    );
+
+    const delivery = sendSmsWithResult({
+      to: '+1 555 555 0100',
+      body: 'Hello',
+    });
+    await vi.waitFor(() => {
+      expect(timeout).toHaveBeenCalledWith(PROVIDER_TIMEOUT_MS);
+    });
+    controller.abort(new DOMException('timed out', 'TimeoutError'));
+
+    await expect(delivery).resolves.toEqual({
+      status: 'failed',
+      provider: 'twilio',
+      errorCode: 'timeout',
+    });
+  });
+
+  test('refuses an opted-out recipient without calling Twilio', async () => {
+    process.env.TWILIO_ACCOUNT_SID = 'ACtest';
+    process.env.TWILIO_AUTH_TOKEN = 'test-auth-token';
+    process.env.TWILIO_FROM_NUMBER = '+15555550199';
+    optOutStatus.mockResolvedValue('opted_out');
+    const provider = vi.fn();
+    vi.stubGlobal('fetch', provider);
+
+    await expect(sendSmsWithResult({ to: '+1 555 555 0100', body: 'Hello' })).resolves.toEqual({
+      status: 'opted_out',
+      provider: 'twilio',
+    });
+    expect(optOutStatus).toHaveBeenCalledWith('+15555550100');
+    expect(provider).not.toHaveBeenCalled();
   });
 });
 

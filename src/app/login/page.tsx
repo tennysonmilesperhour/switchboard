@@ -37,7 +37,7 @@ export default async function LoginPage({
       <header className="py-6">
         <Link
           href="/welcome"
-          className="text-xl font-extrabold lowercase tracking-tight text-terracotta"
+          className="text-xl font-extrabold lowercase tracking-tight text-terracotta-deep"
         >
           switchboard
         </Link>

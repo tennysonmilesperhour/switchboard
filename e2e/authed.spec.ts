@@ -291,6 +291,57 @@ test.describe('authenticated surface', () => {
     expect(parsed).toHaveProperty('signals');
   });
 
+  test('turning on an availability signal never asks for location', async ({ page }) => {
+    await page.addInitScript(() => {
+      const calls = { geolocation: 0, permissions: 0 };
+      Object.defineProperty(window, '__signalLocationCalls', {
+        configurable: true,
+        value: calls,
+      });
+      Object.defineProperty(navigator.geolocation, 'getCurrentPosition', {
+        configurable: true,
+        value: () => {
+          calls.geolocation += 1;
+        },
+      });
+      Object.defineProperty(navigator.permissions, 'query', {
+        configurable: true,
+        value: async () => {
+          calls.permissions += 1;
+          return { state: 'prompt' };
+        },
+      });
+    });
+
+    await login(page, 'e2ehost');
+    await page.goto('/');
+    const signal = page.getByRole('button', { name: /Down to Hang/ });
+    await expect(signal).toBeVisible();
+
+    // Make the final tap an on-tap even when a prior local run left this
+    // fixture's signal active.
+    if ((await signal.getAttribute('aria-pressed')) === 'true') {
+      await signal.click();
+      await expect(signal).toHaveAttribute('aria-pressed', 'false');
+    }
+    await page.evaluate(() => {
+      const calls = (window as typeof window & {
+        __signalLocationCalls: { geolocation: number; permissions: number };
+      }).__signalLocationCalls;
+      calls.geolocation = 0;
+      calls.permissions = 0;
+    });
+
+    await signal.click();
+
+    const calls = await page.evaluate(
+      () => (window as typeof window & {
+        __signalLocationCalls: { geolocation: number; permissions: number };
+      }).__signalLocationCalls,
+    );
+    expect(calls).toEqual({ geolocation: 0, permissions: 0 });
+  });
+
   test('the feature index is reachable, searchable, and its links work', async ({
     page,
   }) => {

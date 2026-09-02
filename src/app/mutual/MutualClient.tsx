@@ -220,7 +220,15 @@ export function MutualClient({
           <EmptyState
             emoji="☺"
             title="No connections yet"
-            body="Add friends from the People tab first - Mutual Mode needs someone to be mutual with."
+            body="Mutual is a private, two-sided signal: choose a friend and something you would enjoy doing, and neither person hears a thing unless they independently choose the same thing. Add a connection first, then come back when there is someone to choose."
+            action={
+              <Link
+                href="/people"
+                className="inline-flex min-h-11 items-center rounded-btn bg-brand-gradient px-4 text-sm font-bold text-white"
+              >
+                Find your people
+              </Link>
+            }
           />
         ) : (
           <div className="space-y-2">

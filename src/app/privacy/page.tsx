@@ -50,7 +50,7 @@ const SECTIONS = [
 export default function PrivacyPage() {
   return (
     <main className="mx-auto max-w-2xl px-6 py-16 text-ink">
-      <p className="text-sm font-bold text-terracotta">Effective August 31, 2026</p>
+      <p className="text-sm font-bold text-terracotta-deep">Effective August 31, 2026</p>
       <h1 className="mt-2 text-4xl font-black">Privacy Notice</h1>
       <p className="mt-4 text-sm leading-relaxed text-ink-soft">
         This notice explains how Switchboard handles information for an early-access
@@ -69,7 +69,7 @@ export default function PrivacyPage() {
           </section>
         ))}
       </div>
-      <div className="mt-10 flex flex-wrap gap-4 text-sm font-bold text-terracotta">
+      <div className="mt-10 flex flex-wrap gap-4 text-sm font-bold text-terracotta-deep">
         <Link href="/terms">Terms</Link>
         <Link href="/community">Community Covenant</Link>
         <Link href="/copyright">Copyright</Link>

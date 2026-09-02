@@ -1,10 +1,10 @@
 /* Switchboard service worker — web push + PWA installability + offline shell. */
 
-const CACHE = 'switchboard-v2';
+const CACHE = 'switchboard-v3';
 // Static, non-user-specific assets safe to cache. Authenticated page HTML is
 // NEVER cached (it's per-user); navigations are network-first with a generic
 // offline fallback, so one user can't be served another's cached content.
-const PRECACHE = ['/welcome', '/manifest.webmanifest', '/icons/icon.svg'];
+const PRECACHE = ['/offline.html', '/manifest.webmanifest', '/icons/icon.svg'];
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
@@ -68,7 +68,7 @@ self.addEventListener('fetch', (event) => {
   if (request.mode === 'navigate') {
     event.respondWith(
       fetch(request).catch(
-        () => caches.match(request).then((cached) => cached || caches.match('/welcome')),
+        () => caches.match(request).then((cached) => cached || caches.match('/offline.html')),
       ),
     );
   }

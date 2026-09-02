@@ -44,6 +44,11 @@ const REQUIRED_TOKENS = [
 
 /** The block of declarations for one `[data-theme="…"]` selector. */
 function themeBlock(id: string): string {
+  if (id === 'default') {
+    const tokens = CSS.match(/@theme\s*\{([\s\S]*?)\n\}/)?.[1] ?? '';
+    const root = CSS.match(/:root\s*\{([\s\S]*?)\n\}/)?.[1] ?? '';
+    return `${tokens}\n${root}`;
+  }
   const match = CSS.match(
     new RegExp(`\\[data-theme="${id}"\\]\\s*\\{([\\s\\S]*?)\\n\\}`),
   );
@@ -111,7 +116,6 @@ describe('appearance presets', () => {
    */
   it('defines every token it needs, in full', () => {
     for (const theme of APP_THEMES) {
-      if (theme.id === 'default') continue; // the base lives in @theme
       const block = themeBlock(theme.id);
       expect(block, `no CSS block for ${theme.id}`).not.toBe('');
       for (const token of REQUIRED_TOKENS) {
@@ -125,28 +129,38 @@ describe('appearance presets', () => {
 
   /**
    * PRODUCT.md targets WCAG AA, and a preset is not an exemption. These are the
-   * pairs that carry the app's actual reading: body text and secondary text on
-   * both surfaces, and the accent where it is used as a link color.
+   * pairs that carry the app's actual reading, including every Button variant,
+   * links, notification badges, inactive bottom-nav labels, and plan cards.
    */
   it('keeps text readable on every surface (WCAG AA)', () => {
     for (const theme of APP_THEMES) {
-      if (theme.id === 'default') continue;
       const block = themeBlock(theme.id);
       const token = (name: string) => tokenValue(block, name) as string;
+      const white = '#ffffff';
 
       const pairs: Array<[string, string, number, string]> = [
         [token('--color-ink'), token('--color-paper'), 4.5, 'body text on background'],
         [token('--color-ink'), token('--color-card'), 4.5, 'body text on a card'],
         [token('--color-ink-soft'), token('--color-paper'), 4.5, 'secondary text'],
         [token('--color-ink-soft'), token('--color-card'), 4.5, 'secondary text on a card'],
-        // Faint text is supporting copy, held to the large-text threshold.
+        // Faint text remains supporting copy. The 10px bottom-nav labels use
+        // ink-soft below, so they are held to the normal-text threshold.
         [token('--color-ink-faint'), token('--color-card'), 3, 'faint text on a card'],
         [
           token('--color-terracotta-deep'),
-          token('--color-card'),
+          token('--color-paper'),
           4.5,
-          'accent text on a card',
+          'link text on the page',
         ],
+        // Button: primary is checked stop-by-stop below.
+        [token('--color-ink'), token('--color-card'), 4.5, 'secondary button'],
+        [token('--color-ink-soft'), token('--color-paper'), 4.5, 'ghost button'],
+        [white, token('--color-sage'), 4.5, 'accept button'],
+        [token('--color-rose-deep'), token('--color-rose-soft'), 4.5, 'danger button'],
+        // The unread-count badge is white on the accent fill.
+        [white, token('--color-terracotta'), 4.5, 'notification badge'],
+        // Inactive 10px navigation labels are ink-soft on the card bar.
+        [token('--color-ink-soft'), token('--color-card'), 4.5, 'bottom navigation label'],
         [
           token('--color-sage-deep'),
           token('--color-sage-soft'),
@@ -166,6 +180,36 @@ describe('appearance presets', () => {
           'decline text on its own surface',
         ],
       ];
+
+      const gradientStops = [
+        ...token('--brand-gradient').matchAll(/#[0-9a-f]{6}/gi),
+      ].map((match) => match[0]);
+      expect(gradientStops, `${theme.id}: primary button gradient stops`).toHaveLength(3);
+      for (const stop of gradientStops) {
+        pairs.push([white, stop, 4.5, `primary button on ${stop}`]);
+      }
+
+      for (const planToken of REQUIRED_TOKENS.filter((name) =>
+        name.startsWith('--color-plan-'))) {
+        pairs.push([
+          white,
+          token(planToken),
+          4.5,
+          `plan-card title on ${planToken}`,
+        ]);
+      }
+
+      // The audit called out this small default-theme copy specifically. Other
+      // presets may use ink-faint only for large/supporting text, but the stock
+      // palette must keep it readable even directly on paper.
+      if (theme.id === 'default') {
+        pairs.push([
+          token('--color-ink-faint'),
+          token('--color-paper'),
+          4.5,
+          'default faint text on paper',
+        ]);
+      }
 
       for (const [fg, bg, min, what] of pairs) {
         const ratio = contrast(fg, bg);

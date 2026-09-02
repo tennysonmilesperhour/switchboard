@@ -1,9 +1,10 @@
 'use server';
 
-import type { ActionResult } from '@/lib/errors';
+import { failure, validation, type ActionResult } from '@/lib/errors';
 
 import { requireUser } from '@/lib/server/require-user';
 import { parsePlan, type ParsedPlan } from '@/lib/ai/plan-parser';
+import { checkRateLimit } from '@/lib/server/rate-limit';
 
 export interface PlanDraft extends Omit<ParsedPlan, 'inviteeNames'> {
   invitees: Array<{ id: string; name: string }>;
@@ -14,11 +15,17 @@ export async function parsePlanDescription(
   text: string,
 ): Promise<ActionResult & { draft?: PlanDraft }> {
   const trimmed = text.trim();
-  if (!trimmed) return { ok: false, error: 'Say or type a plan first' };
+  if (!trimmed) return validation('Say or type a plan first');
 
   const auth = await requireUser();
   if (!auth.ok) return auth;
   const { supabase, user } = auth;
+  if (!(await checkRateLimit(`ai:plan:${user.id}`, 30, 60 * 60))) {
+    return failure(
+      'SB-RATE-LIMIT',
+      'You’ve drafted a lot of plans. Try again in a little while.',
+    );
+  }
 
   const { data: connections } = await supabase
     .from('connections')

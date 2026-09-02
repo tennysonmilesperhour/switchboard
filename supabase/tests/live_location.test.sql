@@ -15,7 +15,7 @@
 -- role, then switch to `authenticated` with a specific user's JWT claims.
 
 begin;
-select plan(15);
+select plan(16);
 
 -- ————————————————————————— fixtures —————————————————————————
 -- Ava (caller), Ben (nearby sharer), Cara (blocked by Ava), Dan
@@ -149,6 +149,33 @@ select ok(
          where user_id = '00000000-0000-0000-0000-0000000000b2')
     <> 39.74036::double precision,
   'find_nearby_people returns the stored coarse latitude, not the raw fix'
+);
+
+-- Moving the caller inside the same rounded grid cell must not change the
+-- returned distance. If distance uses either raw endpoint, repeated spoofed
+-- caller positions turn it into a trilateration oracle for the target's raw
+-- coordinate even though the latitude/longitude columns look coarsened.
+create temporary table coarse_distance_before on commit drop as
+select distance_m
+  from public.find_nearby_people(5000)
+ where user_id = '00000000-0000-0000-0000-0000000000b2';
+
+reset role;
+update public.live_locations
+   set latitude = 39.73924,
+       longitude = -104.99034
+ where user_id = '00000000-0000-0000-0000-0000000000a1';
+
+set local role authenticated;
+select set_config('request.jwt.claims',
+  '{"sub":"00000000-0000-0000-0000-0000000000a1","role":"authenticated"}', true);
+
+select is(
+  (select distance_m
+     from public.find_nearby_people(5000)
+    where user_id = '00000000-0000-0000-0000-0000000000b2'),
+  (select distance_m from coarse_distance_before),
+  'raw caller positions in one rounded cell produce identical distance_m values'
 );
 
 -- ————————————————————————— act as Gil (not sharing) —————————————————————————

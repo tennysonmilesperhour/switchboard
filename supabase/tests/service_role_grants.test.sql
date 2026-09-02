@@ -28,7 +28,7 @@
 begin;
 
 -- One assertion per function, plus the two catch-alls below.
-select plan(13);
+select plan(18);
 
 select ok(
   has_function_privilege('service_role', 'public.is_event_host(uuid, uuid)', 'EXECUTE'),
@@ -90,6 +90,36 @@ select ok(
   'service_role can execute sweep_retention (the retention cron)'
 );
 
+select ok(
+  has_function_privilege('service_role', 'public.digest_items(uuid)', 'EXECUTE'),
+  'service_role can execute digest_items (the notification sweep)'
+);
+
+select ok(
+  has_function_privilege(
+    'service_role', 'public.auth_user_id_by_email(text)', 'EXECUTE'
+  ),
+  'service_role can resolve canonical auth email ownership for recovery'
+);
+
+select ok(
+  has_function_privilege(
+    'service_role', 'public.try_claim_operator_sweep(text, integer)', 'EXECUTE'),
+  'service_role can claim cron sweep leases'
+);
+
+select ok(
+  has_function_privilege(
+    'service_role', 'public.finish_operator_sweep(text, jsonb)', 'EXECUTE'),
+  'service_role can write successful cron heartbeats'
+);
+
+select ok(
+  has_function_privilege(
+    'service_role', 'public.operator_sweep_status(text)', 'EXECUTE'),
+  'service_role can read cron heartbeats for health'
+);
+
 -- The rule the hardening migration left behind, stated once: no function
 -- anywhere in `public` may be executable by `anon` while being one of the
 -- service-role entry points above. Guards against a future grant that widens
@@ -102,7 +132,8 @@ select is(
       and p.proname in (
         'is_event_host', 'apply_cascade_updates', 'consume_rate_limit',
         'respond_to_guest_invite', 'rotate_event_share_token',
-        'resolve_poll_children', 'sweep_retention'
+        'resolve_poll_children', 'try_claim_operator_sweep',
+        'finish_operator_sweep', 'operator_sweep_status', 'sweep_retention'
       )
       and has_function_privilege('anon', p.oid, 'EXECUTE')),
   0,

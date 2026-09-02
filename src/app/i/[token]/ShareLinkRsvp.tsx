@@ -122,7 +122,16 @@ export function ShareLinkRsvp({ shareToken, defaultName }: ShareLinkRsvpProps) {
             className="w-full rounded-card border border-line bg-paper px-3.5 py-2.5 text-base text-ink placeholder:text-ink-faint focus:border-terracotta focus:outline-none focus:ring-2 focus:ring-terracotta/30"
           />
         </label>
-        {error && <p role="alert" className="text-sm text-rose-deep mt-3">{error}</p>}
+        {error && (
+          <p role="alert" className="text-sm text-rose-deep mt-3">
+            {error}
+            {code && (
+              <span className="ml-1.5 font-mono text-[11px] uppercase tracking-wide text-ink-faint">
+                {errorRef(code)}
+              </span>
+            )}
+          </p>
+        )}
         <Button
           variant="accept"
           size="lg"
@@ -130,6 +139,7 @@ export function ShareLinkRsvp({ shareToken, defaultName }: ShareLinkRsvpProps) {
           disabled={pending || !guardianEmail.trim()}
           onClick={() => {
             setError('');
+            setCode(null);
             startTransition(async () => {
               const res = await requestParentalApproval({
                 inviteId,
@@ -139,6 +149,7 @@ export function ShareLinkRsvp({ shareToken, defaultName }: ShareLinkRsvpProps) {
               });
               if (!res.ok) {
                 setError(res.error ?? 'Could not send the approval request.');
+                setCode(res.code ?? null);
                 return;
               }
               setApprovalSent(true);

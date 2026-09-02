@@ -22,7 +22,7 @@ export function Chip({
       className={`inline-flex items-center gap-1.5 rounded-pill border px-4 py-2 text-sm font-semibold transition-all duration-150 active:scale-[0.97] outline-none focus-visible:ring-2 focus-visible:ring-terracotta ${
         selected
           ? 'bg-terracotta text-white border-terracotta shadow-lift'
-          : 'bg-card text-ink-soft border-line hover:border-terracotta hover:text-terracotta'
+          : 'bg-card text-ink-soft border-line hover:border-terracotta hover:text-terracotta-deep'
       } ${className}`}
       {...props}
     >
