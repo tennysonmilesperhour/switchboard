@@ -1,6 +1,13 @@
 -- Migration history can say a change ran even when its DDL did not. Health must
 -- therefore inspect the schema the application actually depends on, not only
 -- the bookkeeping table used by `supabase db push`.
+--
+-- `current` is the newest version recorded in that bookkeeping table rather
+-- than a literal pinned here: `/api/health` compares it to the newest migration
+-- file the app was built with (`EXPECTED_SCHEMA_VERSION`, held to that file by
+-- `src/lib/health.test.ts`), so a migration that ships without being applied
+-- shows up as a version mismatch without every migration having to redefine
+-- this function. `missing` is the list of objects whose DDL is actually absent.
 create or replace function public.app_schema_status()
 returns jsonb
 language plpgsql
@@ -9,8 +16,13 @@ security definer
 set search_path = ''
 as $$
 declare
+  current_version text;
   missing_objects text[];
 begin
+  select max(applied.version)
+    into current_version
+    from supabase_migrations.schema_migrations applied;
+
   with required_objects(name, present) as (
     values
       (
@@ -104,7 +116,7 @@ begin
    where not present;
 
   return jsonb_build_object(
-    'current', '20260902015913',
+    'current', current_version,
     'complete', cardinality(missing_objects) = 0,
     'missing', to_jsonb(missing_objects)
   );
@@ -123,7 +135,7 @@ stable
 security definer
 set search_path = ''
 as $$
-  select '20260902015913'::text
+  select public.app_schema_status()->>'current'
 $$;
 
 revoke all on function public.app_schema_version() from public, anon, authenticated;

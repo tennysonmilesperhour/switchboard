@@ -5,11 +5,17 @@
 -- the real absence by its operator-facing name.
 
 begin;
-select plan(21);
+select plan(22);
+
+select is(
+  public.app_schema_status()->>'current',
+  (select max(version) from supabase_migrations.schema_migrations),
+  'health reports the newest applied migration as the current version'
+);
 
 select is(
   public.app_schema_version(),
-  '20260902015913',
+  public.app_schema_status()->>'current',
   'the legacy scalar schema version stays aligned with structured health'
 );
 

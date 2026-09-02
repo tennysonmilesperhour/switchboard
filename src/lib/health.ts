@@ -1,4 +1,12 @@
-export const EXPECTED_SCHEMA_VERSION = '20260902015913';
+/**
+ * The newest migration this build of the app was written against. Bump it in
+ * the same commit as any new `supabase/migrations/*.sql` — `health.test.ts`
+ * fails until it matches the newest filename, and `app_schema_status()`
+ * reports the newest version actually applied, so `/api/health` goes red when
+ * the two disagree. It went stale for four migrations once, which left the
+ * check reporting `schema:false` regardless of reality.
+ */
+export const EXPECTED_SCHEMA_VERSION = '20260902120000';
 
 export interface EvaluatedSchemaStatus {
   current: string | null;
