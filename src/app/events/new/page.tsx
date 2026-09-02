@@ -3,7 +3,8 @@ import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
 import { AppShell } from '@/components/shell/AppShell';
 import { paceFromChosenWindows, type WindowPace } from '@/lib/engine/windows';
-import { EventWizard, type WizardFriend } from './EventWizard';
+import { EventWizard } from './EventWizard';
+import type { WizardFriend } from './steps/wizard-types';
 
 export const metadata: Metadata = { title: 'New plan' };
 
