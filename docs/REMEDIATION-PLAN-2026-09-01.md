@@ -63,9 +63,10 @@ production defect or an exploitable gap today.
 
 ### 1. Deploys can no longer outrun their schema
 
-- [ ] **What.** The app auto-deploys on push to `main` while the migration
+- [x] **What.** The app auto-deploys on push to `main` while the migration
   workflow runs in parallel with no lock and no gate. Code that reads new
-  columns goes live before, or without, the columns.
+  columns goes live before, or without, the columns. Completed in
+  [#161](https://github.com/tennysonmilesperhour/switchboard/pull/161).
 - **Where.** `.github/workflows/deploy-migrations.yml`, `vercel.json`,
   `docs/DEPLOYMENT.md`.
 - **How.**
