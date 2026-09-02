@@ -6,21 +6,15 @@ example, showed a stack of `rX / rG / sh` frames inside
 had to be inferred rather than read. Uploading source maps at build time lets
 PostHog symbolicate those stacks back to real files and lines.
 
-This is not wired up yet because it needs a **PostHog personal API key** stored
-as a deployment secret (a personal key is not the public `phc_…` ingest key and
-must never ship to the browser). Steps to enable:
+The build integration is wired through `@posthog/nextjs-config`. It activates
+only when both build-time credentials are present; a personal key is not the
+public `phc_…` ingest key and must never ship to the browser.
 
-## 1. Add the dependency
+## 1. Build integration
 
-```bash
-npm install --save-dev @posthog/nextjs-config
-```
-
-## 2. Wrap the Next config (guarded)
-
-In `next.config.ts`, wrap the existing export so the upload only runs when the
-credentials are present. With the env vars absent (local dev, PRs from forks),
-the build is byte-for-byte what it is today, so this can never break CI:
+`next.config.ts` wraps the existing config only when the credentials are
+present. With them absent (local dev and PRs from forks), the normal config is
+exported and no upload is attempted:
 
 ```ts
 import { withPostHogConfig } from '@posthog/nextjs-config';
@@ -28,35 +22,45 @@ import { withPostHogConfig } from '@posthog/nextjs-config';
 // ...existing `const nextConfig: NextConfig = { ... }`...
 
 const PH_API_KEY = process.env.POSTHOG_API_KEY;   // personal key (phx_…), secret
-const PH_ENV_ID = process.env.POSTHOG_ENV_ID;     // project/env id, e.g. 376510
+const PH_PROJECT_ID = process.env.POSTHOG_PROJECT_ID;
+const buildId = resolveBuildId();
 
-export default PH_API_KEY && PH_ENV_ID
+export default PH_API_KEY && PH_PROJECT_ID
   ? withPostHogConfig(nextConfig, {
       personalApiKey: PH_API_KEY,
-      envId: PH_ENV_ID,
+      projectId: PH_PROJECT_ID,
       host: 'https://us.posthog.com',
-      sourcemaps: { enabled: true },
+      sourcemaps: {
+        enabled: true,
+        deleteAfterUpload: true,
+        releaseName: 'switchboard',
+        releaseVersion: buildId,
+      },
     })
   : nextConfig;
 ```
 
-## 3. Provision the secrets (Vercel)
+`projectId` and the `release*` names are the current
+`@posthog/nextjs-config@1.11.0` options; the older `envId`, `project`, and
+`version` names are deprecated.
+
+## 2. Provision the build credentials (Vercel)
 
 Create a **personal API key** in PostHog (Settings → Personal API keys) scoped to
 error tracking / source map upload, then add both as Production env vars:
 
 - `POSTHOG_API_KEY` = the `phx_…` personal key (mark as secret / sensitive)
-- `POSTHOG_ENV_ID` = `376510` (this project's id)
+- `POSTHOG_PROJECT_ID` = `376510` (this project's id)
 
 They are read only at build time on the server, never `NEXT_PUBLIC_`, so they
 never reach the client — consistent with the secret-handling rule in AGENTS.md.
 
-## 4. Verify
+## 3. Verify
 
 After the next production deploy, a fresh client exception should show real file
 names and line numbers in PostHog instead of hashed chunk frames. Confirm the
 build log shows the PostHog "uploaded N source maps" step.
 
 Reference: PostHog docs → Error tracking → Uploading source maps (Next.js).
-Confirm the exact `withPostHogConfig` option names against the installed
-package version before relying on them.
+The integration deletes local `.map` files after a successful upload so source
+is symbolicated in PostHog without being served with the production assets.
