@@ -55,7 +55,7 @@ export function YouClient({
         <EmptyState
           emoji="🪞"
           title="Nothing to reflect yet"
-          body="Say yes or no to a few plans, log how they left you feeling, and your read will start to take shape here."
+          body="Your Read is a private reflection built only from how you use Switchboard. Say yes or no to a few plans and log how they left you feeling; once there is a real pattern, it will appear here for you to confirm, hide, or correct."
           action={
             <Link
               href="/plans"
