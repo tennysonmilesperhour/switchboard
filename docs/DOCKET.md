@@ -6,6 +6,12 @@ from working sessions. Newest thinking lives here so nothing evaporates.
 > Legend: ✅ shipped · 🛠️ queued to build · 🎨 in design / workshop · 💭 idea ·
 > 🔧 ops (needs the owner or a dashboard, not code)
 
+> **2026-09-01:** the near-term queue now lives in
+> [`REMEDIATION-PLAN-2026-09-01.md`](REMEDIATION-PLAN-2026-09-01.md), the
+> work order from [`AUDIT-2026-09-01.md`](AUDIT-2026-09-01.md). Work that
+> plan before anything 🛠️ below; several lines below it are known to be
+> stale and are corrected by its item 20.
+
 ---
 
 ## 🧹 2026-08-11 consolidation — what moved, what shipped, what's still open
