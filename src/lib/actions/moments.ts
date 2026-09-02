@@ -169,9 +169,12 @@ async function authorizeMomentCandidate(
   // Explicit action-time recheck. The discovery RPC already filters blocks,
   // but repeating the predicate immediately before an admin write prevents a
   // stale page from using an old candidate after either person blocks.
+  // `are_blocked(a, b)` is service-role only since the pair oracles were
+  // revoked from browser roles; a signed-in caller asks about itself through
+  // `is_blocked_with`, which binds the first side to auth.uid().
   const { data: blocked, error: blockError } = await mine.supabase.rpc(
-    'are_blocked',
-    { p_user_a: mine.user.id, p_user_b: other.user_id },
+    'is_blocked_with',
+    { p_other: other.user_id },
   );
   if (blockError) {
     return rejectCandidate(
