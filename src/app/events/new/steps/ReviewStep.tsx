@@ -118,7 +118,7 @@ export function ReviewStep({
             <Card tone="gold">
               <p className="text-sm leading-relaxed">
                 🗳️ This plan starts in <strong>deciding mode</strong> - invitees
-                will suggest and rank ideas first. You’ll send the cascade once
+                will suggest and rank ideas first. You’ll send the invitations once
                 the group settles on what to do.
               </p>
             </Card>

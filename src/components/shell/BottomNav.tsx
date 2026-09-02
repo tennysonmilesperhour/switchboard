@@ -79,7 +79,7 @@ export function BottomNav() {
           <div className="flex justify-center">
             <Link
               href="/create"
-              aria-label="Create a plan"
+              aria-label="Start something"
               className="-mt-4 inline-flex size-14 items-center justify-center rounded-full bg-brand-gradient text-white shadow-float transition-transform active:scale-95"
             >
               <Icon name="add" size={28} />

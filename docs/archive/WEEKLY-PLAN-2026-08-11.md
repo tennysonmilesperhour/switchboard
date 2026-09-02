@@ -1,5 +1,10 @@
 # Weekly Plan — 2026-08-11
 
+> **Archived 2026-09-02.** All six items shipped. This is a point-in-time plan,
+> not current product documentation; shipped behavior lives in
+> [`src/lib/features.ts`](../../src/lib/features.ts) and current work lives in
+> [`docs/DOCKET.md`](../DOCKET.md).
+
 > **Status: all six shipped.** Built in the order below, one commit each. Where
 > the plan's assumptions turned out to be wrong against the code, the change
 > notes say so — see "What the plan got wrong" at the end.

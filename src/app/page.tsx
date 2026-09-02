@@ -256,7 +256,7 @@ export default async function HomePage() {
                 attendeesLabel="Pick something below, or start from scratch. Switchboard sorts out the details."
                 actions={
                   <span className="rounded-btn bg-white/25 px-5 py-2.5 text-sm font-bold backdrop-blur-sm">
-                    Create a plan
+                    Start something
                   </span>
                 }
               />
