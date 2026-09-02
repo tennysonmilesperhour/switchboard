@@ -172,7 +172,7 @@ export async function updateProfileDetails(
       const latitude = Number(rawLatitude);
       const longitude = Number(rawLongitude);
       if (!isValidCoordinate(latitude, longitude)) {
-        return { ok: false, error: 'Choose a valid city or save the location as text.' };
+        return validation('Choose a valid city or save the location as text.');
       }
       homeCoordinateUpdate = {
         home_latitude: latitude,
