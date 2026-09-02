@@ -426,25 +426,30 @@ support address.
 
 Live location (`live_locations`, `find_nearby_people`) is the most sensitive PII
 the app handles, so it is fenced the same way as poll votes and mutual intents —
-the raw data is **owner-only**, and all cross-user exposure goes through one
-security-definer function that encodes the privacy contract.
+the stored data is **owner-only and coarsened**, and all cross-user exposure goes
+through one security-definer function that encodes the privacy contract.
 
 - **The table is owner-only in every direction.** `live_locations` RLS pins
   `user_id = auth.uid()` in both `USING` and `WITH CHECK` for select/insert/
-  update/delete, so no user can read another user's precise coordinate through
-  the table, nor forge/repoint a row (the `user_id` PK can't be changed to
+  update/delete, so no user can read another user's coordinate through the
+  table, nor forge/repoint a row (the `user_id` PK can't be changed to
   someone else). There is **no** cross-user `select` policy — discovery is
   exclusively `find_nearby_people`.
-- **Discovery is mutual, and coarsened.** `private.find_nearby_people` (public
+- **Precision is discarded at write.** The app action rounds latitude and
+  longitude to three decimal places (roughly 110 m), and the database repeats
+  that rule in a `BEFORE INSERT OR UPDATE` trigger. An authenticated client that
+  writes the table directly therefore cannot retain an exact device fix. Existing
+  rows were coarsened when the trigger was installed.
+- **Discovery is mutual.** `private.find_nearby_people` (public
   invoker wrapper, same convention as the other definer bodies) returns rows
   only to a caller who is **themselves** currently sharing ("see and be seen"),
   filters on `are_blocked` and the target's `visibility` scope (`connections`
-  requires `are_connected`), bounds by radius, and **rounds returned coordinates
-  to ~110 m** so a fellow sharer never receives an exact fix. Its returned
-  distance, radius filter, and ordering are calculated from those same rounded
-  caller and target points; an exact distance or exact boundary test would
-  otherwise undo the rounding through repeated spoofed queries. The owner's own
-  precise point stays owner-only.
+  requires `are_connected`), and bounds by radius. Its returned point, distance,
+  radius filter, and ordering all use the same stored coarse coordinates, and
+  the function **rounds them again to ~110 m** as defence in depth, so a
+  fellow sharer never receives an exact fix and an exact distance or exact
+  boundary test cannot undo the rounding through repeated spoofed caller
+  positions.
 - **Opt-in and ephemeral.** Nothing is stored until the user taps "Share my
   location"; every row carries an `expires_at` (clamped 1–8 h), is ignored past
   it, and is swept by the retention cron (`sweepExpired`). "Stop" deletes it.
@@ -453,8 +458,8 @@ security-definer function that encodes the privacy contract.
   resources (docs §3), so they are safe on a self-writable row.
 
 Litmus test: *can a caller who is not sharing — or is blocked, or outside the
-target's visibility scope — learn another user's location, or read a precise
-coordinate straight off the table?*
+target's visibility scope — learn another user's location, or make the database
+retain a precise coordinate?*
 
 ## Home density (a boolean, and only a boolean)
 

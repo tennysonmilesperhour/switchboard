@@ -2,7 +2,8 @@
 
 import { useState } from 'react';
 import { Button } from '@/components/ui/Button';
-import { deleteAccount, updatePassword } from '@/lib/actions/auth';
+import { updatePassword } from '@/lib/actions/auth';
+import { deleteAccount, exportMyData } from '@/lib/actions/account';
 import { PASSWORD_MIN_LENGTH } from '@/lib/auth-identity';
 import { useConfirm } from '@/components/ui/ConfirmDialog';
 
@@ -11,7 +12,7 @@ export function AccountControls() {
   const [password, setPassword] = useState('');
   const [confirmation, setConfirmation] = useState('');
   const [message, setMessage] = useState('');
-  const [pending, setPending] = useState<'password' | 'delete' | null>(null);
+  const [pending, setPending] = useState<'password' | 'export' | 'delete' | null>(null);
 
   async function changePassword(event: React.FormEvent) {
     event.preventDefault();
@@ -33,7 +34,39 @@ export function AccountControls() {
     setPending('delete');
     const result = await deleteAccount(confirmation);
     setPending(null);
-    if (!result.ok) setMessage(result.error ?? 'Could not delete account.');
+    if (!result.ok) {
+      setMessage(
+        [result.error ?? 'Could not delete account.', result.code]
+          .filter(Boolean)
+          .join(' · '),
+      );
+    }
+  }
+
+  async function downloadData() {
+    setPending('export');
+    const result = await exportMyData();
+    setPending(null);
+    if (!result.ok) {
+      setMessage(
+        [result.error ?? 'Could not prepare your data.', result.code]
+          .filter(Boolean)
+          .join(' · '),
+      );
+      return;
+    }
+
+    const url = URL.createObjectURL(
+      new Blob([result.json], { type: 'application/json;charset=utf-8' }),
+    );
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = result.filename;
+    document.body.append(anchor);
+    anchor.click();
+    anchor.remove();
+    window.setTimeout(() => URL.revokeObjectURL(url), 0);
+    setMessage('Your Switchboard data download is ready.');
   }
 
   return (
@@ -57,6 +90,24 @@ export function AccountControls() {
           {pending === 'password' ? 'Updating...' : 'Update password'}
         </Button>
       </form>
+
+      <div className="space-y-3 border-t border-line pt-6">
+        <div>
+          <p className="text-sm font-bold text-ink">Download your data</p>
+          <p className="mt-1 text-sm text-ink-soft">
+            Get a JSON copy of your profile, plans, RSVPs, messages, and signals.
+          </p>
+        </div>
+        <Button
+          type="button"
+          size="sm"
+          variant="secondary"
+          disabled={pending !== null}
+          onClick={downloadData}
+        >
+          {pending === 'export' ? 'Preparing...' : 'Download JSON'}
+        </Button>
+      </div>
 
       <form onSubmit={removeAccount} className="space-y-3 border-t border-line pt-6">
         <div>

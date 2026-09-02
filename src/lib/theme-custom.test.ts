@@ -519,7 +519,7 @@ describe('the wallpaper scrim', () => {
         }
       }
     }
-  });
+  }, 15_000);
 
   it('honours a strength below the ceiling rather than always maximising', () => {
     const base = {

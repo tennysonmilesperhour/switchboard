@@ -1,4 +1,5 @@
 import type { NextConfig } from 'next';
+import { withPostHogConfig } from '@posthog/nextjs-config';
 import path from 'node:path';
 import { resolveBuildId } from './src/lib/build-id';
 
@@ -26,6 +27,8 @@ const securityHeaders = [
   // restrictively and would break the nonce policy.
 ];
 
+const buildId = resolveBuildId();
+
 const nextConfig: NextConfig = {
   turbopack: {
     root: path.resolve(__dirname),
@@ -35,7 +38,7 @@ const nextConfig: NextConfig = {
   // unique per-build fallback); locally it is 'dev' and the watcher stays
   // quiet. See src/lib/build-id.ts for the precedence.
   env: {
-    NEXT_PUBLIC_BUILD_ID: resolveBuildId(),
+    NEXT_PUBLIC_BUILD_ID: buildId,
   },
   async headers() {
     return [{ source: '/(.*)', headers: securityHeaders }];
@@ -62,4 +65,19 @@ const nextConfig: NextConfig = {
   skipTrailingSlashRedirect: true,
 };
 
-export default nextConfig;
+const postHogPersonalApiKey = process.env.POSTHOG_API_KEY;
+const postHogProjectId = process.env.POSTHOG_PROJECT_ID;
+
+export default postHogPersonalApiKey && postHogProjectId
+  ? withPostHogConfig(nextConfig, {
+      personalApiKey: postHogPersonalApiKey,
+      projectId: postHogProjectId,
+      host: 'https://us.posthog.com',
+      sourcemaps: {
+        enabled: true,
+        deleteAfterUpload: true,
+        releaseName: 'switchboard',
+        releaseVersion: buildId,
+      },
+    })
+  : nextConfig;
