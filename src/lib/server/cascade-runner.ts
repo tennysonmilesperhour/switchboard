@@ -314,21 +314,26 @@ export async function sweepCascades(): Promise<number> {
 
   const eventIds = new Set<string>((overdue ?? []).map((row) => row.event_id));
 
-  let advanced = 0;
-  for (const eventId of eventIds) {
-    await advanceEventCascade(eventId);
-    advanced += 1;
-  }
   // Also nudge inviting events with zero live invites (e.g. after restart).
   const { data: stalled } = await admin
     .from('events')
     .select('id')
     .eq('status', 'inviting');
-  for (const event of stalled ?? []) {
-    if (!eventIds.has(event.id)) {
-      await advanceEventCascade(event.id);
-      advanced += 1;
-    }
+  const allEventIds = [
+    ...eventIds,
+    ...(stalled ?? [])
+      .map((event) => event.id as string)
+      .filter((eventId) => !eventIds.has(eventId)),
+  ];
+
+  // Keep enough parallelism to finish a large sweep inside the function cap,
+  // without turning every live event into simultaneous database and provider
+  // work. Provider fan-out has its own tighter bound.
+  const batchSize = 5;
+  for (let start = 0; start < allEventIds.length; start += batchSize) {
+    await Promise.all(
+      allEventIds.slice(start, start + batchSize).map(advanceEventCascade),
+    );
   }
-  return advanced;
+  return allEventIds.length;
 }

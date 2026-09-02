@@ -2,6 +2,12 @@ import { NextResponse } from 'next/server';
 import { sweepDigests } from '@/lib/server/digest';
 import { checkRateLimit } from '@/lib/server/rate-limit';
 import { bearerMatches } from '@/lib/server/secret';
+import {
+  claimCronSweep,
+  finishCronSweep,
+  logCronFailure,
+  logCronSummary,
+} from '@/lib/server/cron-runtime';
 
 export const maxDuration = 60;
 
@@ -16,6 +22,7 @@ export const maxDuration = 60;
  * digests.
  */
 export async function GET(request: Request) {
+  const startedAt = Date.now();
   // Fail closed: an unset secret must never leave the sweep publicly invokable.
   const secret = process.env.CRON_SECRET;
   if (!secret) {
@@ -28,6 +35,23 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: 'Too many requests' }, { status: 429 });
   }
 
-  const sent = await sweepDigests();
-  return NextResponse.json({ ok: true, sent });
+  if (!(await claimCronSweep('digest'))) {
+    const summary = { ok: true, skipped: 'overlap' };
+    logCronSummary('digest', summary, startedAt);
+    return NextResponse.json(summary);
+  }
+
+  try {
+    const sent = await sweepDigests();
+    const summary = { ok: true, sent };
+    try {
+      await finishCronSweep('digest', summary);
+    } finally {
+      logCronSummary('digest', summary, startedAt);
+    }
+    return NextResponse.json(summary);
+  } catch (error) {
+    logCronFailure('digest', error, startedAt);
+    throw error;
+  }
 }
