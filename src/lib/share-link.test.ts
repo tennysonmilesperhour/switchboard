@@ -5,6 +5,8 @@ import {
   ANSWERABLE_EVENT_STATUSES,
   canAnswer,
   canReadPlan,
+  canRequestOpenTable,
+  hostCanEditInvitees,
   hostCanShare,
   shareLinkNotice,
   shareLinkState,
@@ -94,6 +96,32 @@ describe('shareLinkState', () => {
 });
 
 describe('the invariants that keep links working', () => {
+  it('keeps invite-list editing in one status rule', () => {
+    expect(ALL_STATUSES.filter(hostCanEditInvitees)).toEqual(['inviting']);
+    expect(ALL_STATUSES.filter(canRequestOpenTable)).toEqual(['inviting', 'confirmed']);
+
+    const sourceFiles: string[] = [];
+    const visit = (path: string) => {
+      for (const entry of readdirSync(path, { withFileTypes: true })) {
+        const child = join(path, entry.name);
+        if (entry.isDirectory()) visit(child);
+        else if (/\.(?:ts|tsx)$/.test(entry.name)) sourceFiles.push(child);
+      }
+    };
+    visit(join(process.cwd(), 'src', 'lib', 'actions'));
+    visit(join(process.cwd(), 'src', 'app', 'events'));
+    visit(join(process.cwd(), 'src', 'components', 'events'));
+    const localModules = new Set([
+      join(process.cwd(), 'src', 'lib', 'share-link.ts'),
+      join(process.cwd(), 'src', 'lib', 'share-link.test.ts'),
+    ]);
+    const repeatedRule = /status\s*(?:===|!==)\s*['"]inviting['"]/;
+    const offenders = sourceFiles
+      .filter((file) => !localModules.has(file))
+      .filter((file) => repeatedRule.test(readFileSync(file, 'utf8')));
+    expect(offenders.map((file) => file.replace(`${process.cwd()}/`, ''))).toEqual([]);
+  });
+
   it('never offers a share affordance for a link the recipient cannot read', () => {
     // This is the invariant that was violated in production. If it ever fails,
     // some surface is handing out a link that dead-ends.
