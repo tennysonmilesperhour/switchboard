@@ -2,7 +2,6 @@ import { ImageResponse } from 'next/og';
 import { createAdminClient, hasAdminCredentials } from '@/lib/supabase/admin';
 import { resolveEventZone } from '@/lib/server/event-zone';
 import { shareLinkState, unfurlsPlanDetails } from '@/lib/share-link';
-import type { EventStatus } from '@/lib/types';
 
 export const runtime = 'nodejs';
 
@@ -24,15 +23,7 @@ export async function GET(
     .from('events')
     .select('title, starts_at, location_name, status, share_link_active, time_zone, host_id')
     .eq('id', id)
-    .maybeSingle<{
-      title: string | null;
-      starts_at: string | null;
-      location_name: string | null;
-      status: EventStatus;
-      share_link_active: boolean;
-      time_zone: string | null;
-      host_id: string;
-    }>();
+    .maybeSingle();
 
   // Only unfurl details for a plan that is actually being shared, decided by the
   // same classifier as /i/<token> rather than a status list maintained here.

@@ -19,13 +19,9 @@ export const EVENT_THEMES: EventThemeMeta[] = [
   { id: 'blossom', label: 'Blossom', color: 'magenta' },
 ];
 
-const BY_ID = Object.fromEntries(
-  EVENT_THEMES.map((theme) => [theme.id, theme]),
-) as Record<EventTheme, EventThemeMeta>;
-
 /** The plan-card color for a theme, or null for 'default' so classic plans
  *  keep their id-hashed varied color. */
-export function themeColor(theme: EventTheme): PlanColor | null {
+export function themeColor(theme: string): PlanColor | null {
   if (theme === 'default') return null;
-  return BY_ID[theme]?.color ?? null;
+  return EVENT_THEMES.find((entry) => entry.id === theme)?.color ?? null;
 }

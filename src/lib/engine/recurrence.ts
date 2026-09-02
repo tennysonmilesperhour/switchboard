@@ -43,6 +43,20 @@ const FIXED_INTERVAL_DAYS: Partial<Record<RecurrenceKind, number>> = {
 export const MIN_CUSTOM_DAYS = 1;
 export const MAX_CUSTOM_DAYS = 365;
 
+/** PostgreSQL exposes CHECK-constrained text columns as `string`. */
+export function normalizeRecurrenceKind(value: string): RecurrenceKind {
+  switch (value) {
+    case 'daily':
+    case 'weekly':
+    case 'biweekly':
+    case 'monthly':
+    case 'custom':
+      return value;
+    default:
+      return 'none';
+  }
+}
+
 /** Coerce/clamp a custom day count to the permitted range, or null if unusable. */
 export function normalizeCustomInterval(
   value: number | null | undefined,
@@ -55,7 +69,7 @@ export function normalizeCustomInterval(
 
 /** Human label for a badge, e.g. "Repeats weekly". Null when it doesn't repeat. */
 export function recurrenceLabel(
-  kind: RecurrenceKind,
+  kind: string,
   intervalDays?: number | null,
 ): string | null {
   switch (kind) {
@@ -76,6 +90,8 @@ export function recurrenceLabel(
       if (days === 7) return 'Repeats weekly';
       return `Repeats every ${days} days`;
     }
+    default:
+      return null;
   }
 }
 
