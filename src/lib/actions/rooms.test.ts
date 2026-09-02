@@ -22,6 +22,7 @@ const mocks = vi.hoisted(() => {
 
   return {
     after,
+    checkRateLimit: vi.fn(),
     extractItems,
     messageSingle,
     messageInsert,
@@ -52,6 +53,9 @@ vi.mock('@/lib/server/media', () => ({ isOwnPublicStorageUrl: () => true }));
 vi.mock('@/lib/server/notify', () => ({
   notifyRoomActivity: mocks.notifyRoomActivity,
 }));
+vi.mock('@/lib/server/rate-limit', () => ({
+  checkRateLimit: mocks.checkRateLimit,
+}));
 
 import { sendMessage } from './rooms';
 
@@ -61,6 +65,7 @@ beforeEach(() => {
     data: { id: 'message-1' },
     error: null,
   });
+  mocks.checkRateLimit.mockResolvedValue(true);
   mocks.extractItems.mockResolvedValue([
     {
       kind: 'task',
@@ -91,6 +96,7 @@ describe('sendMessage', () => {
     expect(background).toBeTypeOf('function');
     await background?.();
 
+    expect(mocks.checkRateLimit).toHaveBeenCalledWith('ai:extract:user-1', 60, 3600);
     expect(mocks.extractItems).toHaveBeenCalledWith('I’ll bring ice');
     expect(mocks.roomItemsInsert).toHaveBeenCalledWith([
       {
