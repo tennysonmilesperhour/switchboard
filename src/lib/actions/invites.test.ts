@@ -73,6 +73,7 @@ const mocks = vi.hoisted(() => {
         return b;
       },
       order: () => b,
+      limit: () => b,
       maybeSingle: async () => resolve(table, eqs),
       single: async () => resolve(table, eqs),
       then: (

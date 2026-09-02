@@ -439,11 +439,17 @@ export async function respondViaShareLink(
       .eq('id', eventId)
       .maybeSingle();
     if (evt?.parental_approval) {
+      // `rsvp_via_share_token` returns only (outcome, token), so the invite the
+      // guardian step must bind to is resolved here. Nothing enforces one
+      // invite per (event, invitee), so take the row the RPC just answered
+      // rather than letting a stray duplicate turn this into a read error.
       const { data: acceptedInvite } = await admin
         .from('invites')
         .select('id')
         .eq('event_id', eventId)
         .eq('invitee_id', user.id)
+        .order('responded_at', { ascending: false, nullsFirst: false })
+        .limit(1)
         .maybeSingle();
       return {
         ok: true,

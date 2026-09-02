@@ -63,7 +63,7 @@ import { normalizePollTopic, pollQuestion } from '@/lib/types';
 import { normalizeWeight, type Weight } from '@/lib/engine/scoring';
 
 type DeliveryChannel = 'in_app' | 'email' | 'sms';
-type DeliveryState = 'sent' | 'not_configured' | 'invalid_recipient' | 'failed';
+type DeliveryState = 'sent' | 'not_configured' | 'invalid_recipient' | 'opted_out' | 'failed';
 
 function isDeliveryChannel(value: string): value is DeliveryChannel {
   return value === 'in_app' || value === 'email' || value === 'sms';
@@ -74,6 +74,7 @@ function isDeliveryState(value: string): value is DeliveryState {
     value === 'sent' ||
     value === 'not_configured' ||
     value === 'invalid_recipient' ||
+    value === 'opted_out' ||
     value === 'failed'
   );
 }
