@@ -933,7 +933,7 @@ export default async function EventPage({
                 href={`/rooms/${event.room_id}`}
                 className="inline-flex items-center gap-1.5 rounded-pill border border-line bg-card px-3.5 py-2 text-xs font-bold text-ink-soft shadow-lift hover:border-terracotta hover:text-terracotta-deep active:scale-[0.98] transition-all"
               >
-                ❋ Living Room
+                ❋ Room
               </Link>
             )}
             {event.starts_at && new Date(event.starts_at) < new Date() && (
@@ -1030,7 +1030,7 @@ export default async function EventPage({
           <Card tone="sage" lifted>
             <p className="font-extrabold text-lg text-sage-deep">You’re in ✓</p>
             <p className="text-sm text-ink-soft mt-0.5">
-              See you there. The Living Room has the details.
+              See you there. The room has the details.
             </p>
           </Card>
         )}

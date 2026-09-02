@@ -63,7 +63,7 @@ export default async function RoomsPage() {
   return (
     <AppShell title="Rooms">
       {rooms.length === 0 ? (
-        <EmptyState emoji="💬" title="No rooms yet" body="Every plan and match gets a Living Room where the details stay together." />
+        <EmptyState emoji="💬" title="No rooms yet" body="Every plan and match gets a room where the details stay together." />
       ) : <RoomsInbox rooms={rooms} />}
     </AppShell>
   );

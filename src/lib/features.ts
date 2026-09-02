@@ -225,7 +225,7 @@ export const FEATURE_GROUPS: readonly FeatureGroup[] = [
         id: 'weighted-input',
         title: 'Private group decisions',
         blurb:
-          'Everyone rates each option privately — love, good, or rather-not — so people can be honest about a date or a place.',
+          'Everyone rates each option privately as love, good, or rather-not, so people can be honest about a date or a place.',
         where: 'Start something → Help me figure it out',
         href: '/events/new?decide=1',
       },
