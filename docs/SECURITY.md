@@ -461,6 +461,57 @@ Litmus test: *can a caller who is not sharing — or is blocked, or outside the
 target's visibility scope — learn another user's location, or make the database
 retain a precise coordinate?*
 
+## Home density (a boolean, and only a boolean)
+
+The Around pillar appears only when a viewer's city has an anchored zone they
+may access or another active live-location sharer. That decision is made by
+`home_around_available` (`20260902123000_home_density_signal_default.sql`):
+
+- **Home receives one boolean.** The private definer body evaluates a
+  city-sized 50 km radius and returns no row, identity, count, or coordinate.
+  It honors private zone membership (`can_view_zone`), blocks, and the sharer's
+  `connections` visibility scope.
+- **The radius is measured between coarse cells, never exact points.** The home
+  point is self-writable and the RPC is unmetered, so an exact haversine against
+  raw `live_locations` coordinates would be a trilateration oracle: move the
+  point, watch the boolean flip at the 50 km edge, repeat from three sides, and a
+  sharer's raw fix falls out at finer precision than `find_nearby_people` ever
+  returns. Both sides are snapped to a 0.25° grid (~28 km) *before* the
+  distance is taken (`private.coarse_distance_m`), the same lesson as
+  `20260902023519_live_location_coarse_distance.sql`. Moving a home point
+  anywhere inside its cell changes nothing; the most a caller can learn is
+  whether some city-sized cell has someone visible to them in it, which is what
+  the pillar says out loud. `home_density_and_signal_default.test.sql` pins
+  this with a viewer 51 km from a sharer by exact distance who still gets
+  `true`, and gets the same answer after moving 22 km within the cell.
+- **Accepted exposure.** A viewer who is *not* sharing learns that someone with
+  `sharers` visibility is live somewhere in their city-sized cell. That is
+  strictly less than what the same person gets by opting in to share (a rounded
+  pin at ~110 m through `find_nearby_people`), and it carries no identity.
+- **A home point is owner-private.** `profiles.home_latitude` and
+  `profiles.home_longitude` are deliberately absent from the profile SELECT
+  allowlist (`WITHHELD` in `profile-column-grants.test.ts`, and
+  `has_column_privilege` in pgTAP). The owner can retrieve that exact point only
+  through `my_home_point()` while editing their profile; ordinary profile
+  readers and Home cannot select it.
+- **The point is explicit.** Editing the city as free text clears a prior point;
+  choosing a place suggestion stores a validated pair. The database rejects a
+  half-coordinate, an out-of-range coordinate, and null island.
+
+Availability's remembered circle is private for the same reason:
+`last_signal_circle_id` is withheld and exposed only to its owner as a scalar
+through `my_signal_default_circle()`. The server action, the setter
+(`set_my_signal_default_circle`), and a `BEFORE INSERT OR UPDATE` trigger on
+`profiles` all require it to name a circle owned by that profile, and the
+`signals_visible` policy is unchanged: `viewer_in_signal_audience` still
+requires every audience circle to belong to the signal's owner, so a forged id
+could never widen who sees a signal — it could only have been stored.
+
+Litmus test: *does any density surface reveal more than whether Around has
+something behind it, could repeated calls with a moved home point narrow that
+down to a person, or can a user associate their preference with somebody
+else's circle?*
+
 ## Shared Moments (identity unfolds only by mutual consent)
 
 The `moments` table is owner-only. Pre-consent discovery crosses that boundary

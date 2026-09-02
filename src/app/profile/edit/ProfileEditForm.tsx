@@ -6,6 +6,7 @@ import { Avatar } from '@/components/ui/Avatar';
 import { Button } from '@/components/ui/Button';
 import { Icon } from '@/components/ui/Icon';
 import { SectionHeader } from '@/components/ui/Card';
+import { PlaceSearchInput, type PlacePoint } from '@/components/events/PlaceSearchInput';
 import { SOCIAL_PLATFORMS, SOCIAL_BY_ID } from '@/lib/socials';
 import { updateProfileDetails, type ActionResult } from '@/lib/actions/profile';
 import { MAX_UPLOAD_BYTES, uploadImage } from '@/lib/client/upload-image';
@@ -23,6 +24,7 @@ export interface ProfileEditInitial {
   tagline: string;
   pronouns: string;
   location: string;
+  homePoint: PlacePoint | null;
   links: ProfileLink[];
   socials: ProfileSocial[];
   contactEmail: string;
@@ -39,6 +41,9 @@ export function ProfileEditForm(props: ProfileEditInitial) {
   const [coverUrl, setCoverUrl] = useState(props.coverUrl);
   const [handle, setHandle] = useState(props.handle);
   const [bio, setBio] = useState(props.bio);
+  const [location, setLocation] = useState(props.location);
+  const [homePoint, setHomePoint] = useState<PlacePoint | null>(props.homePoint);
+  const [locationChanged, setLocationChanged] = useState(false);
   const [links, setLinks] = useState<ProfileLink[]>(props.links);
   const [socials, setSocials] = useState<ProfileSocial[]>(props.socials);
   const [contactPublic, setContactPublic] = useState(props.contactPublic);
@@ -116,6 +121,10 @@ export function ProfileEditForm(props: ProfileEditInitial) {
       <input type="hidden" name="cover_url" value={coverUrl ?? ''} />
       <input type="hidden" name="links" value={JSON.stringify(cleanLinks)} />
       <input type="hidden" name="socials" value={JSON.stringify(cleanSocials)} />
+      <input type="hidden" name="location" value={location} />
+      <input type="hidden" name="home_latitude" value={homePoint?.lat ?? ''} />
+      <input type="hidden" name="home_longitude" value={homePoint?.lng ?? ''} />
+      <input type="hidden" name="location_changed" value={String(locationChanged)} />
 
       {/* ————— Photos ————— */}
       <section>
@@ -265,12 +274,20 @@ export function ProfileEditForm(props: ProfileEditInitial) {
         </div>
 
         <div className="space-y-1.5">
-          <label htmlFor="location" className={labelCls}>Location</label>
-          <input
+          <label htmlFor="location" className={labelCls}>City or area</label>
+          <PlaceSearchInput
             id="location"
-            name="location"
-            maxLength={80}
-            defaultValue={props.location}
+            value={location}
+            onChange={(next) => {
+              setLocation(next.slice(0, 80));
+              setLocationChanged(true);
+            }}
+            onPointChange={(next) => {
+              setHomePoint(next);
+              setLocationChanged(true);
+            }}
+            pinned={homePoint !== null}
+            pinnedMessage="Pinned — Around can use this city on Home."
             placeholder="Portland, OR"
             className={inputCls}
           />

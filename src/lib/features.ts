@@ -418,7 +418,7 @@ export const FEATURE_GROUPS: readonly FeatureGroup[] = [
         title: 'Shared moments',
         blurb:
           'Check in somewhere and, if someone else is there too, you each step through three moments of consent before either of you is revealed.',
-        where: 'More → Moments',
+        where: 'More → Around → Moments',
         href: '/moments',
       },
       {
@@ -426,7 +426,7 @@ export const FEATURE_GROUPS: readonly FeatureGroup[] = [
         title: 'Serendipity zones',
         blurb:
           'Named places you check into — a conference, a cruise, a campus, a festival — so “who else is here?” has an answer.',
-        where: 'Home → Zones',
+        where: 'More → Around → Zones',
         href: '/zones',
       },
       {
@@ -434,7 +434,8 @@ export const FEATURE_GROUPS: readonly FeatureGroup[] = [
         title: 'Private zones',
         blurb:
           'Make a zone visible only to people you let in, by link or by request, and remove anyone later. Public zones still work exactly as before.',
-        where: 'Zones → create one, or a zone you organize → Who can be here',
+        where:
+          'More → Around → Zones → create one, or a zone you organize → Who can be here',
         href: '/zones',
       },
       {
@@ -442,7 +443,7 @@ export const FEATURE_GROUPS: readonly FeatureGroup[] = [
         title: 'The map',
         blurb:
           'Plans, zones, and shared places on one map, as layers you switch on and off.',
-        where: 'More → Map',
+        where: 'More → Around → Map',
         href: '/map',
       },
       {
@@ -450,7 +451,7 @@ export const FEATURE_GROUPS: readonly FeatureGroup[] = [
         title: 'Live on the map',
         blurb:
           'Opt in to appear to other people who are also sharing — mutual, block-aware, blurred to about 110 meters, and it switches itself off after a couple of hours.',
-        where: 'Map → the live sharing toggle',
+        where: 'More → Around → Map → the live sharing toggle',
         href: '/map',
       },
       {
