@@ -35,6 +35,8 @@ import { isValidCoordinate } from '@/lib/geo';
 import { safeHttpUrl } from '@/lib/security';
 import { geocode } from '@/lib/server/geocode';
 import { hasInviteDetails } from '@/lib/event-details';
+import { canAddInvitees, MAX_INVITEES_PER_EVENT } from '@/lib/invite-limits';
+import { consumeEventOutboundSlot } from '@/lib/server/invite-delivery-limit';
 
 export interface WizardInvitee {
   /** Profile id for members; null for guests. */
@@ -222,6 +224,11 @@ export async function createEvent(input: CreateEventInput): Promise<CreateEventR
   if (input.invitees.length === 0) {
     return createEventError('Add at least one person to invite before sending.');
   }
+  if (!canAddInvitees(0, input.invitees.length)) {
+    return createEventError(
+      `A plan can include up to ${MAX_INVITEES_PER_EVENT} people.`,
+    );
+  }
   // A plan can be undated (Time TBD), but if a start time is given it must be in
   // the future — the client blocks this too, but never trust the client.
   if (input.startsAt && new Date(input.startsAt).getTime() < Date.now()) {
@@ -404,7 +411,7 @@ export async function addPeopleToEvent(
   const admin = createAdminClient();
   const { data: event } = await admin
     .from('events')
-    .select('id, status, invite_mode, starts_at')
+    .select('id, host_id, status, invite_mode, starts_at')
     .eq('id', eventId)
     .maybeSingle();
   if (!event) return { ok: false, error: 'Plan not found.' };
@@ -432,7 +439,7 @@ export async function addPeopleToEvent(
       resolved: await resolveAddition(supabase, parsed),
     })),
   );
-  const additions: ResolvedAddition[] = [];
+  let additions: ResolvedAddition[] = [];
   for (const { parsed, resolved } of resolutions) {
     if (!resolved) {
       skipped.push({ entry: parsed.display, reason: 'no one with that handle' });
@@ -455,6 +462,52 @@ export async function addPeopleToEvent(
         label: (profile.display_name as string) ?? 'Friend',
       });
     }
+  }
+
+  // Contact resolution already omits blocked profiles, but explicitly-picked
+  // ids and a block created during this request still need an action-time
+  // check. The insert trigger repeats this under the event-row lock.
+  const memberIds = Array.from(new Set(
+    additions
+      .filter((addition): addition is Extract<ResolvedAddition, { kind: 'member' }> =>
+        addition.kind === 'member')
+      .map((addition) => addition.profileId),
+  ));
+  const blockChecks = await Promise.all(
+    memberIds.map(async (profileId) => ({
+      profileId,
+      result: await supabase.rpc('are_blocked', {
+        p_user_a: event.host_id,
+        p_user_b: profileId,
+      }),
+    })),
+  );
+  const failedBlockCheck = blockChecks.find(({ result }) => result.error);
+  if (failedBlockCheck?.result.error) {
+    return {
+      ...(await reportAndFail(
+        'SB-INVITE-SEND',
+        'add-people',
+        failedBlockCheck.result.error,
+        { eventId },
+        'Could not verify those invitees. Try again.',
+      )),
+      skipped,
+    };
+  }
+  const blockedIds = new Set(
+    blockChecks
+      .filter(({ result }) => result.data === true)
+      .map(({ profileId }) => profileId),
+  );
+  if (blockedIds.size > 0) {
+    additions = additions.filter((addition) => {
+      if (addition.kind !== 'member' || !blockedIds.has(addition.profileId)) {
+        return true;
+      }
+      skipped.push({ entry: addition.label, reason: 'blocked relationship' });
+      return false;
+    });
   }
 
   if (additions.length === 0) {
@@ -532,6 +585,13 @@ export async function addPeopleToEvent(
 
   if (toInsert.length === 0) {
     return { ok: false, error: 'No new people to add.', skipped };
+  }
+  if (!canAddInvitees(rows.length, toInsert.length)) {
+    return {
+      ok: false,
+      error: `A plan can include up to ${MAX_INVITEES_PER_EVENT} people. Remove someone before adding more.`,
+      skipped,
+    };
   }
 
   const { error } = await admin.from('invites').insert(toInsert);
@@ -615,8 +675,8 @@ export async function inviteConnectionNow(
   // A block that was placed without tearing down the connection row would
   // otherwise slip through the check above.
   const { data: blocked } = await supabase.rpc('are_blocked', {
-    a: user.id,
-    b: profileId,
+    p_user_a: user.id,
+    p_user_b: profileId,
   });
   if (blocked) return { ok: false, error: 'You can’t invite this person.' };
 
@@ -651,6 +711,12 @@ export async function inviteConnectionNow(
   const rows = existing ?? [];
   if (rows.some((row) => row.invitee_id === profileId)) {
     return { ok: false, error: `${name} is already on this plan.` };
+  }
+  if (!canAddInvitees(rows.length, 1)) {
+    return {
+      ok: false,
+      error: `A plan can include up to ${MAX_INVITEES_PER_EVENT} people.`,
+    };
   }
 
   // Same reasoning as resendInvite: don't send into a full plan.
@@ -1207,7 +1273,7 @@ export async function cancelEvent(
 
   const { data: event } = await admin
     .from('events')
-    .select('title')
+    .select('title, host_id')
     .eq('id', eventId)
     .maybeSingle();
   await admin
@@ -1260,14 +1326,36 @@ export async function cancelEvent(
       subject: `Cancelled: ${title}`,
       text: `${title} has been cancelled. Apologies for the change of plans.${reasonLine}\n\n- Switchboard`,
     }));
-  if (guestEmails.length > 0) await sendEmails(guestEmails);
+  const permittedGuestEmails = (
+    await Promise.all(
+      guestEmails.map(async (message) =>
+        (await consumeEventOutboundSlot(
+          event?.host_id ?? user.id,
+          'cancellation',
+        ))
+          ? message
+          : null),
+    )
+  ).filter((message): message is (typeof guestEmails)[number] => message !== null);
+  if (permittedGuestEmails.length > 0) await sendEmails(permittedGuestEmails);
   const guestSms = guestContacts
     .filter((c) => looksLikePhoneNumber(c))
     .map((to) => ({
       to,
       body: `${title} on Switchboard has been cancelled.${cleanReason ? ` Reason: ${cleanReason}` : ''}`,
     }));
-  if (guestSms.length > 0) await sendSmsMessages(guestSms);
+  const permittedGuestSms = (
+    await Promise.all(
+      guestSms.map(async (message) =>
+        (await consumeEventOutboundSlot(
+          event?.host_id ?? user.id,
+          'cancellation',
+        ))
+          ? message
+          : null),
+    )
+  ).filter((message): message is (typeof guestSms)[number] => message !== null);
+  if (permittedGuestSms.length > 0) await sendSmsMessages(permittedGuestSms);
 
   // Retire any invite still in motion so the (now belt-and-suspenders) RSVP
   // guard has nothing live to act on.
