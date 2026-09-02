@@ -3216,6 +3216,15 @@ export type Database = {
           title: string
         }[]
       }
+      sweep_retention: {
+        Args: { p_now?: string }
+        Returns: {
+          contact_verification_requests_deleted: number
+          moments_deleted: number
+          notifications_deleted: number
+          rate_limits_deleted: number
+        }[]
+      }
       try_claim_operator_sweep: {
         Args: { p_lease_seconds?: number; p_sweep: string }
         Returns: boolean
