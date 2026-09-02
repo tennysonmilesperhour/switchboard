@@ -52,7 +52,7 @@ export function VisibilityStep({
               },
               {
                 label: 'Keep expired invitations visible',
-                hint: 'People whose window passed can still see the event page.',
+                hint: 'People whose window passed can still see the plan page.',
                 value: showExpired,
                 set: setShowExpired,
               },
@@ -106,7 +106,7 @@ export function VisibilityStep({
           )}
           <p className="text-xs text-ink-faint leading-relaxed px-1">
             Defaults are tuned so a one-on-one coffee feels private and a party
-            feels social. Invitees never see their position in the cascade.
+            feels social. Invitees never see their place in the invite order.
           </p>
         </div>
   );

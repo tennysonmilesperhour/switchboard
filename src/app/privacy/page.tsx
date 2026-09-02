@@ -14,7 +14,7 @@ const SECTIONS = [
     title: 'How We Use It',
     body: [
       'To create accounts, authenticate users, show profiles, send invitations, run RSVPs, support plan rooms, manage notifications, prevent abuse, and provide customer or operational support.',
-      'To power privacy-preserving features, including anonymous weighted input, mutual-interest matching, people discovery, and contact matching.',
+      'To power privacy-preserving features, including private group decisions, mutual-interest matching, people discovery, and contact matching.',
       'To improve reliability and safety, including debugging errors, enforcing rate limits, handling reports, and blocking abusive behavior.',
     ],
   },
@@ -31,7 +31,7 @@ const SECTIONS = [
   {
     title: 'SMS Notifications',
     body: [
-      'If you add and verify a mobile phone number and opt in to SMS notifications, Switchboard may send text messages about your account, phone verification, invitations, RSVPs, reminders, schedule changes, cancellations, and other event-related updates.',
+      'If you add and verify a mobile phone number and opt in to SMS notifications, Switchboard may send text messages about your account, phone verification, invitations, RSVPs, reminders, schedule changes, cancellations, and other plan-related updates.',
       'Message frequency varies based on your activity and notification settings. Message and data rates may apply.',
       'You can opt out of SMS notifications at any time by replying STOP. Reply HELP for help. You can also manage notification settings from your Switchboard account.',
     ],

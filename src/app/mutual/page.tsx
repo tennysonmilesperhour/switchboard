@@ -4,7 +4,7 @@ import { createClient } from '@/lib/supabase/server';
 import { AppShell } from '@/components/shell/AppShell';
 import { MutualClient, type MutualFriend, type MyIntent, type MyMatch } from './MutualClient';
 
-export const metadata: Metadata = { title: 'Mutual Mode' };
+export const metadata: Metadata = { title: 'Mutual' };
 
 export default async function MutualPage({
   searchParams,

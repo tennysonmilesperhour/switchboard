@@ -1,7 +1,7 @@
 -- Connect a calendar, so the availability grid starts from your real week.
 --
--- Phase 1 of the calendar work (docs/INNOVATIONS.md #9): a read-only iCalendar
--- subscription rather than OAuth. Every major calendar publishes one — Google's
+-- A read-only iCalendar subscription rather than OAuth. Every major calendar
+-- publishes one — Google's
 -- "secret address in iCal format", Outlook's published URL, iCloud's public
 -- link — so this works for the whole friend group on day one instead of only
 -- the Google half, and it needs no app verification to ship.

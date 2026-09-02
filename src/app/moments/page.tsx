@@ -14,7 +14,7 @@ import {
   type MomentCandidateIntro,
 } from '@/lib/moment-candidates';
 
-export const metadata: Metadata = { title: 'Shared Moments' };
+export const metadata: Metadata = { title: 'Moments' };
 
 export default async function MomentsPage() {
   const supabase = await createClient();

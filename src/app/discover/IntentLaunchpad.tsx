@@ -7,7 +7,7 @@ const INTENTS = [
   {
     emoji: '🗓️',
     title: "I've got a plan",
-    subtitle: 'Create an event and start inviting',
+    subtitle: 'Create a plan and start inviting',
     href: '/events/new',
   },
   {

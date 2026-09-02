@@ -11,7 +11,7 @@ import { createZone } from '@/lib/actions/zones';
 import { EXPERIENCE_PRESETS } from '@/lib/types';
 import { ZoneLocationField } from './ZoneLocationField';
 
-export const metadata: Metadata = { title: 'Serendipity Zones' };
+export const metadata: Metadata = { title: 'Zones' };
 
 const ERRORS: Record<string, string> = {
   name: 'Zones need a name of at least 3 letters.',
