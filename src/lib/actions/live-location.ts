@@ -5,7 +5,7 @@ import { failure, validation, type ActionResult, type ErrorCode } from '@/lib/er
 import { revalidatePath } from 'next/cache';
 import { requireUser } from '@/lib/server/require-user';
 import { checkRateLimit } from '@/lib/server/rate-limit';
-import { isValidCoordinate } from '@/lib/geo';
+import { coarsenCoordinate, isValidCoordinate } from '@/lib/geo';
 import type { LiveLocation, LocationVisibility, NearbyPerson } from '@/lib/types';
 import { reportAndFail } from '@/lib/server/observability';
 
@@ -62,9 +62,9 @@ export interface ShareLocationInput {
 
 /**
  * Turn live location on (or update the details of an active share). Upserts the
- * caller's single owner-only row with a fresh expiry. The exact coordinate is
- * stored for the caller's own pin and for distance maths; what OTHER people see
- * is coarsened inside `find_nearby_people`. Opt-in and time-boxed by design.
+ * caller's single owner-only row with a fresh expiry. Coordinates are coarsened
+ * before persistence, so neither the owner row nor nearby distance maths retain
+ * an exact device fix. Opt-in and time-boxed by design.
  */
 export async function shareLocation(input: ShareLocationInput): Promise<ShareResult> {
   const auth = await requireUser();
@@ -90,8 +90,8 @@ export async function shareLocation(input: ShareLocationInput): Promise<ShareRes
   const { error } = await supabase.from('live_locations').upsert(
     {
       user_id: user.id,
-      latitude: input.lat,
-      longitude: input.lng,
+      latitude: coarsenCoordinate(input.lat),
+      longitude: coarsenCoordinate(input.lng),
       accuracy_m: accuracy,
       headline,
       emoji,
@@ -133,7 +133,12 @@ export async function refreshLocationPoint(
 
   const { data, error } = await supabase
     .from('live_locations')
-    .update({ latitude: lat, longitude: lng, accuracy_m: accuracy, updated_at: new Date().toISOString() })
+    .update({
+      latitude: coarsenCoordinate(lat),
+      longitude: coarsenCoordinate(lng),
+      accuracy_m: accuracy,
+      updated_at: new Date().toISOString(),
+    })
     .eq('user_id', user.id)
     .gt('expires_at', new Date().toISOString())
     .select('user_id')

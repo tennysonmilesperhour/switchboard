@@ -5,8 +5,8 @@
 --   supabase test db
 --
 -- The privacy contract under test:
---   * live_locations is owner-only: no user can SELECT another user's precise
---     coordinate through the table (RLS).
+--   * live_locations is owner-only and every coordinate is coarsened before
+--     persistence, including writes made directly through PostgREST.
 --   * find_nearby_people is MUTUAL — it returns nothing to a caller who isn't
 --     sharing — and it honours blocks, the 'connections' visibility scope, and
 --     the radius. Coordinates it returns are coarsened.
@@ -15,7 +15,7 @@
 -- role, then switch to `authenticated` with a specific user's JWT claims.
 
 begin;
-select plan(14);
+select plan(16);
 
 -- ————————————————————————— fixtures —————————————————————————
 -- Ava (caller), Ben (nearby sharer), Cara (blocked by Ava), Dan
@@ -75,7 +75,21 @@ select is(
   (select count(*)::int from public.live_locations
    where user_id = '00000000-0000-0000-0000-0000000000b2'),
   0,
-  'RLS: a user cannot read another user''s precise coordinate through the table'
+  'RLS: a user cannot read another user''s coordinate through the table'
+);
+
+select is(
+  (select latitude from public.live_locations
+    where user_id = '00000000-0000-0000-0000-0000000000a1'),
+  39.739::double precision,
+  'the database coarsens latitude before storing it'
+);
+
+select is(
+  (select longitude from public.live_locations
+    where user_id = '00000000-0000-0000-0000-0000000000a1'),
+  -104.990::double precision,
+  'the database coarsens longitude before storing it'
 );
 
 select is(
@@ -126,7 +140,7 @@ select is(
   'within 5 km Ava sees exactly Ben and Eve (Cara blocked, Dan not a connection, Finn far)'
 );
 
--- Coordinates come back coarsened to ~110 m (3 dp), never Ben's raw fix.
+-- The RPC returns the coarse point stored at write, never Ben's raw fix.
 select ok(
   (select latitude from public.find_nearby_people(5000)
      where user_id = '00000000-0000-0000-0000-0000000000b2')
@@ -134,7 +148,7 @@ select ok(
   and (select latitude from public.find_nearby_people(5000)
          where user_id = '00000000-0000-0000-0000-0000000000b2')
     <> 39.74036::double precision,
-  'find_nearby_people returns a coarsened latitude, not the raw fix'
+  'find_nearby_people returns the stored coarse latitude, not the raw fix'
 );
 
 -- Moving the caller inside the same rounded grid cell must not change the
