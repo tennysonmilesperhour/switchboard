@@ -1,8 +1,9 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useId, useState } from 'react';
 import { Icon } from '@/components/ui/Icon';
 import { CopyButton } from '@/components/ui/CopyButton';
+import { Dialog } from '@/components/ui/Dialog';
 
 interface ProfileShareProps {
   /** Pre-rendered QR SVG markup (encodes a vCard). */
@@ -23,19 +24,7 @@ export function ProfileShare({
   contactIncluded,
 }: ProfileShareProps) {
   const [open, setOpen] = useState(false);
-
-  useEffect(() => {
-    if (!open) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setOpen(false);
-    };
-    window.addEventListener('keydown', onKey);
-    document.body.style.overflow = 'hidden';
-    return () => {
-      window.removeEventListener('keydown', onKey);
-      document.body.style.overflow = '';
-    };
-  }, [open]);
+  const titleId = useId();
 
   function downloadVcf() {
     const blob = new Blob([vcard], { type: 'text/vcard;charset=utf-8' });
@@ -101,22 +90,18 @@ export function ProfileShare({
       </div>
 
       {open ? (
-        <div
-          role="dialog"
-          aria-modal="true"
-          aria-label="Your QR contact code"
-          onClick={() => setOpen(false)}
-          className="fixed inset-0 z-50 flex items-center justify-center bg-ink/60 p-6 backdrop-blur-sm"
+        <Dialog
+          onClose={() => setOpen(false)}
+          labelledBy={titleId}
+          panelClassName="w-full max-w-xs rounded-card bg-card p-6 text-center shadow-lift"
         >
-          <div
-            onClick={(e) => e.stopPropagation()}
-            className="w-full max-w-xs rounded-card bg-card p-6 text-center shadow-lift"
-          >
             <div
               className="mx-auto aspect-square w-full max-w-[16rem] rounded-xl border border-line bg-white p-3 [&>svg]:size-full"
               dangerouslySetInnerHTML={{ __html: qrMarkup }}
             />
-            <p className="mt-4 text-lg font-extrabold text-ink">{displayName}</p>
+            <h2 id={titleId} className="mt-4 text-lg font-extrabold text-ink">
+              {displayName}
+            </h2>
             <p className="text-sm text-ink-faint">@{handle}</p>
             <div className="mt-4 flex items-center justify-center gap-2">
               <button
@@ -132,12 +117,11 @@ export function ProfileShare({
             <button
               type="button"
               onClick={() => setOpen(false)}
-              className="mt-4 text-sm font-semibold text-ink-faint hover:text-ink"
+              className="mt-4 inline-flex min-h-11 items-center justify-center rounded-pill px-4 text-sm font-semibold text-ink-faint hover:bg-cream hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-terracotta"
             >
               Close
             </button>
-          </div>
-        </div>
+        </Dialog>
       ) : null}
     </>
   );

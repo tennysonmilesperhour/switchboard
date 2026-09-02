@@ -356,19 +356,19 @@ Implemented in PR #172.
 
 ### 16. Dialogs, loading, offline
 
-- [ ] `src/components/ui/ConfirmDialog.tsx`: move focus in on open, close on
+- [x] (PR #176) `src/components/ui/ConfirmDialog.tsx`: move focus in on open, close on
   Escape, `aria-labelledby` the title, return focus on close. Then extract one
   `Dialog`/`Sheet` primitive with a focus trap and `inert` on the background,
   and migrate the other three hand-rolled overlays (More sheet, InviteeSheet,
   ProfileShare, PlaceSearch).
-- [ ] `loading.tsx` for `/settings`, `/you`, `/zones`, `/map`, `/features`,
+- [x] `loading.tsx` for `/settings`, `/you`, `/zones`, `/map`, `/features`,
   `/u/[handle]`, `/create`, `/events/new`, `/profile/edit`, using
   `PageSkeleton`.
-- [ ] `public/sw.js`: an offline page instead of falling back to `/welcome`.
-- [ ] One bottom-overlay slot: `InstallPrompt`, `PmfSurvey`, and
+- [x] `public/sw.js`: an offline page instead of falling back to `/welcome`.
+- [x] One bottom-overlay slot: `InstallPrompt`, `PmfSurvey`, and
   `NotificationNudge` never render at once; the notification nudge waits until
   the user has sent or received an invite.
-- [ ] Dismiss buttons reach 44px; `viewport.themeColor` follows the active
+- [x] Dismiss buttons reach 44px; `viewport.themeColor` follows the active
   theme; `prefers-color-scheme: dark` selects Dusk when no theme is saved.
 - **Accept.** Keyboard-only walk through delete-plan and delete-account works;
   no route flashes blank; offline shows a real offline page.

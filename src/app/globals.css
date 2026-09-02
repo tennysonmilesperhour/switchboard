@@ -154,6 +154,42 @@
   --shadow-card: 0 2px 5px rgb(0 0 0 / 0.45), inset 0 -10px 14px rgb(0 0 0 / 0.15);
 }
 
+/* With no saved appearance, respect the operating system before first paint.
+ * This is the Dusk token set in full, not a filter over the light palette. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme]) {
+    color-scheme: dark;
+    --color-paper: #1e1712;
+    --color-cream: #2a211a;
+    --color-card: #2a211a;
+    --color-ink: #f4ece1;
+    --color-ink-soft: #c4b5a4;
+    --color-ink-faint: #9c8b78;
+    --color-line: #3d3128;
+    --color-terracotta: #e8a24b;
+    --color-terracotta-deep: #f2b968;
+    --color-terracotta-soft: #3a2c1c;
+    --color-sage: #6fbfa3;
+    --color-sage-deep: #8fd4bc;
+    --color-sage-soft: #24322c;
+    --color-gold: #e8a24b;
+    --color-gold-soft: #33271a;
+    --color-gold-deep: #f2c27f;
+    --color-rose-soft: #3a2226;
+    --color-rose-deep: #f08a95;
+    --color-plan-pink: #d4657f;
+    --color-plan-purple: #9b7bc4;
+    --color-plan-blue: #6d9ec9;
+    --color-plan-jade: #6fbfa3;
+    --color-plan-orange: #e8a24b;
+    --color-plan-magenta: #c4739b;
+    --brand-gradient: linear-gradient(96deg, #e8a24b 0%, #d4657f 55%, #9b7bc4 120%);
+    --shadow-lift: 0 2px 5px rgb(0 0 0 / 0.4), 0 1px 2px rgb(0 0 0 / 0.3);
+    --shadow-float: 0 8px 28px rgb(0 0 0 / 0.5), 0 2px 6px rgb(0 0 0 / 0.35);
+    --shadow-card: 0 2px 5px rgb(0 0 0 / 0.45), inset 0 -10px 14px rgb(0 0 0 / 0.15);
+  }
+}
+
 /* Transit: departure-board discipline, one signal color, warm off-white. */
 [data-theme="transit"] {
   --color-paper: #faf8f5;
@@ -246,6 +282,17 @@ body {
   font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
   overscroll-behavior-y: none;
+}
+
+/* Native modal backdrop. The dialog itself is a full-viewport flex container;
+ * its child is the visible card/sheet, so backdrop clicks remain detectable. */
+.app-dialog[open] {
+  display: flex;
+}
+
+.app-dialog::backdrop {
+  background: rgb(25 29 34 / 0.45);
+  backdrop-filter: blur(2px);
 }
 
 /* ----- Wallpaper -----

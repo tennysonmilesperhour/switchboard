@@ -56,7 +56,7 @@ export function FindableNudge({ state }: { state: FindabilityState }) {
             localStorage.setItem(DISMISS_KEY, '1');
             setDismissed(true);
           }}
-          className="shrink-0 rounded-full p-1 text-ink-faint hover:text-ink"
+          className="-m-2 inline-flex size-11 shrink-0 items-center justify-center rounded-full text-ink-faint hover:bg-card/70 hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-terracotta"
         >
           <Icon name="close" size={16} />
         </button>

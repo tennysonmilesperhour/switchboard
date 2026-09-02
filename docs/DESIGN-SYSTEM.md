@@ -63,7 +63,12 @@ and sliders.
 - Reuse the shared primitives in `src/components/ui/`: `Button` (variants
   primary/secondary/ghost/accept/danger), `Card` + `SectionHeader`, `Chip`,
   `Avatar`/`AvatarCluster`, `PlanCard`, `EmptyState`, `Icon`, `Skeleton`,
-  `Toast` (`useToast`), `ConfirmDialog` (`useConfirm`).
+  `Toast` (`useToast`), `Dialog`/`Sheet`/`Popover`, and `ConfirmDialog`
+  (`useConfirm`). `Dialog` is the only modal primitive: it owns the native top
+  layer, focus entry and trapping, Escape/backdrop dismissal, background inert
+  state, scroll lock, and focus return. Do not hand-roll those behaviors in a
+  feature component. A suggestion list that must leave its text input active is
+  a non-modal `Popover`, not a dialog.
 - Wall-clock times use `TimeSelect`, never `<input type="time">`: iOS ignores
   `step` on a time input and offers a minute-by-minute wheel, so hosts aiming
   for 5:20 landed on 5:19. `TimeSelect` asks for the time the way people say
@@ -80,6 +85,13 @@ and sliders.
   listing the rest of the features.
 - Every query-heavy route has a `loading.tsx` built on `PageSkeleton`; the app
   has root `error.tsx` and `not-found.tsx`.
+- Bottom prompts share `BottomOverlayProvider`. Notification permission has
+  priority over installation, which has priority over the PMF survey, so only
+  one prompt can cover the bottom navigation at a time. The notification prompt
+  is not eligible until the person has sent or received an invite.
+- The service worker precaches `/offline.html` and serves it when a document
+  navigation fails. Never use an online route such as `/welcome` as an offline
+  fallback: middleware and rendering still need the network there.
 
 ## Appearance presets (the token layer, swapped at runtime)
 
@@ -88,6 +100,12 @@ preset in Settings → Appearance; it is stored on their profile
 (`profiles.appearance_theme`) and applied as `data-theme` on `<html>` by the
 root layout, server-side — never by a client effect, which would flash the
 default palette on every navigation.
+
+When there is no saved appearance, the operating-system color scheme chooses
+the default light palette or Dusk through `prefers-color-scheme`. A saved
+preference always wins. The root layout also emits a matching
+`viewport.themeColor` (including the derived paper color for a custom theme),
+so browser chrome changes with the active surface instead of staying light.
 
 Both of those columns are read through the session client, which means both
 need an explicit SELECT grant: `profiles` has a column allowlist rather than a

@@ -4,10 +4,12 @@ import {
   createContext,
   useCallback,
   useContext,
+  useId,
   useRef,
   useState,
 } from 'react';
 import { Button } from '@/components/ui/Button';
+import { Dialog } from '@/components/ui/Dialog';
 
 interface ConfirmOptions {
   title: string;
@@ -31,6 +33,8 @@ const ConfirmContext = createContext<ConfirmFn | null>(null);
 export function ConfirmProvider({ children }: { children: React.ReactNode }) {
   const [options, setOptions] = useState<ConfirmOptions | null>(null);
   const resolver = useRef<((value: boolean) => void) | null>(null);
+  const titleId = useId();
+  const bodyId = useId();
 
   const confirm = useCallback<ConfirmFn>((opts) => {
     setOptions(opts);
@@ -49,52 +53,46 @@ export function ConfirmProvider({ children }: { children: React.ReactNode }) {
     <ConfirmContext.Provider value={confirm}>
       {children}
       {options && (
-        <div
-          className="fixed inset-0 z-50 flex items-end justify-center bg-ink/40 p-4 sm:items-center"
-          role="dialog"
-          aria-modal="true"
-          onClick={() => settle(false)}
+        <Dialog
+          onClose={() => settle(false)}
+          labelledBy={titleId}
+          describedBy={options.body ? bodyId : undefined}
+          layout="adaptive-sheet"
+          panelClassName="animate-rise w-full max-w-sm rounded-card bg-card p-5 shadow-float"
         >
-          <div
-            className="animate-rise w-full max-w-sm rounded-card bg-card p-5 shadow-float"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <h2 className="text-lg font-extrabold tracking-tight text-ink">
+            <h2 id={titleId} className="text-lg font-extrabold tracking-tight text-ink">
               {options.title}
             </h2>
             {options.body && (
-              <p className="mt-1.5 text-sm leading-relaxed text-ink-soft">
+              <p id={bodyId} className="mt-1.5 text-sm leading-relaxed text-ink-soft">
                 {options.body}
               </p>
             )}
             <div className="mt-5 flex gap-2">
               <Button
                 variant="secondary"
-                className="flex-1"
+                className="min-h-11 flex-1"
                 onClick={() => settle(false)}
               >
                 Cancel
               </Button>
               <Button
                 variant={options.danger ? 'danger' : 'primary'}
-                className="flex-1"
+                className="min-h-11 flex-1"
                 onClick={() => settle(true)}
               >
                 {options.confirmLabel ?? 'Confirm'}
               </Button>
             </div>
-          </div>
-        </div>
+        </Dialog>
       )}
     </ConfirmContext.Provider>
   );
 }
 
-/** Returns a function that resolves true if the user confirms. Falls back to
- *  the native confirm() if somehow used outside the provider. */
+/** Returns the app dialog. The provider is a required part of the root shell. */
 export function useConfirm(): ConfirmFn {
   const ctx = useContext(ConfirmContext);
-  if (ctx) return ctx;
-  return async (opts) =>
-    typeof window !== 'undefined' ? window.confirm(opts.title) : false;
+  if (!ctx) throw new Error('useConfirm must be used inside ConfirmProvider');
+  return ctx;
 }
