@@ -7,8 +7,8 @@
 // Safe to run repeatedly. DRY-RUN BY DEFAULT — it only reports what it would do.
 // Pass --apply to actually copy objects and rewrite columns:
 //
-//   node --env-file-if-exists=.env.local scripts/migrate-legacy-media.mjs          # dry run
-//   node --env-file-if-exists=.env.local scripts/migrate-legacy-media.mjs --apply  # execute
+//   node --env-file-if-exists=.env.local scripts/archive/migrate-legacy-media.mjs          # dry run
+//   node --env-file-if-exists=.env.local scripts/archive/migrate-legacy-media.mjs --apply  # execute
 //
 // Requires NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY (service role,
 // so RLS is bypassed for the rewrite). Point it at the project whose data you

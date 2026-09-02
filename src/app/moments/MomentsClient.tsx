@@ -109,7 +109,7 @@ export function MomentsClient({
           className="block rounded-card border border-dashed border-line bg-cream px-4 py-3 text-sm text-ink-soft hover:border-terracotta hover:text-terracotta-deep transition-colors"
         >
           🎪 At a conference, cruise, or festival? Check in through its{' '}
-          <strong>Serendipity Zone</strong> instead.
+          <strong>zone</strong> instead.
         </Link>
         <Link
           href="/map"
@@ -313,7 +313,7 @@ export function MomentsClient({
           title="Sharing this moment"
           hint={
             candidates.length === 0
-              ? 'Serendipity is watching quietly - check back in a bit'
+              ? 'No one else is here yet - check back in a bit'
               : 'Same place, same time, similar interests'
           }
         />
@@ -321,7 +321,7 @@ export function MomentsClient({
           <Card tone="cream">
             <p className="text-sm text-ink-soft leading-relaxed">
               Nobody else has checked in here yet. That’s the thing about
-              serendipity - it can’t be rushed. You’ll get a gentle nudge if a
+              a chance encounter - it can’t be rushed. You’ll get a gentle nudge if a
               match appears. ✨
             </p>
           </Card>

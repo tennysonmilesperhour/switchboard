@@ -41,8 +41,8 @@ Drawn from what shipped, so new names inherit the same voice:
 | Name | Where it appears | Legacy / alternates | Decision |
 |---|---|---|---|
 | Home | Bottom bar tab 1, `/` | — | keep |
-| Explore | Bottom bar tab 2, routes to `/discover` | "Discover" (route name, and the Home tile still says Discover) | **decide** — the tab says Explore, the route and the Home tile say Discover. Pick one word and make all three agree. Recommend **Explore** for the tab and heading, since the route can stay `/discover` without a user ever reading it. |
-| (create FAB) | Bottom bar center, `/create` | "New plan", "Start something" | **decide** — the FAB has `aria-label="Create a plan"`, the index calls the destination "Start something", Home said "New plan". Recommend **Start something** everywhere (it covers all three doors: a plan you have, one to figure out, or ideas to browse). |
+| Explore | Bottom bar tab 2, Home tile, and page heading; routes to `/discover` | "Discover" (internal route name) | rename → **Explore** everywhere user-facing. The route stays `/discover`; it is implementation detail. |
+| (create FAB) | Bottom bar center, `/create`, and generic create calls to action | "New plan", "Create a plan", "Make a plan" | rename → **Start something**. It covers all three doors: a plan you have, one to figure out, or ideas to browse. Specific wizard headings may still say “New plan.” |
 | Calendar | Bottom bar tab 4, `/plans` | "Plans", "Coming up" | keep — "Calendar" as the tab, "Coming up" as the section inside it, is working |
 | More | Bottom bar tab 5 (sheet) | — | keep |
 | Everything | More sheet → `/features` | "Feature index" (internal) | keep |
@@ -53,8 +53,8 @@ Drawn from what shipped, so new names inherit the same voice:
 |---|---|---|---|
 | Make a plan | Home pillar row → `/create` | "New plan", "Float an idea" | keep — "Float an idea to your people" stays as the empty-state copy, which is warmer for a first plan |
 | Mutual | Home pillar row, More sheet, `/mutual` | "Mutual Mode", "Down to Connect" | keep **Mutual** as the place; "Down to connect" stays as the action inside it |
-| I'm free | Home pillar row → the signal composer | "Availability signals", "Signals", "Coffee Break?" | **decide** — the feature is "Availability signals" in the index, the composer is a chip row with no title, and the pillar says "I'm free". Recommend keeping **I'm free** as the tap and **Availability signals** as the catalogue name; they serve different readers. |
-| Zones | Home pillar row, More sheet, `/zones` | "Serendipity Zones" | **decide** — README and the index say "Serendipity zones", nav says "Zones". Recommend **Zones** in nav, **Serendipity zones** on first introduction only. |
+| I'm free | Home pillar row → the signal composer | "Availability signals", "Signals", "Coffee Break?" | keep **I'm free** as the tap and **Availability signals** as the catalogue name; they serve different readers. |
+| Zones | Home pillar row, More sheet, `/zones` | "Serendipity Zones" | keep **Zones** in navigation and metadata; **Serendipity zones** appears only at its first catalogue introduction. |
 
 ## Core mechanics
 
@@ -62,10 +62,10 @@ Drawn from what shipped, so new names inherit the same voice:
 |---|---|---|---|
 | Cascading invites | Features index, README | "the cascade" (internal), "Cascade" | keep; "the chain" is the in-product plain-language version and is working ("Change the chain after it's live") |
 | Response window | Wizard, host controls | "window" | keep |
-| Anonymous weighted input | Features index, README | "AWI" (internal only), "the poll" | **decide** — README leads with "Anonymous Weighted Input" as a proper noun, which is exactly the jargon `/welcome` removed. Recommend **"Private group decisions"** as the name and "everyone rates options privately" as the blurb; keep AWI internal. |
+| Private group decisions | Features index | "Anonymous weighted input", "AWI" (internal only), "the poll" | rename → **Private group decisions**, with “everyone rates options privately” in the explanation. AWI stays internal. |
 | Consensus meter | Plan page with an open poll | — | keep |
 | Poll | Plan page, wizard | "group decision", "vote" | keep — "poll" is the plain word; "group decision" is the concept |
-| Guest link / Invite link | Plan page Share, Invite link card | "share link", "token link" | **decide** — three names for one URL ("Shareable guest links" in the index, "Invite link" on the card, "Share" on the button). Recommend **Invite link** everywhere user-facing. |
+| Invite link | Plan page Share, Invite link card | "guest link", "share link", "token link" | rename → **Invite link** everywhere user-facing. “Share” remains the verb on the platform share button. Internal modules may still use `share-link`. |
 | Run it back | Past plan page | "clone", "re-invite" | keep |
 | Open Table | Wizard visibility, index | "friends-of-friends" | keep |
 | Co-hosts | Plan page | — | keep |
@@ -104,7 +104,7 @@ Resolving them is most of the value of this page.
 |---|---|---|
 | The thing you organize | plan, event, gathering | **Plan** in all copy. `events` stays as the table/route; a user never reads it. Audit: the wizard, plan page, and notifications. |
 | The place people talk | room, living room, chat, thread | **Room** for the space; **thread** only for the plan-page comments (a genuinely different surface). |
-| Discovery surface | Explore, Discover | Pick one (recommend Explore) — currently disagreeing between the tab and the Home tile. |
+| Discovery surface | Explore, Discover | **Explore** in every user-facing surface; `/discover` remains the internal route. |
 | The link you send | invite link, guest link, share link | **Invite link.** |
 | People you know | friends, connections, people | **People** as the place, **friends** in prose, `connections` internal only. |
 | A private group of people | circle, household, board, zone | Already distinct concepts; keep, but never use the bare word "group" in UI copy, since it maps to four different things here. |
@@ -116,5 +116,3 @@ Resolving them is most of the value of this page.
    it appears cold.)
 2. Is "Your Read" clear without opening it? It is the most abstract name in the
    product.
-3. Should "Serendipity" survive anywhere user-facing, or is it a word the app
-   should demonstrate rather than say?

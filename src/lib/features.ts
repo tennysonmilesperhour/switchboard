@@ -96,7 +96,7 @@ export const FEATURE_GROUPS: readonly FeatureGroup[] = [
       },
       {
         id: 'guest-links',
-        title: 'Shareable guest links',
+        title: 'Invite links',
         blurb:
           'Send anyone a link and the plan opens for them with no account and no app — signing in is only asked for when they answer.',
         where: 'Your plan’s page → Share, and the Invite link card',
@@ -223,9 +223,9 @@ export const FEATURE_GROUPS: readonly FeatureGroup[] = [
     features: [
       {
         id: 'weighted-input',
-        title: 'Anonymous weighted input',
+        title: 'Private group decisions',
         blurb:
-          'Everyone privately rates each option love / good / rather-not, so people can be honest about a date or a place.',
+          'Everyone rates each option privately — love, good, or rather-not — so people can be honest about a date or a place.',
         where: 'Start something → Help me figure it out',
         href: '/events/new?decide=1',
       },
@@ -385,7 +385,7 @@ export const FEATURE_GROUPS: readonly FeatureGroup[] = [
   },
   {
     id: 'places',
-    title: 'Places and serendipity',
+    title: 'Places and chance encounters',
     hint: 'Finding something to do, and finding out who’s already nearby.',
     emoji: '🧭',
     features: [

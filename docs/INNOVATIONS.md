@@ -1,14 +1,12 @@
-# Switchboard: 20 Ideas for the Next Wave
+# Switchboard: Ideas for the Next Wave
 
-The first two waves have shipped: the 10 launch innovations (guest links,
-cascade simulator, teaching declines, smart windows, circles, consensus
-meter, calendar export, quiet hours, OG images, PWA push) and the 10 bold
-ideas (Standing Rituals, Third-Party Matchmaker, Social Battery, Open Table,
-Reconnection Radar, Memory Capsules, Venue Perks, Voice-First Planning,
-Households, Serendipity Zones).
+Only unshipped ideas live here. The authoritative catalogue of what exists is
+[`src/lib/features.ts`](../src/lib/features.ts); when an idea ships, remove it
+from this file. The original idea numbers remain stable because archived plans
+refer to them.
 
-Here are 20 more, grouped by theme. Each has a rationale, rough effort
-(S/M/L), and the main risk. None are built yet.
+Here are 13 open ideas, grouped by theme. Each has a rationale, rough effort
+(S/M/L), and the main risk.
 
 ---
 
@@ -16,16 +14,10 @@ Here are 20 more, grouped by theme. Each has a rationale, rough effort
 
 ### 1. Weather Guardian
 Outdoor plan and the forecast turns? Switchboard notices two days out,
-quietly asks the host "want a backup?", and can run a lightning AWI poll
+quietly asks the host "want a backup?", and can run a quick private poll
 for plan B without a single panicked group text.
 Why: rain kills more plans than rejection does. Effort: M. Risk: forecast
 API dependency; only trigger on high confidence.
-
-### 2. Run It Back
-One tap on any past event: same people, same place, new date. The cascade
-re-fires in the same order, minus anyone who said "not my thing".
-Why: the best predictor of a good plan is the last good plan. Effort: S.
-Risk: none worth naming; this should exist already.
 
 ### 3. Flake Insurance
 When someone cancels late, Switchboard instantly offers the seat to the
@@ -34,14 +26,8 @@ so the short notice feels like an invitation, not an afterthought.
 Why: late cancellations are the biggest source of dead plans. Effort: S-M.
 Risk: tone; the copy has to make short notice flattering.
 
-### 4. Co-Hosts
-Two or more people share host powers: editing the cascade, approving Open
-Table requests, closing polls. Great for couples and event pairs.
-Why: real plans usually have two organizers. Effort: M. Risk: permission
-model complexity.
-
 ### 5. Cascade Coach
-Private post-event analytics for hosts: which windows expired, where the
+Private post-plan analytics for hosts: which windows expired, where the
 cascade stalled, what window lengths actually get answered in your circle.
 Feeds better defaults next time.
 Why: the product should learn plan mechanics so users never think about
@@ -55,29 +41,10 @@ order sorts itself. Addresses pull from the room's Places.
 Why: "who's driving" is the last group-text holdout. Effort: M. Risk: none
 serious; keep it text-based, no live location in v1.
 
-### 7. Split the Bill
-Log shared costs in the room, see who owes what, settle with a Venmo or
-PayPal link. No money moves through Switchboard.
-Why: money awkwardness is social friction, which is the whole mission.
-Effort: M. Risk: scope creep toward payments; stay a ledger.
-
-### 8. Availability Heatmap
-For hard-to-schedule groups: everyone paints their free times on a shared
-week grid, and the overlap glows. The host taps the brightest block and the
-event is scheduled.
-Why: date-picking is the slowest part of group planning. Effort: M.
-Risk: needs a great mobile paint interaction to beat Doodle-style tools.
-
-### 9. Calendar Sync
-Optional read-only Google Calendar link: free/busy powers smarter response
-windows, ritual timing, and heatmap prefills.
-Why: multiplies the intelligence of everything above. Effort: L. Risk:
-OAuth scopes and trust; must be transparently read-only.
-
 ### 10. Surprise Mode
 Plan a birthday inside the guest of honor's own friend group: one member is
 marked hidden, sees nothing, while everyone else coordinates normally. On
-the day, the event reveals itself to them.
+the day, the plan reveals itself to them.
 Why: surprise parties are the ultimate coordination problem. Effort: M.
 Risk: a leak would be catastrophic for trust; needs careful RLS work.
 
@@ -93,17 +60,11 @@ Risk: keep it one-tap and optional or it becomes homework.
 Profile-level needs (step-free, quiet spaces, dietary, no late nights)
 surfaced to hosts at planning time and to Discovery as filters.
 Why: inclusion is a feature, not a checkbox. Effort: M. Risk: sensitive
-data; strictly opt-in and visible only to hosts of events you join.
-
-### 13. Sabbatical Mode
-One switch: pause signals, radar, rituals, and matchmaking. Friends who
-try to reach you see "taking a quiet season" instead of silence.
-Why: permission to rest is part of permission to connect. Effort: S.
-Risk: none; this is the brand.
+data; strictly opt-in and visible only to hosts of plans you join.
 
 ### 14. Matchmaker Hints
 Switchboard privately notices that two of your friends share three
-interests and have never been at the same event, and suggests you introduce
+interests and have never been at the same plan, and suggests you introduce
 them. You stay the matchmaker; the app just hands you the idea.
 Why: seeds the matchmaker loop with zero cold-start effort. Effort: M.
 Risk: must feel like insight, not surveillance; interests only, no
@@ -123,13 +84,6 @@ share card for texts. Meeting someone IRL becomes a two-second add.
 Why: the add-a-friend flow is the top of every funnel. Effort: S.
 Risk: none.
 
-### 17. Neighborhood Boards
-A permanent, geofenced zone for a neighborhood: recurring open events
-(Saturday market walk, pickup basketball), availability signals scoped to
-neighbors, and a shared board room.
-Why: the strongest use case for local community is repetition, not
-one-offs. Effort: L. Risk: moderation; start invite-only per board.
-
 ### 18. Travel Overlap
 Share upcoming trips (city plus date range). When a friend's trip overlaps
 yours, you both get a quiet note: "You two are both in Chicago March 3-6."
@@ -145,20 +99,17 @@ Why: reflection drives retention better than streaks. Effort: M.
 Risk: must celebrate, never guilt; no counts of declined invites.
 
 ### 20. Anniversary Rewind
-A year after a capsule-worthy event, the room softly resurfaces it: "One
-year ago tonight." One tap runs it back (see idea 2).
+A year after a capsule-worthy plan, the room softly resurfaces it: "One
+year ago tonight." One tap starts another plan with the same people.
 Why: memories are the moat; anniversaries are their interest payments.
-Effort: S. Risk: skip anniversaries of events with departed members.
+Effort: S. Risk: skip anniversaries of plans with departed members.
 
 ---
 
 ## Suggested sequencing
 
-Quick wins first: 2 Run It Back, 16 Handle Cards, 13 Sabbatical Mode,
-11 Arrival Mood, 20 Anniversary Rewind.
-Then the sturdiness pass: 3 Flake Insurance, 1 Weather Guardian, 5 Cascade
-Coach, 4 Co-Hosts.
-Then logistics: 8 Heatmap, 6 Carpool, 7 Split the Bill, 10 Surprise Mode.
-Long arcs: 9 Calendar Sync, 14 Matchmaker Hints, 15 Plus-One Chains,
-12 Comfort Prefs, 18 Travel Overlap, 17 Neighborhood Boards, 19 Seasons
-Recap.
+Quick wins first: Arrival Mood, Handle Cards, Anniversary Rewind.
+Then the sturdiness pass: Flake Insurance, Weather Guardian, Cascade Coach.
+Then logistics: Carpool Threads and Surprise Mode.
+Long arcs: Matchmaker Hints, Plus-One Chains, Comfort and Access Preferences,
+Travel Overlap, and Seasons Recap.

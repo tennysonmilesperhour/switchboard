@@ -102,7 +102,7 @@ export default async function ZonePage({
       <div className="space-y-6">
         <div className="rounded-card bg-ink text-paper p-6">
           <p className="text-xs font-bold uppercase tracking-widest text-gold-deep">
-            {zone.visibility === 'private' ? 'Private Zone' : 'Serendipity Zone'}
+            {zone.visibility === 'private' ? 'Private zone' : 'Zone'}
           </p>
           <h2 className="font-extrabold tracking-tight text-3xl mt-1.5 text-balance">
             ✨ {zone.name}
@@ -117,7 +117,7 @@ export default async function ZonePage({
                 }`
               : imHere
                 ? 'You’re checked in here. Nobody else is right now — you’re the one they’ll find.'
-                : 'Be the first to check in. Serendipity needs a starting point.'}
+                : 'Be the first to check in. Every chance encounter starts somewhere.'}
           </p>
           {/* A zone is a place, so "where is it" has to be answerable from here.
               Anchored zones link straight to their own pin; unanchored ones say

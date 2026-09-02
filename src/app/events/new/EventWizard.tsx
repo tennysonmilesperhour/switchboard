@@ -96,13 +96,13 @@ const MODE_OPTIONS: Array<{
     mode: 'individual',
     emoji: '🪜',
     title: 'One at a time',
-    body: 'Invite people in your order. When someone accepts, the cascade stops. Perfect for coffee, lunch, or last-minute plans.',
+    body: 'Invite people in your order. When someone accepts, the invitations stop. Perfect for coffee, lunch, or last-minute plans.',
   },
   {
     mode: 'group',
     emoji: '🌊',
     title: 'In waves',
-    body: 'Invite groups in stages. Later waves only go out if spots remain - events fill naturally without overbooking.',
+    body: 'Invite groups in stages. Later waves only go out if spots remain - plans fill naturally without overbooking.',
   },
   {
     mode: 'all_at_once',
@@ -1824,7 +1824,7 @@ export function EventWizard({
             ))}
           </ol>
           <p className="text-xs text-ink-faint">
-            💡 Suggested window for this event: <strong>{suggested.label}</strong> -
+            💡 Suggested window for this plan: <strong>{suggested.label}</strong> -
             based on how soon it starts.
           </p>
         </div>
@@ -1848,7 +1848,7 @@ export function EventWizard({
               },
               {
                 label: 'Keep expired invitations visible',
-                hint: 'People whose window passed can still see the event page.',
+                hint: 'People whose window passed can still see the plan page.',
                 value: showExpired,
                 set: setShowExpired,
               },
@@ -1902,7 +1902,7 @@ export function EventWizard({
           )}
           <p className="text-xs text-ink-faint leading-relaxed px-1">
             Defaults are tuned so a one-on-one coffee feels private and a party
-            feels social. Invitees never see their position in the cascade.
+            feels social. Invitees never see their place in the invite order.
           </p>
         </div>
       )}
@@ -1986,7 +1986,7 @@ export function EventWizard({
             <Card tone="gold">
               <p className="text-sm leading-relaxed">
                 🗳️ This plan starts in <strong>deciding mode</strong> - invitees
-                will suggest and rank ideas first. You’ll send the cascade once
+                will suggest and rank ideas first. You’ll send the invitations once
                 the group settles on what to do.
               </p>
             </Card>

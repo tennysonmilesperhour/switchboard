@@ -1,40 +1,70 @@
 # Docs index
 
-Two kinds of documents live here. **Living docs** are kept true as the code
-changes — if you change behavior they describe, update them in the same PR.
-**`archive/`** holds point-in-time plans and audits that were executed or
-superseded; they are history, never a source of truth, and each opens with a
-banner saying what happened to it.
+Living docs are kept true as the code changes: if a change affects behavior
+they describe, update the owning document in the same PR. Point-in-time plans,
+audits, and verification artifacts move to `archive/` when finished. Archived
+files are historical evidence, never a source of current product truth.
 
 ## Living docs
 
 | Doc | What it is |
 |---|---|
-| [`SECURITY.md`](SECURITY.md) | The security precedents. Read before touching auth, RLS, `createAdminClient()`, uploads, redirects, or untrusted text. |
-| [`AUTH.md`](AUTH.md) | The account-access invariants. Read before touching sign-in, sign-up, recovery, or onboarding. |
-| [`DEPLOYMENT.md`](DEPLOYMENT.md) | How the app and database ship; env vars, cron, moderators. |
-| [`DESIGN-SYSTEM.md`](DESIGN-SYSTEM.md) | The design system as shipped — tokens, type, component conventions. |
-| [`NAMING.md`](NAMING.md) | What things are called, where each name appears, and the decision behind it. |
-| [`analytics.md`](analytics.md) | Every tracked event and why; the anonymity guardrail. |
-| [`DOCKET.md`](DOCKET.md) | The living backlog: strategy, queued builds, design threads, and residuals carried forward from archived docs. |
-| [`INNOVATIONS.md`](INNOVATIONS.md) | The idea list. Roadmap entries live here, never in the feature index. |
-| [`WEEKLY-PLAN-2026-08-11.md`](WEEKLY-PLAN-2026-08-11.md) | The current week's plan. Superseded weekly plans move to `archive/`. |
-| [`AUDIT-2026-09-01.md`](AUDIT-2026-09-01.md) | Full audit of code, UX, security, vision, and delivery at `f68181e`. Moves to `archive/` once every box in the remediation plan is ticked. |
-| [`REMEDIATION-PLAN-2026-09-01.md`](REMEDIATION-PLAN-2026-09-01.md) | The work order from the audit: three passes of numbered, self-contained items with acceptance criteria. Point a session at an item; tick the box in the PR that finishes it. |
+| [`README.md`](README.md) | This complete index of the `docs/` tree. |
+| [`SECURITY.md`](SECURITY.md) | Security precedents. Read before touching auth, RLS, `createAdminClient()`, uploads, redirects, or untrusted text. |
+| [`AUTH.md`](AUTH.md) | Account-access invariants for sign-in, sign-up, recovery, and onboarding. |
+| [`DEPLOYMENT.md`](DEPLOYMENT.md) | How the app and database ship; env vars, cron, and moderators. |
+| [`DESIGN-SYSTEM.md`](DESIGN-SYSTEM.md) | The shipped visual system: tokens, type, and component conventions. |
+| [`NAMING.md`](NAMING.md) | Canonical user-facing names and the decisions behind them. |
+| [`analytics.md`](analytics.md) | Every tracked analytics event and the anonymity guardrail. |
+| [`DOCKET.md`](DOCKET.md) | The living backlog: strategy, queued builds, design threads, and carried residuals. |
+| [`INNOVATIONS.md`](INNOVATIONS.md) | Unshipped ideas only; shipped features are removed. |
+| [`POSTHOG_SOURCEMAPS.md`](POSTHOG_SOURCEMAPS.md) | How to upload production source maps to PostHog and verify the result. |
 
-Also load-bearing but not in `docs/`: [`../AGENTS.md`](../AGENTS.md) (the agent
-operating manual), [`../PRODUCT.md`](../PRODUCT.md) (product principles and
-anti-references), `src/lib/features.ts` (the user-facing feature catalogue,
-rendered at `/features` and enforced by test), and `src/lib/errors.ts` (every
-operational error code).
+## Active point-in-time work
+
+| Doc | What it is |
+|---|---|
+| [`AUDIT-2026-09-01.md`](AUDIT-2026-09-01.md) | Audit of code, UX, security, vision, and delivery at `f68181e`; archives when the remediation plan closes. |
+| [`REMEDIATION-PLAN-2026-09-01.md`](REMEDIATION-PLAN-2026-09-01.md) | The numbered work order from the audit; archives with the audit after every box is complete. |
+
+## Archive
+
+| File | Historical purpose |
+|---|---|
+| [`archive/AUDIT-AND-HANDOFF.md`](archive/AUDIT-AND-HANDOFF.md) | Earlier codebase audit and handoff. |
+| [`archive/CHATGPT-5-5-PROMPT-MAP.md`](archive/CHATGPT-5-5-PROMPT-MAP.md) | Prompt-to-work map for an earlier implementation pass. |
+| [`archive/CLIENT-FEEDBACK-PLAN.md`](archive/CLIENT-FEEDBACK-PLAN.md) | First client-feedback implementation plan. |
+| [`archive/CLIENT-FEEDBACK-2-PLAN.md`](archive/CLIENT-FEEDBACK-2-PLAN.md) | Second client-feedback implementation plan. |
+| [`archive/CLIENT-FEEDBACK-3-PLAN.md`](archive/CLIENT-FEEDBACK-3-PLAN.md) | Third client-feedback implementation plan. |
+| [`archive/COMPLETION-PLAN.md`](archive/COMPLETION-PLAN.md) | Historical completion plan. |
+| [`archive/DEMO-MVP-SCOPE-CHECKLIST.md`](archive/DEMO-MVP-SCOPE-CHECKLIST.md) | Demo/MVP scope checklist. |
+| [`archive/DESIGN-DIRECTIONS.md`](archive/DESIGN-DIRECTIONS.md) | Superseded visual-direction exploration. |
+| [`archive/MVP-SHIP-CHECKLIST.md`](archive/MVP-SHIP-CHECKLIST.md) | MVP release checklist. |
+| [`archive/PARTIFUL-GAPS.md`](archive/PARTIFUL-GAPS.md) | Point-in-time Partiful comparison. |
+| [`archive/SHIP-READINESS-AUDIT.md`](archive/SHIP-READINESS-AUDIT.md) | Earlier ship-readiness audit. |
+| [`archive/WEEKLY-PLAN-2026-08-11.md`](archive/WEEKLY-PLAN-2026-08-11.md) | Completed six-item weekly plan. |
+| [`archive/scope-of-work-verification.html`](archive/scope-of-work-verification.html) | Standalone client-facing verification checklist captured on August 10, 2026. |
+| [`archive/scope-verification.js`](archive/scope-verification.js) | Script companion to the archived HTML checklist. |
+
+## Historical specs
+
+| File | Historical purpose |
+|---|---|
+| [`superpowers/specs/2026-07-03-switchboard-v1-design.md`](superpowers/specs/2026-07-03-switchboard-v1-design.md) | Original v1 design and data-model specification. |
+
+## Load-bearing sources outside `docs/`
+
+- [`../AGENTS.md`](../AGENTS.md) — agent operating manual.
+- [`../PRODUCT.md`](../PRODUCT.md) — product principles and anti-references.
+- [`../src/lib/features.ts`](../src/lib/features.ts) — the only catalogue of
+  what ships, rendered at `/features` and enforced by test.
+- [`../src/lib/errors.ts`](../src/lib/errors.ts) — operational error registry.
 
 ## Where things go
 
 - **Work not yet done** → `DOCKET.md` (near-term, decided) or `INNOVATIONS.md`
-  (ideas). A dated weekly plan may expand on docket items.
-- **A finished pass or audit** → write-ups move to `archive/` once executed,
-  with a banner and their open items carried into `DOCKET.md` first.
+  (uncommitted ideas). A dated plan may expand on docket work while active.
+- **A finished plan, audit, or checklist** → `archive/`, with a banner and any
+  remaining work carried into `DOCKET.md` first.
 - **Behavior documentation** → the living doc that owns it, updated in the same
   PR as the change.
-
-`superpowers/specs/` holds dated design specs (historical by convention).

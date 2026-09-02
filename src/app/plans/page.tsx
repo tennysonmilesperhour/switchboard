@@ -169,7 +169,7 @@ export default async function PlansPage() {
           body="Start a plan and let Switchboard handle the asking. One person or twenty - no group-chat chaos."
           action={
             <Link href="/create">
-              <Button>Make a plan</Button>
+              <Button>Start something</Button>
             </Link>
           }
         />
@@ -207,7 +207,7 @@ export default async function PlansPage() {
           )}
           {pastEvents.length > 0 && (
             <section>
-              <SectionHeader title="Past events" hint="Plans that have wrapped" />
+              <SectionHeader title="Past plans" hint="Plans that have wrapped" />
               <div className="grid grid-cols-2 gap-3">
                 {pastEvents.map((event, i) => (
                   <EventCard key={event.id} event={event} index={i} note="Past" />

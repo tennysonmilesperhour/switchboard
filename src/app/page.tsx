@@ -242,7 +242,7 @@ export default async function HomePage() {
                 attendeesLabel="Pick something below, or start from scratch. Switchboard sorts out the details."
                 actions={
                   <span className="rounded-btn bg-white/25 px-5 py-2.5 text-sm font-bold backdrop-blur-sm">
-                    Create a plan
+                    Start something
                   </span>
                 }
               />
@@ -439,7 +439,7 @@ export default async function HomePage() {
                 answer "I don't know who or what yet". */}
             <div className="grid grid-cols-2 gap-3">
               {[
-                { href: '/discover', emoji: '🧭', title: 'Discover', body: 'What should we do?' },
+                { href: '/discover', emoji: '🧭', title: 'Explore', body: 'What should we do?' },
                 { href: '/moments', emoji: '✨', title: 'Moments', body: 'Who’s nearby' },
               ].map((action) => (
                 <Link key={action.href} href={action.href} className="group">

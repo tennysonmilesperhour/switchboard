@@ -5,8 +5,8 @@
 // subset whose contact matches exactly one account. It never prints tokens,
 // contacts, names, or account ids.
 //
-//   npm run backfill:guest-invites
-//   npm run backfill:guest-invites -- --apply
+//   node --env-file-if-exists=.env.local scripts/archive/backfill-orphaned-guest-invites.mjs
+//   node --env-file-if-exists=.env.local scripts/archive/backfill-orphaned-guest-invites.mjs --apply
 //
 // Requires SUPABASE_DB_URL for a trusted direct or session-pooler Postgres
 // connection. Direct SQL is deliberate: the match spans auth.users and public

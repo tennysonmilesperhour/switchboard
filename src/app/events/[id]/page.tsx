@@ -784,7 +784,7 @@ export default async function EventPage({
             <p className="text-sm font-bold text-ink">Your plan was created.</p>
             <p className="mt-1 text-sm text-ink-soft">
               At least one invitation could not be sent automatically. The delivery status below
-              shows what needs attention, and guest links remain available to share manually.
+              shows what needs attention, and invite links remain available to share manually.
             </p>
           </div>
         )}
@@ -1165,7 +1165,7 @@ export default async function EventPage({
         {/* Guest links for the host to share */}
         {guestLinks.length > 0 && (
           <section>
-            <SectionHeader title="Guest links" hint="For people you invited who aren’t on Switchboard" />
+            <SectionHeader title="Invite links" hint="For people you invited who aren’t on Switchboard" />
             <p className="text-sm text-ink-soft mb-2.5 leading-relaxed">
               Each link opens a private invitation page for that person - the
               plan shows up with no account or app. Copy it and send it however

@@ -69,7 +69,7 @@ export function HostControls({ event, pollDecided, isPrimaryHost }: HostControls
     const approved = await confirm({
       title: `Permanently delete “${event.title}”?`,
       body:
-        'This removes the plan, invitations, polls, comments, room messages, and share links. This cannot be undone.',
+        'This removes the plan, invitations, polls, comments, room messages, and invite links. This cannot be undone.',
       confirmLabel: 'Delete permanently',
       danger: true,
     });

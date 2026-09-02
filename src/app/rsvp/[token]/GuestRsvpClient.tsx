@@ -259,7 +259,7 @@ export function GuestRsvpClient({
   if (status === 'waitlisted') {
     return (
       <div className="mt-8 rounded-card bg-gold-soft p-5 animate-rise">
-        <p className="font-bold">The event filled up, you’re on the waitlist</p>
+        <p className="font-bold">The plan filled up, you’re on the waitlist</p>
         <p className="text-sm text-ink-soft mt-1">
           If a spot opens, the host will reach out.
         </p>

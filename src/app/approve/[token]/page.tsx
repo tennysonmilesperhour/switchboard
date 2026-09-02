@@ -50,7 +50,7 @@ export default async function ApprovalPage({
   return (
     <ApproveClient
       token={token}
-      eventTitle={event?.title ?? 'this event'}
+      eventTitle={event?.title ?? 'this plan'}
       guardianName={approval.guardian_name}
     />
   );

@@ -17,10 +17,9 @@ import { GRID_DAYS, gridSlots, slotRange } from '@/lib/availability';
 /**
  * Connecting a calendar so the availability grid starts from your real week.
  *
- * Phase 1 of docs/INNOVATIONS.md #9, deliberately without OAuth: every calendar
- * worth connecting already publishes a read-only iCalendar URL, which means this
- * works for Google, Outlook and iCloud users alike and ships without waiting on
- * app verification for a sensitive Google scope.
+ * Deliberately implemented without OAuth: every calendar worth connecting
+ * already publishes a read-only iCalendar URL, so this works for Google,
+ * Outlook, and iCloud users alike without requesting a sensitive Google scope.
  *
  * The URL is a bearer credential — anyone holding it can read the whole
  * calendar — so it is written once and never read back out to the client. Every

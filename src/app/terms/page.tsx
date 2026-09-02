@@ -27,7 +27,7 @@ const SECTIONS = [
   },
   {
     title: 'SMS Notifications',
-    body: 'If you add and verify a mobile phone number and opt in to SMS notifications, you agree that Switchboard may send transactional text messages about phone verification, your account, invitations, RSVPs, reminders, schedule changes, cancellations, and event-related updates. Message frequency varies. Message and data rates may apply. Reply STOP to opt out of SMS notifications or HELP for help.',
+    body: 'If you add and verify a mobile phone number and opt in to SMS notifications, you agree that Switchboard may send transactional text messages about phone verification, your account, invitations, RSVPs, reminders, schedule changes, cancellations, and plan-related updates. Message frequency varies. Message and data rates may apply. Reply STOP to opt out of SMS notifications or HELP for help.',
   },
   {
     title: 'Safety and Enforcement',

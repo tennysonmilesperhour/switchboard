@@ -9,8 +9,7 @@ from working sessions. Newest thinking lives here so nothing evaporates.
 > **2026-09-01:** the near-term queue now lives in
 > [`REMEDIATION-PLAN-2026-09-01.md`](REMEDIATION-PLAN-2026-09-01.md), the
 > work order from [`AUDIT-2026-09-01.md`](AUDIT-2026-09-01.md). Work that
-> plan before anything 🛠️ below; several lines below it are known to be
-> stale and are corrected by its item 20.
+> plan before anything 🛠️ below.
 
 ---
 
@@ -18,10 +17,11 @@ from working sessions. Newest thinking lives here so nothing evaporates.
 
 The point-in-time plans and audits were archived to `docs/archive/` (they had
 drifted badly — all three client-feedback plans still said "nothing implemented
-yet" while their features were live in the app). This docket and
-`docs/WEEKLY-PLAN-2026-08-11.md` are now the only places describing work not
-yet done. This section carries forward every still-open item found in the
-archived docs so nothing evaporates with them.
+yet" while their features were live in the app). This docket and the active
+remediation plan are the only places describing work not yet done. The
+completed weekly plan now lives in `docs/archive/`. This section carries
+forward every still-open item found in the archived docs so nothing evaporates
+with them.
 
 ### ✅ Shipped 2026-08-12 (the weekly plan, executed)
 
@@ -31,12 +31,7 @@ editable after creation; poll trees (a follow-up opens by itself when its
 parent is decided) plus the suggest-deadline sweep that makes that long-stored
 setting real; the feature passport on `/features`; and appearance presets
 (Almanac, Dusk, Transit) with a contrast-checked token layer. Home now leads
-with four equal pillars. `docs/NAMING.md` is the naming checklist — its
-**decide** rows are the open work there.
-
-**Needs Docker before production:** `supabase test db` for
-`private_zones.test.sql` and `poll_trees.test.sql`, then apply migrations
-`20260812120000`, `20260812130000`, `20260812140000`.
+with four equal pillars. `docs/NAMING.md` records the resolved naming choices.
 
 ### ✅ Verified shipped since the sections below were written
 
@@ -122,7 +117,10 @@ reader can redo it in one command rather than trust this file.
   id — same rule as poll votes, because "who is free Friday night" is a question
   about someone's private life. Slots are validated against the grid the app
   offers, so the column cannot become a free-form timestamp store.
-  Still open, and now unblocked: **read-only Google free/busy** (2b).
+  **Read-only calendar busy-time import is also shipped.** It accepts a secret
+  iCalendar/ICS address from Google, Apple, or Outlook, stores only coarse busy
+  bands, and prefills the grid. Google OAuth/free-busy API access was not
+  required and is not part of the shipped design.
 - ✅ **Post-level reporting** into the moderation queue (round 1, Phase 3).
   `user_reports` gained `target_kind`/`target_id` rather than getting a parallel
   table, so the existing resolution tracking, `platform_moderators` authority,
@@ -233,13 +231,13 @@ Code can't close these; they need the owner or a dashboard:
 
 ### 💭 Deferred epics still parked (from the archived strategy docs)
 
-Interop wave 2+ (import-from-link shipped; PSI contact matching, Discord bot,
-two-way calendar write remain), OAuth/passkeys, i18n, businesses in Explore
-(N13), the adventure game (N12 — the 2026-08-11 weekly plan's feature passport
-is its first intrinsic step), collaborative playlist / shared album / weather
-embeds / plus-ones (Partiful-gaps leftovers), and `polls.suggest_deadline` is
-vestigial — drop it in the next poll migration (the poll-tree work is the
-natural moment).
+Interop wave 2+ (import-from-link and read-only calendar busy-time import
+shipped; PSI contact matching, Discord bot, and two-way calendar write remain),
+OAuth/passkeys, i18n, businesses in Explore (N13), the adventure game (N12 —
+the 2026-08-11 weekly plan's feature passport is its first intrinsic step), and
+collaborative playlist / shared album / weather embeds / plus-ones
+(Partiful-gaps leftovers). `polls.suggest_deadline` is active: the poll runner
+uses it to close suggestions and advance the decision.
 
 ---
 
@@ -254,9 +252,9 @@ of these wearing a costume — build each once, surface it everywhere:
 1. **A reachability policy** — *who can reach me, and on what terms.* Powers
    connect-tiers, the ex-filter, Moments gates-with-exceptions, mutual reveals,
    and get-to-know-you prefs. One engine, many surfaces.
-2. **The geo foundation** — opt-in device location + real coordinates. The
-   keystone under the map, Moments proximity, public events, verified-presence
-   Zones, and Adventure Mode. Nothing spatial exists until it's poured.
+2. **The geo foundation** — shipped for opt-in live location, map layers,
+   geo-tagged plans, zones, and moments. Future proximity controls, public-plan
+   discovery, verified-presence zones, and Adventure Mode should reuse it.
 3. **Engineered serendipity** — make real-world encounters happen *without
    pressure*. The app's soul: meetcute → Moments → Adventure Mode → the map.
 
@@ -348,10 +346,11 @@ density + safety, not the next sprint.
   `position` unique constraint needs careful renumbering; host/co-host only.
   `AddInvitees`/`HostControls` may already cover part of the "add" path — scope
   before building.
-- **"Describe it for me" is weak.** It's AI-backed (`parsePlan` → Claude) with a
-  title-only no-key fallback — so if `ANTHROPIC_API_KEY` isn't set on the
-  deployment it silently degrades. Fix: (1) confirm/wire the key, (2) strengthen
-  the prompt + add a "here's what I understood" confirm step.
+- **"Describe it for me" can still improve.** It uses Claude when configured
+  and a deterministic fallback otherwise. The fallback extracts a title,
+  relative date, time, invite mode, and known invitee names; only location and
+  capacity remain unset without the model. Open work: strengthen extraction and
+  add a "here's what I understood" confirmation step.
 
 ---
 
@@ -418,13 +417,13 @@ density + safety, not the next sprint.
 
 Move away from numbers/icons toward something spatial and intuitive.
 
-- **Geo-tagged, opt-in-public events** (esp. recurring) — the foundation. Events
-  today have only a text location; no coordinates, no public flag, no map.
-- **Opt-in device location** — the app has never used `navigator.geolocation`.
-  First consumer: a **proximity slider in Moments** ("proximity of willingness")
-  beside the existing time slider, filtering by distance from me. Needs
-  coordinates on moments (today just a text `place_name`) + location-sharing on.
-  Show "within X mi", never anyone's exact pin.
+- **Opt-in-public plans** (especially recurring) — coordinates and map pins are
+  shipped; the remaining product decision is a public-discovery flag and its
+  audience rules.
+- **Moments proximity control** — device geolocation, geo-tagged moments, and
+  opt-in live sharing are shipped. The remaining idea is a "proximity of
+  willingness" slider beside the time control. Show "within X mi", never
+  anyone's exact pin.
 - **Dashboard = two living streams** — *Around me* (locality + interests,
   calendar-aware) and *Your people* (friends' public plans, who's down to hang).
   Raw material exists: signals + discovery.
@@ -449,9 +448,10 @@ hard routing/scheduling problem). The reveal rides Moments' three-moments-of-
 consent. **Highest-trust surface in the app:** opt-in only, busy/public venues,
 playful quests, consented reveal, one-tap exit. Feeds the challenge/tier game.
 
-Privacy spine for all of the above: public = opt-in *per event*, the map shows
-*events people chose to share* (never live people), "down to hang" stays
-circle-scoped. Anything that steers people physically toward each other is
-opt-in and consent-gated, always.
+Privacy spine for all of the above: public plans must be opt-in *per plan*; live
+people appear on the map only after they explicitly share, to viewers allowed by
+their chosen audience, with blocks enforced and coordinates coarsened at the
+boundary. "Down to hang" stays circle-scoped. Anything that steers people
+physically toward each other is opt-in and consent-gated, always.
 
 *(Open threads still to hear back on: SLC Lunatics — the story got cut off.)*
