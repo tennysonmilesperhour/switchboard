@@ -145,9 +145,9 @@ production defect or an exploitable gap today.
 
 ### 5. Security H3: moments reveal nobody before consent
 
-- [ ] **What.** `src/app/moments/page.tsx:70-112` ships every candidate's
+- [x] **What.** `src/app/moments/page.tsx:70-112` ships every candidate's
   `user_id` regardless of stage, `find_shared_moments` applies no block
-  filter, and `expressCuriosity` pings any owner.
+  filter, and `expressCuriosity` pings any owner. Fixed in PR #165.
 - **Where.** `src/app/moments/page.tsx`, `src/app/moments/MomentsClient.tsx`,
   `src/lib/actions/moments.ts`, new migration redefining
   `find_shared_moments`, `supabase/tests/moments_anonymity.test.sql` (new).
