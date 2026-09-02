@@ -164,10 +164,11 @@ production defect or an exploitable gap today.
 
 ### 6. Security H4: invites honour blocks and hosts cannot forge attendance
 
-- [ ] **What.** `create_event_atomic` and `addPeopleToEvent` apply no
+- [x] **What.** `create_event_atomic` and `addPeopleToEvent` apply no
   `are_blocked` check and no invitee cap; `deliverInvitations` and
   `cancelEvent` send host text to any `guest_contact`; the `invites_insert`
-  policy lets a host insert `status = 'accepted'` for any profile.
+  policy lets a host insert `status = 'accepted'` for any profile. Fixed in
+  PR #166.
 - **Where.** `src/lib/actions/events.ts:393-567`, `private.create_event_atomic`
   (latest definition is in `20260811120000_parental_approval.sql`), the
   `invites_insert` policy from `20260710123000_cohost_policy_parity.sql`,
