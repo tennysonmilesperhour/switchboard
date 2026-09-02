@@ -26,8 +26,9 @@ import {
 import { reportAndFail, reportOperationalError } from '@/lib/server/observability';
 import type { ActionResult, ErrorCode } from '@/lib/errors';
 import { failure, validation } from '@/lib/errors';
-import { looksLikeEmail, sendEmails } from '@/lib/server/email';
+import { guestEmailHeaders, looksLikeEmail, sendEmails } from '@/lib/server/email';
 import { looksLikePhoneNumber, sendSmsMessages } from '@/lib/server/sms';
+import { inviteIdsSentBySms } from '@/lib/server/sms-opt-out';
 import { normalizePhoneNumber } from '@/lib/phone';
 import { suggestWindow } from '@/lib/engine/windows';
 import { parseInviteEntries, type ParsedInviteEntry } from '@/lib/invite-entry';
@@ -115,7 +116,11 @@ function createEventError(error: string): CreateEventResult {
 function deliveryWarning(delivery: InvitationDeliverySummary | undefined): string | undefined {
   if (!delivery) return undefined;
   const count =
-    delivery.notConfigured + delivery.failed + delivery.invalidRecipient + delivery.manual;
+    delivery.notConfigured
+    + delivery.failed
+    + delivery.invalidRecipient
+    + delivery.optedOut
+    + delivery.manual;
   return count > 0
     ? `${count} invitation channel${count === 1 ? '' : 's'} needs attention.`
     : undefined;
@@ -1247,7 +1252,7 @@ export async function cancelEvent(
   // that it's off, so nobody shows up to a cancelled plan.
   const { data: accepted } = await admin
     .from('invites')
-    .select('invitee_id, guest_contact')
+    .select('id, invitee_id, guest_contact')
     .eq('event_id', eventId)
     .eq('status', 'accepted');
   const rows = accepted ?? [];
@@ -1264,17 +1269,15 @@ export async function cancelEvent(
     });
   }
 
-  const guestContacts = rows
-    .filter((r) => !r.invitee_id)
-    .map((r) => r.guest_contact as string | null)
-    .filter((c): c is string => Boolean(c));
+  const guests = rows.filter((r) => !r.invitee_id && Boolean(r.guest_contact));
   const reasonLine = cleanReason ? `\n\nReason: ${cleanReason}` : '';
-  const guestEmails = guestContacts
-    .filter((c) => looksLikeEmail(c))
-    .map((to) => ({
-      to,
+  const guestEmails = guests
+    .filter((invite) => looksLikeEmail(invite.guest_contact))
+    .map((invite) => ({
+      to: invite.guest_contact as string,
       subject: `Cancelled: ${title}`,
       text: `${title} has been cancelled. Apologies for the change of plans.${reasonLine}\n\n- Switchboard`,
+      headers: guestEmailHeaders(),
     }));
   const permittedGuestEmails = (
     await Promise.all(
@@ -1288,10 +1291,12 @@ export async function cancelEvent(
     )
   ).filter((message): message is (typeof guestEmails)[number] => message !== null);
   if (permittedGuestEmails.length > 0) await sendEmails(permittedGuestEmails);
-  const guestSms = guestContacts
-    .filter((c) => looksLikePhoneNumber(c))
-    .map((to) => ({
-      to,
+  const textableGuests = guests.filter((invite) => looksLikePhoneNumber(invite.guest_contact));
+  const smsInviteIds = await inviteIdsSentBySms(textableGuests.map((invite) => invite.id));
+  const guestSms = textableGuests
+    .filter((invite) => smsInviteIds.has(invite.id))
+    .map((invite) => ({
+      to: invite.guest_contact as string,
       body: `${title} on Switchboard has been cancelled.${cleanReason ? ` Reason: ${cleanReason}` : ''}`,
     }));
   const permittedGuestSms = (

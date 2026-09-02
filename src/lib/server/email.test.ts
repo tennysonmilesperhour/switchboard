@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, test, vi } from 'vitest';
 import {
+  guestEmailHeaders,
   looksLikeEmail,
   PROVIDER_TIMEOUT_MS,
   sendEmailWithResult,
@@ -10,6 +11,7 @@ afterEach(() => {
   vi.unstubAllGlobals();
   delete process.env.RESEND_API_KEY;
   delete process.env.EMAIL_FROM;
+  delete process.env.NEXT_PUBLIC_SUPPORT_EMAIL;
 });
 
 describe('looksLikeEmail', () => {
@@ -91,5 +93,28 @@ describe('looksLikeEmail', () => {
       errorCode: 'timeout',
     });
     expect(timeout).toHaveBeenCalledWith(PROVIDER_TIMEOUT_MS);
+  });
+
+  test('passes an unsubscribe header for guest mail', async () => {
+    process.env.RESEND_API_KEY = 'test-key';
+    process.env.EMAIL_FROM = 'Switchboard <test@example.com>';
+    process.env.NEXT_PUBLIC_SUPPORT_EMAIL = 'support@example.com';
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ id: 'email_123' }), { status: 200 }),
+    ));
+
+    await sendEmailWithResult({
+      to: 'guest@example.com',
+      subject: 'An invitation',
+      text: 'Hello',
+      headers: guestEmailHeaders(),
+    });
+
+    const [, init] = (fetch as unknown as ReturnType<typeof vi.fn>).mock.calls[0];
+    expect(JSON.parse(init.body as string)).toEqual(expect.objectContaining({
+      headers: {
+        'List-Unsubscribe': '<mailto:support@example.com?subject=unsubscribe>',
+      },
+    }));
   });
 });

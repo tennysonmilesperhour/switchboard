@@ -345,7 +345,7 @@ Implemented in PR #172.
 
 ### 15. SMS opt-out that exists
 
-- [ ] **What.** The terms describe STOP/HELP handling; there is no inbound
+- [x] **What.** (PR #175) The terms describe STOP/HELP handling; there is no inbound
   webhook, no opt-out record, and non-users get texted.
 - **How.** `POST /api/sms/inbound` validating Twilio's signature; an
   `sms_opt_outs` table keyed by normalised number; `sendSmsWithResult`

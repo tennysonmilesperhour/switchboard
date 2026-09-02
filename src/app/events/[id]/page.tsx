@@ -206,7 +206,7 @@ export default async function EventPage({
       invitee_avatar_url: string | null;
       deliveries?: Array<{
         channel: 'in_app' | 'email' | 'sms';
-        status: 'sent' | 'not_configured' | 'invalid_recipient' | 'failed';
+        status: 'sent' | 'not_configured' | 'invalid_recipient' | 'opted_out' | 'failed';
       }>;
     }
   > = [];
@@ -239,7 +239,7 @@ export default async function EventPage({
         string,
         {
           channel: 'in_app' | 'email' | 'sms';
-          status: 'sent' | 'not_configured' | 'invalid_recipient' | 'failed';
+          status: 'sent' | 'not_configured' | 'invalid_recipient' | 'opted_out' | 'failed';
         }
       >();
       for (const attempt of attempts ?? []) {

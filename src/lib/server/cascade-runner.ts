@@ -8,6 +8,7 @@ import { notifyUsers } from '@/lib/server/notify';
 import {
   looksLikeEmail,
   appUrl,
+  guestEmailHeaders,
   sendEmailWithResult,
   type DeliveryStatus,
 } from '@/lib/server/email';
@@ -45,6 +46,7 @@ export interface InvitationDeliverySummary {
   notConfigured: number;
   failed: number;
   invalidRecipient: number;
+  optedOut: number;
   manual: number;
 }
 
@@ -58,13 +60,21 @@ interface DeliveryAttemptRow {
 }
 
 function emptyDeliverySummary(): InvitationDeliverySummary {
-  return { sent: 0, notConfigured: 0, failed: 0, invalidRecipient: 0, manual: 0 };
+  return {
+    sent: 0,
+    notConfigured: 0,
+    failed: 0,
+    invalidRecipient: 0,
+    optedOut: 0,
+    manual: 0,
+  };
 }
 
 function countDelivery(summary: InvitationDeliverySummary, status: DeliveryStatus): void {
   if (status === 'sent') summary.sent += 1;
   else if (status === 'not_configured') summary.notConfigured += 1;
   else if (status === 'invalid_recipient') summary.invalidRecipient += 1;
+  else if (status === 'opted_out') summary.optedOut += 1;
   else summary.failed += 1;
 }
 
@@ -114,6 +124,7 @@ async function deliverInvitations(
           text: invite.invitee_id
             ? memberInviteText(event, invitePath)
             : guestInviteText(event, invite.guest_name, invite.guest_token),
+          ...(invite.invitee_id ? {} : { headers: guestEmailHeaders() }),
         });
         countDelivery(summary, result.status);
         attempts.push({

@@ -1,4 +1,11 @@
-import { afterEach, describe, expect, test, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
+
+const optOutStatus = vi.hoisted(() => vi.fn());
+
+vi.mock('@/lib/server/sms-opt-out', () => ({
+  smsOptOutStatus: optOutStatus,
+}));
+
 import {
   sendSmsWithResult,
   guestInviteSmsText,
@@ -16,6 +23,11 @@ afterEach(() => {
   delete process.env.TWILIO_ACCOUNT_SID;
   delete process.env.TWILIO_AUTH_TOKEN;
   delete process.env.TWILIO_FROM_NUMBER;
+});
+
+beforeEach(() => {
+  optOutStatus.mockReset();
+  optOutStatus.mockResolvedValue('allowed');
 });
 
 describe('sendSmsWithResult', () => {
@@ -102,6 +114,9 @@ describe('sendSmsWithResult', () => {
       to: '+1 555 555 0100',
       body: 'Hello',
     });
+    await vi.waitFor(() => {
+      expect(timeout).toHaveBeenCalledWith(PROVIDER_TIMEOUT_MS);
+    });
     controller.abort(new DOMException('timed out', 'TimeoutError'));
 
     await expect(delivery).resolves.toEqual({
@@ -109,7 +124,22 @@ describe('sendSmsWithResult', () => {
       provider: 'twilio',
       errorCode: 'timeout',
     });
-    expect(timeout).toHaveBeenCalledWith(PROVIDER_TIMEOUT_MS);
+  });
+
+  test('refuses an opted-out recipient without calling Twilio', async () => {
+    process.env.TWILIO_ACCOUNT_SID = 'ACtest';
+    process.env.TWILIO_AUTH_TOKEN = 'test-auth-token';
+    process.env.TWILIO_FROM_NUMBER = '+15555550199';
+    optOutStatus.mockResolvedValue('opted_out');
+    const provider = vi.fn();
+    vi.stubGlobal('fetch', provider);
+
+    await expect(sendSmsWithResult({ to: '+1 555 555 0100', body: 'Hello' })).resolves.toEqual({
+      status: 'opted_out',
+      provider: 'twilio',
+    });
+    expect(optOutStatus).toHaveBeenCalledWith('+15555550100');
+    expect(provider).not.toHaveBeenCalled();
   });
 });
 
