@@ -2848,10 +2848,7 @@ export type Database = {
         Args: { p_event: string }
         Returns: boolean
       }
-      can_current_user_view_zone: {
-        Args: { p_zone: string }
-        Returns: boolean
-      }
+      can_current_user_view_zone: { Args: { p_zone: string }; Returns: boolean }
       can_view_event: {
         Args: { p_event: string; p_user: string }
         Returns: boolean
