@@ -96,6 +96,11 @@ const REGISTRY = {
     fix: null,
     actor: 'operator',
   },
+  'SB-CONFIG-AUTH': {
+    message: 'Account management isn’t fully configured on this deployment.',
+    fix: null,
+    actor: 'operator',
+  },
 
   // ————————————————————————— invite links —————————————————————————
   // One code per REASON a link doesn't open, because one sentence for all of
@@ -233,6 +238,16 @@ const REGISTRY = {
   'SB-AUTH-RESEND': {
     message: 'Switchboard couldn’t send that confirmation email.',
     fix: 'Try again in a few minutes, or use “Forgot password?” — that link confirms the address too.',
+    actor: 'reader',
+  },
+  'SB-AUTH-DELETE': {
+    message: 'Switchboard couldn’t delete that account.',
+    fix: 'Try again in a moment.',
+    actor: 'reader',
+  },
+  'SB-ACCOUNT-EXPORT': {
+    message: 'Switchboard couldn’t prepare your data download.',
+    fix: 'Try again in a moment.',
     actor: 'reader',
   },
   'SB-PERM-HOST': {
@@ -600,6 +615,12 @@ const AREA_CODES: Record<string, ErrorCode> = {
 
   // Getting into an account
   'auth.resend-confirmation': 'SB-AUTH-RESEND',
+  'account.delete': 'SB-AUTH-DELETE',
+  'account.export': 'SB-ACCOUNT-EXPORT',
+
+  // Best-effort delivery still needs an operator-visible trace when a provider
+  // rejects a live subscription for a reason other than "gone".
+  'push.send': 'SB-CONFIG-PUSH',
 
   // Uploads
   'audio-upload': 'SB-UPLOAD-FAILED',

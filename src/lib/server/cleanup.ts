@@ -12,35 +12,65 @@ export async function sweepExpired(): Promise<{
   signalsDeleted: number;
   momentsClosed: number;
   liveLocationsDeleted: number;
+  contactVerificationRequestsDeleted: number;
+  rateLimitsDeleted: number;
+  notificationsDeleted: number;
+  momentsDeleted: number;
 }> {
   const admin = createAdminClient();
   const now = new Date().toISOString();
 
-  const { data: signals } = await admin
-    .from('availability_signals')
-    .delete()
-    .lt('expires_at', now)
-    .select('id');
+  // The durable retention rules live in one service-role-only database
+  // function so their exact scope can be exercised by pgTAP. Run it before
+  // closing newly-expired moments: a moment must already be closed when the
+  // retention sweep begins before it is eligible for deletion.
+  const { data: retention, error: retentionError } = await admin
+    .rpc('sweep_retention')
+    .single<{
+      contact_verification_requests_deleted: number;
+      rate_limits_deleted: number;
+      notifications_deleted: number;
+      moments_deleted: number;
+    }>();
+  if (retentionError) {
+    throw new Error('Retention sweep failed', { cause: retentionError });
+  }
 
-  const { data: moments } = await admin
-    .from('moments')
-    .update({ status: 'closed' })
-    .eq('status', 'open')
-    .lt('available_until', now)
-    .select('id');
+  const [signalsResult, momentsResult, liveResult] = await Promise.all([
+    admin
+      .from('availability_signals')
+      .delete()
+      .lt('expires_at', now)
+      .select('id'),
+    admin
+      .from('moments')
+      .update({ status: 'closed' })
+      .eq('status', 'open')
+      .lt('available_until', now)
+      .select('id'),
+    // Live locations are already ignored at read time once past expires_at;
+    // this reclaims the row so a lapsed share leaves nothing behind.
+    admin
+      .from('live_locations')
+      .delete()
+      .lt('expires_at', now)
+      .select('user_id'),
+  ]);
 
-  // Live locations are already ignored at read time once past expires_at (the
-  // find_nearby_people RPC filters them out); this just reclaims the rows so a
-  // lapsed share leaves nothing behind.
-  const { data: live } = await admin
-    .from('live_locations')
-    .delete()
-    .lt('expires_at', now)
-    .select('user_id');
+  const cleanupError =
+    signalsResult.error ?? momentsResult.error ?? liveResult.error;
+  if (cleanupError) {
+    throw new Error('Ephemeral cleanup failed', { cause: cleanupError });
+  }
 
   return {
-    signalsDeleted: signals?.length ?? 0,
-    momentsClosed: moments?.length ?? 0,
-    liveLocationsDeleted: live?.length ?? 0,
+    signalsDeleted: signalsResult.data?.length ?? 0,
+    momentsClosed: momentsResult.data?.length ?? 0,
+    liveLocationsDeleted: liveResult.data?.length ?? 0,
+    contactVerificationRequestsDeleted:
+      retention.contact_verification_requests_deleted,
+    rateLimitsDeleted: retention.rate_limits_deleted,
+    notificationsDeleted: retention.notifications_deleted,
+    momentsDeleted: retention.moments_deleted,
   };
 }

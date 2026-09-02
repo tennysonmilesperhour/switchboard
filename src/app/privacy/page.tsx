@@ -6,7 +6,7 @@ const SECTIONS = [
     body: [
       'Account details such as your name, handle, login email, optional contact email, optional phone number, profile photo, profile text, interests, activities, and settings.',
       'Social graph and planning data such as connections, circles, household groups, plans, invitations, RSVPs, messages, rooms, polls, votes, availability signals, discovery settings, mutual-interest signals, matches, reports, and blocks.',
-      'Uploaded media such as profile images and plan cover images. Profile and plan images are public if you attach them to public or shared surfaces.',
+      'Uploaded media such as profile images, plan covers, room photos, capsule photos, and voice notes. Profile, plan, and room images are public if you attach them to public or shared surfaces; access-gated media is stored privately.',
       'Technical data needed to run the service, including authentication sessions, push subscriptions, rate-limit records, operational logs, and device/browser information sent by your browser.',
     ],
   },
@@ -40,7 +40,8 @@ const SECTIONS = [
     title: 'Choices and Deletion',
     body: [
       'You can edit your profile, contact details, interests, discoverability, quiet hours, notification settings, and password from the app.',
-      'You can delete your account from Settings. Deletion removes your profile and associated personal data according to the database relationships in the service.',
+      'You can download a JSON copy of your profile, plans, RSVPs, messages, and availability signals from Settings.',
+      'You can delete your account from Settings. Before removing the account, Switchboard deletes the avatars, covers, room photos, and private media stored under your account; associated database records are then removed according to the service relationships.',
       'You can turn off discoverability at any time. Existing mutual matches or rooms may remain unless you leave or delete them.',
     ],
   },

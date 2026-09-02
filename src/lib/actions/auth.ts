@@ -14,7 +14,6 @@ import {
   looksLikeEmail,
   sendEmailWithResult,
 } from '@/lib/server/email';
-import { redirect } from 'next/navigation';
 import {
   PASSWORD_MIN_LENGTH,
   USERNAME_EMAIL_DOMAIN,
@@ -665,28 +664,4 @@ export async function updatePassword(password: string): Promise<AuthActionResult
     console.error('[auth:password-update:error]', error);
     return authError('Could not update your password right now.');
   }
-}
-
-export async function deleteAccount(confirmation: string): Promise<AuthActionResult> {
-  if (confirmation.trim().toUpperCase() !== 'DELETE') {
-    return authError('Type DELETE to confirm.');
-  }
-  if (!hasAdminCredentials()) {
-    return authError('Account deletion is not configured on this server.');
-  }
-
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return authError('Sign in again before deleting your account.');
-
-  const admin = createAdminClient();
-  const { error } = await admin.auth.admin.deleteUser(user.id);
-  if (error) {
-    console.error('[auth:delete-account:error]', error);
-    return authError('Could not delete your account right now.');
-  }
-  await supabase.auth.signOut();
-  redirect('/welcome?account=deleted');
 }

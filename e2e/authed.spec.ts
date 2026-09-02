@@ -1,4 +1,5 @@
 import { expect, test, type BrowserContext, type Page } from '@playwright/test';
+import { readFile } from 'node:fs/promises';
 
 /**
  * Authenticated journeys. These need a running app pointed at a Supabase that
@@ -263,6 +264,31 @@ test.describe('authenticated surface', () => {
     // Landed somewhere inside the app (home/onboarding), not bounced to welcome.
     await expect(page).not.toHaveURL(/\/welcome/);
     await expect(page.getByRole('navigation', { name: 'Main navigation' })).toBeVisible();
+  });
+
+  test('a signed-in user can download a valid JSON data export', async ({ page }) => {
+    await login(page, 'e2ehost');
+    await page.goto('/settings');
+
+    const downloadStarted = page.waitForEvent('download');
+    await page.getByRole('button', { name: 'Download JSON' }).click();
+    const download = await downloadStarted;
+    expect(download.suggestedFilename()).toMatch(
+      /^switchboard-data-\d{4}-\d{2}-\d{2}\.json$/,
+    );
+
+    const path = await download.path();
+    expect(path, 'browser did not persist the exported file').not.toBeNull();
+    const parsed = JSON.parse(await readFile(path!, 'utf8')) as Record<
+      string,
+      unknown
+    >;
+    expect(parsed).toMatchObject({ schemaVersion: 1 });
+    expect(parsed).toHaveProperty('profile');
+    expect(parsed).toHaveProperty('plans');
+    expect(parsed).toHaveProperty('rsvps');
+    expect(parsed).toHaveProperty('messages');
+    expect(parsed).toHaveProperty('signals');
   });
 
   test('the feature index is reachable, searchable, and its links work', async ({

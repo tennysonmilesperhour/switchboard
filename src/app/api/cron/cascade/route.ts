@@ -50,5 +50,10 @@ export async function GET(request: Request) {
     signalsDeleted: cleaned.signalsDeleted,
     momentsClosed: cleaned.momentsClosed,
     liveLocationsDeleted: cleaned.liveLocationsDeleted,
+    contactVerificationRequestsDeleted:
+      cleaned.contactVerificationRequestsDeleted,
+    rateLimitsDeleted: cleaned.rateLimitsDeleted,
+    notificationsDeleted: cleaned.notificationsDeleted,
+    momentsDeleted: cleaned.momentsDeleted,
   });
 }
