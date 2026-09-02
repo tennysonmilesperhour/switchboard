@@ -188,7 +188,8 @@ production defect or an exploitable gap today.
 
 ### 7. Front door: create account, signal bar, contrast
 
-- [x] **What.** Three user-visible defects on the first screens.
+- [x] **What.** Three user-visible defects on the first screens. Fixed in
+  PR #167.
 - **Where and how.**
   1. `src/app/welcome/page.tsx:67,111,117`: the "Create account" links must
      carry `mode=create` (build the href the way `RsvpSignInGate.tsx:39` does).
