@@ -355,6 +355,33 @@ Litmus test: *can a caller who is not sharing — or is blocked, or outside the
 target's visibility scope — learn another user's location, or read a precise
 coordinate straight off the table?*
 
+## Home density (a boolean, and only a boolean)
+
+The Around pillar appears only when a viewer's city has an anchored zone they
+may access or another active live-location sharer. That decision is made by
+`home_around_available` (`20260902120000_home_density_signal_default.sql`):
+
+- **Home receives one boolean.** The private definer body evaluates a 50 km
+  radius and returns no row, identity, count, or coordinate. It honors private
+  zone membership, blocks, and the sharer's `connections` visibility scope.
+- **A home point is owner-private.** `profiles.home_latitude` and
+  `profiles.home_longitude` are deliberately absent from the profile SELECT
+  allowlist. The owner can retrieve that exact point only through
+  `my_home_point()` while editing their profile; ordinary profile readers and
+  Home cannot select it.
+- **The point is explicit.** Editing the city as free text clears a prior point;
+  choosing a place suggestion stores a validated pair. The database rejects a
+  half-coordinate, an out-of-range coordinate, and null island.
+
+Availability's remembered circle is private for the same reason:
+`last_signal_circle_id` is withheld and exposed only to its owner as a scalar
+through `my_signal_default_circle()`. A trigger and the setter both require it
+to name a circle owned by that profile.
+
+Litmus test: *does any density surface reveal more than whether Around has
+something behind it, or let a user associate their preference with somebody
+else's circle?*
+
 ## Zone presence (a count, and only a count)
 
 `moments` is owner-only under RLS, so the zone page could never truthfully say

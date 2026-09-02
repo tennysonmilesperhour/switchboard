@@ -20,6 +20,7 @@ interface PlaceSearchInputProps {
   onPointChange: (point: PlacePoint | null) => void;
   /** Whether the parent currently holds a pinned coordinate for this value. */
   pinned?: boolean;
+  pinnedMessage?: string;
   placeholder?: string;
   className?: string;
 }
@@ -42,6 +43,7 @@ export function PlaceSearchInput({
   onChange,
   onPointChange,
   pinned = false,
+  pinnedMessage = 'Pinned — this plan will show up on the map.',
   placeholder,
   className,
 }: PlaceSearchInputProps) {
@@ -56,9 +58,16 @@ export function PlaceSearchInput({
   // Only the newest keystroke's response may win, so out-of-order resolutions
   // from the server action can't clobber fresher results.
   const requestSeq = useRef(0);
+  // A saved event/profile value is display state, not a new search request.
+  // Wait for the person to edit it before consulting the geocoder.
+  const firstEffect = useRef(true);
   const listboxId = useId();
 
   useEffect(() => {
+    if (firstEffect.current) {
+      firstEffect.current = false;
+      if (value.trim()) return;
+    }
     if (skipNextSearch.current) {
       skipNextSearch.current = false;
       return;
@@ -211,7 +220,7 @@ export function PlaceSearchInput({
       {pinned && (
         <p className="mt-1 inline-flex items-center gap-1 text-xs font-semibold text-sage-deep">
           <Icon name="mapPin" size={13} />
-          Pinned — this plan will show up on the map.
+          {pinnedMessage}
         </p>
       )}
     </div>

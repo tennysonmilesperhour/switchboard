@@ -6,6 +6,11 @@ import { useEffect, useRef, useState } from 'react';
 import { Icon, type IconName } from '@/components/ui/Icon';
 
 type Tab = { href: string; label: string; icon: IconName };
+type MoreTab = Tab & {
+  desc: string;
+  /** Routes represented by this grouped destination. */
+  activeHrefs?: readonly string[];
+};
 
 const LEFT: Tab[] = [
   { href: '/', label: 'Home', icon: 'home' },
@@ -15,21 +20,25 @@ const LEFT: Tab[] = [
 const RIGHT: Tab[] = [{ href: '/plans', label: 'Calendar', icon: 'calendar' }];
 
 /** Everything not on the primary bar, reachable from the More sheet in one tap. */
-const MORE: Array<Tab & { desc: string }> = [
+const MORE: MoreTab[] = [
   { href: '/you', label: 'Your Read', icon: 'sparkle', desc: 'The you your behavior reveals - private' },
   { href: '/people', label: 'People', icon: 'users', desc: 'Add friends, circles, and matchmaking' },
   { href: '/mutual', label: 'Mutual', icon: 'sparkle', desc: 'Down to connect, only if it’s mutual' },
-  { href: '/moments', label: 'Moments', icon: 'mapPin', desc: 'Check in where you are, revealed by consent' },
-  { href: '/map', label: 'Map', icon: 'globe', desc: 'Everything nearby + who’s sharing live' },
+  {
+    href: '/map',
+    label: 'Around',
+    icon: 'globe',
+    desc: 'Map, zones, and moments',
+    activeHrefs: ['/map', '/zones', '/moments'],
+  },
   { href: '/rooms', label: 'Rooms', icon: 'chat', desc: 'Your living-room chats' },
   { href: '/boards', label: 'Boards', icon: 'grid', desc: 'Neighborhood boards' },
-  { href: '/zones', label: 'Zones', icon: 'globe', desc: 'Places & gatherings to check into' },
   { href: '/profile', label: 'Profile', icon: 'account', desc: 'Your card, socials, and links' },
   { href: '/settings', label: 'Settings', icon: 'settings', desc: 'Notifications, quiet hours, sabbatical' },
   { href: '/features', label: 'Everything', icon: 'grid', desc: 'Every feature, and where to find it' },
 ];
 
-const MORE_HREFS = MORE.map((t) => t.href);
+const MORE_HREFS = MORE.flatMap((tab) => tab.activeHrefs ?? [tab.href]);
 
 function isActive(pathname: string, href: string): boolean {
   return href === '/' ? pathname === '/' : pathname.startsWith(href);
@@ -138,7 +147,9 @@ function MoreSheet({
         <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-line" aria-hidden />
         <div className="grid grid-cols-2 gap-2">
           {MORE.map((tab) => {
-            const active = isActive(pathname, tab.href);
+            const active = (tab.activeHrefs ?? [tab.href]).some((href) =>
+              isActive(pathname, href),
+            );
             return (
               <Link
                 key={tab.href}

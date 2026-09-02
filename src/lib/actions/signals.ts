@@ -6,6 +6,8 @@ import { revalidatePath } from 'next/cache';
 import { createClient } from '@/lib/supabase/server';
 
 const DEFAULT_DURATION_HOURS = 3;
+const UUID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 async function requireUser() {
   const supabase = await createClient();
@@ -13,6 +15,41 @@ async function requireUser() {
     data: { user },
   } = await supabase.auth.getUser();
   return { supabase, user };
+}
+
+type SessionClient = Awaited<ReturnType<typeof createClient>>;
+
+/** Reject foreign, malformed, and duplicate audience ids before any write. */
+async function ownedCircleAudience(
+  supabase: SessionClient,
+  userId: string,
+  rawCircleIds: string[],
+): Promise<string[] | null> {
+  if (!Array.isArray(rawCircleIds) || rawCircleIds.length > 100) return null;
+  const circleIds = [...new Set(rawCircleIds)];
+  if (!circleIds.every((id) => typeof id === 'string' && UUID_PATTERN.test(id))) {
+    return null;
+  }
+  if (circleIds.length === 0) return [];
+
+  const { data, error } = await supabase
+    .from('circles')
+    .select('id')
+    .eq('owner_id', userId)
+    .in('id', circleIds);
+  if (error || data?.length !== circleIds.length) return null;
+  return circleIds;
+}
+
+async function rememberSignalCircle(
+  supabase: SessionClient,
+  circleId: string | null,
+): Promise<boolean> {
+  if (!circleId) return true;
+  const { error } = await supabase.rpc('set_my_signal_default_circle', {
+    p_circle: circleId,
+  });
+  return !error;
 }
 
 /**
@@ -43,6 +80,14 @@ export async function addSignal(
     return { ok: false, error: 'Signals are paused while you’re on sabbatical.' };
   }
 
+  const audience = await ownedCircleAudience(supabase, user.id, circleIds);
+  if (!audience) {
+    return { ok: false, error: 'Choose circles from your own list.' };
+  }
+  if (!(await rememberSignalCircle(supabase, audience.at(-1) ?? null))) {
+    return { ok: false, error: 'Could not save your signal audience.' };
+  }
+
   // Re-toggling the same signal simply refreshes it rather than duplicating.
   await supabase
     .from('availability_signals')
@@ -57,7 +102,7 @@ export async function addSignal(
     user_id: user.id,
     emoji: cleanEmoji,
     label: cleanLabel,
-    circle_ids: circleIds,
+    circle_ids: audience,
     expires_at: expiresAt,
   });
   if (error) return { ok: false, error: error.message };
@@ -87,12 +132,24 @@ export async function removeSignal(
  */
 export async function setSignalsAudience(
   circleIds: string[],
+  rememberedCircleId: string | null,
 ): Promise<ActionResult> {
   const { supabase, user } = await requireUser();
   if (!user) return { ok: false, error: 'Not signed in' };
+  const audience = await ownedCircleAudience(supabase, user.id, circleIds);
+  if (!audience) {
+    return { ok: false, error: 'Choose circles from your own list.' };
+  }
+  if (
+    rememberedCircleId !== null &&
+    (!audience.includes(rememberedCircleId) ||
+      !(await rememberSignalCircle(supabase, rememberedCircleId)))
+  ) {
+    return { ok: false, error: 'Could not save your signal audience.' };
+  }
   const { error } = await supabase
     .from('availability_signals')
-    .update({ circle_ids: circleIds })
+    .update({ circle_ids: audience })
     .eq('user_id', user.id);
   if (error) return { ok: false, error: error.message };
   revalidatePath('/');

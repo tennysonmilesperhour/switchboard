@@ -3,6 +3,7 @@ import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { AppShell } from '@/components/shell/AppShell';
+import { AroundTabs } from '@/components/around/AroundTabs';
 import {
   MomentsClient,
   type Candidate,
@@ -123,12 +124,15 @@ export default async function MomentsPage() {
   }
 
   return (
-    <AppShell title="Moments">
-      <MomentsClient
-        myMoment={myMoment}
-        candidates={candidates}
-        matchedRoomId={matchedRoomId}
-      />
+    <AppShell title="Around">
+      <div className="space-y-4">
+        <AroundTabs active="moments" />
+        <MomentsClient
+          myMoment={myMoment}
+          candidates={candidates}
+          matchedRoomId={matchedRoomId}
+        />
+      </div>
     </AppShell>
   );
 }

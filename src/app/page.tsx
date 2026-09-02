@@ -26,6 +26,7 @@ import {
 import { getReconnectionSuggestions } from '@/lib/server/radar';
 import { formatDateTime, formatRelative } from '@/lib/format';
 import { greetingFor } from '@/lib/greeting';
+import { resolveDefaultSignalCircle } from '@/lib/signal-audience';
 import type { SwitchboardEvent } from '@/lib/types';
 
 export default async function HomePage() {
@@ -49,6 +50,8 @@ export default async function HomePage() {
     { data: upcoming },
     { data: recentMatches },
     { count: friendCount },
+    { data: aroundAvailable },
+    { data: rememberedSignalCircle },
   ] = await Promise.all([
     supabase
       .from('availability_signals')
@@ -56,7 +59,12 @@ export default async function HomePage() {
       .eq('user_id', user.id)
       .gt('expires_at', nowIso)
       .order('created_at'),
-    supabase.from('circles').select('id, name, emoji').eq('owner_id', user.id),
+    supabase
+      .from('circles')
+      .select('id, name, emoji')
+      .eq('owner_id', user.id)
+      .order('created_at')
+      .order('id'),
     supabase
       .from('availability_signals')
       .select('id, emoji, label, expires_at, user_id, profile:profiles(display_name, handle)')
@@ -84,7 +92,15 @@ export default async function HomePage() {
       .select('id', { count: 'exact', head: true })
       .eq('status', 'accepted')
       .or(`requester_id.eq.${user.id},addressee_id.eq.${user.id}`),
+    supabase.rpc('home_around_available'),
+    supabase.rpc('my_signal_default_circle'),
   ]);
+
+  const hasConnections = (friendCount ?? 0) > 0;
+  const defaultSignalCircleId = resolveDefaultSignalCircle(
+    (circles ?? []).map((circle) => circle.id),
+    typeof rememberedSignalCircle === 'string' ? rememberedSignalCircle : null,
+  );
 
   // Innovations: matchmaker proposals, rituals, radar, energy prompts.
   const nowMs = new Date(nowIso).getTime();
@@ -168,7 +184,7 @@ export default async function HomePage() {
   // cards at once.
   const findableDone = findabilitySettled(await loadFindability());
   const gettingStartedDone =
-    (friendCount ?? 0) > 0 &&
+    hasConnections &&
     (upcoming?.length ?? 0) > 0 &&
     (mySignals?.length ?? 0) > 0 &&
     findableDone;
@@ -192,12 +208,20 @@ export default async function HomePage() {
           </p>
         </div>
 
-        {/* The four pillars, equal weight, above anything conditional. */}
-        <PillarRow />
+        <PillarRow
+          hasConnections={hasConnections}
+          showAround={aroundAvailable === true}
+        />
 
-        <div id="signals" className="scroll-mt-20">
-          <SignalBar active={mySignals ?? []} circles={circles ?? []} />
-        </div>
+        {hasConnections && (
+          <div id="signals" className="scroll-mt-20">
+            <SignalBar
+              active={mySignals ?? []}
+              circles={circles ?? []}
+              defaultCircleId={defaultSignalCircleId}
+            />
+          </div>
+        )}
 
         {/* The single first-run guidance card — checks itself off live. Once
             it retires, the passport takes over as the quiet way to find the
@@ -210,7 +234,7 @@ export default async function HomePage() {
           />
         ) : (
           <GettingStarted
-            friendDone={(friendCount ?? 0) > 0}
+            friendDone={hasConnections}
             planDone={(upcoming?.length ?? 0) > 0}
             signalDone={(mySignals?.length ?? 0) > 0}
             findableDone={findableDone}
@@ -434,13 +458,21 @@ export default async function HomePage() {
                 </div>
               </Card>
             </Link>
-            {/* The four pillars moved to the top of the page as an
-                equal-weight row; what remains here are the two surfaces that
-                answer "I don't know who or what yet". */}
-            <div className="grid grid-cols-2 gap-3">
+            {/* Local serendipity gets no second, ungated door here. When it is
+                alive, this uses the same Around entry as Home and More. */}
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               {[
                 { href: '/discover', emoji: '🧭', title: 'Discover', body: 'What should we do?' },
-                { href: '/moments', emoji: '✨', title: 'Moments', body: 'Who’s nearby' },
+                ...(aroundAvailable === true
+                  ? [
+                      {
+                        href: '/map',
+                        emoji: '✨',
+                        title: 'Around',
+                        body: 'What’s happening nearby',
+                      },
+                    ]
+                  : []),
               ].map((action) => (
                 <Link key={action.href} href={action.href} className="group">
                   <Card className="h-full group-hover:border-terracotta group-hover:shadow-lift transition-all">
