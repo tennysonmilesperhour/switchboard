@@ -19,6 +19,7 @@ import {
 } from '@/lib/server/sms';
 import type { Invite, SwitchboardEvent } from '@/lib/types';
 import { directInvitePath } from '@/lib/invite-links';
+import { consumeEventOutboundSlot } from '@/lib/server/invite-delivery-limit';
 
 function toEngineInvite(invite: Invite): CascadeInvite {
   return {
@@ -106,41 +107,65 @@ async function deliverInvitations(
 
     if (invite.guest_token && looksLikeEmail(invite.guest_contact)) {
       hasChannel = true;
-      const result = await sendEmailWithResult({
-        to: invite.guest_contact,
-        subject: `You are invited: ${event.title}`,
-        text: invite.invitee_id
-          ? memberInviteText(event, invitePath)
-          : guestInviteText(event, invite.guest_name, invite.guest_token),
-      });
-      countDelivery(summary, result.status);
-      attempts.push({
-        invite_id: invite.id,
-        channel: 'email',
-        status: result.status,
-        provider: result.provider,
-        provider_message_id: result.providerMessageId ?? null,
-        error_code: result.errorCode ?? null,
-      });
+      if (await consumeEventOutboundSlot(event.host_id, 'invitation')) {
+        const result = await sendEmailWithResult({
+          to: invite.guest_contact,
+          subject: `You are invited: ${event.title}`,
+          text: invite.invitee_id
+            ? memberInviteText(event, invitePath)
+            : guestInviteText(event, invite.guest_name, invite.guest_token),
+        });
+        countDelivery(summary, result.status);
+        attempts.push({
+          invite_id: invite.id,
+          channel: 'email',
+          status: result.status,
+          provider: result.provider,
+          provider_message_id: result.providerMessageId ?? null,
+          error_code: result.errorCode ?? null,
+        });
+      } else {
+        countDelivery(summary, 'failed');
+        attempts.push({
+          invite_id: invite.id,
+          channel: 'email',
+          status: 'failed',
+          provider: 'switchboard',
+          provider_message_id: null,
+          error_code: 'host_daily_limit',
+        });
+      }
     }
 
     if (invite.guest_token && looksLikePhoneNumber(invite.guest_contact)) {
       hasChannel = true;
-      const result = await sendSmsWithResult({
-        to: invite.guest_contact,
-        body: invite.invitee_id
-          ? `You are invited to ${event.title} on Switchboard: ${appUrl(invitePath)}`
-          : guestInviteSmsText(event.title, invite.guest_token),
-      });
-      countDelivery(summary, result.status);
-      attempts.push({
-        invite_id: invite.id,
-        channel: 'sms',
-        status: result.status,
-        provider: result.provider,
-        provider_message_id: result.providerMessageId ?? null,
-        error_code: result.errorCode ?? null,
-      });
+      if (await consumeEventOutboundSlot(event.host_id, 'invitation')) {
+        const result = await sendSmsWithResult({
+          to: invite.guest_contact,
+          body: invite.invitee_id
+            ? `You are invited to ${event.title} on Switchboard: ${appUrl(invitePath)}`
+            : guestInviteSmsText(event.title, invite.guest_token),
+        });
+        countDelivery(summary, result.status);
+        attempts.push({
+          invite_id: invite.id,
+          channel: 'sms',
+          status: result.status,
+          provider: result.provider,
+          provider_message_id: result.providerMessageId ?? null,
+          error_code: result.errorCode ?? null,
+        });
+      } else {
+        countDelivery(summary, 'failed');
+        attempts.push({
+          invite_id: invite.id,
+          channel: 'sms',
+          status: 'failed',
+          provider: 'switchboard',
+          provider_message_id: null,
+          error_code: 'host_daily_limit',
+        });
+      }
     }
 
     if (!hasChannel) summary.manual += 1;

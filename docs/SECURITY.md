@@ -266,6 +266,8 @@ integrations a deployment has wired up is reconnaissance, not public data.
   `find_nearby_people` mutual/block/visibility/radius/coarsening invariants.
 - `supabase/tests/zone_presence.test.sql` — `moments` stays owner-only and
   `zone_presence` counts only other, live, unblocked people in its own zone.
+- `supabase/tests/invite_blocks.test.sql` — event invite inserts honor blocks,
+  cap each plan at 100 rows, and never let a host write an accepted RSVP.
 - `supabase/tests/profile_column_grants.test.sql` — SB-01's column allowlist is
   actually in force (no table-wide SELECT on `profiles`), the withheld columns
   are still withheld, and the columns the app reads are readable.
@@ -286,6 +288,32 @@ working. Genuinely public media (profile avatars/covers, event covers) stays in
 the public buckets. When adding a new gated-media surface, upload to
 `media-private` and sign at the (server) render site — never store or render a
 public URL for gated content.
+
+## Event invitations (consent is not host-writable)
+
+An invitation lets a host ask; it never lets the host answer for somebody
+else. The write boundary is shared by the wizard, add-people controls, direct
+invites, open-table requests, and share-link RSVP rows:
+
+- **Blocks are symmetric at insert time.** The `enforce_invite_insert` trigger
+  compares the event's primary host with a profile invitee under the event-row
+  lock. A block in either direction rejects the insert, including through the
+  service-role and security-definer paths.
+- **A plan carries at most 100 invite rows.** The same trigger serializes on the
+  event and counts before inserting, so concurrent requests cannot race past
+  the ceiling. Server actions reject oversized batches earlier for a useful
+  message; the trigger remains authoritative.
+- **Hosts may enqueue or send, not RSVP.** `invites_insert` accepts only
+  `queued` and `sent`. `accepted`, `declined`, `waitlisted`, and the other
+  response states are written only by the recipient/token response functions.
+- **External text is metered.** Invitation and cancellation email/SMS consume
+  durable per-host daily allowances before a provider is called. Email and SMS
+  share the same allowance; in-app notifications are not part of that external
+  recipient limit.
+
+Litmus test: *can a host name an arbitrary profile/contact and either bypass a
+block, manufacture attendance, or turn one plan into an unbounded message
+sender?*
 
 ## Contact details on a plan (the invitee card)
 
