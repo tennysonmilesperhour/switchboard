@@ -1,6 +1,6 @@
 'use server';
 
-import { validation, type ActionResult } from '@/lib/errors';
+import { failure, validation, type ActionResult } from '@/lib/errors';
 
 import { requireUser } from '@/lib/server/require-user';
 import { parsePlan, type ParsedPlan } from '@/lib/ai/plan-parser';
@@ -21,7 +21,10 @@ export async function parsePlanDescription(
   if (!auth.ok) return auth;
   const { supabase, user } = auth;
   if (!(await checkRateLimit(`ai:plan:${user.id}`, 30, 60 * 60))) {
-    return { ok: false, error: 'You’ve drafted a lot of plans. Try again in a little while.' };
+    return failure(
+      'SB-RATE-LIMIT',
+      'You’ve drafted a lot of plans. Try again in a little while.',
+    );
   }
 
   const { data: connections } = await supabase

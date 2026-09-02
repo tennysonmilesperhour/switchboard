@@ -57,6 +57,9 @@ vi.mock('@/lib/server/notify', () => ({
   notifyRoomActivity: mocks.notifyRoomActivity,
 }));
 vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }));
+vi.mock('next/server', () => ({
+  after: (callback: () => Promise<void>) => void callback(),
+}));
 
 import { runDiscovery } from './discovery';
 import { parsePlanDescription } from './plan';
