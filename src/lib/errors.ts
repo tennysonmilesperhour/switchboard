@@ -354,6 +354,16 @@ const REGISTRY = {
     fix: 'Try again. Nothing about the match itself changed — it’s still on Mutual, and the other person saw nothing either way.',
     actor: 'reader',
   },
+  'SB-MOMENT-ACCESS': {
+    message: 'This shared moment is no longer available to you.',
+    fix: 'Refresh Moments to see who is still open to connecting.',
+    actor: 'reader',
+  },
+  'SB-MOMENT-SAVE': {
+    message: 'That Moments response didn’t save.',
+    fix: 'Refresh Moments and try again.',
+    actor: 'reader',
+  },
   // Connecting a calendar. Its own area: "we couldn't read your calendar" and
   // "your plan didn't save" are different problems with different fixes, and a
   // shared code would send someone to the wrong one.
@@ -554,6 +564,9 @@ const AREA_CODES: Record<string, ErrorCode> = {
   'calendar.disconnect': 'SB-CAL-SAVE',
   'match.dismiss': 'SB-MATCH-CLEAR',
   'match.restore': 'SB-MATCH-CLEAR',
+  'moment.candidate': 'SB-MOMENT-SAVE',
+  'moment.block': 'SB-MOMENT-SAVE',
+  'moment.report': 'SB-MOMENT-SAVE',
   'poll.follow-up': 'SB-PLAN-SAVE',
   'poll.follow-up-remove': 'SB-PLAN-SAVE',
   'event-locate': 'SB-PLAN-SAVE',

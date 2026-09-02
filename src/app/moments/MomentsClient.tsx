@@ -18,8 +18,10 @@ import {
 import { formatRelative } from '@/lib/format';
 import { EXPERIENCE_PRESETS } from '@/lib/types';
 import { BlockReportButtons } from '@/components/profile/BlockReportButtons';
+import { AnonymousMomentSafetyButtons } from './AnonymousMomentSafetyButtons';
 import { useCurrentLocation } from '@/lib/client/use-current-location';
 import { createClient } from '@/lib/supabase/client';
+import type { MomentCandidate } from '@/lib/moment-candidates';
 
 export interface MyMoment {
   id: string;
@@ -30,22 +32,13 @@ export interface MyMoment {
   status: string;
 }
 
-export interface Candidate {
-  id: string;
-  userId: string | null;
-  experiences: string[];
-  headline: string | null;
-  stage: 'none' | 'curious' | 'revealed' | 'accepted' | 'passed';
-  intro: { name: string; interests: string[]; headline: string | null } | null;
-}
-
 export function MomentsClient({
   myMoment,
   candidates,
   matchedRoomId,
 }: {
   myMoment: MyMoment | null;
-  candidates: Candidate[];
+  candidates: MomentCandidate[];
   matchedRoomId?: string | null;
 }) {
   const [place, setPlace] = useState('');
@@ -464,14 +457,19 @@ export function MomentsClient({
                     )}
                   </>
                 )}
-                {candidate.userId && (
-                  <div className="mt-3 border-t border-line pt-2">
+                <div className="mt-3 border-t border-line pt-2">
+                  {candidate.userId ? (
                     <BlockReportButtons
                       targetId={candidate.userId}
                       name={candidate.intro?.name ?? 'this person'}
                     />
-                  </div>
-                )}
+                  ) : (
+                    <AnonymousMomentSafetyButtons
+                      myMomentId={myMoment.id}
+                      candidateMomentId={candidate.id}
+                    />
+                  )}
+                </div>
               </Card>
             ))}
           </div>
