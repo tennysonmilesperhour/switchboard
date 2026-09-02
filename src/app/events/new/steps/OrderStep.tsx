@@ -240,7 +240,7 @@ export function OrderStep({
             ))}
           </ol>
           <p className="text-xs text-ink-faint">
-            💡 Suggested window for this event: <strong>{suggested.label}</strong> -
+            💡 Suggested window for this plan: <strong>{suggested.label}</strong> -
             based on how soon it starts.
           </p>
         </div>

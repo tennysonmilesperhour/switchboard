@@ -24,7 +24,6 @@ const PUBLIC_PREFIXES = [
   '/i', // public per-plan share links (the one a host texts); token-authed
   '/join', // shareable plan links; auth returns here via a validated next path
   '/verify-contact',
-  '/design', // design direction previews
   '/api/cron',
   '/api/og',
   '/api/health',

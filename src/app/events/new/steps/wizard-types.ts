@@ -103,13 +103,13 @@ export const MODE_OPTIONS: Array<{
     mode: 'individual',
     emoji: '🪜',
     title: 'One at a time',
-    body: 'Invite people in your order. When someone accepts, the cascade stops. Perfect for coffee, lunch, or last-minute plans.',
+    body: 'Invite people in your order. When someone accepts, the invitations stop. Perfect for coffee, lunch, or last-minute plans.',
   },
   {
     mode: 'group',
     emoji: '🌊',
     title: 'In waves',
-    body: 'Invite groups in stages. Later waves only go out if spots remain - events fill naturally without overbooking.',
+    body: 'Invite groups in stages. Later waves only go out if spots remain - plans fill naturally without overbooking.',
   },
   {
     mode: 'all_at_once',

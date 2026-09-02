@@ -194,7 +194,7 @@ export default async function EventPage({
             <p className="text-sm font-bold text-ink">Your plan was created.</p>
             <p className="mt-1 text-sm text-ink-soft">
               At least one invitation could not be sent automatically. The delivery status below
-              shows what needs attention, and guest links remain available to share manually.
+              shows what needs attention, and invite links remain available to share manually.
             </p>
           </div>
         )}
@@ -316,7 +316,7 @@ export default async function EventPage({
                 href={`/rooms/${event.room_id}`}
                 className="inline-flex items-center gap-1.5 rounded-pill border border-line bg-card px-3.5 py-2 text-xs font-bold text-ink-soft shadow-lift hover:border-terracotta hover:text-terracotta-deep active:scale-[0.98] transition-all"
               >
-                ❋ Living Room
+                ❋ Room
               </Link>
             )}
             {event.starts_at && new Date(event.starts_at) < new Date() && (
@@ -413,7 +413,7 @@ export default async function EventPage({
           <Card tone="sage" lifted>
             <p className="font-extrabold text-lg text-sage-deep">You’re in ✓</p>
             <p className="text-sm text-ink-soft mt-0.5">
-              See you there. The Living Room has the details.
+              See you there. The room has the details.
             </p>
           </Card>
         )}
@@ -582,7 +582,7 @@ export default async function EventPage({
         {/* Guest links for the host to share */}
         {guestLinks.length > 0 && (
           <section>
-            <SectionHeader title="Guest links" hint="For people you invited who aren’t on Switchboard" />
+            <SectionHeader title="Invite links" hint="For people you invited who aren’t on Switchboard" />
             <p className="text-sm text-ink-soft mb-2.5 leading-relaxed">
               Each link opens a private invitation page for that person - the
               plan shows up with no account or app. Copy it and send it however

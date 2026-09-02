@@ -641,6 +641,7 @@ host to any directive means adding the case there.
   fields only.
 - **Legacy public media objects.** Rows created before the private-bucket
   migration still point at public URLs; `signMediaRef` serves them as-is. Run
-  `npm run migrate:legacy-media` (dry-run by default; `-- --apply` to execute)
-  to copy those objects into `media-private` and rewrite the columns to paths,
-  retroactively securing them.
+  `node --env-file-if-exists=.env.local scripts/archive/migrate-legacy-media.mjs`
+  (dry-run by default; add `--apply` to execute) to copy those objects into
+  `media-private` and rewrite the columns to paths, retroactively securing them.
+  The one-off is archived because new uploads already use the private bucket.

@@ -82,7 +82,7 @@ export function GiveSpaceButton({ targetId, name, avoided }: GiveSpaceButtonProp
       <p className="mt-1 max-w-xs text-center text-[11px] leading-snug text-ink-faint">
         {giving
           ? `We’ll quietly warn you if ${firstName} is somewhere you’re headed. They’re never told.`
-          : 'A private heads-up before events where they’ll be - no block, and they’re never notified.'}
+          : 'A private heads-up before plans where they’ll be - no block, and they’re never notified.'}
       </p>
     </div>
   );

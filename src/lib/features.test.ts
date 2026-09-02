@@ -76,8 +76,6 @@ const NOT_INDEXED: Record<string, string> = {
   terms: 'covered by the “Privacy, terms, and copyright” entry',
   copyright: 'covered by the “Privacy, terms, and copyright” entry',
   moderation: 'operator screen, gated to appointed moderators',
-  design: 'internal design-system reference, 404s in production',
-  'scope-verification': 'client-facing verification checklist, URL-only access',
   api: 'not a page',
   auth: 'not a page',
 };

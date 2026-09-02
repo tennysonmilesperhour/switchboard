@@ -10,14 +10,13 @@
     "test": "vitest run",
     "seed:test-profiles": "node --env-file-if-exists=.env.local scripts/seed-test-profiles.mjs",
     "seed:discovery-demo": "node --env-file-if-exists=.env.local scripts/seed-discovery-demo.mjs",
-    "migrate:legacy-media": "node --env-file-if-exists=.env.local scripts/migrate-legacy-media.mjs",
-    "backfill:guest-invites": "node --env-file-if-exists=.env.local scripts/backfill-orphaned-guest-invites.mjs",
     "e2e": "playwright test"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.110.0",
     "@supabase/ssr": "^0.12.0",
     "@supabase/supabase-js": "^2.110.0",
+    "leaflet": "^1.9.4",
     "next": "16.2.12",
     "posthog-js": "^1.404.0",
     "qrcode": "^1.5.4",
@@ -38,7 +37,6 @@
     "@types/web-push": "^3.6.4",
     "eslint": "^9",
     "eslint-config-next": "16.2.12",
-    "leaflet": "^1.9.4",
     "postgres": "3.4.7",
     "tailwindcss": "^4",
     "typescript": "^5",
