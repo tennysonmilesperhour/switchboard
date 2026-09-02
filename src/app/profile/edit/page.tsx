@@ -27,7 +27,10 @@ export default async function EditProfilePage() {
   // surface; the owner reads their own via the security-definer accessor (SB-01).
   const { data: privateProfile } = await supabase
     .rpc('my_private_profile')
-    .maybeSingle();
+    .maybeSingle<{ calendar_token: string; contact_email: string | null; contact_phone: string | null }>();
+  const { data: homePoint } = await supabase
+    .rpc('my_home_point')
+    .maybeSingle<{ latitude: number; longitude: number }>();
 
   const links = parseProfileLinks(profile?.links ?? []);
   const socials = parseProfileSocials(profile?.socials ?? []).filter(
@@ -46,6 +49,11 @@ export default async function EditProfilePage() {
         tagline={profile?.tagline ?? ''}
         pronouns={profile?.pronouns ?? ''}
         location={profile?.location ?? ''}
+        homePoint={
+          homePoint
+            ? { lat: homePoint.latitude, lng: homePoint.longitude }
+            : null
+        }
         links={links}
         socials={socials}
         contactEmail={privateProfile?.contact_email ?? ''}

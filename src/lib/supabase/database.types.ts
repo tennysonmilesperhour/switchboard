@@ -25,6 +25,7 @@ export type Database = {
         Returns: Json
       }
     }
+
     Enums: {
       [_ in never]: never
     }
@@ -2112,8 +2113,11 @@ export type Database = {
           display_name: string
           down_to: string[]
           handle: string | null
+          home_latitude: number | null
+          home_longitude: number | null
           id: string
           interests: string[]
+          last_signal_circle_id: string | null
           legal_terms_accepted_at: string | null
           legal_terms_version: string | null
           links: Json
@@ -2159,8 +2163,11 @@ export type Database = {
           display_name?: string
           down_to?: string[]
           handle?: string | null
+          home_latitude?: number | null
+          home_longitude?: number | null
           id: string
           interests?: string[]
+          last_signal_circle_id?: string | null
           legal_terms_accepted_at?: string | null
           legal_terms_version?: string | null
           links?: Json
@@ -2206,8 +2213,11 @@ export type Database = {
           display_name?: string
           down_to?: string[]
           handle?: string | null
+          home_latitude?: number | null
+          home_longitude?: number | null
           id?: string
           interests?: string[]
+          last_signal_circle_id?: string | null
           legal_terms_accepted_at?: string | null
           legal_terms_version?: string | null
           links?: Json
@@ -2940,6 +2950,7 @@ export type Database = {
         Args: { p_counts: Json; p_sweep: string }
         Returns: undefined
       }
+      home_around_available: { Args: never; Returns: boolean }
       is_blocked_with: { Args: { p_other: string }; Returns: boolean }
       is_board_member: {
         Args: { p_board: string; p_user: string }
@@ -3058,6 +3069,10 @@ export type Database = {
         Args: { p_invite: string; p_up: boolean }
         Returns: undefined
       }
+      my_home_point: {
+        Args: never
+        Returns: { latitude: number; longitude: number }[]
+      }
       my_matchmaker_proposals: {
         Args: never
         Returns: {
@@ -3089,6 +3104,7 @@ export type Database = {
           room_id: string
         }[]
       }
+      my_signal_default_circle: { Args: never; Returns: string }
       normalize_phone_number: { Args: { p_value: string }; Returns: string }
       operator_sweep_status: {
         Args: { p_sweep: string }
@@ -3174,6 +3190,10 @@ export type Database = {
       }
       set_invite_window: {
         Args: { p_invite: string; p_minutes: number }
+        Returns: undefined
+      }
+      set_my_signal_default_circle: {
+        Args: { p_circle: string }
         Returns: undefined
       }
       shared_facets_of: {
