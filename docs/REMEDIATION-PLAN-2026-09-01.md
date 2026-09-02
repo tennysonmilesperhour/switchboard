@@ -395,7 +395,7 @@ Target: this quarter. These are the product and structure decisions.
 
 ### 18. Density gate for the serendipity surfaces
 
-- [ ] **What.** Zones, moments, live map, and boards are empty rooms for a
+- [x] **What.** (PR #178) Zones, moments, live map, and boards are empty rooms for a
   user with no graph and no city. The docket calls the plans loop the wedge.
 - **How.** One "Around" entry in the More sheet that opens map, zones, and
   moments as tabs. Show it on Home only when the viewer's city has at least

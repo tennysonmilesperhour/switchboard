@@ -13,7 +13,7 @@ describe('focused Home hierarchy', () => {
       'title="Waiting on you',
       'Plan feed - the heart of Home',
       'Exactly one guidance card',
-      '<PillarRow />',
+      '<PillarRow',
     ].map((needle) => home.indexOf(needle));
 
     expect(landmarks.every((index) => index >= 0)).toBe(true);

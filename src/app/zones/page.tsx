@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
 import { AppShell } from '@/components/shell/AppShell';
+import { AroundTabs } from '@/components/around/AroundTabs';
 import { Card, SectionHeader } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { toMapPoint } from '@/lib/geo';
@@ -39,8 +40,9 @@ export default async function ZonesPage({
     .limit(20);
 
   return (
-    <AppShell title="Zones" back="/moments">
+    <AppShell title="Around">
       <div className="space-y-7">
+        <AroundTabs active="zones" />
         <p className="text-sm text-ink-soft leading-relaxed -mt-1">
           A <strong>zone</strong> is a place — a conference, cruise, campus,
           festival, or any gathering. A <strong>moment</strong> is you checking
