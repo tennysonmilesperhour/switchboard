@@ -99,7 +99,7 @@ export function OrderStep({
                   <button
                     type="button"
                     onClick={() => setWindowForEveryone(suggested.windowMinutes)}
-                    className="rounded-pill border border-line px-3 py-1.5 text-sm font-semibold text-terracotta transition-colors hover:border-terracotta"
+                    className="rounded-pill border border-line px-3 py-1.5 text-sm font-semibold text-terracotta-deep transition-colors hover:border-terracotta"
                   >
                     Use suggested ({suggested.label})
                   </button>

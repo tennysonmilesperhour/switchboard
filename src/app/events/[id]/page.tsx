@@ -16,6 +16,7 @@ import { CascadeProgress } from '@/components/events/CascadeProgress';
 import { AttendeeGrid } from '@/components/events/AttendeeGrid';
 import { HostCard } from '@/components/events/HostCard';
 import { JoinRequests } from '@/components/events/JoinRequests';
+import { ParentalApprovalManager } from '@/components/events/ParentalApprovalManager';
 import { RsvpCard } from '@/components/events/RsvpCard';
 import { Announcements } from '@/components/events/Announcements';
 import { EventThread } from '@/components/events/EventThread';
@@ -140,6 +141,7 @@ export default async function EventPage({
     inviteeCards,
     attendeeCards,
     cancelVoiceUrl,
+    pendingParentalApprovals,
   } = loaded;
 
   const statusLabel: Record<SwitchboardEvent['status'], string> = {
@@ -550,6 +552,13 @@ export default async function EventPage({
                 name: invite.invitee_name,
                 userId: invite.invitee_id ?? invite.id,
               }))}
+          />
+        )}
+
+        {canManage && pendingParentalApprovals.length > 0 && (
+          <ParentalApprovalManager
+            eventId={event.id}
+            approvals={pendingParentalApprovals}
           />
         )}
 

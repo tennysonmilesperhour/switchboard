@@ -1,10 +1,11 @@
 'use server';
 
-import type { ActionResult } from '@/lib/errors';
+import { validation, type ActionResult } from '@/lib/errors';
 
 import { revalidatePath } from 'next/cache';
 import { createClient } from '@/lib/supabase/server';
 import { requireUser } from '@/lib/server/require-user';
+import { reportAndFail } from '@/lib/server/observability';
 
 export async function createHousehold(
   name: string,
@@ -14,7 +15,7 @@ export async function createHousehold(
   if (!auth.ok) return auth;
   const { supabase, user } = auth;
   const trimmed = name.trim();
-  if (!trimmed) return { ok: false, error: 'Household needs a name' };
+  if (!trimmed) return validation('Household needs a name');
 
   // Only group people you're actually connected to — don't let anyone be
   // silently filed into a household without consent (SB-20).
@@ -39,7 +40,13 @@ export async function createHousehold(
     .insert({ owner_id: user.id, name: trimmed })
     .select('id')
     .single();
-  if (error || !household) return { ok: false, error: error?.message };
+  if (error || !household) {
+    return reportAndFail(
+      'SB-HOUSEHOLD-SAVE',
+      'household.save',
+      error ?? new Error('insert returned no household'),
+    );
+  }
 
   if (allowed.length > 0) {
     await supabase.from('household_members').insert(

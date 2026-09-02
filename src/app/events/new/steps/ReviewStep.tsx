@@ -95,7 +95,7 @@ export function ReviewStep({
                       key={entry.id}
                       className="flex items-center gap-3 text-sm rounded-card bg-cream px-3.5 py-2.5"
                     >
-                      <span className="text-terracotta" aria-hidden>→</span>
+                      <span className="text-terracotta-deep" aria-hidden>→</span>
                       <span className="font-bold flex-1">{invitee?.name}</span>
                       <span className="text-ink-faint text-xs">
                         {new Intl.DateTimeFormat('en-US', {

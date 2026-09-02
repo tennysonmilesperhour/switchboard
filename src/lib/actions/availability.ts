@@ -3,14 +3,13 @@
 import { revalidatePath } from 'next/cache';
 
 import type { ActionResult } from '@/lib/errors';
-import { failure } from '@/lib/errors';
+import { failure, validation } from '@/lib/errors';
 import { createClient } from '@/lib/supabase/server';
 import { requireUser } from '@/lib/server/require-user';
 import { isEventManager } from '@/lib/server/authz';
 import { reportAndFail } from '@/lib/server/observability';
 import {
   gridSlots,
-  isGridSlot,
   recommendAvailability,
   type AvailabilitySnapshot,
   type SlotCount,
@@ -117,7 +116,7 @@ export async function slotsToPollOptions(
   const snapshot = await loadAvailability(eventId);
   const recommendation = recommendAvailability(snapshot, limit);
   if (recommendation.status !== 'ready') {
-    return { ok: false, error: recommendation.message };
+    return validation(recommendation.message);
   }
   const best = recommendation.slots;
 
@@ -147,9 +146,4 @@ export async function slotsToPollOptions(
 
   revalidatePath(`/events/${eventId}`);
   return { ok: true, added: fresh.length };
-}
-
-/** Re-exported so a caller can validate before it asks the server to. */
-export async function isOfferedSlot(slot: string): Promise<boolean> {
-  return isGridSlot(slot, new Date());
 }

@@ -1,7 +1,8 @@
 import { createAdminClient } from '@/lib/supabase/admin';
 import { notifyUsers } from '@/lib/server/notify';
-import { sendEmails, looksLikeEmail, appUrl } from '@/lib/server/email';
+import { appUrl, guestEmailHeaders, looksLikeEmail, sendEmails } from '@/lib/server/email';
 import { sendSmsMessages, looksLikePhoneNumber } from '@/lib/server/sms';
+import { inviteIdsSentBySms } from '@/lib/server/sms-opt-out';
 import { formatDateTime } from '@/lib/format';
 import type { Invite, SwitchboardEvent } from '@/lib/types';
 
@@ -69,12 +70,16 @@ async function remindOneEvent(
 
   const { data: invites } = await admin
     .from('invites')
-    .select('invitee_id, guest_name, guest_contact, guest_token, status')
+    .select('id, invitee_id, guest_name, guest_contact, guest_token, status')
     .eq('event_id', event.id)
     .returns<
-      Pick<Invite, 'invitee_id' | 'guest_name' | 'guest_contact' | 'guest_token' | 'status'>[]
+      Pick<Invite, 'id' | 'invitee_id' | 'guest_name' | 'guest_contact' | 'guest_token' | 'status'>[]
     >();
   const rows = invites ?? [];
+  const textableGuests = rows.filter(
+    (invite) => !invite.invitee_id && looksLikePhoneNumber(invite.guest_contact),
+  );
+  const smsInviteIds = await inviteIdsSentBySms(textableGuests.map((invite) => invite.id));
 
   const accepted = rows.filter((i) => i.status === 'accepted');
   // In the plan's own zone — a reminder email/push has no viewer zone, so
@@ -113,11 +118,17 @@ async function remindOneEvent(
         `${event.title} is ${kind === 'soon' ? 'starting soon' : 'coming up'} - ${when}.\n` +
         (event.location_name ? `Where: ${event.location_name}\n` : '') +
         `\nDetails: ${appUrl(`/rsvp/${i.guest_token}`)}\n\n- Switchboard`,
+      headers: guestEmailHeaders(),
     }));
 
   // Guest attendees reachable by phone → the same reminder over SMS.
   const attendeeTexts = accepted
-    .filter((i) => !i.invitee_id && looksLikePhoneNumber(i.guest_contact) && i.guest_token)
+    .filter((i) => (
+      !i.invitee_id
+      && looksLikePhoneNumber(i.guest_contact)
+      && i.guest_token
+      && smsInviteIds.has(i.id)
+    ))
     .map((i) => ({
       to: i.guest_contact as string,
       body:
@@ -151,9 +162,15 @@ async function remindOneEvent(
           `Hi ${i.guest_name ?? 'there'},\n\n` +
           `${event.title} is coming up - ${when}. Your invitation is still ` +
           `open, no pressure.\n\nRSVP: ${appUrl(`/rsvp/${i.guest_token}`)}\n\n- Switchboard`,
+        headers: guestEmailHeaders(),
       }));
     nudgeTexts = pending
-      .filter((i) => !i.invitee_id && looksLikePhoneNumber(i.guest_contact) && i.guest_token)
+      .filter((i) => (
+        !i.invitee_id
+        && looksLikePhoneNumber(i.guest_contact)
+        && i.guest_token
+        && smsInviteIds.has(i.id)
+      ))
       .map((i) => ({
         to: i.guest_contact as string,
         body:

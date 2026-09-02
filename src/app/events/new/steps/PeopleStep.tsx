@@ -128,7 +128,7 @@ export function PeopleStep({
                 <span className="flex-1 text-left text-sm font-bold text-ink">
                   Friends · {friends.length}
                   {selectedFriendCount > 0 && (
-                    <span className="text-terracotta"> · {selectedFriendCount} selected</span>
+                    <span className="text-terracotta-deep"> · {selectedFriendCount} selected</span>
                   )}
                 </span>
                 <Icon

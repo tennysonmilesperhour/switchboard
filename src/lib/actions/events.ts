@@ -20,7 +20,6 @@ export {
   setInviteWindow,
 } from '@/lib/actions/event-invitees';
 export {
-  setEventInviteLink,
   setEventShareLink,
   rotateEventShareLink,
 } from '@/lib/actions/event-share-links';

@@ -186,7 +186,7 @@ export default async function JoinPage({
     <div className="mx-auto max-w-lg min-h-dvh flex flex-col px-6">
       <header className="py-6">
         <span className="font-extrabold tracking-tight text-xl">
-          Switch<span className="text-terracotta">board</span>
+          Switch<span className="text-terracotta-deep">board</span>
         </span>
       </header>
       <main className="flex-1 flex flex-col justify-center pb-24">
@@ -220,7 +220,7 @@ export default async function JoinPage({
             <p className="mt-3 text-ink font-bold">{formatDateTime(event.starts_at, zone)}</p>
             {event.location_name && (
               <p className="text-ink-soft text-sm mt-1 inline-flex items-center gap-1.5">
-                <Icon name="mapPin" size={15} className="text-terracotta" />
+                <Icon name="mapPin" size={15} className="text-terracotta-deep" />
                 {event.location_name}
               </p>
             )}

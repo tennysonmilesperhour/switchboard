@@ -1,11 +1,12 @@
 'use server';
 
-import type { ErrorCode } from '@/lib/errors';
+import { failure, validation, type ErrorCode } from '@/lib/errors';
 
 import { requireUser } from '@/lib/server/require-user';
 import { checkRateLimit } from '@/lib/server/rate-limit';
 import { safeFetchText } from '@/lib/server/safe-fetch';
 import { isFetchableUrl } from '@/lib/net-guard';
+import { reportAndFail } from '@/lib/server/observability';
 import { parseEvent, isoToDateTimeParts } from '@/lib/import-event';
 
 export interface ImportResult {
@@ -43,17 +44,15 @@ export async function importEventFromLink(rawUrl: string): Promise<ImportResult>
   // addresses, and re-checks every redirect hop.
   const checked = isFetchableUrl(rawUrl);
   if (!checked.ok) {
-    return {
-      ok: false,
-      error:
+    return validation(
         checked.reason === 'private'
           ? 'That address is on a private network, so there’s nothing there to import.'
           : 'That doesn’t look like a link.',
-    };
+    );
   }
 
   if (!(await checkRateLimit(`import:${user.id}`, 20, 60 * 60))) {
-    return { ok: false, error: 'Too many imports. Try again in a bit.' };
+    return failure('SB-RATE-LIMIT', 'Too many imports. Try again in a bit.');
   }
 
   const fetched = await safeFetchText(checked.url.toString(), {
@@ -62,16 +61,23 @@ export async function importEventFromLink(rawUrl: string): Promise<ImportResult>
     accept: 'text/html,text/calendar,application/xhtml+xml',
   });
   if (!fetched.ok || fetched.body === undefined) {
-    return fetched.reason === 'private'
-      ? { ok: false, error: 'That address is on a private network, so there’s nothing there to import.' }
-      : { ok: false, error: 'We couldn’t read that link - just fill the plan in below.' };
+    if (fetched.reason === 'private') {
+      return validation(
+        'That address is on a private network, so there’s nothing there to import.',
+      );
+    }
+    return reportAndFail(
+      'SB-IMPORT-READ',
+      'event.import',
+      new Error(`safe fetch failed: ${fetched.reason ?? 'unknown'}`),
+    );
   }
   const content = fetched.body;
   const contentType = fetched.contentType ?? '';
 
   const parsed = parseEvent(content, contentType);
   if (!parsed || (!parsed.title && !parsed.startISO)) {
-    return { ok: false, error: 'We couldn’t find an event on that page.' };
+    return validation('We couldn’t find an event on that page.');
   }
 
   const { date, time } = isoToDateTimeParts(parsed.startISO);

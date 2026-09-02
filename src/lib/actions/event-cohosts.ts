@@ -3,6 +3,8 @@
 import { revalidatePath } from 'next/cache';
 import { requireUser, requireUserOrRedirect } from '@/lib/server/require-user';
 import type { ActionResult } from '@/lib/errors';
+import { validation } from '@/lib/errors';
+import { reportAndFail } from '@/lib/server/observability';
 
 /**
  * Primary host adds a co-host by handle. Co-hosts share host powers (editing
@@ -18,16 +20,16 @@ export async function addCoHost(
   const { supabase, user } = auth;
 
   const cleanHandle = handle.trim().toLowerCase().replace(/^@/, '');
-  if (!cleanHandle) return { ok: false, error: 'Enter a handle.' };
+  if (!cleanHandle) return validation('Enter a handle.');
 
   const { data: profile } = await supabase
     .from('profiles')
     .select('id')
     .eq('handle', cleanHandle)
     .maybeSingle();
-  if (!profile) return { ok: false, error: 'No one with that handle.' };
+  if (!profile) return validation('No one with that handle.');
   if (profile.id === user.id) {
-    return { ok: false, error: 'You’re already the host.' };
+    return validation('You’re already the host.');
   }
 
   const { error } = await supabase.from('event_cohosts').insert({
@@ -37,10 +39,8 @@ export async function addCoHost(
   });
   if (error) {
     const already = error.code === '23505';
-    return {
-      ok: false,
-      error: already ? 'They’re already a co-host.' : error.message,
-    };
+    if (already) return validation('They’re already a co-host.');
+    return reportAndFail('SB-PLAN-SAVE', 'event.cohost-add', error, { eventId });
   }
 
   // Bring them into the Living Room so they can coordinate. Best-effort:

@@ -34,6 +34,7 @@ import type {
 } from '@/lib/types';
 import type { InviteePerson } from '@/components/events/InviteeSheet';
 import type { HostCardData } from '@/components/events/HostCard';
+import type { PendingParentalApproval } from '@/components/events/ParentalApprovalManager';
 import type { AnnouncementView } from '@/components/events/Announcements';
 import type { ThreadCommentView } from '@/components/events/EventThread';
 import type { OptionResult } from '@/components/polls/PollSection';
@@ -44,7 +45,7 @@ export type EventPageInvite = Invite & {
   invitee_avatar_url: string | null;
   deliveries?: Array<{
     channel: 'in_app' | 'email' | 'sms';
-    status: 'sent' | 'not_configured' | 'invalid_recipient' | 'failed';
+    status: 'sent' | 'not_configured' | 'invalid_recipient' | 'opted_out' | 'failed';
   }>;
 };
 
@@ -78,6 +79,8 @@ export interface EventPageData {
     mutuals: Awaited<ReturnType<typeof getMutualConnections>>;
   } | null;
   hostInvites: EventPageInvite[];
+  /** Guardian-pending requests the host may re-send or redirect. Host/co-host only. */
+  pendingParentalApprovals: PendingParentalApproval[];
   myInvite: Invite | null;
   addableConnections: Array<{
     id: string;
@@ -318,6 +321,7 @@ export async function loadEventPage(
     hiddenAcceptedCountResult,
     avoidsResult,
     cancelVoiceUrl,
+    parentalApprovalResult,
   ] = await Promise.all([
     canManage
       ? admin
@@ -388,6 +392,16 @@ export async function loadEventPage(
           .eq('avoider_id', user.id)
       : Promise.resolve({ data: [] }),
     signMediaRef(event.cancel_voice_url),
+    // Host/co-host recovery for a request that is waiting on a guardian. These
+    // addresses are private and cross the server/client boundary only inside
+    // the same `canManage` gate used for the host's invite contact cards.
+    canManage && event.parental_approval
+      ? admin
+          .from('parental_approvals')
+          .select('invite_id, guardian_email, guardian_name')
+          .eq('event_id', id)
+          .eq('status', 'pending')
+      : Promise.resolve({ data: [] }),
   ]);
 
   const hostInvites: EventPageInvite[] = (hostInviteResult.data ?? []).map((row) => {
@@ -413,6 +427,7 @@ export async function loadEventPage(
           | 'sent'
           | 'not_configured'
           | 'invalid_recipient'
+          | 'opted_out'
           | 'failed',
       });
     }
@@ -424,6 +439,20 @@ export async function loadEventPage(
       deliveries: [...latestByChannel.values()],
     };
   });
+
+  const inviteeNameById = new Map(
+    hostInvites.map((invite) => [invite.id, invite.invitee_name]),
+  );
+  const pendingParentalApprovals: PendingParentalApproval[] = canManage
+    ? (parentalApprovalResult.data ?? [])
+        .filter((approval) => inviteeNameById.has(approval.invite_id as string))
+        .map((approval) => ({
+          inviteId: approval.invite_id as string,
+          inviteeName: inviteeNameById.get(approval.invite_id as string) ?? 'Invitee',
+          guardianEmail: approval.guardian_email as string,
+          guardianName: (approval.guardian_name as string | null) ?? null,
+        }))
+    : [];
 
   const invitedIds = new Set(
     hostInvites
@@ -636,6 +665,7 @@ export async function loadEventPage(
     cohosts,
     hostCard,
     hostInvites,
+    pendingParentalApprovals,
     myInvite,
     addableConnections,
     attendees,

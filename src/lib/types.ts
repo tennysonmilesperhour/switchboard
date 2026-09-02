@@ -431,8 +431,9 @@ export interface LiveLocation {
 }
 
 /** One nearby sharer as returned by the `find_nearby_people` RPC. Coordinates
- *  are already coarsened server-side; identity is only ever returned to a caller
- *  who is themselves sharing (mutual) and whom the target permits. */
+ *  are already coarsened server-side, and `distance_m` is derived only from the
+ *  rounded caller and target points. Identity is returned only to a caller who
+ *  is themselves sharing (mutual) and whom the target permits. */
 export interface NearbyPerson {
   user_id: string;
   distance_m: number;

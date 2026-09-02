@@ -60,14 +60,14 @@ export function WizardFrame({
 
       <header key={step} className="animate-rise">
         <div className="flex items-center gap-3">
-          <p className="text-xs font-bold uppercase tracking-[0.16em] text-terracotta">
+          <p className="text-xs font-bold uppercase tracking-[0.16em] text-terracotta-deep">
             Step {step + 1} of {STEPS.length}
           </p>
           {step > 0 && (
             <button
               type="button"
               onClick={() => goToStep(previousStep(step))}
-              className="inline-flex items-center gap-1 rounded-pill text-xs font-bold text-ink-soft outline-none transition-colors hover:text-terracotta focus-visible:ring-2 focus-visible:ring-terracotta"
+              className="inline-flex items-center gap-1 rounded-pill text-xs font-bold text-ink-soft outline-none transition-colors hover:text-terracotta-deep focus-visible:ring-2 focus-visible:ring-terracotta"
             >
               <svg viewBox="0 0 24 24" aria-hidden className="size-3.5 fill-current">
                 <path d="M14.7 6.7 13.3 5.3 6.6 12l6.7 6.7 1.4-1.4-5.3-5.3z" />

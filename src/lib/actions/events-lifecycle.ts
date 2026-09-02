@@ -23,9 +23,12 @@ import {
 } from '@/lib/engine/recurrence';
 import { reportAndFail, reportOperationalError } from '@/lib/server/observability';
 import type { ActionResult } from '@/lib/errors';
-import { failure } from '@/lib/errors';
-import { looksLikeEmail, sendEmails } from '@/lib/server/email';
+import { failure, validation } from '@/lib/errors';
+import { guestEmailHeaders, looksLikeEmail, sendEmails } from '@/lib/server/email';
 import { looksLikePhoneNumber, sendSmsMessages } from '@/lib/server/sms';
+import { inviteIdsSentBySms } from '@/lib/server/sms-opt-out';
+import { canAddInvitees, MAX_INVITEES_PER_EVENT } from '@/lib/invite-limits';
+import { consumeEventOutboundSlot } from '@/lib/server/invite-delivery-limit';
 import { safeHttpUrl } from '@/lib/security';
 import { hasInviteDetails } from '@/lib/event-details';
 import {
@@ -50,6 +53,11 @@ export async function createEvent(input: CreateEventInput): Promise<CreateEventR
   }
   if (input.invitees.length === 0) {
     return createEventError('Add at least one person to invite before sending.');
+  }
+  if (!canAddInvitees(0, input.invitees.length)) {
+    return createEventError(
+      `A plan can include up to ${MAX_INVITEES_PER_EVENT} people.`,
+    );
   }
   // A plan can be undated (Time TBD), but if a start time is given it must be in
   // the future — the client blocks this too, but never trust the client.
@@ -137,13 +145,13 @@ export async function updateEventDetails(
   const manager = await checkEventManager(user.id, eventId);
   if (!manager.ok) return failure('SB-PLAN-AUTHZ');
   if (!manager.isManager) {
-    return { ok: false, error: 'Only the host can edit this plan.' };
+    return failure('SB-PERM-HOST', 'Only the host can edit this plan.');
   }
 
   const title = input.title.trim();
-  if (!title) return { ok: false, error: 'Give your plan a name.' };
+  if (!title) return validation('Give your plan a name.');
   if (input.capacity !== null && (!Number.isInteger(input.capacity) || input.capacity < 1)) {
-    return { ok: false, error: 'Capacity must be a whole number of at least 1.' };
+    return validation('Capacity must be a whole number of at least 1.');
   }
 
   const wishlistUrl = safeHttpUrl(input.wishlistUrl);
@@ -154,7 +162,7 @@ export async function updateEventDetails(
     .select('starts_at, location_name, title')
     .eq('id', eventId)
     .maybeSingle();
-  if (!before) return { ok: false, error: 'Plan not found.' };
+  if (!before) return validation('Plan not found.');
 
   const { error } = await admin
     .from('events')
@@ -275,11 +283,7 @@ export async function confirmEvent(eventId: string): Promise<void> {
  *  event to 'past', and retires any invites still in motion. This is what
  *  powers the real-world recap and the one-tap Run It Back. */
 export async function markHappened(eventId: string): Promise<void> {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) redirect('/login');
+  const { user } = await requireUserOrRedirect();
   const manager = await checkEventManager(user.id, eventId);
   if (!manager.ok || !manager.isManager) return;
   const admin = createAdminClient();
@@ -342,7 +346,7 @@ export async function cancelEvent(
 
   const { data: event } = await admin
     .from('events')
-    .select('title')
+    .select('title, host_id')
     .eq('id', eventId)
     .maybeSingle();
   await admin
@@ -366,7 +370,7 @@ export async function cancelEvent(
   // that it's off, so nobody shows up to a cancelled plan.
   const { data: accepted } = await admin
     .from('invites')
-    .select('invitee_id, guest_contact')
+    .select('id, invitee_id, guest_contact')
     .eq('event_id', eventId)
     .eq('status', 'accepted');
   const rows = accepted ?? [];
@@ -383,26 +387,48 @@ export async function cancelEvent(
     });
   }
 
-  const guestContacts = rows
-    .filter((r) => !r.invitee_id)
-    .map((r) => r.guest_contact as string | null)
-    .filter((c): c is string => Boolean(c));
+  const guests = rows.filter((r) => !r.invitee_id && Boolean(r.guest_contact));
   const reasonLine = cleanReason ? `\n\nReason: ${cleanReason}` : '';
-  const guestEmails = guestContacts
-    .filter((c) => looksLikeEmail(c))
-    .map((to) => ({
-      to,
+  const guestEmails = guests
+    .filter((invite) => looksLikeEmail(invite.guest_contact))
+    .map((invite) => ({
+      to: invite.guest_contact as string,
       subject: `Cancelled: ${title}`,
       text: `${title} has been cancelled. Apologies for the change of plans.${reasonLine}\n\n- Switchboard`,
+      headers: guestEmailHeaders(),
     }));
-  if (guestEmails.length > 0) await sendEmails(guestEmails);
-  const guestSms = guestContacts
-    .filter((c) => looksLikePhoneNumber(c))
-    .map((to) => ({
-      to,
+  const permittedGuestEmails = (
+    await Promise.all(
+      guestEmails.map(async (message) =>
+        (await consumeEventOutboundSlot(
+          event?.host_id ?? user.id,
+          'cancellation',
+        ))
+          ? message
+          : null),
+    )
+  ).filter((message): message is (typeof guestEmails)[number] => message !== null);
+  if (permittedGuestEmails.length > 0) await sendEmails(permittedGuestEmails);
+  const textableGuests = guests.filter((invite) => looksLikePhoneNumber(invite.guest_contact));
+  const smsInviteIds = await inviteIdsSentBySms(textableGuests.map((invite) => invite.id));
+  const guestSms = textableGuests
+    .filter((invite) => smsInviteIds.has(invite.id))
+    .map((invite) => ({
+      to: invite.guest_contact as string,
       body: `${title} on Switchboard has been cancelled.${cleanReason ? ` Reason: ${cleanReason}` : ''}`,
     }));
-  if (guestSms.length > 0) await sendSmsMessages(guestSms);
+  const permittedGuestSms = (
+    await Promise.all(
+      guestSms.map(async (message) =>
+        (await consumeEventOutboundSlot(
+          event?.host_id ?? user.id,
+          'cancellation',
+        ))
+          ? message
+          : null),
+    )
+  ).filter((message): message is (typeof guestSms)[number] => message !== null);
+  if (permittedGuestSms.length > 0) await sendSmsMessages(permittedGuestSms);
 
   // Retire any invite still in motion so the (now belt-and-suspenders) RSVP
   // guard has nothing live to act on.
@@ -433,21 +459,25 @@ export async function deleteEventPermanently(
     { p_event: eventId },
   );
   if (error) {
-    await reportOperationalError('event.delete', error, { eventId, userId: user.id });
-    return { ok: false, error: 'Could not permanently delete this plan.' };
+    return reportAndFail('SB-PLAN-DELETE', 'event.delete', error, {
+      eventId,
+      userId: user.id,
+    });
   }
-  if (outcome === 'not_found') return { ok: false, error: 'That plan was not found.' };
+  if (outcome === 'not_found') return validation('That plan was not found.');
   if (outcome === 'forbidden') {
-    return { ok: false, error: 'Only the primary host can permanently delete this plan.' };
+    return failure('SB-PERM-HOST', 'Only the primary host can permanently delete this plan.');
   }
   if (outcome === 'accepted_guests') {
-    return {
-      ok: false,
-      error: 'Cancel the plan first so everyone who accepted is notified.',
-    };
+    return validation('Cancel the plan first so everyone who accepted is notified.');
   }
   if (outcome !== 'deleted') {
-    return { ok: false, error: 'Could not permanently delete this plan.' };
+    return reportAndFail(
+      'SB-PLAN-DELETE',
+      'event.delete',
+      new Error(`unexpected delete outcome: ${String(outcome)}`),
+      { eventId, userId: user.id },
+    );
   }
 
   revalidatePath('/plans');

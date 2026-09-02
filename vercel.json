@@ -1,9 +1,18 @@
 {
+  "git": {
+    "deploymentEnabled": {
+      "main": false
+    }
+  },
   "regions": ["sfo1"],
   "crons": [
     {
       "path": "/api/cron/cascade",
       "schedule": "* * * * *"
+    },
+    {
+      "path": "/api/cron/digest",
+      "schedule": "0 * * * *"
     }
   ]
 }

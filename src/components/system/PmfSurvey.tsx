@@ -4,6 +4,7 @@ import { useEffect, useState, useTransition } from 'react';
 import { usePathname } from 'next/navigation';
 import { Icon } from '@/components/ui/Icon';
 import { submitPmf, type PmfChoice } from '@/lib/actions/feedback';
+import { useBottomOverlaySlot } from '@/components/system/BottomOverlaySlot';
 
 const DONE_KEY = 'sb-pmf';
 const CHOICES: { value: PmfChoice; label: string }[] = [
@@ -22,6 +23,8 @@ export function PmfSurvey() {
   const [show, setShow] = useState(false);
   const [done, setDone] = useState(false);
   const [pending, startTransition] = useTransition();
+  const wantsSlot = show && pathname === '/';
+  const ownsSlot = useBottomOverlaySlot('pmf', wantsSlot, 10);
 
   useEffect(() => {
     if (process.env.NEXT_PUBLIC_PMF_ENABLED !== '1') return;
@@ -31,7 +34,7 @@ export function PmfSurvey() {
     return () => clearTimeout(timer);
   }, []);
 
-  if (!show || pathname !== '/') return null;
+  if (!wantsSlot || !ownsSlot) return null;
 
   function close() {
     localStorage.setItem(DONE_KEY, '1');
@@ -62,7 +65,7 @@ export function PmfSurvey() {
                 type="button"
                 onClick={close}
                 aria-label="Dismiss"
-                className="shrink-0 text-ink-soft hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-terracotta rounded-full"
+                className="inline-flex size-11 shrink-0 items-center justify-center rounded-full text-ink-soft hover:bg-cream hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-terracotta"
               >
                 <Icon name="close" size={16} />
               </button>
@@ -74,7 +77,7 @@ export function PmfSurvey() {
                   type="button"
                   disabled={pending}
                   onClick={() => answer(choice.value)}
-                  className="rounded-btn border border-line bg-paper px-3.5 py-2 text-left text-sm font-medium text-ink transition-colors hover:border-terracotta hover:text-terracotta-deep focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-terracotta disabled:opacity-60"
+                  className="min-h-11 rounded-btn border border-line bg-paper px-3.5 py-2 text-left text-sm font-medium text-ink transition-colors hover:border-terracotta hover:text-terracotta-deep focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-terracotta disabled:opacity-60"
                 >
                   {choice.label}
                 </button>

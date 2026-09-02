@@ -21,7 +21,9 @@ const allSource = sourceFiles(SRC);
 
 describe('source architecture boundaries', () => {
   it('keeps source files at or below 800 lines except explicit registries', () => {
-    const registryAllowlist = new Set(['lib/theme-custom.ts']);
+    // Registries: the theme catalogue and the error-code registry (`SB-*` codes
+    // are permanent and only ever grow — see AGENTS.md).
+    const registryAllowlist = new Set(['lib/theme-custom.ts', 'lib/errors.ts']);
     const oversized = allSource
       .map((path) => ({ path: relative(SRC, path), lines: lines(path) }))
       .filter(({ path, lines: count }) => count > 800 && !registryAllowlist.has(path));

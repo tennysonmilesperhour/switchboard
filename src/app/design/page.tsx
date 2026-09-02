@@ -37,7 +37,7 @@ export default function DesignSystemPage() {
   return (
     <div className="mx-auto max-w-lg min-h-dvh px-5 py-10">
       <header className="mb-10">
-        <span className="text-xl font-extrabold lowercase tracking-tight text-terracotta">
+        <span className="text-xl font-extrabold lowercase tracking-tight text-terracotta-deep">
           switchboard
         </span>
         <h1 className="mt-2 text-4xl font-black tracking-tight text-ink">

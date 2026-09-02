@@ -1,6 +1,6 @@
 'use server';
 
-import type { ErrorCode } from '@/lib/errors';
+import { validation, type ErrorCode } from '@/lib/errors';
 
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
@@ -134,18 +134,18 @@ export async function updateProfileDetails(
     .trim()
     .toLowerCase();
 
-  if (!displayName) return { ok: false, error: 'Add your name.' };
+  if (!displayName) return validation('Add your name.');
   if (!HANDLE_PATTERN.test(handle)) {
-    return { ok: false, error: 'Handle: 3–24 lowercase letters, numbers, or underscores.' };
+    return validation('Handle: 3–24 lowercase letters, numbers, or underscores.');
   }
 
   const email = nullableText(formData.get('contact_email'), 120);
   if (email && !isEmail(email)) {
-    return { ok: false, error: 'That email address looks off.' };
+    return validation('That email address looks off.');
   }
   const phone = nullableText(formData.get('contact_phone'), 40);
   if (phone && !normalizePhoneNumber(phone)) {
-    return { ok: false, error: 'Use a phone number with a country code.' };
+    return validation('Use a phone number with a country code.');
   }
 
   // Media URLs must live in our own Supabase storage buckets.
@@ -154,7 +154,7 @@ export async function updateProfileDetails(
   const mediaOk = (u: string | null) =>
     u === null || isOwnPublicStorageUrl(u, ['avatars', 'covers']);
   if (!mediaOk(avatarUrl) || !mediaOk(coverUrl)) {
-    return { ok: false, error: 'Unexpected image location - please re-upload.' };
+    return validation('Unexpected image location - please re-upload.');
   }
 
   const { error } = await supabase
@@ -178,9 +178,9 @@ export async function updateProfileDetails(
 
   if (error) {
     if (error.code === '23505') {
-      return { ok: false, error: 'That handle is already taken.' };
+      return validation('That handle is already taken.');
     }
-    return { ok: false, error: 'Could not save - please try again.' };
+    return reportAndFail('SB-PROFILE-SAVE', 'profile-save', error, { userId: user.id });
   }
 
   // Contact info may have just been added — adopt any guest invites sent to this
@@ -303,8 +303,7 @@ export async function updateInterests(formData: FormData): Promise<ActionResult>
     .update({ interests, down_to: downTo })
     .eq('id', user.id);
   if (error) {
-    await reportOperationalError('settings.interests', error, { userId: user.id });
-    return { ok: false, error: 'Could not save your selections. Try again.' };
+    return reportAndFail('SB-SETTINGS-SAVE', 'settings.interests', error, { userId: user.id });
   }
 
   revalidatePath('/settings');
@@ -341,8 +340,9 @@ export async function updateDiscoverability(formData: FormData): Promise<ActionR
     })
     .eq('id', user.id);
   if (error) {
-    await reportOperationalError('settings.discoverability', error, { userId: user.id });
-    return { ok: false, error: 'Could not save your discovery settings. Try again.' };
+    return reportAndFail('SB-SETTINGS-SAVE', 'settings.discoverability', error, {
+      userId: user.id,
+    });
   }
 
   revalidatePath('/settings');
@@ -372,7 +372,7 @@ export async function updateAppearanceTheme(theme: string): Promise<ActionResult
   if (wanted.earned) {
     const passport = await loadPassport(user.id);
     if (!passportProgress(passport).done) {
-      return { ok: false, error: 'That one unlocks once you’ve tried everything.' };
+      return validation('That one unlocks once you’ve tried everything.');
     }
   }
 
@@ -465,7 +465,11 @@ export async function setDiscoverable(enabled: boolean): Promise<ActionResult> {
     .from('profiles')
     .update(update)
     .eq('id', user.id);
-  if (error) return { ok: false, error: error.message };
+  if (error) {
+    return reportAndFail('SB-SETTINGS-SAVE', 'settings.discoverability', error, {
+      userId: user.id,
+    });
+  }
 
   revalidatePath('/discover');
   revalidatePath('/settings');
@@ -486,8 +490,7 @@ export async function updateSabbatical(formData: FormData): Promise<ActionResult
     })
     .eq('id', user.id);
   if (error) {
-    await reportOperationalError('settings.sabbatical', error, { userId: user.id });
-    return { ok: false, error: 'Could not save your quiet-season settings. Try again.' };
+    return reportAndFail('SB-SETTINGS-SAVE', 'settings.sabbatical', error, { userId: user.id });
   }
 
   // Entering a quiet season pulls down any live availability signal so you
@@ -524,7 +527,11 @@ export async function updateNotificationPrefs(
       notify_social: Boolean(prefs.social),
     })
     .eq('id', user.id);
-  if (error) return { ok: false, error: 'Could not save — please try again.' };
+  if (error) {
+    return reportAndFail('SB-SETTINGS-SAVE', 'settings.notifications', error, {
+      userId: user.id,
+    });
+  }
 
   revalidatePath('/settings');
   return { ok: true };
@@ -543,8 +550,9 @@ export async function updateQuietHours(formData: FormData): Promise<ActionResult
     .update({ quiet_hours_start: start, quiet_hours_end: end })
     .eq('id', user.id);
   if (error) {
-    await reportOperationalError('settings.quiet-hours', error, { userId: user.id });
-    return { ok: false, error: 'Could not save your quiet hours. Try again.' };
+    return reportAndFail('SB-SETTINGS-SAVE', 'settings.quiet-hours', error, {
+      userId: user.id,
+    });
   }
 
   revalidatePath('/settings');
@@ -553,16 +561,19 @@ export async function updateQuietHours(formData: FormData): Promise<ActionResult
 
 /** Revoke the current calendar-subscription link by rotating the token. Any
  *  calendar following the old URL simply stops updating. */
-export async function regenerateCalendarToken(): Promise<{ ok: boolean }> {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { ok: false };
-  await supabase
+export async function regenerateCalendarToken(): Promise<ActionResult> {
+  const auth = await requireUser();
+  if (!auth.ok) return auth;
+  const { supabase, user } = auth;
+  const { error } = await supabase
     .from('profiles')
     .update({ calendar_token: crypto.randomUUID() })
     .eq('id', user.id);
+  if (error) {
+    return reportAndFail('SB-SETTINGS-SAVE', 'settings.calendar-token', error, {
+      userId: user.id,
+    });
+  }
   revalidatePath('/settings');
   return { ok: true };
 }

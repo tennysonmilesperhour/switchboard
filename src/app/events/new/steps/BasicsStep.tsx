@@ -379,7 +379,7 @@ export function BasicsStep({
                               options: [...question.options, ''],
                             })
                           }
-                          className="pl-6 text-xs font-semibold text-terracotta hover:text-terracotta-deep"
+                          className="pl-6 text-xs font-semibold text-terracotta-deep hover:text-terracotta-deep"
                         >
                           + Add option
                         </button>

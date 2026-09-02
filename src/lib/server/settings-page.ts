@@ -66,7 +66,7 @@ export async function loadSettingsPage(user: User) {
     getCalendarStatus(),
     loadPassport(user.id),
     supabase.from('profile_contacts').select('kind, verified_at'),
-    supabase.rpc('is_platform_moderator', { p_user: user.id }),
+    supabase.rpc('is_current_user_platform_moderator'),
   ]);
 
   if (profileResult.error) {

@@ -4,6 +4,7 @@ import { createClient } from '@/lib/supabase/server';
 import type { InvitationDeliverySummary } from '@/lib/server/cascade-runner';
 import type { EventTheme, InviteMode, RecurrenceKind } from '@/lib/types';
 import type { ErrorCode } from '@/lib/errors';
+import { validation } from '@/lib/errors';
 import { normalizePhoneNumber } from '@/lib/phone';
 import { isValidCoordinate } from '@/lib/geo';
 import { geocode } from '@/lib/server/geocode';
@@ -80,13 +81,17 @@ export interface CreateEventResult {
 }
 
 export function createEventError(error: string): CreateEventResult {
-  return { ok: false, error };
+  return validation(error);
 }
 
 export function deliveryWarning(delivery: InvitationDeliverySummary | undefined): string | undefined {
   if (!delivery) return undefined;
   const count =
-    delivery.notConfigured + delivery.failed + delivery.invalidRecipient + delivery.manual;
+    delivery.notConfigured
+    + delivery.failed
+    + delivery.invalidRecipient
+    + delivery.optedOut
+    + delivery.manual;
   return count > 0
     ? `${count} invitation channel${count === 1 ? '' : 's'} needs attention.`
     : undefined;

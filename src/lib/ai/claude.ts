@@ -2,6 +2,9 @@ import 'server-only';
 
 import Anthropic from '@anthropic-ai/sdk';
 
+export const AI_TIMEOUT_MS = 10_000;
+export const AI_MAX_RETRIES = 1;
+
 /** AI features degrade gracefully when no key is configured. */
 export function aiEnabled(): boolean {
   return Boolean(process.env.ANTHROPIC_API_KEY);
@@ -11,7 +14,10 @@ let client: Anthropic | null = null;
 
 export function getClaude(): Anthropic {
   if (!client) {
-    client = new Anthropic(); // reads ANTHROPIC_API_KEY
+    client = new Anthropic({
+      timeout: AI_TIMEOUT_MS,
+      maxRetries: AI_MAX_RETRIES,
+    }); // reads ANTHROPIC_API_KEY
   }
   return client;
 }

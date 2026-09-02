@@ -143,7 +143,7 @@ export function CalendarConnect({ status }: { status: CalendarStatus }) {
       {/* Named in each app's own words, because none of them agrees on what to
           call this and a single generic instruction sends most people hunting. */}
       <details className="text-xs text-ink-faint">
-        <summary className="cursor-pointer font-semibold text-terracotta">
+        <summary className="cursor-pointer font-semibold text-terracotta-deep">
           Where do I find that address?
         </summary>
         <ul className="mt-2 space-y-1.5 pl-4">

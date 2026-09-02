@@ -5,10 +5,11 @@ Two tiers:
 - **`public.spec.ts`** — the unauthenticated surface (welcome, login, guest-RSVP,
   no-overflow). Runs in CI with no database, and is what the default
   `npm run e2e` / the `Verify` CI job executes.
-- **`authed.spec.ts`** — the authenticated journeys (sign in, open the wizard,
-  create a plan). These need a real database, so they are **gated behind
-  `E2E_DB=1`** and skipped otherwise. This keeps the default CI green while the
-  fixtures/DB aren't wired.
+- **`authed.spec.ts` and `invite-links.spec.ts`** — the authenticated journeys
+  (sign in, open the wizard, create a plan) and the host-to-recipient share-link
+  contract. These need a real database, so they are **gated behind `E2E_DB=1`**
+  and skipped otherwise. This keeps the default CI green while the fixtures/DB
+  aren't wired.
 
 ## Running the authenticated tests locally
 
@@ -37,7 +38,8 @@ Two tiers:
 
 The **Authenticated E2E** job in `.github/workflows/ci.yml` does all of the
 above on every PR: `supabase start`, `node e2e/seed.mjs`, build, then
-`npx playwright test e2e/authed.spec.ts` with `E2E_DB=1`.
+`npx playwright test e2e/authed.spec.ts e2e/invite-links.spec.ts` with
+`E2E_DB=1`.
 
 ## Fixtures owe the product its rules
 
