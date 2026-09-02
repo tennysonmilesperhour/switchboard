@@ -268,7 +268,7 @@ compile errors or test failures.
 
 - [x] **What.** Resend and Twilio `fetch` with no `AbortSignal`; the Anthropic
   client has no `timeout`; fan-out is unbounded `Promise.all`; message send
-  awaits the extraction model call.
+  awaits the extraction model call. Fixed in PR #169.
 - **Where.** `src/lib/server/email.ts:63`, `src/lib/server/sms.ts:45`,
   `src/lib/ai/claude.ts`, `src/lib/actions/rooms.ts:46-62`.
 - **How.** `AbortSignal.timeout(10_000)` on both provider fetches; `timeout`
