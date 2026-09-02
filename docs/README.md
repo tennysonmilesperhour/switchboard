@@ -20,13 +20,6 @@ files are historical evidence, never a source of current product truth.
 | [`INNOVATIONS.md`](INNOVATIONS.md) | Unshipped ideas only; shipped features are removed. |
 | [`POSTHOG_SOURCEMAPS.md`](POSTHOG_SOURCEMAPS.md) | How to upload production source maps to PostHog and verify the result. |
 
-## Active point-in-time work
-
-| Doc | What it is |
-|---|---|
-| [`AUDIT-2026-09-01.md`](AUDIT-2026-09-01.md) | Audit of code, UX, security, vision, and delivery at `f68181e`; archives when the remediation plan closes. |
-| [`REMEDIATION-PLAN-2026-09-01.md`](REMEDIATION-PLAN-2026-09-01.md) | The numbered work order from the audit; archives with the audit after every box is complete. |
-
 ## Archive
 
 | File | Historical purpose |
@@ -41,6 +34,8 @@ files are historical evidence, never a source of current product truth.
 | [`archive/DESIGN-DIRECTIONS.md`](archive/DESIGN-DIRECTIONS.md) | Superseded visual-direction exploration. |
 | [`archive/MVP-SHIP-CHECKLIST.md`](archive/MVP-SHIP-CHECKLIST.md) | MVP release checklist. |
 | [`archive/PARTIFUL-GAPS.md`](archive/PARTIFUL-GAPS.md) | Point-in-time Partiful comparison. |
+| [`archive/AUDIT-2026-09-01.md`](archive/AUDIT-2026-09-01.md) | September 1 code, UX, security, vision, and delivery baseline at `f68181e`; its numbered remediation is complete. |
+| [`archive/REMEDIATION-PLAN-2026-09-01.md`](archive/REMEDIATION-PLAN-2026-09-01.md) | Completed 21-item work order from the September 1 audit; dashboard-only residuals live in `DOCKET.md`. |
 | [`archive/SHIP-READINESS-AUDIT.md`](archive/SHIP-READINESS-AUDIT.md) | Earlier ship-readiness audit. |
 | [`archive/WEEKLY-PLAN-2026-08-11.md`](archive/WEEKLY-PLAN-2026-08-11.md) | Completed six-item weekly plan. |
 | [`archive/scope-of-work-verification.html`](archive/scope-of-work-verification.html) | Standalone client-facing verification checklist captured on August 10, 2026. |

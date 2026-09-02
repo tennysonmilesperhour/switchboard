@@ -1,5 +1,11 @@
 # Remediation plan, 2026-09-01
 
+> **Archived 2026-09-02.** All 21 numbered code and documentation items were
+> completed across PRs #161–#181. The unchecked owner/dashboard actions below
+> are a historical snapshot; their current handoff lives in
+> [`DOCKET.md`](../DOCKET.md) under Ops residuals. This file is not a living
+> backlog.
+
 The work order that follows from [`AUDIT-2026-09-01.md`](AUDIT-2026-09-01.md).
 The audit has the evidence and the file:line citations; this file has the
 work, in the order it should be done, written so a session with no other
@@ -441,8 +447,9 @@ Target: this quarter. These are the product and structure decisions.
   live people on the map, Google free/busy, the plan-parser fallback,
   `suggest_deadline`). Delete the stale "Needs Docker" line. Archive
   `WEEKLY-PLAN-2026-08-11.md` with a banner. Index `POSTHOG_SOURCEMAPS.md`.
-- [ ] Final closeout: move `AUDIT-2026-09-01.md` and this file to `archive/`
-  once every box in this plan is ticked.
+- [x] (PR #180) Final closeout: move `AUDIT-2026-09-01.md` and this file to `archive/`
+  once every numbered item is complete and open owner tasks are carried into
+  `DOCKET.md`.
 - [x] (PR #180) Resolve the five `docs/NAMING.md` decide rows in one PR: Explore on the
   Home tile (`page.tsx:442`); short `metadata.title` for Mutual, Zones,
   Moments; one name for the create button; "invite link" everywhere;
@@ -478,6 +485,6 @@ Target: this quarter. These are the product and structure decisions.
 
 ## Done when
 
-Every box above is ticked with a PR number, `AUDIT-2026-09-01.md` and this
-file have moved to `docs/archive/` with banners, and the open items that
-remain (if any) are listed in `DOCKET.md`.
+Met on 2026-09-02: every numbered code/documentation item is complete,
+`AUDIT-2026-09-01.md` and this file have moved to `docs/archive/` with banners,
+and the owner/dashboard actions that remain are listed in `DOCKET.md`.

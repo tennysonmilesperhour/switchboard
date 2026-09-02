@@ -6,10 +6,10 @@ from working sessions. Newest thinking lives here so nothing evaporates.
 > Legend: ✅ shipped · 🛠️ queued to build · 🎨 in design / workshop · 💭 idea ·
 > 🔧 ops (needs the owner or a dashboard, not code)
 
-> **2026-09-01:** the near-term queue now lives in
-> [`REMEDIATION-PLAN-2026-09-01.md`](REMEDIATION-PLAN-2026-09-01.md), the
-> work order from [`AUDIT-2026-09-01.md`](AUDIT-2026-09-01.md). Work that
-> plan before anything 🛠️ below.
+> **2026-09-02:** the numbered work from the September 1 audit is complete.
+> The [audit](archive/AUDIT-2026-09-01.md) and its
+> [remediation plan](archive/REMEDIATION-PLAN-2026-09-01.md) are historical;
+> their remaining owner/dashboard actions are carried below under Ops residuals.
 
 ---
 
@@ -17,11 +17,10 @@ from working sessions. Newest thinking lives here so nothing evaporates.
 
 The point-in-time plans and audits were archived to `docs/archive/` (they had
 drifted badly — all three client-feedback plans still said "nothing implemented
-yet" while their features were live in the app). This docket and the active
-remediation plan are the only places describing work not yet done. The
-completed weekly plan now lives in `docs/archive/`. This section carries
-forward every still-open item found in the archived docs so nothing evaporates
-with them.
+yet" while their features were live in the app). This docket is the living
+record of work not yet done. Completed plans and audits live in `docs/archive/`.
+This section carries forward every still-open item found in them so nothing
+evaporates.
 
 ### ✅ Shipped 2026-08-12 (the weekly plan, executed)
 
@@ -143,10 +142,27 @@ reader can redo it in one command rather than trust this file.
 
 Code can't close these; they need the owner or a dashboard:
 
+- **Production deploy gate**: create the Vercel `production-after-schema`
+  deploy hook for `main`, save its URL as the GitHub production-environment
+  secret `VERCEL_DEPLOY_HOOK_URL`, and confirm Vercel's normal Git production
+  deploy for `main` is disabled. Then verify one merge produces exactly one
+  production deploy, after migration parity passes.
+- **Production database identity and history**: confirm Vercel's
+  `NEXT_PUBLIC_SUPABASE_URL` project ref matches GitHub's
+  `SUPABASE_PROJECT_ID` (`cuzgighqdzypntmhxrqc` is the project linked by the
+  Supabase integration). Record the manual command or dashboard migration that
+  added `profiles.notify_plans` between 2026-08-31 19:52 UTC and 2026-09-01
+  18:08 UTC.
+- Set a **GitHub Actions budget/spending limit** so exhausted included minutes
+  cannot silently stop every workflow late in the month again.
 - Enable **leaked-password protection** in Supabase (last open security
   advisor).
 - **Provider config**: Resend email (`RESEND_API_KEY`/`EMAIL_FROM`), Twilio
   phone verification (all four vars), or set pilot expectations without them.
+- **PostHog source maps**: provision `POSTHOG_API_KEY` and
+  `POSTHOG_PROJECT_ID` in Vercel, deploy once, and confirm a fresh client error
+  resolves to source filenames and lines as described in
+  [`POSTHOG_SOURCEMAPS.md`](POSTHOG_SOURCEMAPS.md).
 - **Cron plan**: Vercel Pro for the every-minute sweep, or an external
   scheduler with the `CRON_SECRET` bearer.
 - **Preview environment isolation** (own Supabase project, complete config) and
