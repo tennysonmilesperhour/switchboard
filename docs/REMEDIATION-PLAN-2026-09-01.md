@@ -394,24 +394,24 @@ Target: this quarter. These are the product and structure decisions.
 
 ### 19. Split the four oversized files
 
-- [ ] `src/app/events/new/EventWizard.tsx` (2,046 lines): one file per step
+- [x] (PR #179) `src/app/events/new/EventWizard.tsx` (2,046 lines): one file per step
   under `src/app/events/new/steps/`, a thin shell that owns state.
-- [ ] `src/lib/actions/events.ts` (1,605 lines): `events-lifecycle.ts`,
+- [x] `src/lib/actions/events.ts` (1,605 lines): `events-lifecycle.ts`,
   `event-invitees.ts`, `event-cohosts.ts`, `event-share-links.ts`. Every
   `createAdminClient()` site goes through `checkEventManager`; remove the 13
   ad-hoc `host_id === user.id` checks named in the audit.
-- [ ] `src/app/events/[id]/page.tsx` (1,256 lines): a `loadEventPage(id, user)`
+- [x] `src/app/events/[id]/page.tsx` (1,256 lines): a `loadEventPage(id, user)`
   loader in `src/lib/server/` with the ~20 independent reads in two
   `Promise.all` phases. Same treatment for `settings/page.tsx`.
-- [ ] `src/app/people/PeopleClient.tsx` (1,104 lines): one component per
+- [x] `src/app/people/PeopleClient.tsx` (1,104 lines): one component per
   section.
-- [ ] Indexes: `events (host_id, status)`, `events (status) where status = 'inviting'`,
+- [x] Indexes: `events (host_id, status)`, `events (status) where status = 'inviting'`,
   `push_subscriptions (user_id)`, `poll_votes (poll_id)`.
-- [ ] Add `import 'server-only'` to `supabase/admin.ts`, `ai/claude.ts`,
+- [x] Add `import 'server-only'` to `supabase/admin.ts`, `ai/claude.ts`,
   `server/email.ts`, `server/sms.ts`, `server/notify.ts`, `server/secret.ts`,
   and a `no-restricted-imports` ESLint rule fencing `@/lib/supabase/admin`
   out of `src/components/**` and `*Client.tsx`.
-- [ ] Fold `src/app/join/[id]/page.tsx:169` into `share-link.ts` and add a
+- [x] Fold `src/app/join/[id]/page.tsx:169` into `share-link.ts` and add a
   `hostCanEditInvitees(status)` helper so the six repeated status literals go
   away. Extend `share-link.test.ts` to grep for the literal outside the module.
 - **Accept.** No source file over 800 lines except registries; event page
