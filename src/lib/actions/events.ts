@@ -466,7 +466,11 @@ export async function addPeopleToEvent(
 
   // Contact resolution already omits blocked profiles, but explicitly-picked
   // ids and a block created during this request still need an action-time
-  // check. The insert trigger repeats this under the event-row lock.
+  // check. The insert trigger repeats this under the event-row lock. The
+  // two-id form of `are_blocked` is service-role only (a browser role may
+  // only ask about itself via `is_blocked_with`), and the relationship that
+  // matters is the *host's* — a co-host may be adding — so this runs through
+  // the admin client that `checkEventManager` has already authorized.
   const memberIds = Array.from(new Set(
     additions
       .filter((addition): addition is Extract<ResolvedAddition, { kind: 'member' }> =>
@@ -476,7 +480,7 @@ export async function addPeopleToEvent(
   const blockChecks = await Promise.all(
     memberIds.map(async (profileId) => ({
       profileId,
-      result: await supabase.rpc('are_blocked', {
+      result: await admin.rpc('are_blocked', {
         p_user_a: event.host_id,
         p_user_b: profileId,
       }),
