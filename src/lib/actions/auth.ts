@@ -4,7 +4,6 @@ import type { ErrorCode } from '@/lib/errors';
 
 import { failure, validation } from '@/lib/errors';
 import { reportAndFail } from '@/lib/server/observability';
-import { requireUser } from '@/lib/server/require-user';
 
 import { createAdminClient, hasAdminCredentials } from '@/lib/supabase/admin';
 import { createClient } from '@/lib/supabase/server';
@@ -15,7 +14,6 @@ import {
   looksLikeEmail,
   sendEmailWithResult,
 } from '@/lib/server/email';
-import { redirect } from 'next/navigation';
 import {
   PASSWORD_MIN_LENGTH,
   USERNAME_EMAIL_DOMAIN,
@@ -697,28 +695,4 @@ export async function updatePassword(password: string): Promise<AuthActionResult
     console.error('[auth:password-update:error]', error);
     return failure('SB-AUTH-RESET', 'Could not update your password right now.');
   }
-}
-
-export async function deleteAccount(confirmation: string): Promise<AuthActionResult> {
-  if (confirmation.trim().toUpperCase() !== 'DELETE') {
-    return validation('Type DELETE to confirm.');
-  }
-  if (!hasAdminCredentials()) {
-    return failure('SB-CONFIG-AUTH', 'Account deletion is not configured on this server.');
-  }
-
-  const auth = await requireUser();
-  if (!auth.ok) {
-    return failure('SB-AUTH-EXPIRED', 'Sign in again before deleting your account.');
-  }
-  const { supabase, user } = auth;
-
-  const admin = createAdminClient();
-  const { error } = await admin.auth.admin.deleteUser(user.id);
-  if (error) {
-    console.error('[auth:delete-account:error]', error);
-    return failure('SB-AUTH-DELETE', 'Could not delete your account right now.');
-  }
-  await supabase.auth.signOut();
-  redirect('/welcome?account=deleted');
 }

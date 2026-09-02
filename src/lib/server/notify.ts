@@ -2,6 +2,7 @@ import 'server-only';
 
 import webPush from 'web-push';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { reportOperationalError } from '@/lib/server/observability';
 import {
   categoryForKind,
   columnForCategory,
@@ -420,7 +421,12 @@ export async function sendPushToUsers(
         const statusCode = (error as { statusCode?: number }).statusCode;
         if (statusCode === 404 || statusCode === 410) {
           await admin.from('push_subscriptions').delete().eq('id', sub.id);
+          return;
         }
+        await reportOperationalError('push.send', error, {
+          subscriptionId: sub.id,
+          statusCode: statusCode ?? null,
+        });
       }
     }),
   );

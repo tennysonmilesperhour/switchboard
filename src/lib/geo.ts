@@ -92,10 +92,9 @@ export function distanceMeters(a: MapPoint, b: MapPoint): number {
 }
 
 /**
- * Round a coordinate to `decimals` places (default 3 ≈ 110 m). Used to coarsen a
- * live location before it leaves the owner's device, so a rough neighbourhood is
- * shared rather than an exact address. The server RPC coarsens too — this is the
- * belt to its braces, and keeps the number we send small.
+ * Round a coordinate to `decimals` places (default 3 ≈ 110 m). Live-location
+ * actions apply this before persistence, and the database write trigger repeats
+ * the rule so direct clients cannot bypass it.
  */
 export function coarsenCoordinate(value: number, decimals = 3): number {
   if (!Number.isFinite(value)) return value;
