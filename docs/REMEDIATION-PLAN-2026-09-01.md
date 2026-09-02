@@ -110,9 +110,10 @@ production defect or an exploitable gap today.
 
 ### 3. Security H1: parental approval is bound to the caller
 
-- [ ] **What.** `requestParentalApproval` never checks that the invite belongs
+- [x] **What.** `requestParentalApproval` never checks that the invite belongs
   to the caller or the named event; a youth can approve themselves and
   pre-empt the real guardian; any account can email arbitrary addresses.
+  Fixed in PR #163.
 - **Where.** `src/lib/actions/parental-approval.ts:22-104`,
   `resolve_parental_approval` in
   `supabase/migrations/20260811120000_parental_approval.sql`, new migration,
