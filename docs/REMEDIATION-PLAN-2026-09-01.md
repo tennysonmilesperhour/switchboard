@@ -281,8 +281,10 @@ compile errors or test failures.
 
 ### 12. Cron heartbeat and overlap guard
 
-- [ ] **What.** Nothing records that a sweep ran; five sweeps can overlap;
-  sweeps are sequential under a 60 second cap and die silently at scale.
+- [x] **What.** Nothing records that a sweep ran; five sweeps can overlap;
+  sweeps are sequential under a 60 second cap and die silently at scale. Fixed
+  in PR #171; runtime state lives in `private.operator_sweep_state` because
+  `public.operator_settings` is per-person consent data.
 - **Where.** `src/app/api/cron/cascade/route.ts`, `src/app/api/cron/digest/route.ts`,
   `src/lib/server/cascade-runner.ts`, `src/app/api/health/route.ts`.
 - **How.** Take `pg_try_advisory_lock` at the start of each sweep and exit
