@@ -13,6 +13,7 @@ import { safeFetchText } from '@/lib/server/safe-fetch';
 import { isFetchableUrl } from '@/lib/net-guard';
 import { parseBusyIntervals, busyGridSlots } from '@/lib/ics-busy';
 import { GRID_DAYS, gridSlots, slotRange } from '@/lib/availability';
+import type { TablesInsert } from '@/lib/supabase/database.types';
 
 /**
  * Connecting a calendar so the availability grid starts from your real week.
@@ -150,7 +151,7 @@ async function readSubscriptionUrl(userId: string): Promise<string | null> {
  */
 async function writeSubscription(
   userId: string,
-  fields: Record<string, string | null>,
+  fields: Omit<TablesInsert<'calendar_subscriptions'>, 'user_id'>,
 ): Promise<boolean> {
   const admin = createAdminClient();
   const { error } = await admin

@@ -108,7 +108,7 @@ export default async function PlansPage() {
       });
       throw new Error('Could not load your calendar');
     }
-    for (const event of (invitedEvents ?? []) as SwitchboardEvent[]) {
+    for (const event of invitedEvents ?? []) {
       eventsById.set(event.id, event);
     }
   }
@@ -134,7 +134,7 @@ export default async function PlansPage() {
     event.status === 'past' ||
     (event.starts_at !== null && new Date(event.starts_at).getTime() < nowMs);
 
-  const hostingAll = (hosting ?? []) as SwitchboardEvent[];
+  const hostingAll = hosting ?? [];
   const hostingUpcoming = hostingAll.filter((event) => !hasHappened(event));
 
   const upcomingInvited = invited.filter((row) => !hasHappened(row.event));

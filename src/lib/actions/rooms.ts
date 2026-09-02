@@ -197,12 +197,12 @@ export async function searchMessages(query: string): Promise<MessageHit[]> {
     const room = Array.isArray(row.room) ? row.room[0] : row.room;
     const sender = Array.isArray(row.sender) ? row.sender[0] : row.sender;
     return {
-      id: row.id as string,
-      roomId: row.room_id as string,
+      id: row.id,
+      roomId: row.room_id,
       roomTitle: room?.title ?? 'A room',
       senderName: sender?.display_name ?? 'Someone',
-      body: row.body as string,
-      createdAt: row.created_at as string,
+      body: row.body,
+      createdAt: row.created_at,
     };
   });
 }

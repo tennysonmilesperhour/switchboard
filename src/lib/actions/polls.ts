@@ -64,7 +64,7 @@ export async function addSuggestion(
       source: isHost ? 'host' : 'guests',
     })
     .select('*')
-    .single<PollOption>();
+    .single();
   if (error) return reportAndFail('SB-POLL-SUGGEST', 'poll.suggest', error, { pollId });
 
   // Tell the people who already ranked this poll that the list they ranked has

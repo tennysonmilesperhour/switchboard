@@ -1,5 +1,5 @@
 import { createClient } from '@/lib/supabase/server';
-import { buildCalendar, type IcsEvent } from '@/lib/ics';
+import { buildCalendar } from '@/lib/ics';
 
 /** Add-to-calendar: downloads a .ics for any event the viewer can see. */
 export async function GET(
@@ -14,7 +14,7 @@ export async function GET(
     .from('events')
     .select('id, title, description, location_name, location_address, starts_at, ends_at')
     .eq('id', id)
-    .single<IcsEvent>();
+    .single();
 
   if (!event || !event.starts_at) {
     return new Response('Not found', { status: 404 });

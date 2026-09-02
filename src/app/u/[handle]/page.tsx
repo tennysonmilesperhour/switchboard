@@ -17,7 +17,7 @@ import {
 } from '@/lib/server/relationship';
 import { loadSharedFacets, loadCompatibility } from '@/lib/server/identity';
 import { safeNextPath } from '@/lib/security';
-import type { ProfileLink, ProfileSocial } from '@/lib/types';
+import { parseProfileLinks, parseProfileSocials } from '@/lib/supabase/json';
 
 // Confidence → dot color for a shared read (mirrors the owner's /you view).
 const READ_DOT: Record<string, string> = {
@@ -32,22 +32,6 @@ const READ_CONF_LABEL: Record<string, string> = {
   clear: 'Taking shape',
   strong: 'A clear pattern',
 };
-
-interface PublicProfile {
-  id: string;
-  display_name: string;
-  handle: string | null;
-  avatar_url: string | null;
-  cover_url: string | null;
-  bio: string | null;
-  tagline: string | null;
-  pronouns: string | null;
-  location: string | null;
-  links: ProfileLink[] | null;
-  socials: ProfileSocial[] | null;
-  interests: string[] | null;
-  down_to: string[] | null;
-}
 
 const PROFILE_COLUMNS =
   'id, display_name, handle, avatar_url, cover_url, bio, tagline, pronouns, location, links, socials, interests, down_to';
@@ -100,7 +84,7 @@ export default async function PublicProfilePage({
     .from('profiles')
     .select(PROFILE_COLUMNS)
     .eq('handle', normalizeHandleParam(handle))
-    .maybeSingle<PublicProfile>();
+    .maybeSingle();
   if (!profile) notFound();
 
   // Your own handle → your editable profile, not this read-only view.
@@ -135,8 +119,8 @@ export default async function PublicProfilePage({
       : [[], null];
 
   const displayName = profile.display_name || 'Someone';
-  const links: ProfileLink[] = Array.isArray(profile.links) ? profile.links : [];
-  const socials: ProfileSocial[] = (Array.isArray(profile.socials) ? profile.socials : []).filter(
+  const links = parseProfileLinks(profile.links);
+  const socials = parseProfileSocials(profile.socials).filter(
     (s) => SOCIAL_BY_ID[s.platform],
   );
   const interests: string[] = profile.interests ?? [];

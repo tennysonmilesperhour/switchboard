@@ -97,7 +97,7 @@ export async function respondToInvite(
   const { data, error } = await supabase.rpc('respond_to_invite', {
     p_invite: inviteId,
     p_accept: accept,
-    p_note: note,
+    p_note: note ?? undefined,
   });
   if (error) return reportAndFail('SB-RSVP-SAVE', 'invite.respond', error, { inviteId });
 
@@ -362,14 +362,14 @@ export async function respondViaShareLink(
     .from('profiles')
     .select('display_name')
     .eq('id', user.id)
-    .maybeSingle<{ display_name: string | null }>();
+    .maybeSingle();
   const responderName = profile?.display_name?.trim() || name;
 
   const { data, error } = await admin.rpc('rsvp_via_share_token', {
     p_token: shareToken,
     p_user: user.id,
     p_name: responderName,
-    p_contact: contact,
+    p_contact: contact ?? '',
     p_accept: accept,
   });
   if (error) {
@@ -437,14 +437,26 @@ export async function respondViaShareLink(
       .from('events')
       .select('parental_approval')
       .eq('id', eventId)
-      .maybeSingle<{ parental_approval: boolean }>();
+      .maybeSingle();
     if (evt?.parental_approval) {
+      // `rsvp_via_share_token` returns only (outcome, token), so the invite the
+      // guardian step must bind to is resolved here. Nothing enforces one
+      // invite per (event, invitee), so take the row the RPC just answered
+      // rather than letting a stray duplicate turn this into a read error.
+      const { data: acceptedInvite } = await admin
+        .from('invites')
+        .select('id')
+        .eq('event_id', eventId)
+        .eq('invitee_id', user.id)
+        .order('responded_at', { ascending: false, nullsFirst: false })
+        .limit(1)
+        .maybeSingle();
       return {
         ok: true,
         outcome: 'accepted',
         token: typeof row?.token === 'string' ? row.token : undefined,
         needsApproval: true,
-        inviteId: typeof row?.invite_id === 'string' ? row.invite_id : undefined,
+        inviteId: acceptedInvite?.id,
         eventId,
       };
     }
@@ -465,7 +477,7 @@ async function eventIdForShareToken(
     .from('events')
     .select('id')
     .eq('share_token', shareToken)
-    .maybeSingle<{ id: string }>();
+    .maybeSingle();
   return data?.id ?? null;
 }
 
@@ -618,7 +630,7 @@ export async function respondToGuestInvite(
       .from('events')
       .select('parental_approval')
       .eq('id', invite.event_id)
-      .maybeSingle<{ parental_approval: boolean }>();
+      .maybeSingle();
     if (evt?.parental_approval) {
       return {
         ok: true,

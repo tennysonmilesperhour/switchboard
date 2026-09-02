@@ -48,11 +48,11 @@ export async function getRelationship(
     .maybeSingle();
   if (!data) return { status: 'none', connectionId: null };
   if (data.status === 'accepted') {
-    return { status: 'accepted', connectionId: data.id as string };
+    return { status: 'accepted', connectionId: data.id };
   }
   return {
     status: data.requester_id === viewerId ? 'outgoing' : 'incoming',
-    connectionId: data.id as string,
+    connectionId: data.id,
   };
 }
 

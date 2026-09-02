@@ -1,12 +1,13 @@
 import { createServerClient } from '@supabase/ssr';
 import { cookies } from 'next/headers';
 import { cache } from 'react';
+import type { Database } from '@/lib/supabase/database.types';
 
 /** Server-component / server-action Supabase client (anon key + user session). */
 export async function createClient() {
   const cookieStore = await cookies();
 
-  return createServerClient(
+  return createServerClient<Database>(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {

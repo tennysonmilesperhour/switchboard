@@ -21,9 +21,15 @@ const allSource = sourceFiles(SRC);
 
 describe('source architecture boundaries', () => {
   it('keeps source files at or below 800 lines except explicit registries', () => {
-    // Registries: the theme catalogue and the error-code registry (`SB-*` codes
-    // are permanent and only ever grow — see AGENTS.md).
-    const registryAllowlist = new Set(['lib/theme-custom.ts', 'lib/errors.ts']);
+    // Registries: the theme catalogue, the error-code registry (`SB-*` codes
+    // are permanent and only ever grow — see AGENTS.md), and the generated
+    // schema (`supabase gen types typescript --local`; CI fails on any diff, so
+    // it is never split or hand-edited).
+    const registryAllowlist = new Set([
+      'lib/theme-custom.ts',
+      'lib/errors.ts',
+      'lib/supabase/database.types.ts',
+    ]);
     const oversized = allSource
       .map((path) => ({ path: relative(SRC, path), lines: lines(path) }))
       .filter(({ path, lines: count }) => count > 800 && !registryAllowlist.has(path));

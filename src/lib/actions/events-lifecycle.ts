@@ -30,6 +30,7 @@ import { inviteIdsSentBySms } from '@/lib/server/sms-opt-out';
 import { canAddInvitees, MAX_INVITEES_PER_EVENT } from '@/lib/invite-limits';
 import { consumeEventOutboundSlot } from '@/lib/server/invite-delivery-limit';
 import { safeHttpUrl } from '@/lib/security';
+import { toJson } from '@/lib/supabase/json';
 import { hasInviteDetails } from '@/lib/event-details';
 import {
   createEventError,
@@ -93,7 +94,14 @@ export async function createEvent(input: CreateEventInput): Promise<CreateEventR
   const coverUrl = safeHttpUrl(input.coverUrl);
 
   const { data: eventId, error } = await supabase.rpc('create_event_atomic', {
-    p_input: { ...input, title, wishlistUrl, coverUrl, invitees, parentalApproval: input.parentalApproval ?? false },
+    p_input: toJson({
+      ...input,
+      title,
+      wishlistUrl,
+      coverUrl,
+      invitees,
+      parentalApproval: input.parentalApproval ?? false,
+    }),
   });
   if (error || typeof eventId !== 'string') {
     return reportAndFail(
@@ -250,9 +258,15 @@ export async function setEventVisibility(
   }
 
   const admin = createAdminClient();
+  const update =
+    field === 'show_invite_list'
+      ? { show_invite_list: enabled }
+      : field === 'show_accepted'
+        ? { show_accepted: enabled }
+        : { show_expired: enabled };
   const { error } = await admin
     .from('events')
-    .update({ [field]: enabled })
+    .update(update)
     .eq('id', eventId);
   if (error) {
     return reportAndFail('SB-PLAN-SAVE', 'event-visibility', error, { eventId });

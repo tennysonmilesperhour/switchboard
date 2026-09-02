@@ -25,13 +25,13 @@ export async function generateMetadata({
     .from('invites')
     .select('event_id')
     .eq('guest_token', token)
-    .maybeSingle<{ event_id: string }>();
+    .maybeSingle();
   const { data: event } = invite
     ? await admin
         .from('events')
         .select('title')
         .eq('id', invite.event_id)
-        .maybeSingle<{ title: string }>()
+        .maybeSingle()
     : { data: null };
   const title = event?.title ? `You’re invited: ${event.title}` : 'You’re invited';
   return {
@@ -84,13 +84,7 @@ export default async function GuestRsvpPage({
         .from('invites')
         .select('id, event_id, status, guest_name, invitee_id')
         .eq('guest_token', token)
-        .maybeSingle<{
-          id: string;
-          event_id: string;
-          status: string;
-          guest_name: string | null;
-          invitee_id: string | null;
-        }>()
+        .maybeSingle()
     : { data: null, error: null };
   if (inviteError) {
     await reportOperationalError('rsvp.invite-lookup', inviteError, {});
@@ -100,23 +94,9 @@ export default async function GuestRsvpPage({
   const { data: event, error: eventError } = invite && admin
     ? await admin
         .from('events')
-        .select(
-          'title, description, location_name, location_address, starts_at, ends_at, ' +
-            'time_zone, host_id, cover_url, wishlist_url',
-        )
+        .select('title, description, location_name, location_address, starts_at, ends_at, time_zone, host_id, cover_url, wishlist_url')
         .eq('id', invite.event_id)
-        .maybeSingle<{
-          title: string;
-          description: string | null;
-          location_name: string | null;
-          location_address: string | null;
-          starts_at: string | null;
-          ends_at: string | null;
-          time_zone: string | null;
-          host_id: string;
-          cover_url: string | null;
-          wishlist_url: string | null;
-        }>()
+        .maybeSingle()
     : { data: null, error: null };
   if (eventError) {
     await reportOperationalError('rsvp.event-lookup', eventError, {});
@@ -128,7 +108,7 @@ export default async function GuestRsvpPage({
         .from('profiles')
         .select('display_name')
         .eq('id', event.host_id)
-        .maybeSingle<{ display_name: string }>()
+        .maybeSingle()
     : { data: null };
 
   // Host-defined RSVP questions, if any.
@@ -140,11 +120,11 @@ export default async function GuestRsvpPage({
         .order('position')
     : { data: null };
   const questions = (questionRows ?? []).map((q) => ({
-    id: q.id as string,
-    prompt: q.prompt as string,
-    required: q.required as boolean,
-    kind: q.kind as 'text' | 'choice',
-    options: (q.options as string[] | null) ?? [],
+    id: q.id,
+    prompt: q.prompt,
+    required: q.required,
+    kind: q.kind === 'choice' ? 'choice' as const : 'text' as const,
+    options: q.options,
   }));
 
   // An invite link is often a guest's first contact with Switchboard, so the

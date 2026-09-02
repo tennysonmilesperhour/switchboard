@@ -1,280 +1,50 @@
-/** Domain types mirroring the Supabase schema. */
+/** Domain choices layered on top of the generated Supabase schema. */
 
-import type { InviteStatus } from '@/lib/engine/cascade';
-import type { Weight } from '@/lib/engine/scoring';
+import type { Database, Tables } from '@/lib/supabase/database.types';
 
-/** A free-form labelled link on a profile (personal site, portfolio, etc.). */
+/** JSON-backed profile values, validated when read from the database. */
 export interface ProfileLink {
   label: string;
   url: string;
 }
 
-/** A social handle. `platform` keys into SOCIAL_PLATFORMS; `value` is a
- *  handle or a full URL (normalised to a URL at render time). */
 export interface ProfileSocial {
   platform: string;
   value: string;
 }
 
-export interface Profile {
-  id: string;
-  display_name: string;
-  handle: string;
-  avatar_url: string | null;
-  cover_url: string | null;
-  bio: string | null;
-  tagline: string | null;
-  pronouns: string | null;
-  location: string | null;
-  links: ProfileLink[];
-  socials: ProfileSocial[];
-  contact_email: string | null;
-  contact_phone: string | null;
-  contact_public: boolean;
-  interests: string[];
-  down_to: string[];
-  sabbatical: boolean;
-  sabbatical_message: string | null;
-  quiet_hours_start: number | null; // hour 0-23, local
-  quiet_hours_end: number | null;
-  created_at: string;
-}
+/** Table rows come from the generated schema, never a handwritten mirror. */
+export type SwitchboardEvent = Tables<'events'>;
+export type Invite = Tables<'invites'>;
+export type Poll = Tables<'polls'>;
+export type PollOption = Tables<'poll_options'>;
+export type EventQuestion = Tables<'event_questions'>;
+export type LiveLocation = Tables<'live_locations'>;
+export type NearbyPerson =
+  Database['public']['Functions']['find_nearby_people']['Returns'][number];
 
-export interface EventCoHost {
-  event_id: string;
-  cohost_id: string;
-  added_by: string | null;
-  created_at: string;
-}
-
-export interface Expense {
-  id: string;
-  room_id: string;
-  description: string;
-  amount_cents: number;
-  payer_id: string;
-  settle_url: string | null;
-  created_by: string;
-  created_at: string;
-}
-
-export type BoardRole = 'member' | 'moderator';
-export type BoardPostKind = 'notice' | 'event';
-
-export interface Board {
-  id: string;
-  slug: string;
-  name: string;
-  description: string | null;
-  created_by: string;
-  created_at: string;
-}
-
-export interface BoardMember {
-  board_id: string;
-  member_id: string;
-  role: BoardRole;
-  joined_at: string;
-}
-
-export interface BoardPost {
-  id: string;
-  board_id: string;
-  author_id: string;
-  kind: BoardPostKind;
-  title: string;
-  body: string | null;
-  location: string | null;
-  cadence: string | null;
-  starts_at: string | null;
-  created_at: string;
-}
-
-export interface Circle {
-  id: string;
-  owner_id: string;
-  name: string;
-  emoji: string;
-  created_at: string;
-}
-
-export interface CircleMember {
-  circle_id: string;
-  member_id: string;
-}
-
-export type ConnectionStatus = 'pending' | 'accepted';
-
-export interface Connection {
-  id: string;
-  requester_id: string;
-  addressee_id: string;
-  status: ConnectionStatus;
-  created_at: string;
-}
-
-export type EventStatus = 'draft' | 'deciding' | 'inviting' | 'confirmed' | 'cancelled' | 'past';
+/** CHECK-constrained values used when accepting input or choosing UI behavior. */
+export type EventStatus =
+  | 'draft'
+  | 'deciding'
+  | 'inviting'
+  | 'confirmed'
+  | 'cancelled'
+  | 'past';
 export type InviteMode = 'individual' | 'group' | 'all_at_once';
 export type EventTheme = 'default' | 'sunrise' | 'dusk' | 'meadow' | 'ink' | 'blossom';
 export type RecurrenceKind = 'none' | 'daily' | 'weekly' | 'biweekly' | 'monthly' | 'custom';
-
-export interface SwitchboardEvent {
-  id: string;
-  host_id: string;
-  title: string;
-  description: string | null;
-  location_name: string | null;
-  location_address: string | null;
-  starts_at: string | null;
-  ends_at: string | null;
-  /** IANA zone the host created/edited the plan in; anchors how `starts_at` is
-   *  rendered on the server, where there is no viewer zone. Null for undated
-   *  plans and any created before the zone was captured. */
-  time_zone: string | null;
-  capacity: number | null;
-  invite_mode: InviteMode;
-  status: EventStatus;
-  /** Open table: anyone can ask to join (via the friends-of-friends discover
-   *  feed or the older /join link); the host approves each request. */
-  open_table: boolean;
-  /** Capability token behind the plan's public share link (`/i/<token>`) — the
-   *  one link a host can text to anyone. Immutable except through
-   *  `rotate_event_share_token`. */
-  share_token: string;
-  /** Host's kill switch for that share link. Defaults true in the database, so
-   *  every plan has a working link however it was created. */
-  share_link_active: boolean;
-  /** Visibility settings */
-  show_invite_list: boolean;
-  show_accepted: boolean;
-  show_expired: boolean;
-  room_id: string | null;
-  /** Presentation */
-  cover_url: string | null;
-  theme: EventTheme;
-  wishlist_url: string | null;
-  /** Recurrence: how often the plan repeats, and the day-count for a custom cadence. */
-  recurrence: RecurrenceKind;
-  recurrence_interval_days: number | null;
-  /** Reminders */
-  reminders_enabled: boolean;
-  reminded_day_before_at: string | null;
-  reminded_soon_at: string | null;
-  /** Cancellation context (set when the host calls a plan off) */
-  cancel_reason: string | null;
-  cancel_voice_url: string | null;
-  /** Set when a host marks the plan as having actually happened. */
-  happened_at: string | null;
-  /** When true, every RSVP requires guardian approval before it counts. */
-  parental_approval: boolean;
-  created_at: string;
-}
-
-export type ParentalApprovalStatus = 'pending' | 'approved' | 'denied';
-
-export interface ParentalApproval {
-  id: string;
-  invite_id: string;
-  event_id: string;
-  guardian_email: string;
-  guardian_name: string | null;
-  token: string;
-  status: ParentalApprovalStatus;
-  responded_at: string | null;
-  created_at: string;
-}
-
-export interface Announcement {
-  id: string;
-  event_id: string;
-  author_id: string;
-  body: string;
-  created_at: string;
-}
-
-export interface EventComment {
-  id: string;
-  event_id: string;
-  author_id: string;
-  body: string | null;
-  voice_url: string | null;
-  voice_duration_seconds: number | null;
-  created_at: string;
-}
-
-export interface EventQuestion {
-  id: string;
-  event_id: string;
-  prompt: string;
-  required: boolean;
-  position: number;
-  /** 'text' (free response) or 'choice' (pick one of `options`). */
-  kind: 'text' | 'choice';
-  /** Selectable answers for a 'choice' question; empty for 'text'. */
-  options: string[];
-  created_at: string;
-}
-
-export interface InviteAnswer {
-  id: string;
-  invite_id: string;
-  question_id: string;
-  answer: string;
-  created_at: string;
-}
-
 export type DeclineNote = 'keep_asking' | 'not_my_thing' | null;
-
-export interface Invite {
-  id: string;
-  event_id: string;
-  invitee_id: string | null;
-  guest_name: string | null;
-  guest_contact: string | null;
-  guest_token: string | null;
-  position: number;
-  group_stage: number;
-  window_minutes: number;
-  status: InviteStatus;
-  sent_at: string | null;
-  responded_at: string | null;
-  decline_note: DeclineNote;
-  decline_message: string | null;
-  created_at: string;
-}
-
-/**
- * `pending` is a follow-up poll waiting on the one before it: it exists, the
- * host has set it up, and it opens by itself the moment its parent is decided.
- */
-export type PollPhase = 'pending' | 'suggesting' | 'voting' | 'runoff' | 'decided';
-export type PollResolution = 'host_pick' | 'auto' | 'runoff';
 export type PollSource = 'guests' | 'host' | 'ai';
-
-export interface Poll {
-  id: string;
-  event_id: string;
-  phase: PollPhase;
-  resolution: PollResolution;
-  allow_suggestions: boolean;
-  vote_deadline: string | null;
-  winning_option_id: string | null;
-  /** The poll that has to land before this one opens, when it's a follow-up. */
-  parent_poll_id: string | null;
-  topic: PollTopic;
-  /** The host's own wording, when the topic preset isn't what they meant. */
-  title: string | null;
-  created_at: string;
-}
-
-/** What a poll is about. Drives its label and the suggested follow-up chain. */
 export type PollTopic = 'date' | 'place' | 'food' | 'activity' | 'custom';
+export type IntentKind = 'down_to_connect' | 'open_to_reschedule' | 'discover_connect';
+export type RoomItemKind = 'event' | 'address' | 'task' | 'link' | 'photo' | 'note';
+export type LocationVisibility = 'sharers' | 'connections';
 
 export const POLL_TOPICS: Array<{
   topic: PollTopic;
   label: string;
   emoji: string;
-  /** The question, as the group reads it. */
   question: string;
 }> = [
   { topic: 'date', label: 'When', emoji: '📅', question: 'When should this be?' },
@@ -284,13 +54,6 @@ export const POLL_TOPICS: Array<{
   { topic: 'custom', label: 'Something else', emoji: '💬', question: 'One more thing' },
 ];
 
-/**
- * What usually needs deciding next, once a given topic is settled.
- *
- * Only a suggestion — the host picks, and can always add a custom follow-up.
- * The order mirrors how plans actually get made: the date gates everything,
- * then the place, then the details inside it.
- */
 export const SUGGESTED_FOLLOW_UPS: Record<PollTopic, PollTopic[]> = {
   date: ['place', 'activity'],
   place: ['food', 'activity'],
@@ -299,152 +62,25 @@ export const SUGGESTED_FOLLOW_UPS: Record<PollTopic, PollTopic[]> = {
   custom: ['custom'],
 };
 
-export function pollQuestion(poll: Pick<Poll, 'topic' | 'title'>): string {
+export function normalizePollTopic(value: string): PollTopic {
+  switch (value) {
+    case 'date':
+    case 'place':
+    case 'food':
+    case 'activity':
+    case 'custom':
+      return value;
+    default:
+      return 'custom';
+  }
+}
+
+export function pollQuestion(poll: { topic: string; title: string | null }): string {
   if (poll.title?.trim()) return poll.title.trim();
   return (
     POLL_TOPICS.find((entry) => entry.topic === poll.topic)?.question ??
     'What should we do?'
   );
-}
-
-export interface PollOption {
-  id: string;
-  poll_id: string;
-  label: string;
-  detail: string | null;
-  source: PollSource;
-  created_at: string;
-}
-
-export interface PollVote {
-  poll_id: string;
-  option_id: string;
-  voter_id: string;
-  weight: Weight;
-}
-
-export type IntentKind = 'down_to_connect' | 'open_to_reschedule' | 'discover_connect';
-export type IntentStatus = 'active' | 'matched' | 'withdrawn';
-
-export interface MutualIntent {
-  id: string;
-  author_id: string;
-  target_id: string;
-  activity: string;
-  kind: IntentKind;
-  event_id: string | null; // for open_to_reschedule
-  status: IntentStatus;
-  created_at: string;
-}
-
-export interface Match {
-  id: string;
-  user_a: string;
-  user_b: string;
-  activity: string;
-  kind: IntentKind;
-  event_id: string | null;
-  room_id: string | null;
-  created_at: string;
-}
-
-export interface AvailabilitySignal {
-  id: string;
-  user_id: string;
-  emoji: string;
-  label: string;
-  circle_ids: string[]; // empty = all connections; otherwise the union of these circles
-  expires_at: string;
-  created_at: string;
-}
-
-export type RoomKind = 'event' | 'match' | 'group' | 'moment';
-
-export interface Room {
-  id: string;
-  kind: RoomKind;
-  title: string;
-  created_by: string;
-  created_at: string;
-}
-
-export interface Message {
-  id: string;
-  room_id: string;
-  sender_id: string;
-  body: string;
-  created_at: string;
-}
-
-export type RoomItemKind = 'event' | 'address' | 'task' | 'link' | 'photo' | 'note';
-
-export interface RoomItem {
-  id: string;
-  room_id: string;
-  message_id: string | null;
-  kind: RoomItemKind;
-  title: string;
-  detail: string | null;
-  url: string | null;
-  done: boolean;
-  created_by: string | null;
-  created_at: string;
-}
-
-export type MomentStatus = 'open' | 'matched' | 'closed';
-
-export interface Moment {
-  id: string;
-  user_id: string;
-  place_name: string;
-  experiences: string[];
-  headline: string | null;
-  available_until: string;
-  status: MomentStatus;
-  created_at: string;
-}
-
-export type MomentInterestStage = 'curious' | 'revealed' | 'accepted' | 'passed';
-
-export interface MomentInterest {
-  id: string;
-  moment_id: string;
-  other_moment_id: string;
-  stage: MomentInterestStage;
-  created_at: string;
-}
-
-/** Who a live location is visible to (besides the owner, who always sees it). */
-export type LocationVisibility = 'sharers' | 'connections';
-
-/** The owner's own live-location row (`live_locations`). Owner-only under RLS. */
-export interface LiveLocation {
-  user_id: string;
-  latitude: number;
-  longitude: number;
-  accuracy_m: number | null;
-  headline: string | null;
-  emoji: string | null;
-  visibility: LocationVisibility;
-  updated_at: string;
-  expires_at: string;
-}
-
-/** One nearby sharer as returned by the `find_nearby_people` RPC. Coordinates
- *  are already coarsened server-side, and `distance_m` is derived only from the
- *  rounded caller and target points. Identity is returned only to a caller who
- *  is themselves sharing (mutual) and whom the target permits. */
-export interface NearbyPerson {
-  user_id: string;
-  distance_m: number;
-  latitude: number;
-  longitude: number;
-  headline: string | null;
-  emoji: string | null;
-  display_name: string;
-  handle: string;
-  avatar_url: string | null;
-  interests: string[];
 }
 
 export const ACTIVITY_PRESETS = [

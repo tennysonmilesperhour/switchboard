@@ -10,7 +10,6 @@ import {
 } from './MomentsClient';
 import {
   buildMomentCandidates,
-  type FoundMomentCandidate,
   type MomentCandidate,
   type MomentCandidateIntro,
 } from '@/lib/moment-candidates';
@@ -66,7 +65,7 @@ export default async function MomentsPage() {
       (interests ?? []).map((i) => [i.other_moment_id, i.stage]),
     );
 
-    const foundList = (found ?? []) as FoundMomentCandidate[];
+    const foundList = found ?? [];
 
     // Only the mutually-curious candidates get a gentle introduction. Fetch all
     // of their moments in one query rather than one round trip per candidate.

@@ -101,7 +101,7 @@ export default async function NewEventPage({
         .in('event_id', eventIds)
         .limit(80);
       defaultPace = paceFromChosenWindows(
-        (recentInvites ?? []).map((i) => i.window_minutes as number),
+        (recentInvites ?? []).map((i) => i.window_minutes),
       );
     }
   }

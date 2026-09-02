@@ -6,10 +6,9 @@ import { DiscoverClient } from './DiscoverClient';
 import {
   PeopleDiscoveryClient,
   type DiscoveryMatch,
-  type DiscoveryPerson,
 } from './PeopleDiscoveryClient';
-import { OpenTables, type OpenTableRow } from '@/components/events/OpenTables';
-import { VenuePerks, type VenueRow, type VenueClaim } from '@/components/venues/VenuePerks';
+import { OpenTables } from '@/components/events/OpenTables';
+import { VenuePerks } from '@/components/venues/VenuePerks';
 import { IntentLaunchpad } from './IntentLaunchpad';
 
 export const metadata: Metadata = { title: 'Explore' };
@@ -79,18 +78,24 @@ export default async function DiscoverPage() {
         <IntentLaunchpad />
         <div id="browse">
         <PeopleDiscoveryClient
-          people={(people ?? []) as DiscoveryPerson[]}
+          people={people ?? []}
           matches={matches}
           discoverable={Boolean(profile?.discoverable)}
         />
-        <OpenTables tables={(openTables ?? []) as OpenTableRow[]} />
+        <OpenTables tables={openTables ?? []} />
         </div>
         <div id="brainstorm">
         <DiscoverClient defaultInterests={profile?.interests ?? []} />
         </div>
         <VenuePerks
-          venues={(venues ?? []) as VenueRow[]}
-          myClaims={(myVenues ?? []) as VenueClaim[]}
+          venues={venues ?? []}
+          myClaims={(myVenues ?? []).map((venue) => ({
+            ...venue,
+            status:
+              venue.status === 'verified' || venue.status === 'rejected'
+                ? venue.status
+                : 'pending',
+          }))}
         />
       </div>
     </AppShell>

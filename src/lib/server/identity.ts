@@ -15,6 +15,8 @@ import {
   type TempoSample,
   type Feeling,
 } from '@/lib/engine/identity';
+import { toJson } from '@/lib/supabase/json';
+import type { Database, Tables } from '@/lib/supabase/database.types';
 
 export type Verdict = 'confirmed' | 'rejected' | null;
 
@@ -46,13 +48,12 @@ function localHour(iso: string | null, timeZone: string): number | null {
   }
 }
 
-/**
- * Supabase renders a to-one join as an object or a 1-element array (and its
- * generated types often say array); normalize either shape to a single row.
- */
-function one<T>(rel: unknown): T | null {
-  if (Array.isArray(rel)) return (rel[0] as T) ?? null;
-  return (rel as T) ?? null;
+function feeling(value: string): Feeling {
+  return value === 'filled' || value === 'drained' ? value : 'neutral';
+}
+
+function verdict(value: string | null): Verdict {
+  return value === 'confirmed' || value === 'rejected' ? value : null;
 }
 
 /**
@@ -115,7 +116,7 @@ export async function loadMyIdentity(): Promise<DisplayFacet[]> {
   const enabledFeatures = new Set(
     (settingRows ?? [])
       .filter((s) => s.enabled)
-      .map((s) => s.setting_key as string),
+      .map((s) => s.setting_key),
   );
 
   const timeZone = profile?.timezone || 'UTC';
@@ -123,26 +124,28 @@ export async function loadMyIdentity(): Promise<DisplayFacet[]> {
 
   // Headcount is only knowable for events the owner hosted (RLS hides other
   // hosts' invite lists), so size is best-effort; the engine tolerates null.
-  const hostedIds = new Set((hostedRows ?? []).map((e) => e.id as string));
+  const hostedIds = new Set((hostedRows ?? []).map((e) => e.id));
   const acceptedByEvent = new Map<string, number>();
-  const { data: hostedAccepted } = hostedIds.size
-    ? await supabase
-        .from('invites')
-        .select('event_id')
-        .in('event_id', [...hostedIds])
-        .eq('status', 'accepted')
-    : { data: [] as { event_id: string }[] };
-  for (const row of hostedAccepted ?? []) {
+  let hostedAccepted: Array<{ event_id: string }> = [];
+  if (hostedIds.size > 0) {
+    const { data } = await supabase
+      .from('invites')
+      .select('event_id')
+      .in('event_id', [...hostedIds])
+      .eq('status', 'accepted');
+    hostedAccepted = data ?? [];
+  }
+  for (const row of hostedAccepted) {
     acceptedByEvent.set(row.event_id, (acceptedByEvent.get(row.event_id) ?? 0) + 1);
   }
 
   const energy: EnergySample[] = (energyRows ?? []).map((row) => {
-    const ev = one<{ starts_at: string | null; host_id: string }>(row.event);
-    const eventId = row.event_id as string;
+    const ev = Array.isArray(row.event) ? row.event[0] : row.event;
+    const eventId = row.event_id;
     const isHost = ev?.host_id === user.id;
     const size = isHost ? (acceptedByEvent.get(eventId) ?? 0) + 1 : null;
     return {
-      feeling: row.feeling as Feeling,
+      feeling: feeling(row.feeling),
       hour: localHour(ev?.starts_at ?? null, timeZone),
       size,
     };
@@ -158,15 +161,15 @@ export async function loadMyIdentity(): Promise<DisplayFacet[]> {
   // Divergence: histogram of the local hour of the plans you actually accept.
   const acceptedHourCounts = { daytime: 0, evening: 0, 'late night': 0 };
   for (const inv of inviteRows ?? []) {
-    const status = inv.status as string;
-    const ev = one<{ title: string | null; starts_at: string | null }>(inv.event);
+    const status = inv.status;
+    const ev = Array.isArray(inv.event) ? inv.event[0] : inv.event;
     if (status === 'accepted' || status === 'declined' || status === 'expired') {
       invitesResolved += 1;
     }
     if (status === 'accepted') {
       invitesAccepted += 1;
       if (ev?.title) attendedTitles.push(ev.title);
-      const resp = inv.responded_at ? Date.parse(inv.responded_at as string) : NaN;
+      const resp = inv.responded_at ? Date.parse(inv.responded_at) : NaN;
       if (Number.isFinite(resp)) {
         const ageDays = (now - resp) / DAY_MS;
         if (ageDays <= 30) recentAccepts += 1;
@@ -179,8 +182,8 @@ export async function loadMyIdentity(): Promise<DisplayFacet[]> {
       }
     }
     if (status === 'accepted' || status === 'declined') {
-      const sent = inv.sent_at ? Date.parse(inv.sent_at as string) : NaN;
-      const resp = inv.responded_at ? Date.parse(inv.responded_at as string) : NaN;
+      const sent = inv.sent_at ? Date.parse(inv.sent_at) : NaN;
+      const resp = inv.responded_at ? Date.parse(inv.responded_at) : NaN;
       const responseMinutes =
         Number.isFinite(sent) && Number.isFinite(resp) ? (resp - sent) / 60000 : null;
       const start = ev?.starts_at ? Date.parse(ev.starts_at) : NaN;
@@ -194,22 +197,22 @@ export async function loadMyIdentity(): Promise<DisplayFacet[]> {
 
   const postCounts = new Map<string, number>();
   for (const p of postRows ?? []) {
-    const bid = p.board_id as string;
+    const bid = p.board_id;
     postCounts.set(bid, (postCounts.get(bid) ?? 0) + 1);
   }
   const boards = (boardRows ?? []).map((row) => {
-    const b = one<{ id: string; name: string }>(row.board);
+    const b = Array.isArray(row.board) ? row.board[0] : row.board;
     return { name: b?.name ?? 'a board', posts: postCounts.get(b?.id ?? '') ?? 0 };
   });
 
   const professed = [
-    ...((profile?.down_to as string[] | null) ?? []),
-    ...((profile?.interests as string[] | null) ?? []),
+    ...(profile?.down_to ?? []),
+    ...(profile?.interests ?? []),
   ];
   const evidence = [
     ...attendedTitles,
-    ...(hostedRows ?? []).map((e) => e.title as string),
-    ...(matchRows ?? []).map((m) => m.activity as string),
+    ...(hostedRows ?? []).map((e) => e.title),
+    ...(matchRows ?? []).map((m) => m.activity),
   ];
 
   // Contexts (#3): average feeling in intimate rooms vs. crowds, by size.
@@ -228,7 +231,7 @@ export async function loadMyIdentity(): Promise<DisplayFacet[]> {
 
   // Divergence (#1): declared chronotype (from quiet-hours) vs. the time of day
   // you actually accept plans. Only a clear contradiction becomes a claim.
-  const qhStart = profile?.quiet_hours_start as number | null | undefined;
+  const qhStart = profile?.quiet_hours_start;
   const declaredChronotype =
     qhStart === null || qhStart === undefined
       ? null
@@ -240,9 +243,9 @@ export async function loadMyIdentity(): Promise<DisplayFacet[]> {
       qhStart >= 18 && qhStart <= 21
       ? 'an early night'
       : null;
-  const revealedTime = (
-    Object.entries(acceptedHourCounts) as [keyof typeof acceptedHourCounts, number][]
-  ).sort((a, b) => b[1] - a[1])[0];
+  const revealedTime = (['daytime', 'evening', 'late night'] as const)
+    .map((key) => [key, acceptedHourCounts[key]] as const)
+    .sort((a, b) => b[1] - a[1])[0];
   const revealedChronotype =
     revealedTime && revealedTime[1] > 0 ? revealedTime[0] : null;
   const chronotypeContradicts =
@@ -297,7 +300,7 @@ export async function loadMyIdentity(): Promise<DisplayFacet[]> {
         facet_key: f.key,
         title: f.title,
         summary: f.summary,
-        detail: f.detail,
+        detail: toJson(f.detail),
         confidence: f.confidence,
         sample_size: f.sampleSize,
         computed_at: new Date().toISOString(),
@@ -318,10 +321,10 @@ export async function loadMyIdentity(): Promise<DisplayFacet[]> {
 
   const prefs = new Map<string, FacetPref>();
   for (const p of prefRows ?? []) {
-    prefs.set(p.facet_key as string, {
+    prefs.set(p.facet_key, {
       hidden: Boolean(p.hidden),
       sharedWithConnections: Boolean(p.shared_with_connections),
-      verdict: (p.verdict as Verdict) ?? null,
+      verdict: verdict(p.verdict),
     });
   }
 
@@ -338,7 +341,7 @@ export async function loadOperatorSettings(): Promise<Record<string, boolean>> {
   const supabase = await createClient();
   const { data } = await supabase.from('operator_settings').select('setting_key, enabled');
   const out: Record<string, boolean> = {};
-  for (const row of data ?? []) out[row.setting_key as string] = Boolean(row.enabled);
+  for (const row of data ?? []) out[row.setting_key] = Boolean(row.enabled);
   return out;
 }
 
@@ -357,21 +360,18 @@ export async function reflectionReady(): Promise<boolean> {
   const setAside = new Set(
     (prefRows ?? [])
       .filter((p) => p.verdict === 'rejected' || p.hidden === true)
-      .map((p) => p.facet_key as string),
+      .map((p) => p.facet_key),
   );
   const usable = (facetRows ?? []).filter(
-    (f) => !setAside.has(f.facet_key as string),
+    (f) => !setAside.has(f.facet_key),
   );
   return usable.length >= 3;
 }
 
-export interface Reflection {
-  id: string;
-  kind: string;
-  body: string;
-  source: string;
-  created_at: string;
-}
+export type Reflection = Pick<
+  Tables<'identity_reflections'>,
+  'id' | 'kind' | 'body' | 'source' | 'created_at'
+>;
 
 /** The caller's saved reflections, newest first. */
 export async function loadReflections(): Promise<Reflection[]> {
@@ -381,28 +381,21 @@ export async function loadReflections(): Promise<Reflection[]> {
     .select('id, kind, body, source, created_at')
     .order('created_at', { ascending: false })
     .limit(5);
-  return (data as Reflection[] | null) ?? [];
+  return data ?? [];
 }
 
-export interface SharedFacet {
-  facet_key: string;
-  title: string;
-  summary: string;
-  confidence: string;
-  computed_at: string;
-}
+export type SharedFacet =
+  Database['public']['Functions']['shared_facets_of']['Returns'][number];
 
 /** Facets another user has consented to share with their connections. */
 export async function loadSharedFacets(targetId: string): Promise<SharedFacet[]> {
   const supabase = await createClient();
   const { data } = await supabase.rpc('shared_facets_of', { p_target: targetId });
-  return (data as SharedFacet[] | null) ?? [];
+  return data ?? [];
 }
 
-export interface Compatibility {
-  summary: string;
-  basis: string[];
-}
+export type Compatibility =
+  Database['public']['Functions']['compatibility_between']['Returns'][number];
 
 /**
  * A consented compatibility read between the caller and `targetId`. Non-null
@@ -414,5 +407,5 @@ export async function loadCompatibility(targetId: string): Promise<Compatibility
   const { data } = await supabase.rpc('compatibility_between', { p_other: targetId });
   const row = Array.isArray(data) ? data[0] : data;
   if (!row?.summary) return null;
-  return { summary: row.summary as string, basis: (row.basis as string[]) ?? [] };
+  return { summary: row.summary, basis: row.basis };
 }
