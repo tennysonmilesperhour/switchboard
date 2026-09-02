@@ -1,11 +1,16 @@
 import { afterEach, describe, expect, test, vi } from 'vitest';
-import { sendSmsWithResult, guestInviteSmsText } from './sms';
+import {
+  sendSmsWithResult,
+  guestInviteSmsText,
+  PROVIDER_TIMEOUT_MS,
+} from './sms';
 
 // These asserted against Plivo until #94 moved delivery back to Twilio, so the
 // suite has been red ever since — which is its own problem: a permanently
 // failing test is a test nobody reads, on the exact path that kept shipping
 // broken invite links.
 afterEach(() => {
+  vi.restoreAllMocks();
   vi.unstubAllGlobals();
   vi.unstubAllEnvs();
   delete process.env.TWILIO_ACCOUNT_SID;
@@ -69,6 +74,42 @@ describe('sendSmsWithResult', () => {
       provider: 'twilio',
       errorCode: 'provider_error',
     });
+  });
+
+  test('aborts a stalled provider at the configured timeout', async () => {
+    process.env.TWILIO_ACCOUNT_SID = 'ACtest';
+    process.env.TWILIO_AUTH_TOKEN = 'test-auth-token';
+    process.env.TWILIO_FROM_NUMBER = '+15555550199';
+    const controller = new AbortController();
+    const timeout = vi
+      .spyOn(AbortSignal, 'timeout')
+      .mockReturnValue(controller.signal);
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((_url: string | URL | Request, init?: RequestInit) =>
+        new Promise<Response>((_resolve, reject) => {
+          init?.signal?.addEventListener(
+            'abort',
+            () => reject(init?.signal?.reason),
+            { once: true },
+          );
+        }),
+      ),
+    );
+
+    const delivery = sendSmsWithResult({
+      to: '+1 555 555 0100',
+      body: 'Hello',
+    });
+    controller.abort(new DOMException('timed out', 'TimeoutError'));
+
+    await expect(delivery).resolves.toEqual({
+      status: 'failed',
+      provider: 'twilio',
+      errorCode: 'timeout',
+    });
+    expect(timeout).toHaveBeenCalledWith(PROVIDER_TIMEOUT_MS);
   });
 });
 

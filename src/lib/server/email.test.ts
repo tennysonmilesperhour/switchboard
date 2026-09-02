@@ -1,7 +1,12 @@
 import { afterEach, describe, expect, test, vi } from 'vitest';
-import { looksLikeEmail, sendEmailWithResult } from './email';
+import {
+  looksLikeEmail,
+  PROVIDER_TIMEOUT_MS,
+  sendEmailWithResult,
+} from './email';
 
 afterEach(() => {
+  vi.restoreAllMocks();
   vi.unstubAllGlobals();
   delete process.env.RESEND_API_KEY;
   delete process.env.EMAIL_FROM;
@@ -50,5 +55,41 @@ describe('looksLikeEmail', () => {
       provider: 'resend',
       providerMessageId: 'email_123',
     });
+  });
+
+  test('aborts a stalled provider at the configured timeout', async () => {
+    process.env.RESEND_API_KEY = 'test-key';
+    process.env.EMAIL_FROM = 'Switchboard <test@example.com>';
+    const controller = new AbortController();
+    const timeout = vi
+      .spyOn(AbortSignal, 'timeout')
+      .mockReturnValue(controller.signal);
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((_url: string | URL | Request, init?: RequestInit) =>
+        new Promise<Response>((_resolve, reject) => {
+          init?.signal?.addEventListener(
+            'abort',
+            () => reject(init?.signal?.reason),
+            { once: true },
+          );
+        }),
+      ),
+    );
+
+    const delivery = sendEmailWithResult({
+      to: 'sam@example.com',
+      subject: 'Hello',
+      text: 'Hi',
+    });
+    controller.abort(new DOMException('timed out', 'TimeoutError'));
+
+    await expect(delivery).resolves.toEqual({
+      status: 'failed',
+      provider: 'resend',
+      errorCode: 'timeout',
+    });
+    expect(timeout).toHaveBeenCalledWith(PROVIDER_TIMEOUT_MS);
   });
 });
