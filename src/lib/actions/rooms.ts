@@ -1,6 +1,6 @@
 'use server';
 
-import type { ActionResult } from '@/lib/errors';
+import { validation, type ActionResult } from '@/lib/errors';
 
 import { revalidatePath } from 'next/cache';
 import { createClient } from '@/lib/supabase/server';
@@ -9,6 +9,7 @@ import { requireUser } from '@/lib/server/require-user';
 import { extractItems } from '@/lib/ai/extract';
 import { isOwnPublicStorageUrl } from '@/lib/server/media';
 import { notifyRoomActivity } from '@/lib/server/notify';
+import { reportAndFail } from '@/lib/server/observability';
 
 async function notifyRoom(roomId: string, senderId: string): Promise<void> {
   const admin = createAdminClient();
@@ -25,7 +26,7 @@ export async function sendMessage(
   body: string,
 ): Promise<ActionResult> {
   const trimmed = body.trim();
-  if (!trimmed) return { ok: false, error: 'Empty message' };
+  if (!trimmed) return validation('Empty message');
 
   const auth = await requireUser();
   if (!auth.ok) return auth;
@@ -36,7 +37,7 @@ export async function sendMessage(
     .insert({ room_id: roomId, sender_id: user.id, body: trimmed })
     .select('id')
     .single();
-  if (error) return { ok: false, error: error.message };
+  if (error) return reportAndFail('SB-ROOM-SAVE', 'room.message', error, { roomId });
 
   notifyRoom(roomId, user.id).catch((notifyError) =>
     console.error('Room notification failed', notifyError),
@@ -78,7 +79,7 @@ export async function sendPhotoMessage(
   // Only accept a URL we minted into our own public media bucket — never an
   // arbitrary attacker-chosen origin pasted into the field.
   if (!isOwnPublicStorageUrl(imageUrl, ['media'])) {
-    return { ok: false, error: 'Unsupported image.' };
+    return validation('Unsupported image.');
   }
   const title = caption?.trim().slice(0, 120) || 'Photo';
 
@@ -94,7 +95,7 @@ export async function sendPhotoMessage(
     })
     .select('id')
     .single();
-  if (error) return { ok: false, error: error.message };
+  if (error) return reportAndFail('SB-ROOM-SAVE', 'room.image', error, { roomId });
 
   notifyRoom(roomId, user.id).catch((notifyError) =>
     console.error('Room notification failed', notifyError),

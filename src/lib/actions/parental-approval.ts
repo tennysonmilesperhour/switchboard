@@ -7,7 +7,7 @@ import { checkEventManager, isEventManager } from '@/lib/server/authz';
 import { advanceEventCascade } from '@/lib/server/cascade-runner';
 import { notifyUsers } from '@/lib/server/notify';
 import { reportAndFail, reportOperationalError } from '@/lib/server/observability';
-import { failure, type ActionResult, type ErrorCode } from '@/lib/errors';
+import { failure, validation, type ActionResult, type ErrorCode } from '@/lib/errors';
 import { looksLikeEmail, sendEmails } from '@/lib/server/email';
 import { approvalUrl } from '@/lib/links';
 import { checkRateLimit } from '@/lib/server/rate-limit';
@@ -32,7 +32,7 @@ export async function requestParentalApproval(
   const guardianEmail = input.guardianEmail.trim().toLowerCase();
   const guardianName = input.guardianName?.trim() || null;
   if (!looksLikeEmail(guardianEmail)) {
-    return { ok: false, error: 'Enter a valid email address for the guardian.' };
+    return validation('Enter a valid email address for the guardian.');
   }
 
   // This read runs as the caller, so RLS is part of the authorization boundary.
@@ -80,7 +80,7 @@ export async function requestParentalApproval(
   }
   if (!event) return failure('SB-RSVP-GONE', 'This plan is no longer available.');
   if (!event.parental_approval) {
-    return { ok: false, error: 'This plan does not require parental approval.' };
+    return validation('This plan does not require parental approval.');
   }
 
   if (
@@ -174,7 +174,7 @@ export async function resendParentalApproval(
   const guardianEmail = input.guardianEmail.trim().toLowerCase();
   const guardianName = input.guardianName?.trim() || null;
   if (!looksLikeEmail(guardianEmail)) {
-    return { ok: false, error: 'Enter a valid email address for the guardian.' };
+    return validation('Enter a valid email address for the guardian.');
   }
 
   const manager = await checkEventManager(user.id, input.eventId);
@@ -417,7 +417,7 @@ export async function toggleParentalApproval(
   if (!auth.ok) return auth;
   const { user } = auth;
   if (!(await isEventManager(user.id, eventId))) {
-    return { ok: false, error: 'Only the host can change this.' };
+    return failure('SB-PERM-HOST', 'Only the host can change this.');
   }
 
   const admin = createAdminClient();

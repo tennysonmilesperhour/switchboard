@@ -3,7 +3,7 @@
 import { revalidatePath } from 'next/cache';
 
 import type { ActionResult } from '@/lib/errors';
-import { failure } from '@/lib/errors';
+import { failure, validation } from '@/lib/errors';
 import { createClient } from '@/lib/supabase/server';
 import { requireUser } from '@/lib/server/require-user';
 import { isEventManager } from '@/lib/server/authz';
@@ -117,7 +117,7 @@ export async function slotsToPollOptions(
   const snapshot = await loadAvailability(eventId);
   const recommendation = recommendAvailability(snapshot, limit);
   if (recommendation.status !== 'ready') {
-    return { ok: false, error: recommendation.message };
+    return validation(recommendation.message);
   }
   const best = recommendation.slots;
 

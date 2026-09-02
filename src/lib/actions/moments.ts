@@ -1,9 +1,8 @@
 'use server';
 
-import { failure, type ErrorCode } from '@/lib/errors';
+import { failure, validation, type ErrorCode } from '@/lib/errors';
 
 import { revalidatePath } from 'next/cache';
-import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { notifyUsers } from '@/lib/server/notify';
 import { requireUser } from '@/lib/server/require-user';
@@ -33,8 +32,8 @@ export async function checkIn(
   const auth = await requireUser();
   if (!auth.ok) return auth;
   const { supabase, user } = auth;
-  if (!placeName.trim()) return { ok: false, error: 'Where are you?' };
-  if (experiences.length === 0) return { ok: false, error: 'Pick at least one experience' };
+  if (!placeName.trim()) return validation('Where are you?');
+  if (experiences.length === 0) return validation('Pick at least one experience');
 
   // One open moment at a time.
   await supabase
@@ -58,17 +57,15 @@ export async function checkIn(
     latitude: point?.lat ?? null,
     longitude: point?.lng ?? null,
   });
-  if (error) return { ok: false, error: error.message };
+  if (error) return reportAndFail('SB-MOMENT-SAVE', 'moment.create', error);
   revalidatePath('/moments');
   return { ok: true };
 }
 
 export async function closeMoment(): Promise<void> {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return;
+  const auth = await requireUser();
+  if (!auth.ok) return;
+  const { supabase, user } = auth;
   await supabase
     .from('moments')
     .update({ status: 'closed' })
@@ -79,9 +76,9 @@ export async function closeMoment(): Promise<void> {
 
 async function ownOpenMoment(momentId: string) {
   const auth = await requireUser();
-  if (!auth.ok) return null;
+  if (!auth.ok) return auth;
   const { supabase, user } = auth;
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from('moments')
     .select('id, user_id, place_name')
     .eq('id', momentId)
@@ -89,10 +86,17 @@ async function ownOpenMoment(momentId: string) {
     .eq('status', 'open')
     .gt('available_until', new Date().toISOString())
     .maybeSingle();
-  return data ? { ...data, supabase, user } : null;
+  if (error) {
+    return reportAndFail('SB-MOMENT-SAVE', 'moment.load', error, { momentId });
+  }
+  if (!data) return validation('Your check-in has ended');
+  return { ok: true as const, ...data, supabase, user };
 }
 
-type OwnedOpenMoment = NonNullable<Awaited<ReturnType<typeof ownOpenMoment>>>;
+type OwnedOpenMoment = Extract<
+  Awaited<ReturnType<typeof ownOpenMoment>>,
+  { ok: true }
+>;
 
 type CandidateAuthorization =
   | {
@@ -101,6 +105,11 @@ type CandidateAuthorization =
       other: { user_id: string; place_name: string };
     }
   | { ok: false; result: MomentActionResult };
+
+function rejectCandidate(result: MomentActionResult): CandidateAuthorization {
+  const rejection = { ok: false as const, result };
+  return rejection;
+}
 
 /**
  * Revalidate an anonymous candidate without ever returning its owner id to the
@@ -117,22 +126,21 @@ async function authorizeMomentCandidate(
     { p_place: mine.place_name },
   );
   if (visibleError) {
-    return {
-      ok: false,
-      result: await reportAndFail(
+    return rejectCandidate(
+      await reportAndFail(
         'SB-MOMENT-SAVE',
         'moment.candidate',
         visibleError,
         { momentId: mine.id },
         'Could not verify this shared moment. Refresh and try again.',
       ),
-    };
+    );
   }
   const isVisible = ((visible ?? []) as Array<{ id: string }>).some(
     (candidate) => candidate.id === otherMomentId,
   );
   if (!isVisible) {
-    return { ok: false, result: failure('SB-MOMENT-ACCESS') };
+    return rejectCandidate(failure('SB-MOMENT-ACCESS'));
   }
 
   const admin = createAdminClient();
@@ -144,19 +152,18 @@ async function authorizeMomentCandidate(
     .gt('available_until', new Date().toISOString())
     .maybeSingle<{ user_id: string; place_name: string }>();
   if (otherError) {
-    return {
-      ok: false,
-      result: await reportAndFail(
+    return rejectCandidate(
+      await reportAndFail(
         'SB-MOMENT-SAVE',
         'moment.candidate',
         otherError,
         { momentId: mine.id },
         'Could not verify this shared moment. Refresh and try again.',
       ),
-    };
+    );
   }
   if (!other || other.user_id === mine.user.id) {
-    return { ok: false, result: failure('SB-MOMENT-ACCESS') };
+    return rejectCandidate(failure('SB-MOMENT-ACCESS'));
   }
 
   // Explicit action-time recheck. The discovery RPC already filters blocks,
@@ -167,19 +174,18 @@ async function authorizeMomentCandidate(
     { p_user_a: mine.user.id, p_user_b: other.user_id },
   );
   if (blockError) {
-    return {
-      ok: false,
-      result: await reportAndFail(
+    return rejectCandidate(
+      await reportAndFail(
         'SB-MOMENT-SAVE',
         'moment.candidate',
         blockError,
         { momentId: mine.id },
         'Could not verify this shared moment. Refresh and try again.',
       ),
-    };
+    );
   }
   if (blocked) {
-    return { ok: false, result: failure('SB-MOMENT-ACCESS') };
+    return rejectCandidate(failure('SB-MOMENT-ACCESS'));
   }
 
   return { ok: true, admin, other };
@@ -194,7 +200,7 @@ export async function expressCuriosity(
   otherMomentId: string,
 ): Promise<MomentActionResult> {
   const mine = await ownOpenMoment(myMomentId);
-  if (!mine) return { ok: false, error: 'Your check-in has ended' };
+  if (!mine.ok) return mine;
 
   const authorization = await authorizeMomentCandidate(mine, otherMomentId);
   if (!authorization.ok) return authorization.result;
@@ -255,7 +261,7 @@ export async function acceptMoment(
   otherMomentId: string,
 ): Promise<MomentActionResult> {
   const mine = await ownOpenMoment(myMomentId);
-  if (!mine) return { ok: false, error: 'Your check-in has ended' };
+  if (!mine.ok) return mine;
 
   const authorization = await authorizeMomentCandidate(mine, otherMomentId);
   if (!authorization.ok) return authorization.result;
@@ -303,7 +309,7 @@ export async function acceptMoment(
   }
 
   // Both said yes → open a room, connect the two people.
-  const { data: room } = await admin
+  const { data: room, error: roomError } = await admin
     .from('rooms')
     .insert({
       kind: 'moment',
@@ -312,7 +318,14 @@ export async function acceptMoment(
     })
     .select('id')
     .single();
-  if (!room) return { ok: false, error: 'Could not open a chat' };
+  if (roomError || !room) {
+    return reportAndFail(
+      'SB-MOMENT-CHAT',
+      'moment.chat',
+      roomError ?? new Error('insert returned no room'),
+      { myMomentId, otherMomentId },
+    );
+  }
 
   await admin.from('room_members').insert([
     { room_id: room.id, member_id: mine.user_id },
@@ -342,7 +355,7 @@ export async function blockMomentCandidate(
   otherMomentId: string,
 ): Promise<MomentActionResult> {
   const mine = await ownOpenMoment(myMomentId);
-  if (!mine) return { ok: false, error: 'Your check-in has ended' };
+  if (!mine.ok) return mine;
   const authorization = await authorizeMomentCandidate(mine, otherMomentId);
   if (!authorization.ok) return authorization.result;
 
@@ -370,10 +383,10 @@ export async function reportMomentCandidate(
   reason: string,
 ): Promise<MomentActionResult> {
   const cleanReason = reason.trim().slice(0, 500);
-  if (!cleanReason) return { ok: false, error: 'Add a short reason.' };
+  if (!cleanReason) return validation('Add a short reason.');
 
   const mine = await ownOpenMoment(myMomentId);
-  if (!mine) return { ok: false, error: 'Your check-in has ended' };
+  if (!mine.ok) return mine;
   const authorization = await authorizeMomentCandidate(mine, otherMomentId);
   if (!authorization.ok) return authorization.result;
 
@@ -402,8 +415,8 @@ export async function passMoment(
   myMomentId: string,
   otherMomentId: string,
 ): Promise<void> {
-  const mine = await ownOpenMoment(myMomentId);
-  if (!mine) return;
+  const mineResult = await ownOpenMoment(myMomentId);
+  if (!mineResult.ok) return;
   const admin = createAdminClient();
   await admin
     .from('moment_interests')

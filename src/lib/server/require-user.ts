@@ -1,5 +1,6 @@
 import type { User } from '@supabase/supabase-js';
 import { redirect } from 'next/navigation';
+import { failure, type Failure } from '@/lib/errors';
 import { createClient } from '@/lib/supabase/server';
 
 type ServerClient = Awaited<ReturnType<typeof createClient>>;
@@ -22,14 +23,26 @@ type ServerClient = Awaited<ReturnType<typeof createClient>>;
  */
 export async function requireUser(): Promise<
   | { ok: true; supabase: ServerClient; user: User }
-  | { ok: false; error: string }
+  | Failure
 > {
   const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  if (!user) return { ok: false, error: 'Not signed in' };
+  if (!user) return failure('SB-AUTH-REQUIRED');
   return { ok: true, supabase, user };
+}
+
+/** Read the current user when an action genuinely supports anonymous use. */
+export async function getOptionalUser(): Promise<{
+  supabase: ServerClient;
+  user: User | null;
+}> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  return { supabase, user };
 }
 
 export async function requireUserOrRedirect(

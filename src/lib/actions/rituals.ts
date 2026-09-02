@@ -1,12 +1,13 @@
 'use server';
 
-import type { ActionResult } from '@/lib/errors';
+import { failure, validation, type ActionResult } from '@/lib/errors';
 
 import { revalidatePath } from 'next/cache';
 import { createClient } from '@/lib/supabase/server';
 import { notifyUsers } from '@/lib/server/notify';
 import { checkRateLimit } from '@/lib/server/rate-limit';
 import { requireUser } from '@/lib/server/require-user';
+import { reportAndFail } from '@/lib/server/observability';
 
 export async function proposeRitual(
   partnerId: string,
@@ -18,10 +19,10 @@ export async function proposeRitual(
   const { supabase, user } = auth;
 
   const cleanActivity = activity.trim().slice(0, 80);
-  if (!cleanActivity) return { ok: false, error: 'Name the ritual first.' };
+  if (!cleanActivity) return validation('Name the ritual first.');
 
   if (!(await checkRateLimit(`ritual:${user.id}`, 20, 60 * 60))) {
-    return { ok: false, error: 'You’ve sent a lot of proposals. Try again later.' };
+    return failure('SB-RATE-LIMIT', 'You’ve sent a lot of proposals. Try again later.');
   }
 
   const { error } = await supabase.from('rituals').insert({
@@ -30,7 +31,7 @@ export async function proposeRitual(
     activity: cleanActivity,
     cadence_days: cadenceDays,
   });
-  if (error) return { ok: false, error: error.message };
+  if (error) return reportAndFail('SB-RITUAL-SAVE', 'ritual.create', error, { partnerId });
 
   await notifyUsers([partnerId], {
     kind: 'ritual',
@@ -46,11 +47,9 @@ export async function respondToRitual(
   ritualId: string,
   accept: boolean,
 ): Promise<void> {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return;
+  const auth = await requireUser();
+  if (!auth.ok) return;
+  const { supabase, user } = auth;
   // Only the invited partner may accept/decline - the proposer cannot
   // self-accept their own proposal.
   await supabase

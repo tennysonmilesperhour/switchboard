@@ -1,6 +1,6 @@
 'use server';
 
-import type { ErrorCode } from '@/lib/errors';
+import { failure, validation, type ErrorCode } from '@/lib/errors';
 
 import {
   createHash,
@@ -16,6 +16,7 @@ import { requireUser } from '@/lib/server/require-user';
 import { checkRateLimit } from '@/lib/server/rate-limit';
 import { appUrl, sendEmailWithResult } from '@/lib/server/email';
 import { sendSmsWithResult } from '@/lib/server/sms';
+import { reportAndFail } from '@/lib/server/observability';
 
 export type ContactKind = 'email' | 'phone';
 
@@ -58,7 +59,7 @@ export async function requestContactVerification(
   const { user } = auth;
 
   if (!(await checkRateLimit(`contact-verify-send:${user.id}:${kind}`, 4, 60 * 60))) {
-    return { ok: false, error: 'Too many verification requests. Try again later.' };
+    return failure('SB-RATE-LIMIT', 'Too many verification requests. Try again later.');
   }
 
   const admin = createAdminClient();
@@ -70,7 +71,7 @@ export async function requestContactVerification(
     .maybeSingle<{ normalized_value: string; verified_at: string | null }>();
 
   if (!contact) {
-    return { ok: false, error: `Add a ${kind === 'email' ? 'contact email' : 'phone number'} first.` };
+    return validation(`Add a ${kind === 'email' ? 'contact email' : 'phone number'} first.`);
   }
   if (contact.verified_at) return { ok: true, message: 'That contact is already verified.' };
 
@@ -89,7 +90,14 @@ export async function requestContactVerification(
       token_hash: tokenHash(token),
       expires_at: new Date(Date.now() + 30 * 60 * 1000).toISOString(),
     });
-    if (requestError) return { ok: false, error: 'Could not start email verification.' };
+    if (requestError) {
+      return reportAndFail(
+        'SB-VERIFY-START',
+        'contact.verify-start',
+        requestError,
+        { kind },
+      );
+    }
 
     const delivery = await sendEmailWithResult({
       to: contact.normalized_value,
@@ -105,12 +113,14 @@ export async function requestContactVerification(
         .delete()
         .eq('user_id', user.id)
         .eq('kind', kind);
-      return {
-        ok: false,
-        error: delivery.status === 'not_configured'
-          ? 'Email verification is not configured yet.'
-          : 'The verification email could not be sent. Try again later.',
-      };
+      if (delivery.status === 'not_configured') return failure('SB-CONFIG-EMAIL');
+      return reportAndFail(
+        'SB-VERIFY-START',
+        'contact.verify-start',
+        new Error(`email delivery failed: ${delivery.status}`),
+        { kind },
+        'The verification email could not be sent. Try again later.',
+      );
     }
     return { ok: true, message: 'Verification email sent. It expires in 30 minutes.' };
   }
@@ -118,7 +128,7 @@ export async function requestContactVerification(
   const code = String(randomInt(0, 1_000_000)).padStart(6, '0');
   const codeHash = phoneCodeHash(user.id, contact.normalized_value, code);
   if (!codeHash) {
-    return { ok: false, error: 'Phone verification is not configured yet.' };
+    return failure('SB-CONFIG-SMS');
   }
   const { error: requestError } = await admin.from('contact_verification_requests').insert({
     user_id: user.id,
@@ -127,7 +137,9 @@ export async function requestContactVerification(
     code_hash: codeHash,
     expires_at: new Date(Date.now() + 10 * 60 * 1000).toISOString(),
   });
-  if (requestError) return { ok: false, error: 'Could not start phone verification.' };
+  if (requestError) {
+    return reportAndFail('SB-VERIFY-START', 'contact.verify-start', requestError, { kind });
+  }
 
   const delivery = await sendSmsWithResult({
     to: contact.normalized_value,
@@ -139,12 +151,14 @@ export async function requestContactVerification(
       .delete()
       .eq('user_id', user.id)
       .eq('kind', kind);
-    return {
-      ok: false,
-      error: delivery.status === 'not_configured'
-        ? 'Phone verification is not configured yet.'
-        : 'The verification text could not be sent. Try again later.',
-    };
+    if (delivery.status === 'not_configured') return failure('SB-CONFIG-SMS');
+    return reportAndFail(
+      'SB-VERIFY-START',
+      'contact.verify-start',
+      new Error(`SMS delivery failed: ${delivery.status}`),
+      { kind },
+      'The verification text could not be sent. Try again later.',
+    );
   }
   return { ok: true, message: 'Verification code sent. It expires in 10 minutes.' };
 }
@@ -154,9 +168,9 @@ export async function confirmPhoneContact(code: string): Promise<ContactVerifica
   if (!auth.ok) return auth;
   const { user } = auth;
   const cleaned = code.replace(/\D/g, '');
-  if (cleaned.length !== 6) return { ok: false, error: 'Enter the six-digit code.' };
+  if (cleaned.length !== 6) return validation('Enter the six-digit code.');
   if (!(await checkRateLimit(`contact-verify-code:${user.id}`, 8, 15 * 60))) {
-    return { ok: false, error: 'Too many code attempts. Request a new code later.' };
+    return failure('SB-RATE-LIMIT', 'Too many code attempts. Request a new code later.');
   }
 
   const admin = createAdminClient();
@@ -172,7 +186,7 @@ export async function confirmPhoneContact(code: string): Promise<ContactVerifica
       expires_at: string;
     }>();
   if (!request || new Date(request.expires_at).getTime() <= Date.now()) {
-    return { ok: false, error: 'That code expired. Request a new one.' };
+    return validation('That code expired. Request a new one.');
   }
 
   const submittedHash = phoneCodeHash(user.id, request.normalized_value, cleaned);
@@ -182,7 +196,7 @@ export async function confirmPhoneContact(code: string): Promise<ContactVerifica
       .update({ attempts: Math.min(request.attempts + 1, 10) })
       .eq('user_id', user.id)
       .eq('kind', 'phone');
-    return { ok: false, error: 'That code did not match.' };
+    return validation('That code did not match.');
   }
 
   const { error } = await admin
@@ -192,12 +206,10 @@ export async function confirmPhoneContact(code: string): Promise<ContactVerifica
     .eq('kind', 'phone')
     .eq('normalized_value', request.normalized_value);
   if (error) {
-    return {
-      ok: false,
-      error: error.code === '23505'
-        ? 'That phone number is already verified on another account.'
-        : 'Could not verify that phone number.',
-    };
+    if (error.code === '23505') {
+      return validation('That phone number is already verified on another account.');
+    }
+    return reportAndFail('SB-VERIFY-CHECK', 'contact.verify-check', error, { kind: 'phone' });
   }
   await admin
     .from('contact_verification_requests')
