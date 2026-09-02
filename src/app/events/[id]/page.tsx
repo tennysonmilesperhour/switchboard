@@ -18,6 +18,10 @@ import { AttendeeGrid } from '@/components/events/AttendeeGrid';
 import type { InviteePerson } from '@/components/events/InviteeSheet';
 import { HostCard, type HostCardData } from '@/components/events/HostCard';
 import { JoinRequests } from '@/components/events/JoinRequests';
+import {
+  ParentalApprovalManager,
+  type PendingParentalApproval,
+} from '@/components/events/ParentalApprovalManager';
 import { RsvpCard } from '@/components/events/RsvpCard';
 import { Announcements, type AnnouncementView } from '@/components/events/Announcements';
 import { EventThread, type ThreadCommentView } from '@/components/events/EventThread';
@@ -265,6 +269,29 @@ export default async function EventPage({
       .eq('invitee_id', user.id)
       .maybeSingle<Invite>();
     myInvite = data;
+  }
+
+  // Host/co-host recovery for a request that is waiting on a guardian. These
+  // addresses are private and cross the server/client boundary only inside the
+  // same `canManage` gate used for the host's invite contact cards.
+  let pendingParentalApprovals: PendingParentalApproval[] = [];
+  if (canManage && event.parental_approval && hostInvites.length > 0) {
+    const { data: approvalRows } = await admin
+      .from('parental_approvals')
+      .select('invite_id, guardian_email, guardian_name')
+      .eq('event_id', id)
+      .eq('status', 'pending');
+    const inviteeName = new Map(
+      hostInvites.map((invite) => [invite.id, invite.invitee_name]),
+    );
+    pendingParentalApprovals = (approvalRows ?? [])
+      .filter((approval) => inviteeName.has(approval.invite_id as string))
+      .map((approval) => ({
+        inviteId: approval.invite_id as string,
+        inviteeName: inviteeName.get(approval.invite_id as string) ?? 'Invitee',
+        guardianEmail: approval.guardian_email as string,
+        guardianName: (approval.guardian_name as string | null) ?? null,
+      }));
   }
 
   // Host's own connections, for one-tap adding to the flow (only needed while
@@ -1142,6 +1169,13 @@ export default async function EventPage({
                 name: invite.invitee_name,
                 userId: invite.invitee_id ?? invite.id,
               }))}
+          />
+        )}
+
+        {canManage && pendingParentalApprovals.length > 0 && (
+          <ParentalApprovalManager
+            eventId={event.id}
+            approvals={pendingParentalApprovals}
           />
         )}
 

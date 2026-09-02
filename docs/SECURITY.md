@@ -324,6 +324,29 @@ accepted connection to the target read through *their own* RLS client, with
 Litmus test: *is any contact detail on this page something the viewer did not
 themselves supply?*
 
+## Guardian approval (two separately authorized paths)
+
+A guardian link is a capability that can decide whether an accepted RSVP
+counts, so creating it is not an ordinary form post. The first request and a
+host's recovery resend have different authority and must stay separate:
+
+- **The invitee creates the first request.** `requestParentalApproval` reads the
+  invite through the caller's session/RLS client and requires both
+  `invitee_id = user.id` and the submitted `event_id` to match before any
+  service-role read or write. The browser has no direct INSERT policy on
+  `parental_approvals`.
+- **A host may correct and resend, not impersonate the invitee path.**
+  `resendParentalApproval` first proves the caller manages the exact plan, then
+  scopes every service-role query and update to that plan, invite, and a
+  still-pending approval. Both paths are rate-limited per caller.
+- **The resolver distrusts even privileged rows.** The token-addressed
+  `resolve_parental_approval` function checks that the approval's `event_id`
+  equals its invite's `event_id` before mutating either row. A mismatch returns
+  `invite_mismatch` and leaves both records unchanged.
+
+Litmus test: *can this caller prove they own this RSVP, or manage this exact
+plan—and would a cross-plan approval row still be harmless?*
+
 ## Live location (opt-in presence)
 
 Live location (`live_locations`, `find_nearby_people`) is the most sensitive PII
