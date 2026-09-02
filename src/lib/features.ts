@@ -690,9 +690,9 @@ export const FEATURE_GROUPS: readonly FeatureGroup[] = [
       },
       {
         id: 'account-controls',
-        title: 'Password, sign out, delete',
+        title: 'Password, your data, delete',
         blurb:
-          'Change your password, sign out, or delete your account and the data attached to it.',
+          'Change your password, download a JSON copy of your profile, plans, RSVPs, messages, and signals, sign out, or delete your account — and the media and data attached to it.',
         where: 'Settings → Account',
         href: '/settings',
       },
