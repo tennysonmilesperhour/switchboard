@@ -15,14 +15,11 @@ import { SettingsForm, SettingsSaveProvider } from './SettingsSaveBar';
 import { AccountControls } from './AccountControls';
 import { CalendarSubscribe } from './CalendarSubscribe';
 import { CalendarConnect } from './CalendarConnect';
-import { getCalendarStatus } from '@/lib/actions/calendar-sync';
 import { ContactVerification } from './ContactVerification';
 import { AppearanceSection } from './AppearancePicker';
 import { resolveTheme } from '@/lib/themes-app';
 import { parseCustomAppearance } from '@/lib/theme-custom';
-import { reportOperationalError } from '@/lib/server/observability';
-import { loadPassport } from '@/lib/server/passport';
-import { passportProgress } from '@/lib/passport';
+import { loadSettingsPage } from '@/lib/server/settings-page';
 import { INTEREST_CATEGORIES, DOWN_TO_GROUP } from '@/lib/interests';
 import {
   signOut,
@@ -53,50 +50,16 @@ export default async function SettingsPage({
   } = await supabase.auth.getUser();
   if (!user) redirect('/login');
 
-  const { data: profile, error: profileError } = await supabase
-    .from('profiles')
-    .select(
-      'display_name, handle, interests, down_to, sabbatical, sabbatical_message, quiet_hours_start, quiet_hours_end, discoverable, discovery_geography, discovery_demographics, discovery_interests, discovery_involvements, discovery_mutuals, discovery_contexts, notify_plans, notify_suggestions, notify_reminders, notify_messages, notify_social, appearance_theme, appearance_custom, digest_enabled, digest_hour',
-    )
-    .eq('id', user.id)
-    .single();
-  // A read that fails here renders every field blank and every preference at its
-  // default, which looks exactly like a person who has set nothing — the failure
-  // mode that hid a missing column grant for a release. Log it so it is at worst
-  // a mystery with a log line.
-  if (profileError) {
-    await reportOperationalError('settings.appearance-read', profileError, {
-      userId: user.id,
-    });
-  }
-
-  // calendar_token is withheld from the general profiles API surface; fetch the
-  // caller's own value through the security-definer accessor (see SB-01).
-  const { data: privateProfile } = await supabase
-    .rpc('my_private_profile')
-    .maybeSingle<{ calendar_token: string; contact_email: string | null; contact_phone: string | null }>();
+  const {
+    profile,
+    privateProfile,
+    calendarStatus,
+    passportComplete,
+    emailVerified,
+    phoneVerified,
+    isModerator,
+  } = await loadSettingsPage(user);
   const calendarToken = privateProfile?.calendar_token ?? null;
-  // Whether a calendar is connected, and where it points — never the address
-  // itself, which is a bearer credential the server keeps to itself.
-  const calendarStatus = await getCalendarStatus();
-  // Only to decide whether the earned preset shows as available; the action
-  // re-checks it server-side before saving.
-  const passportComplete = passportProgress(await loadPassport(user.id)).done;
-
-  const { data: contacts } = await supabase
-    .from('profile_contacts')
-    .select('kind, verified_at');
-  const emailVerified = Boolean(
-    contacts?.some((contact) => contact.kind === 'email' && contact.verified_at),
-  );
-  const phoneVerified = Boolean(
-    contacts?.some((contact) => contact.kind === 'phone' && contact.verified_at),
-  );
-
-  // Reveal the moderation entry point only to appointed platform moderators.
-  const { data: isModerator } = await supabase.rpc(
-    'is_current_user_platform_moderator',
-  );
 
   const interests: string[] = profile?.interests ?? [];
   const downTo: string[] = profile?.down_to ?? [];

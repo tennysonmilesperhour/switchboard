@@ -5,7 +5,6 @@ import Link from 'next/link';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient, hasAdminCredentials } from '@/lib/supabase/admin';
 import { serializeJsonLd } from '@/lib/security';
-import { signMediaRef } from '@/lib/server/media';
 import { advanceEventCascade } from '@/lib/server/cascade-runner';
 import { AppShell } from '@/components/shell/AppShell';
 import { Card, SectionHeader } from '@/components/ui/Card';
@@ -15,54 +14,34 @@ import { CopyButton } from '@/components/ui/CopyButton';
 import { ShareButton } from '@/components/ui/ShareButton';
 import { CascadeProgress } from '@/components/events/CascadeProgress';
 import { AttendeeGrid } from '@/components/events/AttendeeGrid';
-import type { InviteePerson } from '@/components/events/InviteeSheet';
-import { HostCard, type HostCardData } from '@/components/events/HostCard';
+import { HostCard } from '@/components/events/HostCard';
 import { JoinRequests } from '@/components/events/JoinRequests';
-import {
-  ParentalApprovalManager,
-  type PendingParentalApproval,
-} from '@/components/events/ParentalApprovalManager';
+import { ParentalApprovalManager } from '@/components/events/ParentalApprovalManager';
 import { RsvpCard } from '@/components/events/RsvpCard';
-import { Announcements, type AnnouncementView } from '@/components/events/Announcements';
-import { EventThread, type ThreadCommentView } from '@/components/events/EventThread';
+import { Announcements } from '@/components/events/Announcements';
+import { EventThread } from '@/components/events/EventThread';
 import { VoiceNote } from '@/components/ui/VoiceNote';
 import { RunItBackButton } from '@/components/events/RunItBackButton';
 import { ScheduleNextButton } from '@/components/events/ScheduleNextButton';
-import { PollSection, type OptionResult } from '@/components/polls/PollSection';
+import { PollSection } from '@/components/polls/PollSection';
 import { PollChain } from '@/components/polls/PollChain';
 import { FollowUpComposer } from '@/components/polls/FollowUpComposer';
 import { AvailabilityGrid } from '@/components/events/AvailabilityGrid';
-import { loadAvailability } from '@/lib/actions/availability';
-import { getCalendarStatus, myBusySlots } from '@/lib/actions/calendar-sync';
 import { recurrenceLabel } from '@/lib/engine/recurrence';
 import { HostControls } from './HostControls';
 import { CoHostManager } from './CoHostManager';
 import { AddInvitees } from './AddInvitees';
 import { InviteLink } from './InviteLink';
 import { PrivacyAccess } from './PrivacyAccess';
-import { getRelationship, getMutualConnections } from '@/lib/server/relationship';
 import { inviteExpiresAt } from '@/lib/engine/cascade';
-import { threadGate, THREAD_PREVIEW_COUNT } from '@/lib/engine/thread';
 import { formatDateTime, formatDateTimeRange } from '@/lib/format';
 import { resolveEventZone } from '@/lib/server/event-zone';
 import { googleCalendarUrl } from '@/lib/calendar-links';
-import { appOrigin, eventShareUrl, guestRsvpUrl } from '@/lib/links';
-import { hostCanShare, shareLinkState } from '@/lib/share-link';
-import { INVITE_STATUS_LABEL } from '@/lib/invite-status';
-import {
-  appInviteMessage,
-  looksLikeContactString,
-  planInviteMessage,
-} from '@/lib/invitee-contact';
-import type {
-  EventQuestion,
-  Invite,
-  Poll,
-  PollOption,
-  SwitchboardEvent,
-} from '@/lib/types';
+import { eventShareUrl } from '@/lib/links';
+import { hostCanEditInvitees, hostCanShare } from '@/lib/share-link';
+import type { SwitchboardEvent } from '@/lib/types';
 import { pollQuestion } from '@/lib/types';
-import type { Weight } from '@/lib/engine/scoring';
+import { loadEventPage } from '@/lib/server/event-page';
 
 /** Rich unfurl card for directly-shared event links (iMessage/WhatsApp/Slack). */
 export async function generateMetadata({
@@ -108,14 +87,11 @@ export default async function EventPage({
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  // Preserve where they were headed so signing in returns them to this plan
-  // instead of dropping them on the home page. A visitor who turns out not to
-  // be on the plan is routed onward to the public join page below.
+  // Preserve where they were headed so signing in returns them to this plan.
   if (!user) redirect(`/login?next=${encodeURIComponent(`/events/${id}`)}`);
 
-  // Lazy cascade tick — the cron sweep is the backstop. Run it *after* the
-  // response so a plain page view never blocks on write-side work or outbound
-  // SMS (SB-07); the tick's effects show on the next load.
+  // Cascade advancement is write-side work; never put it back on the page's
+  // critical path. The cron sweep remains the backstop.
   after(async () => {
     try {
       await advanceEventCascade(id);
@@ -124,639 +100,49 @@ export default async function EventPage({
     }
   });
 
-  const { data: event } = await supabase
-    .from('events')
-    .select('*')
-    .eq('id', id)
-    .single<SwitchboardEvent>();
-  // A signed-in visitor who isn't the host or an invitee can't read this event
-  // row through RLS, so `event` is null here both for a plan that doesn't exist
-  // and for a real plan they just haven't been let into (e.g. someone who
-  // opened a shared link). Send them to the public join page rather than a dead
-  // "Nothing here": it shows the shareable plan with an ask-to-join button when
-  // the host has turned the invite link on, redirects them straight back here if
-  // they actually can see it, and shows a clear "isn't active" note otherwise.
-  if (!event) redirect(`/join/${id}`);
-
-  const isHost = event.host_id === user.id;
-  const admin = createAdminClient();
-
-  // What this plan's public link actually does right now, from the same module
-  // /i/<token> uses to decide what a recipient sees. Both share affordances
-  // below hang off this: the app must not offer a host a way to send a link its
-  // own recipient page would reject (see @/lib/share-link).
-  const shareState = shareLinkState(event);
-
-  // Render the plan's time in its own zone (host-profile fallback for plans
-  // created before the zone was captured), so this page agrees with the link
-  // unfurl and guest invite pages instead of drifting to the server's UTC.
-  const eventZone = await resolveEventZone(admin, event);
-
-  // Co-hosts share host powers. Read the list with admin — a co-host can't
-  // see the full roster through their own RLS.
-  const { data: cohostRows } = await admin
-    .from('event_cohosts')
-    .select('cohost_id')
-    .eq('event_id', id);
-  const cohostIds = (cohostRows ?? []).map((row) => row.cohost_id as string);
-  const isCoHost = cohostIds.includes(user.id);
-  const canManage = isHost || isCoHost;
-
-  // Names for the primary host's co-host manager.
-  let cohosts: Array<{ id: string; name: string }> = [];
-  if (isHost && cohostIds.length > 0) {
-    const { data } = await admin
-      .from('profiles')
-      .select('id, display_name')
-      .in('id', cohostIds);
-    cohosts = (data ?? []).map((p) => ({
-      id: p.id as string,
-      name: (p.display_name as string) ?? 'Co-host',
-    }));
-  }
-
-  // "Hosted by" identity for anyone who isn't the host: the host's public
-  // profile, how the viewer is already connected, and any mutual friends. The
-  // host doesn't need to be told they're hosting their own plan.
-  let hostCard: {
-    host: HostCardData;
-    relationship: Awaited<ReturnType<typeof getRelationship>>;
-    mutuals: Awaited<ReturnType<typeof getMutualConnections>>;
-  } | null = null;
-  if (!isHost) {
-    const { data: hostProfile } = await supabase
-      .from('profiles')
-      .select('id, display_name, handle, avatar_url, tagline')
-      .eq('id', event.host_id)
-      .maybeSingle<HostCardData>();
-    if (hostProfile) {
-      const [relationship, mutuals] = await Promise.all([
-        getRelationship(supabase, user.id, event.host_id),
-        getMutualConnections(admin, user.id, event.host_id),
-      ]);
-      hostCard = { host: hostProfile, relationship, mutuals };
-    }
-  }
-
-  // Host/co-host: full cascade view. Invitee: their own invite.
-  let hostInvites: Array<
-    Invite & {
-      invitee_name: string;
-      invitee_handle: string | null;
-      invitee_avatar_url: string | null;
-      deliveries?: Array<{
-        channel: 'in_app' | 'email' | 'sms';
-        status: 'sent' | 'not_configured' | 'invalid_recipient' | 'opted_out' | 'failed';
-      }>;
-    }
-  > = [];
-  let myInvite: Invite | null = null;
-
-  if (canManage) {
-    const { data } = await admin
-      .from('invites')
-      .select('*, invitee:profiles(display_name, handle, avatar_url)')
-      .eq('event_id', id)
-      .order('position');
-    hostInvites = (data ?? []).map((row) => {
-      const profile = Array.isArray(row.invitee) ? row.invitee[0] : row.invitee;
-      return {
-        ...(row as Invite),
-        invitee_name: profile?.display_name ?? row.guest_name ?? 'Guest',
-        invitee_handle: (profile?.handle as string | null) ?? null,
-        invitee_avatar_url: (profile?.avatar_url as string | null) ?? null,
-      };
-    });
-
-    const inviteIds = hostInvites.map((invite) => invite.id);
-    if (inviteIds.length > 0) {
-      const { data: attempts } = await admin
-        .from('invite_delivery_attempts')
-        .select('invite_id, channel, status, attempted_at')
-        .in('invite_id', inviteIds)
-        .order('attempted_at', { ascending: false });
-      const latestByChannel = new Map<
-        string,
-        {
-          channel: 'in_app' | 'email' | 'sms';
-          status: 'sent' | 'not_configured' | 'invalid_recipient' | 'opted_out' | 'failed';
-        }
-      >();
-      for (const attempt of attempts ?? []) {
-        const key = `${attempt.invite_id}:${attempt.channel}`;
-        if (latestByChannel.has(key)) continue;
-        latestByChannel.set(key, {
-          channel: attempt.channel as 'in_app' | 'email' | 'sms',
-          status: attempt.status as
-            | 'sent'
-            | 'not_configured'
-            | 'invalid_recipient'
-            | 'failed',
-        });
-      }
-      hostInvites = hostInvites.map((invite) => ({
-        ...invite,
-        deliveries: [...latestByChannel.entries()]
-          .filter(([key]) => key.startsWith(`${invite.id}:`))
-          .map(([, attempt]) => attempt),
-      }));
-    }
-  } else {
-    const { data } = await supabase
-      .from('invites')
-      .select('*')
-      .eq('event_id', id)
-      .eq('invitee_id', user.id)
-      .maybeSingle<Invite>();
-    myInvite = data;
-  }
-
-  // Host/co-host recovery for a request that is waiting on a guardian. These
-  // addresses are private and cross the server/client boundary only inside the
-  // same `canManage` gate used for the host's invite contact cards.
-  let pendingParentalApprovals: PendingParentalApproval[] = [];
-  if (canManage && event.parental_approval && hostInvites.length > 0) {
-    const { data: approvalRows } = await admin
-      .from('parental_approvals')
-      .select('invite_id, guardian_email, guardian_name')
-      .eq('event_id', id)
-      .eq('status', 'pending');
-    const inviteeName = new Map(
-      hostInvites.map((invite) => [invite.id, invite.invitee_name]),
-    );
-    pendingParentalApprovals = (approvalRows ?? [])
-      .filter((approval) => inviteeName.has(approval.invite_id as string))
-      .map((approval) => ({
-        inviteId: approval.invite_id as string,
-        inviteeName: inviteeName.get(approval.invite_id as string) ?? 'Invitee',
-        guardianEmail: approval.guardian_email as string,
-        guardianName: (approval.guardian_name as string | null) ?? null,
-      }));
-  }
-
-  // Host's own connections, for one-tap adding to the flow (only needed while
-  // the Add-people panel is shown). Anyone already on the invite list is
-  // filtered out so the picker only offers new people.
-  const addableConnections: Array<{
-    id: string;
-    name: string;
-    handle: string;
-    avatarUrl: string | null;
-  }> = [];
-  if (canManage && event.status === 'inviting') {
-    const invitedIds = new Set(
-      hostInvites
-        .map((invite) => invite.invitee_id)
-        .filter((invId): invId is string => Boolean(invId)),
-    );
-    const { data: connectionRows } = await supabase
-      .from('connections')
-      .select(
-        'requester_id, addressee_id, requester:profiles!connections_requester_id_fkey(id, display_name, handle, avatar_url), addressee:profiles!connections_addressee_id_fkey(id, display_name, handle, avatar_url)',
-      )
-      .eq('status', 'accepted')
-      .or(`requester_id.eq.${user.id},addressee_id.eq.${user.id}`);
-    for (const row of connectionRows ?? []) {
-      const isRequester = row.requester_id === user.id;
-      const otherRaw = isRequester ? row.addressee : row.requester;
-      const other = Array.isArray(otherRaw) ? otherRaw[0] : otherRaw;
-      if (!other || invitedIds.has(other.id)) continue;
-      addableConnections.push({
-        id: other.id,
-        name: other.display_name ?? 'Friend',
-        handle: other.handle ?? '',
-        avatarUrl: other.avatar_url ?? null,
-      });
-    }
-  }
-
-  // Accepted attendees (respects visibility settings; admin read + TS check).
-  // `id` is the profile id where there is one — the "give space" check below
-  // compares it against profile ids — with the invite id standing in for a
-  // guest who has no account. `inviteId` is what the contact card is keyed on.
-  let attendees: Array<{
-    id: string;
-    inviteId: string;
-    inviteeId: string | null;
-    name: string;
-    handle: string | null;
-    avatarUrl: string | null;
-    guestToken: string | null;
-    guestContact: string | null;
-    status: Invite['status'];
-  }> = [];
-  if (canManage || event.show_accepted) {
-    const { data } = await admin
-      .from('invites')
-      .select(
-        'id, invitee_id, guest_name, guest_contact, guest_token, status, invitee:profiles(display_name, handle, avatar_url)',
-      )
-      .eq('event_id', id)
-      .eq('status', 'accepted');
-    attendees = (data ?? []).map((row) => {
-      const profile = Array.isArray(row.invitee) ? row.invitee[0] : row.invitee;
-      return {
-        id: row.invitee_id ?? row.id,
-        inviteId: row.id as string,
-        inviteeId: (row.invitee_id as string | null) ?? null,
-        name: profile?.display_name ?? row.guest_name ?? 'Guest',
-        handle: (profile?.handle as string | null) ?? null,
-        avatarUrl: (profile?.avatar_url as string | null) ?? null,
-        guestToken: (row.guest_token as string | null) ?? null,
-        guestContact: (row.guest_contact as string | null) ?? null,
-        status: row.status as Invite['status'],
-      };
-    });
-  }
-
-  // Private "give space" heads-up. Only computed against attendees the viewer
-  // can already see, so it never becomes an "is X going?" oracle for hidden
-  // guest lists — and it names only people the viewer themselves flagged.
-  let avoidedGoing: string[] = [];
-  if (attendees.length > 0) {
-    const { data: avoids } = await supabase
-      .from('profile_avoids')
-      .select('avoided_id')
-      .eq('avoider_id', user.id);
-    const avoidedSet = new Set((avoids ?? []).map((row) => row.avoided_id as string));
-    avoidedGoing = attendees
-      .filter((attendee) => avoidedSet.has(attendee.id))
-      .map((attendee) => attendee.name);
-  }
-
-  // Polls (Anonymous Weighted Input). A plan can now carry a chain of them —
-  // the date, then where, then what we're eating — so this reads the whole set
-  // and surfaces one at a time. `.maybeSingle()` here used to throw the moment
-  // a second poll existed.
-  //
-  // The active poll is the earliest-created one still open. Everything decided
-  // is history, and everything `pending` is waiting on a parent, so neither is
-  // what the group should be looking at right now.
-  //
-  // `id` breaks the tie because `created_at` does not: `resolve_poll_children`
-  // opens every unblocked follow-up in one statement, and they all take that
-  // statement's `now()`. Ordering on the timestamp alone leaves their relative
-  // order up to the planner, so "the question we're on" could differ between
-  // two renders of the same page — including the render before a suggestion and
-  // the one after it.
-  const { data: pollRows } = await supabase
-    .from('polls')
-    .select('*')
-    .eq('event_id', id)
-    .order('created_at')
-    .order('id')
-    .returns<Poll[]>();
-
-  const allPolls = pollRows ?? [];
-  const poll =
-    allPolls.find((row) => row.phase !== 'decided' && row.phase !== 'pending') ??
-    // Nothing open: show the most recent decision, so the answer stays on the
-    // page rather than vanishing the moment it lands.
-    [...allPolls].reverse().find((row) => row.phase === 'decided') ??
-    null;
-  const decidedPolls = allPolls.filter(
-    (row) => row.phase === 'decided' && row.id !== poll?.id,
-  );
-  const pendingPolls = allPolls.filter((row) => row.phase === 'pending');
-
-  // When people are free. Aggregate doors only: per-slot counts plus how many
-  // eligible people submitted an answer. Neither function returns a user id, so
-  // neither this page nor the host can learn which times any one person picked.
-  const availability = await loadAvailability(id);
-
-  // This viewer's own busy bands, so the grid can be offered pre-filled. Both
-  // are private to them: busy slots never reach the counts, and nothing here is
-  // written until they press Save.
-  //
-  // Only fetched when the grid will actually render, which is only on a plan
-  // with no fixed time yet. Most plans have one, and on those these were two
-  // extra round trips on every view of a page that never shows the result.
-  const [calendarBusy, calendarStatus] = event.starts_at
-    ? [[] as string[], null]
-    : await Promise.all([myBusySlots(), getCalendarStatus()]);
-
-  // What each already-settled question landed on, so the chain can show the
-  // answer rather than just "decided".
-  const allDecidedWinners: Record<string, string> = {};
-  const winnerIds = decidedPolls
-    .map((row) => row.winning_option_id)
-    .filter((optionId): optionId is string => Boolean(optionId));
-  if (winnerIds.length > 0) {
-    const { data: winnerRows } = await supabase
-      .from('poll_options')
-      .select('id, label, poll_id')
-      .in('id', winnerIds);
-    for (const row of winnerRows ?? []) {
-      allDecidedWinners[row.poll_id] = row.label;
-    }
-  }
-
-  let options: PollOption[] = [];
-  let results: OptionResult[] = [];
-  let myVotes: Record<string, Weight> = {};
-  if (poll) {
-    const [{ data: optionRows }, { data: resultRows }, { data: voteRows }] =
-      await Promise.all([
-        supabase.from('poll_options').select('*').eq('poll_id', poll.id),
-        supabase.rpc('poll_results', { p_poll: poll.id }),
-        supabase
-          .from('poll_votes')
-          .select('option_id, weight')
-          .eq('poll_id', poll.id)
-          .eq('voter_id', user.id),
-      ]);
-    options = optionRows ?? [];
-    results = (resultRows ?? []) as OptionResult[];
-    myVotes = Object.fromEntries(
-      (voteRows ?? []).map((v) => [v.option_id, v.weight as Weight]),
-    );
-  }
-
-  // Venue perk when the location matches a claimed partner venue.
-  let venuePerk: { name: string; perk: string } | null = null;
-  if (event.location_name) {
-    const { data: venue } = await supabase
-      .from('venues')
-      .select('name, perk')
-      .eq('status', 'verified')
-      .ilike('name', event.location_name.trim())
-      .limit(1)
-      .maybeSingle();
-    venuePerk = venue ?? null;
-  }
-
-  // RSVP questions (host-defined intake).
-  const { data: questionRows } = await supabase
-    .from('event_questions')
-    .select('*')
-    .eq('event_id', id)
-    .order('position')
-    .returns<EventQuestion[]>();
-  const questions = questionRows ?? [];
-
-  // Announcements (host broadcasts) with author names.
-  const { data: announcementRows } = await supabase
-    .from('announcements')
-    .select('id, body, created_at, author:profiles(display_name)')
-    .eq('event_id', id)
-    .order('created_at', { ascending: false });
-  const announcements: AnnouncementView[] = (announcementRows ?? []).map((row) => {
-    const author = Array.isArray(row.author) ? row.author[0] : row.author;
-    return {
-      id: row.id as string,
-      body: row.body as string,
-      created_at: row.created_at as string,
-      author_name: author?.display_name ?? 'Host',
-    };
-  });
-
-  // Event thread (RSVP-gated commentary). Full access — read all + post — for
-  // hosts/co-hosts and accepted invitees; everyone else who can see the event
-  // gets only the opening messages, which blur out below. We read with the
-  // admin client and slice server-side so a locked viewer is never sent the
-  // gated bodies (the RLS SELECT policy refuses them either way).
-  const canAccessThread = canManage || myInvite?.status === 'accepted';
-  const { count: threadTotal } = await admin
-    .from('event_comments')
-    .select('id', { count: 'exact', head: true })
-    .eq('event_id', id);
-  const threadGateInfo = threadGate(threadTotal ?? 0, canAccessThread);
-
-  let threadComments: ThreadCommentView[] = [];
-  if (threadGateInfo.visibleCount > 0) {
-    let commentsQuery = admin
-      .from('event_comments')
-      .select(
-        'id, body, voice_url, voice_duration_seconds, created_at, author_id, author:profiles(display_name)',
-      )
-      .eq('event_id', id)
-      .order('created_at', { ascending: true });
-    if (!canAccessThread) commentsQuery = commentsQuery.limit(THREAD_PREVIEW_COUNT);
-    const { data: commentRows } = await commentsQuery;
-    threadComments = await Promise.all(
-      (commentRows ?? []).map(async (row) => {
-        const author = Array.isArray(row.author) ? row.author[0] : row.author;
-        return {
-          id: row.id as string,
-          body: (row.body as string | null) ?? null,
-          // voice_url is a private-bucket path; mint a short-lived signed URL
-          // for this authorized viewer (they already passed the thread gate).
-          voice_url: await signMediaRef((row.voice_url as string | null) ?? null),
-          voice_duration_seconds: (row.voice_duration_seconds as number | null) ?? null,
-          created_at: row.created_at as string,
-          author_id: row.author_id as string,
-          author_name: author?.display_name ?? 'Guest',
-        };
-      }),
-    );
-  }
-
-  // True accepted count (independent of visibility) so the host knows the reach.
-  const { count: acceptedCount } = await admin
-    .from('invites')
-    .select('id', { count: 'exact', head: true })
-    .eq('event_id', id)
-    .eq('status', 'accepted');
-
-  // Host-only: answers to RSVP questions, grouped by attendee.
-  let answersByGuest: Array<{ name: string; answers: Array<{ prompt: string; answer: string }> }> = [];
-  if (isHost && questions.length > 0) {
-    const promptById = new Map(questions.map((q) => [q.id, q.prompt]));
-    const { data: answerRows } = await admin
-      .from('invite_answers')
-      .select('question_id, answer, invite:invites(guest_name, invitee:profiles(display_name))')
-      .in('question_id', Array.from(promptById.keys()));
-    const grouped = new Map<string, Array<{ prompt: string; answer: string }>>();
-    for (const row of answerRows ?? []) {
-      const invite = Array.isArray(row.invite) ? row.invite[0] : row.invite;
-      const profile = invite
-        ? Array.isArray(invite.invitee)
-          ? invite.invitee[0]
-          : invite.invitee
-        : null;
-      const name = profile?.display_name ?? invite?.guest_name ?? 'Guest';
-      const list = grouped.get(name) ?? [];
-      list.push({
-        prompt: promptById.get(row.question_id as string) ?? '',
-        answer: row.answer as string,
-      });
-      grouped.set(name, list);
-    }
-    answersByGuest = Array.from(grouped.entries()).map(([name, answers]) => ({
-      name,
-      answers,
-    }));
-  }
-
-  const calendarEvent = event.starts_at
-    ? {
-        title: event.title,
-        description: event.description,
-        location: event.location_name,
-        startsAt: event.starts_at,
-        endsAt: event.ends_at,
-      }
-    : null;
-  const guestLinks = canManage
-    ? hostInvites
-        .filter(
-          (i): i is typeof i & { guest_token: string } =>
-            !i.invitee_id && Boolean(i.guest_token) && i.status === 'sent',
-        )
-        .map((i) => {
-          // When someone is invited by email or phone, guest_name is the raw
-          // contact string. Don't leak that into the name slot — show a
-          // friendly label and surface the contact on its own line.
-          const rawName = i.guest_name?.trim() ?? '';
-          const contact = i.guest_contact?.trim() || null;
-          const nameIsContact =
-            !rawName || rawName === contact || looksLikeContactString(rawName);
-          return {
-            name: nameIsContact ? 'Guest' : rawName,
-            contact,
-            // Build from the one canonical origin helper (same one the email/SMS
-            // send paths use) so a copied guest link can never be stamped with
-            // an ephemeral preview deployment origin or a bare relative path.
-            url: guestRsvpUrl(i.guest_token),
-          };
-        })
-    : [];
-
-  // ————————————————————— contact cards —————————————————————
-  // Tapping anyone on this plan opens their card, and for a host or co-host
-  // that card carries the way to reach them. The only contact detail this page
-  // will hand to the browser is `invites.guest_contact` — the email or phone
-  // the host themselves typed when they added that person, which is also what
-  // the cascade already texts and emails. An account holder's own
-  // `contact_email`/`contact_phone` are deliberately not here: they are
-  // withheld from the API by column grant (see
-  // `20260710120000_lock_sensitive_profile_columns.sql`), and `contact_public`
-  // promises them to a QR card someone chooses to scan, not to every host of
-  // every plan they were invited to.
-  //
-  // Anyone who isn't managing the plan (an invitee reading "Who's in" on a plan
-  // with `show_accepted`) gets identity fields only. That check lives in
-  // `inviteePerson` rather than at each render site, because these objects
-  // become props of a client component and therefore ship to the browser
-  // whether or not the UI draws them.
-  let hostName: string | null = null;
-  if (canManage) {
-    const { data } = await admin
-      .from('profiles')
-      .select('display_name')
-      .eq('id', event.host_id)
-      .maybeSingle<{ display_name: string | null }>();
-    hostName = data?.display_name ?? null;
-  }
-  const planWhen = formatDateTimeRange(event.starts_at, event.ends_at, eventZone);
-  // Narrowed once, outside the closure below: TypeScript drops the `!event`
-  // redirect's narrowing at a function boundary.
-  const plan = event;
-
-  function inviteePerson(input: {
-    inviteId: string;
-    inviteeId: string | null;
-    name: string;
-    handle: string | null;
-    avatarUrl: string | null;
-    guestToken: string | null;
-    guestContact: string | null;
-    status: Invite['status'];
-  }): InviteePerson {
-    const isGuest = !input.inviteeId;
-    if (!canManage) {
-      // Identity only. Built first so a viewer who will never be shown a link
-      // doesn't go anywhere near `appOrigin()`, which throws in production on a
-      // misconfigured origin — that alarm belongs to the people sending links.
-      return {
-        id: input.inviteId,
-        name: input.name,
-        handle: input.handle,
-        avatarUrl: input.avatarUrl,
-        seed: input.inviteeId ?? input.inviteId,
-        isGuest,
-        statusLabel: INVITE_STATUS_LABEL[input.status],
-        contact: null,
-        inviteUrl: null,
-        messages: null,
-      };
-    }
-
-    // Which link this person gets sent.
-    //
-    // Their own `/rsvp/<guest_token>` while it is theirs to answer — the same
-    // rule the Guest links section below uses, including why it is *not*
-    // offered once an invite belongs to an account: holding that token is the
-    // authorization to answer the invite (`respond_to_guest_invite`), so it
-    // isn't something to pass around on behalf of someone who has their own
-    // way in. Otherwise the plan's public link, and only when share-link.ts
-    // says the host may hand it out at all — the app must never offer a way to
-    // send a link its own recipient page would reject.
-    const personalUrl =
-      isGuest && input.guestToken && input.status === 'sent'
-        ? guestRsvpUrl(input.guestToken)
-        : null;
-    const inviteUrl =
-      personalUrl ??
-      (hostCanShare(shareState) ? eventShareUrl(plan.share_token) : null);
-
-    return {
-      id: input.inviteId,
-      name: input.name,
-      handle: input.handle,
-      avatarUrl: input.avatarUrl,
-      // Match the seed the list rows use, so a face doesn't change colour
-      // between the row and the card it opens.
-      seed: input.inviteeId ?? input.inviteId,
-      isGuest,
-      statusLabel: INVITE_STATUS_LABEL[input.status],
-      contact: input.guestContact?.trim() || null,
-      inviteUrl,
-      messages: {
-        plan: planInviteMessage({
-          eventTitle: plan.title,
-          when: planWhen,
-          where: plan.location_name,
-          hostName,
-          inviteUrl,
-        }),
-        app: appInviteMessage({
-          appUrl: appOrigin(),
-          eventTitle: plan.title,
-          inviteUrl,
-        }),
-      },
-    };
-  }
-
-  const inviteeCards: Record<string, InviteePerson> = Object.fromEntries(
-    hostInvites.map((invite) => [
-      invite.id,
-      inviteePerson({
-        inviteId: invite.id,
-        inviteeId: invite.invitee_id,
-        name: invite.invitee_name,
-        handle: invite.invitee_handle,
-        avatarUrl: invite.invitee_avatar_url,
-        guestToken: invite.guest_token,
-        guestContact: invite.guest_contact,
-        status: invite.status,
-      }),
-    ]),
-  );
-
-  const attendeeCards: InviteePerson[] = attendees.map((attendee) =>
-    inviteePerson({
-      inviteId: attendee.inviteId,
-      inviteeId: attendee.inviteeId,
-      name: attendee.name,
-      handle: attendee.handle,
-      avatarUrl: attendee.avatarUrl,
-      guestToken: attendee.guestToken,
-      guestContact: attendee.guestContact,
-      status: attendee.status,
-    }),
-  );
+  const loaded = await loadEventPage(id, user);
+  // RLS makes a missing event and an event this viewer cannot read equivalent.
+  // The join page can safely resolve the public/share-link branch.
+  if (!loaded) redirect(`/join/${id}`);
+  const {
+    event,
+    eventZone,
+    shareState,
+    isHost,
+    canManage,
+    cohosts,
+    hostCard,
+    hostInvites,
+    myInvite,
+    addableConnections,
+    attendees,
+    avoidedGoing,
+    poll,
+    decidedPolls,
+    pendingPolls,
+    availability,
+    calendarBusy,
+    calendarStatus,
+    allDecidedWinners,
+    options,
+    results,
+    myVotes,
+    venuePerk,
+    questions,
+    announcements,
+    canAccessThread,
+    threadTotal,
+    threadGateInfo,
+    threadComments,
+    acceptedCount,
+    answersByGuest,
+    calendarEvent,
+    guestLinks,
+    inviteeCards,
+    attendeeCards,
+    cancelVoiceUrl,
+    pendingParentalApprovals,
+  } = loaded;
 
   const statusLabel: Record<SwitchboardEvent['status'], string> = {
     draft: 'Draft',
@@ -793,9 +179,6 @@ export default async function EventPage({
         }
       : {}),
   };
-
-  // cancel_voice_url is a private-bucket path; sign it for this viewer.
-  const cancelVoiceUrl = await signMediaRef(event.cancel_voice_url);
 
   return (
     <AppShell title={event.title} back="/plans">
@@ -1190,7 +573,7 @@ export default async function EventPage({
               invites={hostInvites.filter((invite) => invite.status !== 'requested')}
               mode={event.invite_mode}
               eventId={event.id}
-              editable={canManage && event.status === 'inviting'}
+              editable={canManage && hostCanEditInvitees(event.status)}
               people={inviteeCards}
             />
           </section>
@@ -1239,7 +622,7 @@ export default async function EventPage({
           />
         )}
 
-        {canManage && event.status === 'inviting' && (
+        {canManage && hostCanEditInvitees(event.status) && (
           <AddInvitees eventId={event.id} connections={addableConnections} />
         )}
 
