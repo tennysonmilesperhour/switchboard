@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
 import { AppShell } from '@/components/shell/AppShell';
+import { AroundTabs } from '@/components/around/AroundTabs';
 import { toMapPoint, type MapMarker } from '@/lib/geo';
 import { getMySharing } from '@/lib/actions/live-location';
 import { MapExplorer } from './MapExplorer';
@@ -96,8 +97,11 @@ export default async function MapPage({
   }
 
   return (
-    <AppShell title="Map">
-      <MapExplorer markers={markers} mySharing={mySharing} initialFocus={focus ?? null} />
+    <AppShell title="Around">
+      <div className="space-y-4">
+        <AroundTabs active="map" />
+        <MapExplorer markers={markers} mySharing={mySharing} initialFocus={focus ?? null} />
+      </div>
     </AppShell>
   );
 }

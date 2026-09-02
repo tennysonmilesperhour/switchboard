@@ -13,7 +13,7 @@ describe('focused Home hierarchy', () => {
       'title="Waiting on you',
       'aria-label="Your plans"',
       '<PassportCard',
-      '<PillarRow />',
+      '<PillarRow',
     ].map((needle) => home.indexOf(needle));
 
     expect(landmarks.every((index) => index >= 0)).toBe(true);

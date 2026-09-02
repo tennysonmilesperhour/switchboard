@@ -47,6 +47,12 @@ const WITHHELD: Record<string, string> = {
     'SB-01: the match key for phone-based contact import; only security-definer functions compare against it.',
   digest_sent_at:
     'Send bookkeeping for the daily digest: written and read only by sweepDigests through the service-role client, which bypasses the allowlist. Nothing renders it.',
+  home_latitude:
+    'The exact point behind the city-density gate. Its owner reads it only through my_home_point(); Home receives one boolean.',
+  home_longitude:
+    'The exact point behind the city-density gate. Its owner reads it only through my_home_point(); Home receives one boolean.',
+  last_signal_circle_id:
+    'Private availability preference. Its owner reads it only through my_signal_default_circle().',
 };
 
 function migrationSources(): string[] {
