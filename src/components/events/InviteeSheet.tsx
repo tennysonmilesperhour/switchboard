@@ -1,11 +1,12 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useState } from 'react';
 import Link from 'next/link';
 import { Avatar } from '@/components/ui/Avatar';
 import { Icon } from '@/components/ui/Icon';
 import { CopyButton } from '@/components/ui/CopyButton';
 import { ShareButton } from '@/components/ui/ShareButton';
+import { Sheet } from '@/components/ui/Dialog';
 import {
   classifyContact,
   messageActionLabel,
@@ -81,18 +82,6 @@ export function InviteeSheet({
   children?: React.ReactNode;
 }) {
   const [choice, setChoice] = useState<MessageChoice>('plan');
-  const panelRef = useRef<HTMLDivElement>(null);
-
-  // Escape closes, and the panel takes focus so a keyboard user lands inside
-  // the dialog rather than continuing down the page behind it.
-  useEffect(() => {
-    panelRef.current?.focus();
-    function onKeyDown(event: KeyboardEvent) {
-      if (event.key === 'Escape') onClose();
-    }
-    document.addEventListener('keydown', onKeyDown);
-    return () => document.removeEventListener('keydown', onKeyDown);
-  }, [onClose]);
 
   const contact = classifyContact(person.contact);
   const message = person.messages?.[choice] ?? null;
@@ -101,19 +90,11 @@ export function InviteeSheet({
   const titleId = `invitee-sheet-${person.id}`;
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-end justify-center bg-ink/40 p-4 sm:items-center"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby={titleId}
-      onClick={onClose}
+    <Sheet
+      onClose={onClose}
+      labelledBy={titleId}
+      panelClassName="animate-rise w-full max-w-sm rounded-card bg-card p-5 shadow-float"
     >
-      <div
-        ref={panelRef}
-        tabIndex={-1}
-        className="animate-rise w-full max-w-sm rounded-card bg-card p-5 shadow-float outline-none"
-        onClick={(event) => event.stopPropagation()}
-      >
         <div className="flex items-start gap-3">
           <Avatar
             name={person.name}
@@ -137,7 +118,7 @@ export function InviteeSheet({
             type="button"
             onClick={onClose}
             aria-label="Close"
-            className="-mr-1 -mt-1 shrink-0 rounded-full p-1.5 text-ink-faint hover:bg-cream hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-terracotta"
+            className="-mr-2 -mt-2 inline-flex size-11 shrink-0 items-center justify-center rounded-full text-ink-faint hover:bg-cream hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-terracotta"
           >
             <Icon name="close" size={18} />
           </button>
@@ -240,7 +221,6 @@ export function InviteeSheet({
             )}
           </div>
         )}
-      </div>
-    </div>
+    </Sheet>
   );
 }

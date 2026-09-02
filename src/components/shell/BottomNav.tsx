@@ -2,8 +2,9 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { useEffect, useRef, useState } from 'react';
+import { useState } from 'react';
 import { Icon, type IconName } from '@/components/ui/Icon';
+import { Sheet } from '@/components/ui/Dialog';
 
 type Tab = { href: string; label: string; icon: IconName };
 
@@ -105,37 +106,27 @@ function MoreSheet({
   onClose: () => void;
   pathname: string;
 }) {
-  const sheetRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    // Move focus into the sheet on open and close on Escape, so keyboard and
-    // assistive-technology users can operate and dismiss it.
-    const previouslyFocused = document.activeElement as HTMLElement | null;
-    sheetRef.current?.querySelector<HTMLElement>('a, button')?.focus();
-    function onKeyDown(event: KeyboardEvent) {
-      if (event.key === 'Escape') onClose();
-    }
-    document.addEventListener('keydown', onKeyDown);
-    return () => {
-      document.removeEventListener('keydown', onKeyDown);
-      previouslyFocused?.focus?.();
-    };
-  }, [onClose]);
-
   return (
-    <div
-      className="fixed inset-0 z-40 bg-ink/30"
-      role="dialog"
-      aria-modal="true"
-      aria-label="More features"
-      onClick={onClose}
+    <Sheet
+      onClose={onClose}
+      labelledBy="more-features-title"
+      bottomOnly
+      panelClassName="animate-rise max-h-[calc(100dvh-1rem)] w-full max-w-lg overflow-y-auto rounded-t-card bg-card p-4 pb-[calc(env(safe-area-inset-bottom)+1rem)] shadow-float"
     >
-      <div
-        ref={sheetRef}
-        className="animate-rise absolute inset-x-0 bottom-0 mx-auto max-w-lg rounded-t-card bg-card p-4 pb-[calc(env(safe-area-inset-bottom)+5.5rem)] shadow-float"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-line" aria-hidden />
+        <div className="mb-3 flex items-center gap-2">
+          <div className="h-1 flex-1 rounded-full bg-line" aria-hidden />
+          <h2 id="more-features-title" className="text-base font-extrabold text-ink">
+            More
+          </h2>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Close more features"
+            className="inline-flex size-11 items-center justify-center rounded-full text-ink-faint hover:bg-cream hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-terracotta"
+          >
+            <Icon name="close" size={18} />
+          </button>
+        </div>
         <div className="grid grid-cols-2 gap-2">
           {MORE.map((tab) => {
             const active = isActive(pathname, tab.href);
@@ -165,8 +156,7 @@ function MoreSheet({
             );
           })}
         </div>
-      </div>
-    </div>
+    </Sheet>
   );
 }
 

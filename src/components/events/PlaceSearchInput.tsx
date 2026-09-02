@@ -2,6 +2,7 @@
 
 import { useEffect, useId, useRef, useState, type KeyboardEvent } from 'react';
 import { Icon } from '@/components/ui/Icon';
+import { Popover } from '@/components/ui/Dialog';
 import { searchPlaces } from '@/lib/actions/map';
 import type { PlaceResult } from '@/lib/geo';
 
@@ -166,11 +167,12 @@ export function PlaceSearchInput({
       </div>
 
       {showDropdown && (
-        <ul
-          id={listboxId}
-          role="listbox"
-          className="absolute z-20 mt-1 max-h-64 w-full overflow-auto rounded-card border border-line bg-card py-1 shadow-lift"
-        >
+        <Popover>
+          <ul
+            id={listboxId}
+            role="listbox"
+            className="max-h-64 w-full overflow-auto rounded-card border border-line bg-card py-1 shadow-lift"
+          >
           {results.map((place, index) => (
             <li key={`${place.lat},${place.lng},${index}`} role="none">
               <button
@@ -205,7 +207,8 @@ export function PlaceSearchInput({
               No matching place — we’ll still save what you typed.
             </li>
           )}
-        </ul>
+          </ul>
+        </Popover>
       )}
 
       {pinned && (

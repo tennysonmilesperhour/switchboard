@@ -2,7 +2,7 @@ import Link from 'next/link';
 import { Suspense } from 'react';
 import { BottomNav } from './BottomNav';
 import { BellPlaceholder, NotificationBell } from './NotificationBell';
-import { NotificationNudge } from './NotificationNudge';
+import { InviteAwareNotificationNudge } from './InviteAwareNotificationNudge';
 import { Icon } from '@/components/ui/Icon';
 
 interface AppShellProps {
@@ -54,7 +54,9 @@ export function AppShell({ title, back, action, children }: AppShellProps) {
           </Suspense>
         )}
       </header>
-      <NotificationNudge />
+      <Suspense fallback={null}>
+        <InviteAwareNotificationNudge />
+      </Suspense>
       <main className="flex-1 px-4 pb-28 pt-1">{children}</main>
       <BottomNav />
     </div>
