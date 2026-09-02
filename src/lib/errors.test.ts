@@ -8,6 +8,7 @@ import {
   errorFor,
   errorRef,
   failure,
+  validation,
   type ErrorCode,
 } from './errors';
 import { shareLinkCode, type ShareLinkState } from './share-link';
@@ -40,6 +41,14 @@ const ALL_SOURCE = sourceFiles(SRC).map((path) => ({
   path,
   text: readFileSync(path, 'utf8'),
 }));
+const ACTION_SOURCE = ALL_SOURCE.filter((file) =>
+  file.path.includes(`${join('lib', 'actions')}/`),
+);
+
+function sourceLocation(path: string, text: string, index: number): string {
+  const line = text.slice(0, index).split('\n').length;
+  return `${path.replace(process.cwd(), '')}:${line}`;
+}
 
 describe('the registry', () => {
   it('gives every code a message and an actor', () => {
@@ -105,6 +114,11 @@ describe('coverage across the app', () => {
       )) {
         used.add(match[1]);
       }
+      for (const match of text.matchAll(
+        /reportAndFail\(\s*'SB-[A-Z-]+'\s*,\s*'([a-z0-9.:_-]+)'/g,
+      )) {
+        used.add(match[1]);
+      }
     }
     expect(used.size, 'no reportOperationalError calls found — regex is stale').toBeGreaterThan(
       20,
@@ -112,6 +126,34 @@ describe('coverage across the app', () => {
 
     const unmapped = [...used].filter((area) => !MAPPED_ERROR_AREAS.includes(area));
     expect(unmapped, `unmapped error areas: ${unmapped.join(', ')}`).toEqual([]);
+  });
+
+  it('makes every action failure declare validation or a stable code', () => {
+    const uncategorized: string[] = [];
+    for (const { path, text } of ACTION_SOURCE) {
+      for (const match of text.matchAll(/return\s*\{\s*ok:\s*false\b/g)) {
+        uncategorized.push(sourceLocation(path, text, match.index));
+      }
+    }
+
+    expect(
+      uncategorized,
+      `uncategorized action failures (use validation(), failure(), or reportAndFail()):\n${uncategorized.join('\n')}`,
+    ).toEqual([]);
+  });
+
+  it('centralizes action authentication in the shared user helpers', () => {
+    const bypasses: string[] = [];
+    for (const { path, text } of ACTION_SOURCE) {
+      for (const match of text.matchAll(/\.auth\s*\.\s*getUser\s*\(/g)) {
+        bypasses.push(sourceLocation(path, text, match.index));
+      }
+    }
+
+    expect(
+      bypasses,
+      `actions bypassing requireUser()/getOptionalUser():\n${bypasses.join('\n')}`,
+    ).toEqual([]);
   });
 
   it('has no mappings for areas that no longer exist', () => {
@@ -189,7 +231,12 @@ describe('every invite-link dead end names itself', () => {
   });
 });
 
-describe('failure() and errorRef()', () => {
+describe('validation(), failure(), and errorRef()', () => {
+  it('keeps reader-fixable validation concise and deliberately uncoded', () => {
+    expect(validation('Add your name.')).toEqual({ ok: false, error: 'Add your name.' });
+    expect(validation()).toEqual({ ok: false });
+  });
+
   it('carries the code and the fix alongside the sentence', () => {
     const result = failure('SB-RSVP-SAVE');
     expect(result.ok).toBe(false);

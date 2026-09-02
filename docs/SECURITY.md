@@ -382,6 +382,30 @@ Litmus test: *does any density surface reveal more than whether Around has
 something behind it, or let a user associate their preference with somebody
 else's circle?*
 
+## Shared Moments (identity unfolds only by mutual consent)
+
+The `moments` table is owner-only. Pre-consent discovery crosses that boundary
+only through `find_shared_moments`, and its result is intentionally not a
+profile:
+
+- **Anonymous means no identity field.** Before a pair reaches `revealed` or
+  `accepted`, the React client payload contains the candidate moment id and
+  experience categories only—no profile/user id, name, or free-text headline.
+  The discovery RPC returns `headline = null` as defense in depth.
+- **Blocks close discovery in both directions.** `find_shared_moments` applies
+  `are_blocked(auth.uid(), candidate.user_id)`, so either person's block removes
+  the pair for both callers. Curiosity and acceptance re-run the same discovery
+  check and an explicit block check immediately before any service-role write
+  or notification.
+- **Safety does not require identity disclosure.** Block/report buttons on an
+  unrevealed card send only the caller's and candidate's moment ids to a server
+  action. The action proves the caller owns a live moment, revalidates that the
+  candidate is still discoverable, then resolves the target server-side. Once
+  mutual consent reveals a profile, the normal profile safety controls apply.
+
+Litmus test: *does any field or action available before mutual reveal let the
+browser identify the person behind a candidate moment?*
+
 ## Zone presence (a count, and only a count)
 
 `moments` is owner-only under RLS, so the zone page could never truthfully say

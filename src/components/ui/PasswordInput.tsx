@@ -30,7 +30,7 @@ export function PasswordInput({ id, className = '', ...props }: PasswordInputPro
         aria-pressed={visible}
         aria-controls={inputId}
         title={visible ? 'Hide password' : 'Show password'}
-        className="absolute inset-y-0 right-0 flex items-center rounded-card px-3.5 text-ink-faint transition-colors hover:text-ink outline-none focus-visible:text-terracotta focus-visible:ring-2 focus-visible:ring-terracotta"
+        className="absolute inset-y-0 right-0 flex items-center rounded-card px-3.5 text-ink-faint transition-colors hover:text-ink outline-none focus-visible:text-terracotta-deep focus-visible:ring-2 focus-visible:ring-terracotta"
       >
         <Icon name={visible ? 'eyeOff' : 'eye'} size={20} />
       </button>

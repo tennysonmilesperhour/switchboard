@@ -76,7 +76,7 @@ export function FeatureIndexClient({
             <a
               key={group.id}
               href={`#${group.id}`}
-              className="inline-flex items-center gap-1 rounded-pill border border-line bg-card px-3 py-1.5 text-[13px] font-semibold text-ink-soft hover:border-terracotta hover:text-terracotta focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-terracotta"
+              className="inline-flex items-center gap-1 rounded-pill border border-line bg-card px-3 py-1.5 text-[13px] font-semibold text-ink-soft hover:border-terracotta hover:text-terracotta-deep focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-terracotta"
             >
               <span aria-hidden>{group.emoji}</span>
               {group.title}
@@ -126,7 +126,7 @@ export function FeatureIndexClient({
         <p className="text-sm leading-relaxed text-ink-soft">
           None of this switches itself on. Everything above waits until you use
           it — so the shortest way through is still to{' '}
-          <Link href="/create" className="font-bold text-terracotta">
+          <Link href="/create" className="font-bold text-terracotta-deep">
             start something
           </Link>
           .

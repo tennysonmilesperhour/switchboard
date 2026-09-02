@@ -577,7 +577,7 @@ export function BoardClient({
                               type="button"
                               onClick={() => editPost(post)}
                               disabled={pending}
-                              className="rounded-pill px-2 py-1 text-[11px] font-semibold text-terracotta-deep hover:text-terracotta focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-terracotta"
+                              className="rounded-pill px-2 py-1 text-[11px] font-semibold text-terracotta-deep hover:text-terracotta-deep focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-terracotta"
                             >
                               edit
                             </button>
@@ -673,7 +673,7 @@ export function BoardClient({
                     href={inviteUrl}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="min-w-0 flex-1 truncate rounded text-sm font-semibold text-terracotta-deep underline decoration-terracotta/40 underline-offset-2 hover:text-terracotta focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-terracotta"
+                    className="min-w-0 flex-1 truncate rounded text-sm font-semibold text-terracotta-deep underline decoration-terracotta/40 underline-offset-2 hover:text-terracotta-deep focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-terracotta"
                     title={inviteUrl}
                   >
                     {inviteUrl}

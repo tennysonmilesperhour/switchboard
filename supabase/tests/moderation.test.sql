@@ -39,7 +39,7 @@ select set_config('request.jwt.claims',
   '{"sub":"00000000-0000-0000-0000-0000000000c3","role":"authenticated"}', true);
 
 select is(
-  public.is_platform_moderator('00000000-0000-0000-0000-0000000000c3'),
+  public.is_current_user_platform_moderator(),
   false,
   'an ordinary user is not a platform moderator'
 );
@@ -75,7 +75,7 @@ select set_config('request.jwt.claims',
   '{"sub":"00000000-0000-0000-0000-00000000d0d0","role":"authenticated"}', true);
 
 select is(
-  public.is_platform_moderator('00000000-0000-0000-0000-00000000d0d0'),
+  public.is_current_user_platform_moderator(),
   true,
   'an appointed moderator is recognized'
 );

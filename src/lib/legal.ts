@@ -1,4 +1,4 @@
-export const LEGAL_VERSION = '2026-07-29';
+export const LEGAL_VERSION = '2026-08-31';
 
 export const COMMUNITY_COVENANT_SUMMARY = [
   'Use Switchboard to foster positive, safe, nourishing human connection.',

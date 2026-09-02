@@ -6,9 +6,14 @@ import { AppShell } from '@/components/shell/AppShell';
 import { AroundTabs } from '@/components/around/AroundTabs';
 import {
   MomentsClient,
-  type Candidate,
   type MyMoment,
 } from './MomentsClient';
+import {
+  buildMomentCandidates,
+  type FoundMomentCandidate,
+  type MomentCandidate,
+  type MomentCandidateIntro,
+} from '@/lib/moment-candidates';
 
 export const metadata: Metadata = { title: 'Shared Moments' };
 
@@ -30,7 +35,7 @@ export default async function MomentsPage() {
     .maybeSingle();
 
   const myMoment: MyMoment | null = momentRow ?? null;
-  let candidates: Candidate[] = [];
+  let candidates: MomentCandidate[] = [];
   let matchedRoomId: string | null = null;
 
   if (myMoment && myMoment.status === 'matched') {
@@ -61,23 +66,7 @@ export default async function MomentsPage() {
       (interests ?? []).map((i) => [i.other_moment_id, i.stage]),
     );
 
-    const admin = createAdminClient();
-    const foundList = (found ?? []) as Array<{
-      id: string;
-      experiences: string[];
-      headline: string | null;
-    }>;
-
-    const userIdByMoment = new Map<string, string>();
-    if (foundList.length > 0) {
-      const { data: momentOwners } = await admin
-        .from('moments')
-        .select('id, user_id')
-        .in('id', foundList.map((c) => c.id));
-      for (const m of momentOwners ?? []) {
-        userIdByMoment.set(m.id, m.user_id);
-      }
-    }
+    const foundList = (found ?? []) as FoundMomentCandidate[];
 
     // Only the mutually-curious candidates get a gentle introduction. Fetch all
     // of their moments in one query rather than one round trip per candidate.
@@ -87,15 +76,18 @@ export default async function MomentsPage() {
         const stage = stageByOther.get(id) ?? 'none';
         return stage === 'revealed' || stage === 'accepted';
       });
-    const introById = new Map<string, Candidate['intro']>();
+    const introById = new Map<string, MomentCandidateIntro>();
+    const userIdByMoment = new Map<string, string>();
     if (introIds.length > 0) {
+      const admin = createAdminClient();
       const { data: others } = await admin
         .from('moments')
-        .select('id, headline, profile:profiles(display_name, interests)')
+        .select('id, user_id, headline, profile:profiles(display_name, interests)')
         .in('id', introIds);
       for (const other of others ?? []) {
         const profile = Array.isArray(other.profile) ? other.profile[0] : other.profile;
         if (profile) {
+          userIdByMoment.set(other.id, other.user_id);
           introById.set(other.id, {
             name: profile.display_name,
             interests: (profile.interests ?? []).slice(0, 4),
@@ -105,22 +97,12 @@ export default async function MomentsPage() {
       }
     }
 
-    candidates = foundList
-      .map((candidate) => {
-        const stage = (stageByOther.get(candidate.id) ?? 'none') as Candidate['stage'];
-        return {
-          id: candidate.id,
-          userId: userIdByMoment.get(candidate.id) ?? null,
-          experiences: candidate.experiences,
-          headline: candidate.headline,
-          stage,
-          intro:
-            stage === 'revealed' || stage === 'accepted'
-              ? introById.get(candidate.id) ?? null
-              : null,
-        };
-      })
-      .filter((c) => c.stage !== 'passed');
+    candidates = buildMomentCandidates({
+      found: foundList,
+      stageByMoment: stageByOther,
+      introByMoment: introById,
+      userIdByMoment,
+    });
   }
 
   return (

@@ -13,7 +13,7 @@ export default function ForgotPasswordPage() {
         account has a reachable email.
       </p>
       <ForgotPasswordForm />
-      <Link href="/login" className="mt-5 text-sm font-bold text-terracotta">
+      <Link href="/login" className="mt-5 text-sm font-bold text-terracotta-deep">
         Back to sign in
       </Link>
     </main>

@@ -356,7 +356,7 @@ export function ProfileEditForm(props: ProfileEditInitial) {
           <button
             type="button"
             onClick={addSocial}
-            className="inline-flex items-center gap-1.5 text-sm font-bold text-terracotta hover:text-terracotta-deep"
+            className="inline-flex items-center gap-1.5 text-sm font-bold text-terracotta-deep hover:text-terracotta-deep"
           >
             <Icon name="add" size={16} />
             Add social
@@ -370,7 +370,7 @@ export function ProfileEditForm(props: ProfileEditInitial) {
         <div className="space-y-2.5">
           {links.map((link, i) => (
             <div key={i} className="flex items-center gap-2">
-              <span className="inline-flex size-10 shrink-0 items-center justify-center rounded-card border border-line bg-card text-terracotta">
+              <span className="inline-flex size-10 shrink-0 items-center justify-center rounded-card border border-line bg-card text-terracotta-deep">
                 <Icon name="globe" size={20} />
               </span>
               <div className="grid min-w-0 flex-1 grid-cols-1 gap-2 sm:grid-cols-2">
@@ -405,7 +405,7 @@ export function ProfileEditForm(props: ProfileEditInitial) {
           <button
             type="button"
             onClick={addLink}
-            className="inline-flex items-center gap-1.5 text-sm font-bold text-terracotta hover:text-terracotta-deep"
+            className="inline-flex items-center gap-1.5 text-sm font-bold text-terracotta-deep hover:text-terracotta-deep"
           >
             <Icon name="add" size={16} />
             Add link
@@ -465,7 +465,7 @@ export function ProfileEditForm(props: ProfileEditInitial) {
 
       <p className="text-xs text-ink-faint">
         Interests &amp; activities live in{' '}
-        <Link href="/settings" className="font-semibold text-terracotta">Settings</Link>.
+        <Link href="/settings" className="font-semibold text-terracotta-deep">Settings</Link>.
       </p>
 
       {!state.ok && state.error ? (

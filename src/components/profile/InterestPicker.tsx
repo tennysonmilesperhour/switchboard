@@ -161,7 +161,7 @@ export function InterestPicker({
           <button
             type="button"
             onClick={() => setAllOpen(!allExpanded)}
-            className="text-xs font-semibold text-terracotta hover:text-terracotta-deep"
+            className="text-xs font-semibold text-terracotta-deep hover:text-terracotta-deep"
           >
             {allExpanded ? 'Collapse all' : 'Expand all'}
           </button>

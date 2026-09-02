@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+    <meta name="theme-color" media="(prefers-color-scheme: light)" content="#f9fbfd" />
+    <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#1e1712" />
+    <title>Offline · Switchboard</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+        font-family: system-ui, sans-serif;
+        background: #f9fbfd;
+        color: #191d22;
+      }
+      body {
+        min-height: 100svh;
+        margin: 0;
+        display: grid;
+        place-items: center;
+        padding: 24px;
+        box-sizing: border-box;
+      }
+      main {
+        width: min(100%, 360px);
+        padding: 28px;
+        box-sizing: border-box;
+        border: 1px solid #ebebeb;
+        border-radius: 21px;
+        background: #fff;
+        box-shadow: 0 8px 28px rgb(0 0 0 / 0.12);
+        text-align: center;
+      }
+      img { width: 56px; height: 56px; }
+      h1 { margin: 16px 0 8px; font-size: 24px; }
+      p { margin: 0; line-height: 1.55; color: #565a60; }
+      a {
+        display: inline-flex;
+        min-height: 44px;
+        align-items: center;
+        margin-top: 22px;
+        padding: 0 20px;
+        border-radius: 999px;
+        background: #f82a63;
+        color: #fff;
+        font-weight: 750;
+        text-decoration: none;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root { background: #1e1712; color: #f4ece1; }
+        main { border-color: #3d3128; background: #2a211a; }
+        p { color: #c4b5a4; }
+        a { background: #e8a24b; color: #1e1712; }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <img src="/icons/icon.svg" alt="" />
+      <h1>You’re offline</h1>
+      <p>Your plans are still safe. Reconnect, then try Switchboard again.</p>
+      <a href="/">Try again</a>
+    </main>
+  </body>
+</html>

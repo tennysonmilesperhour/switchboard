@@ -10,7 +10,11 @@
  */
 
 import { isEmail } from '@/lib/auth-identity';
+import { supportEmail } from '@/lib/contact';
 import { absoluteUrl } from '@/lib/links';
+import { mapInBatches } from '@/lib/server/batches';
+
+export const PROVIDER_TIMEOUT_MS = 10_000;
 
 export interface EmailMessage {
   to: string;
@@ -18,9 +22,16 @@ export interface EmailMessage {
   /** Plain-text body. Always provided; html is an optional richer version. */
   text: string;
   html?: string;
+  /** Provider-level message headers, such as an RFC 2369 unsubscribe route. */
+  headers?: Record<string, string>;
 }
 
-export type DeliveryStatus = 'sent' | 'not_configured' | 'invalid_recipient' | 'failed';
+export type DeliveryStatus =
+  | 'sent'
+  | 'not_configured'
+  | 'invalid_recipient'
+  | 'opted_out'
+  | 'failed';
 
 export interface ProviderDeliveryResult {
   status: DeliveryStatus;
@@ -59,9 +70,11 @@ export async function sendEmailWithResult(
     return { status: 'not_configured', provider: 'resend' };
   }
 
+  const signal = AbortSignal.timeout(PROVIDER_TIMEOUT_MS);
   try {
     const response = await fetch('https://api.resend.com/emails', {
       method: 'POST',
+      signal,
       headers: {
         Authorization: `Bearer ${process.env.RESEND_API_KEY}`,
         'Content-Type': 'application/json',
@@ -72,6 +85,7 @@ export async function sendEmailWithResult(
         subject: message.subject,
         text: message.text,
         ...(message.html ? { html: message.html } : {}),
+        ...(message.headers ? { headers: message.headers } : {}),
       }),
     });
     if (!response.ok) {
@@ -90,13 +104,24 @@ export async function sendEmailWithResult(
     };
   } catch (error) {
     console.error('[email:error]', error);
-    return { status: 'failed', provider: 'resend', errorCode: 'network_error' };
+    return {
+      status: 'failed',
+      provider: 'resend',
+      errorCode: signal.aborted ? 'timeout' : 'network_error',
+    };
   }
 }
 
-/** Send to several addresses concurrently; returns how many were dispatched. */
+/** List-level escape hatch on every email sent to an off-platform guest. */
+export function guestEmailHeaders(): Record<string, string> {
+  return {
+    'List-Unsubscribe': `<mailto:${supportEmail()}?subject=unsubscribe>`,
+  };
+}
+
+/** Send in bounded groups; returns how many were dispatched. */
 export async function sendEmails(messages: EmailMessage[]): Promise<number> {
-  const results = await Promise.all(messages.map(sendEmail));
+  const results = await mapInBatches(messages, sendEmail);
   return results.filter(Boolean).length;
 }
 

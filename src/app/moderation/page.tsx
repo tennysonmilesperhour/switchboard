@@ -15,12 +15,11 @@ export default async function ModerationPage() {
   } = await supabase.auth.getUser();
   if (!user) redirect('/login');
 
-  // Gate: only appointed platform moderators. is_platform_moderator is a
-  // security-definer check; the queues below are likewise definer-guarded, so a
-  // non-moderator sees nothing even if they reach this URL.
-  const { data: isModerator } = await supabase.rpc('is_platform_moderator', {
-    p_user: user.id,
-  });
+  // The self-scoped gate binds the subject to auth.uid(), so callers cannot
+  // probe another account's moderator role.
+  const { data: isModerator } = await supabase.rpc(
+    'is_current_user_platform_moderator',
+  );
   if (!isModerator) redirect('/');
 
   const [{ data: reports }, { data: venues }] = await Promise.all([

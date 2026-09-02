@@ -4,7 +4,6 @@ import { createClient, getRenderUser } from '@/lib/supabase/server';
 import { AppShell } from '@/components/shell/AppShell';
 import { Card, SectionHeader } from '@/components/ui/Card';
 import { Avatar } from '@/components/ui/Avatar';
-import { Icon } from '@/components/ui/Icon';
 import { PlanCard, planColor } from '@/components/ui/PlanCard';
 import { SignalBar } from '@/components/signals/SignalBar';
 import { GettingStarted } from '@/components/home/GettingStarted';
@@ -204,41 +203,38 @@ export default async function HomePage() {
         <div>
           <Greeting name={firstName} initial={greeting} />
           <p className="text-sm text-ink-faint mt-1">
-            Feeling social? Let people know.
+            Your invitations and plans, in the order they need you.
           </p>
         </div>
 
-        <PillarRow
-          hasConnections={hasConnections}
-          showAround={aroundAvailable === true}
-        />
-
-        {hasConnections && (
-          <div id="signals" className="scroll-mt-20">
-            <SignalBar
-              active={mySignals ?? []}
-              circles={circles ?? []}
-              defaultCircleId={defaultSignalCircleId}
-            />
-          </div>
-        )}
-
-        {/* The single first-run guidance card — checks itself off live. Once
-            it retires, the passport takes over as the quiet way to find the
-            parts of the app you haven't met. Never both at once. */}
-        {gettingStartedDone ? (
-          <PassportCard
-            earned={passportSummary.earned}
-            total={passportSummary.total}
-            nextLabel={passportSummary.next?.label ?? null}
-          />
-        ) : (
-          <GettingStarted
-            friendDone={hasConnections}
-            planDone={(upcoming?.length ?? 0) > 0}
-            signalDone={(mySignals?.length ?? 0) > 0}
-            findableDone={findableDone}
-          />
+        {/* Invitations are the only time-sensitive thing on Home. Keep them
+            directly below the greeting so a 390px viewport never buries the
+            response behind discovery or setup UI. */}
+        {(pendingInvites?.length ?? 0) > 0 && (
+          <section>
+            <SectionHeader title="Waiting on you 💌" />
+            <div className="space-y-2">
+              {(pendingInvites ?? []).map((invite) => {
+                const event = (
+                  Array.isArray(invite.event) ? invite.event[0] : invite.event
+                ) as Pick<
+                  SwitchboardEvent,
+                  'id' | 'title' | 'starts_at' | 'time_zone'
+                > | null;
+                if (!event) return null;
+                return (
+                  <Link key={invite.id} href={`/events/${event.id}`} className="block group">
+                    <Card tone="gold" className="group-hover:shadow-lift transition-shadow">
+                      <p className="font-medium">{event.title}</p>
+                      <p className="text-xs text-ink-soft mt-0.5">
+                        {formatDateTime(event.starts_at, event.time_zone)} · respond soon
+                      </p>
+                    </Card>
+                  </Link>
+                );
+              })}
+            </div>
+          </section>
         )}
 
         {/* Plan feed - the heart of Home */}
@@ -288,6 +284,44 @@ export default async function HomePage() {
               Nothing is revealed unless both sides choose it, and nothing nags.
               Invitations flow one person at a time.
             </p>
+          </div>
+        )}
+
+        {/* Exactly one guidance card. Once first-run setup retires, the
+            passport takes its place rather than stacking another explainer. */}
+        {gettingStartedDone ? (
+          <PassportCard
+            earned={passportSummary.earned}
+            total={passportSummary.total}
+            nextLabel={passportSummary.next?.label ?? null}
+          />
+        ) : (
+          <GettingStarted
+            friendDone={hasConnections}
+            planDone={(upcoming?.length ?? 0) > 0}
+            signalDone={(mySignals?.length ?? 0) > 0}
+            findableDone={findableDone}
+          />
+        )}
+
+        {/* The product doors follow what needs attention now. A new account
+            gets the three useful ones; Mutual and I'm free arrive with the
+            first connection, and Around only when the city has something
+            behind it (one boolean from the database, never a row). */}
+        <PillarRow
+          hasConnections={hasConnections}
+          showAround={aroundAvailable === true}
+        />
+
+        {/* Signals reach only people you know, so the composer waits for the
+            first connection rather than offering a broadcast to nobody. */}
+        {hasConnections && (
+          <div id="signals" className="scroll-mt-20">
+            <SignalBar
+              active={mySignals ?? []}
+              circles={circles ?? []}
+              defaultCircleId={defaultSignalCircleId}
+            />
           </div>
         )}
 
@@ -406,85 +440,8 @@ export default async function HomePage() {
           </section>
         )}
 
-        {/* Invitations waiting */}
-        {(pendingInvites?.length ?? 0) > 0 && (
-          <section>
-            <SectionHeader title="Waiting on you 💌" />
-            <div className="space-y-2">
-              {(pendingInvites ?? []).map((invite) => {
-                const event = (
-                  Array.isArray(invite.event) ? invite.event[0] : invite.event
-                ) as Pick<
-                  SwitchboardEvent,
-                  'id' | 'title' | 'starts_at' | 'time_zone'
-                > | null;
-                if (!event) return null;
-                return (
-                  <Link key={invite.id} href={`/events/${event.id}`} className="block group">
-                    <Card tone="gold" className="group-hover:shadow-lift transition-shadow">
-                      <p className="font-medium">{event.title}</p>
-                      <p className="text-xs text-ink-soft mt-0.5">
-                        {formatDateTime(event.starts_at, event.time_zone)} · respond soon
-                      </p>
-                    </Card>
-                  </Link>
-                );
-              })}
-            </div>
-          </section>
-        )}
-
         {/* Fresh matches — each one clearable, by swipe or by button. */}
         <RecentMatches matches={(recentMatches ?? []) as RecentMatch[]} />
-
-        {/* Quick actions */}
-        <section>
-          <SectionHeader title="Make something happen" />
-          <div className="space-y-3">
-            <Link href="/people" className="group block">
-              <Card
-                tone="cream"
-                className="group-hover:border-terracotta group-hover:shadow-lift transition-all"
-              >
-                <div className="flex items-center gap-3">
-                  <span className="text-2xl" aria-hidden>👋</span>
-                  <span className="flex-1">
-                    <span className="block font-medium">Find &amp; add friends</span>
-                    <span className="block text-xs text-ink-faint mt-0.5">
-                      By handle, email, phone, or contacts
-                    </span>
-                  </span>
-                  <Icon name="back" size={18} className="rotate-180 text-ink-faint" />
-                </div>
-              </Card>
-            </Link>
-            {/* Local serendipity gets no second, ungated door here. When it is
-                alive, this uses the same Around entry as Home and More. */}
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-              {[
-                { href: '/discover', emoji: '🧭', title: 'Discover', body: 'What should we do?' },
-                ...(aroundAvailable === true
-                  ? [
-                      {
-                        href: '/map',
-                        emoji: '✨',
-                        title: 'Around',
-                        body: 'What’s happening nearby',
-                      },
-                    ]
-                  : []),
-              ].map((action) => (
-                <Link key={action.href} href={action.href} className="group">
-                  <Card className="h-full group-hover:border-terracotta group-hover:shadow-lift transition-all">
-                    <span className="text-2xl" aria-hidden>{action.emoji}</span>
-                    <p className="font-medium mt-2">{action.title}</p>
-                    <p className="text-xs text-ink-faint mt-0.5">{action.body}</p>
-                  </Card>
-                </Link>
-              ))}
-            </div>
-          </div>
-        </section>
       </div>
     </AppShell>
   );

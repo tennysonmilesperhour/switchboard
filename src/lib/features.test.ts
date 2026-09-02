@@ -109,6 +109,15 @@ describe('the catalogue', () => {
     const titles = FEATURES.map((feature) => feature.title.toLowerCase());
     expect(new Set(titles).size).toBe(titles.length);
   });
+
+  it('points the Home pillars and the Around group at the labels people can follow', () => {
+    const where = (id: string) => FEATURES.find((feature) => feature.id === id)?.where;
+    expect(where('mutual')).toBe('Home → Mutual');
+    expect(where('availability-signals')).toBe('Home → I’m free');
+    // Zones left the Home row in remediation 18: it is one of the three
+    // Around tabs, reached from the More sheet (or the density-gated pillar).
+    expect(where('zones')).toBe('More → Around → Zones');
+  });
 });
 
 describe('every link goes somewhere real', () => {

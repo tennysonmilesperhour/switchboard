@@ -7,6 +7,27 @@ export interface HomePillar {
   body: string;
 }
 
+/**
+ * The product doors, given equal weight — but only the ones with something
+ * behind them.
+ *
+ * Home used to bury these: availability sat at the top as a chip row, plans
+ * were the feed, and Mutual and Zones were two of four tiles in a
+ * "Make something happen" grid below every conditional section — so which
+ * pathways a person noticed depended on how much of their Home was populated.
+ * Home now puts urgent invitations, the plan feed, and one guidance card
+ * first; this row is the stable set of doors after that focused sequence.
+ *
+ * The set is gated rather than fixed (remediation 18): a person with no graph
+ * and no local density gets exactly the three doors that do something for them.
+ * Mutual and I'm free are empty rooms without a connection; Around is an empty
+ * room without an anchored zone or a live sharer in the viewer's city.
+ *
+ * Deliberately not styled with the brand gradient: the moment one tile gets the
+ * loud treatment, the row stops being equal doors and becomes one CTA with
+ * also-rans. `PRODUCT.md` asks for the next social action to be obvious, and
+ * the feed above still carries that weight — this row is for breadth.
+ */
 const CORE_PILLARS: readonly HomePillar[] = [
   {
     href: '/create',
@@ -36,6 +57,8 @@ const SOCIAL_PILLARS: readonly HomePillar[] = [
     body: 'Down to connect?',
   },
   {
+    // Availability lives on this page already, so the pillar points at it
+    // rather than duplicating the composer somewhere else.
     href: '#signals',
     emoji: '🟢',
     title: 'I’m free',

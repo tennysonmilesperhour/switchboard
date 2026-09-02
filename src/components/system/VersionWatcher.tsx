@@ -78,7 +78,7 @@ export function VersionWatcher() {
         className="pointer-events-auto flex items-center gap-3 rounded-pill bg-ink text-paper px-4 py-2.5 shadow-lift animate-rise active:scale-[0.98] transition"
       >
         <span className="flex items-center gap-2 text-sm font-medium">
-          <Icon name="sparkle" size={16} className="text-terracotta" />
+          <Icon name="sparkle" size={16} className="text-terracotta-deep" />
           A new version is available
         </span>
         <span className="rounded-pill bg-paper text-ink text-xs font-semibold px-3 py-1.5">

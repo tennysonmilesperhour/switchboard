@@ -266,7 +266,7 @@ export function LoginForm({ next = '/', initialMode = 'signin' }: LoginFormProps
             {status === 'submitting' ? 'Signing in...' : 'Sign in'}
           </Button>
           <div className="text-right">
-            <Link href="/forgot-password" className="text-sm font-bold text-terracotta">
+            <Link href="/forgot-password" className="text-sm font-bold text-terracotta-deep">
               Forgot password?
             </Link>
           </div>
@@ -361,7 +361,7 @@ export function LoginForm({ next = '/', initialMode = 'signin' }: LoginFormProps
             <ul className="mt-3 space-y-1.5">
               {COMMUNITY_COVENANT_SUMMARY.map((item) => (
                 <li key={item} className="flex gap-2">
-                  <span aria-hidden className="text-terracotta">•</span>
+                  <span aria-hidden className="text-terracotta-deep">•</span>
                   <span>{item}</span>
                 </li>
               ))}
@@ -387,11 +387,11 @@ export function LoginForm({ next = '/', initialMode = 'signin' }: LoginFormProps
               />
               <span>
                 I confirm I am at least 18 years old and agree to the{' '}
-                <Link href="/terms" className="font-bold text-terracotta">Terms</Link>
+                <Link href="/terms" className="font-bold text-terracotta-deep">Terms</Link>
                 ,{' '}
-                <Link href="/privacy" className="font-bold text-terracotta">Privacy Notice</Link>
+                <Link href="/privacy" className="font-bold text-terracotta-deep">Privacy Notice</Link>
                 , and{' '}
-                <Link href="/community" className="font-bold text-terracotta">Community Covenant</Link>
+                <Link href="/community" className="font-bold text-terracotta-deep">Community Covenant</Link>
                 .
               </span>
             </label>

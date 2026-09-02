@@ -20,6 +20,11 @@ grant usage on schema public to anon, authenticated;
 grant insert, update, delete on all tables in schema public to anon, authenticated;
 grant usage, select on all sequences in schema public to anon, authenticated;
 
+-- The Twilio webhook and outbound send guard are service-role-only. Preserve
+-- the migration's explicit browser revocation after the hosted-default grant
+-- simulation above.
+revoke insert, update, delete on public.sms_opt_outs from anon, authenticated;
+
 -- Availability is replaced through one atomic, grid-validating RPC. Re-granting
 -- direct writes here would make local/CI looser than production and let a client
 -- bypass both the response marker and slot validation.
@@ -57,7 +62,8 @@ revoke insert, update, delete on public.event_availability_responses from anon, 
 -- `calendar_subscriptions` follows the same pattern: `ics_url` is a bearer
 -- credential, so 20260829140000_calendar_subscriptions.sql revokes the hosted
 -- table-wide default and grants back only the safe status columns. Keep both
--- carve-outs in one list so the local/CI seed cannot undo either migration.
+-- column-allowlist carve-outs here. `sms_opt_outs` is omitted altogether: its
+-- phone suppressions are never browser-readable.
 do $$
 declare
   relation record;
@@ -68,7 +74,7 @@ begin
       join pg_namespace n on n.oid = c.relnamespace
      where n.nspname = 'public'
        and c.relkind in ('r', 'p', 'v', 'm', 'f')
-       and c.relname not in ('profiles', 'calendar_subscriptions')
+       and c.relname not in ('profiles', 'calendar_subscriptions', 'sms_opt_outs')
   loop
     execute format(
       'grant select on public.%I to anon, authenticated', relation.relname

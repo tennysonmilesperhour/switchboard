@@ -1,13 +1,12 @@
 'use server';
 
 import type { ActionResult } from '@/lib/errors';
-import { failure } from '@/lib/errors';
-import { reportAndFail } from '@/lib/server/observability';
+import { failure, validation } from '@/lib/errors';
+import { reportAndFail, reportOperationalError } from '@/lib/server/observability';
 import { checkRateLimit } from '@/lib/server/rate-limit';
 
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
-import { createClient } from '@/lib/supabase/server';
 import { requireUser, requireUserOrRedirect } from '@/lib/server/require-user';
 import { normalizeUsername } from '@/lib/auth-identity';
 import { boardJoinUrl } from '@/lib/links';
@@ -41,9 +40,8 @@ export async function createBoard(formData: FormData): Promise<void> {
   });
   if (error) {
     if (error.code === '23505') redirect('/boards?error=taken');
-    // Surface the real reason for anything unexpected instead of a blank
-    // "try again", so the host (and we) can see what actually failed.
-    redirect(`/boards?error=save&reason=${encodeURIComponent(error.message)}`);
+    await reportOperationalError('board.create', error, {}, 'SB-BOARD-SAVE');
+    redirect('/boards?error=save&reason=SB-BOARD-SAVE');
   }
   redirect(`/boards/${data ?? slug}`);
 }
@@ -57,7 +55,7 @@ export async function inviteToBoard(
   const { supabase, user } = auth;
 
   const cleanHandle = normalizeUsername(handle);
-  if (!cleanHandle) return { ok: false, error: 'Enter a handle.' };
+  if (!cleanHandle) return validation('Enter a handle.');
 
   // Only a board moderator may add people — don't rely solely on RLS (SB-20).
   const { data: myRole } = await supabase
@@ -67,7 +65,7 @@ export async function inviteToBoard(
     .eq('member_id', user.id)
     .maybeSingle();
   if (myRole?.role !== 'moderator') {
-    return { ok: false, error: 'Only a board organizer can add people.' };
+    return failure('SB-PERM-DENIED', 'Only a board organizer can add people.');
   }
 
   const { data: profile } = await supabase
@@ -75,17 +73,15 @@ export async function inviteToBoard(
     .select('id')
     .eq('handle', cleanHandle)
     .maybeSingle();
-  if (!profile) return { ok: false, error: 'No one with that handle.' };
+  if (!profile) return validation('No one with that handle.');
 
   const { error } = await supabase
     .from('board_members')
     .insert({ board_id: boardId, member_id: profile.id, role: 'member' });
   if (error) {
     const already = error.code === '23505';
-    return {
-      ok: false,
-      error: already ? 'They’re already on this board.' : error.message,
-    };
+    if (already) return validation('They’re already on this board.');
+    return reportAndFail('SB-BOARD-SAVE', 'board.member-add', error, { boardId });
   }
 
   revalidatePath(`/boards`);
@@ -107,7 +103,12 @@ export async function ensureBoardInviteLink(
     p_board: boardId,
   });
   if (error || typeof code !== 'string') {
-    return { ok: false, error: 'Could not create an invite link.' };
+    return reportAndFail(
+      'SB-BOARD-LINK',
+      'board.link-create',
+      error ?? new Error('RPC returned no invite code'),
+      { boardId },
+    );
   }
   revalidatePath('/boards');
   return { ok: true, url: boardJoinUrl(code) };
@@ -127,7 +128,12 @@ export async function rotateBoardInviteLink(
     p_board: boardId,
   });
   if (error || typeof code !== 'string') {
-    return { ok: false, error: 'Could not refresh the invite link.' };
+    return reportAndFail(
+      'SB-BOARD-LINK',
+      'board.link-rotate',
+      error ?? new Error('RPC returned no invite code'),
+      { boardId },
+    );
   }
   revalidatePath('/boards');
   return { ok: true, url: boardJoinUrl(code) };
@@ -141,13 +147,14 @@ export async function joinBoardViaCode(
   code: string,
 ): Promise<{ ok: boolean; slug?: string }> {
   const auth = await requireUser();
-  if (!auth.ok) return { ok: false };
+  if (!auth.ok) return auth;
   const { supabase } = auth;
 
   const { data: slug, error } = await supabase.rpc('join_board_via_code', {
     p_code: code,
   });
-  if (error || typeof slug !== 'string') return { ok: false };
+  if (error) return reportAndFail('SB-BOARD-SAVE', 'board.join', error);
+  if (typeof slug !== 'string') return failure('SB-BOARD-UNKNOWN');
   revalidatePath('/boards');
   return { ok: true, slug };
 }
@@ -155,14 +162,20 @@ export async function joinBoardViaCode(
 export async function removeFromBoard(
   boardId: string,
   memberId: string,
-): Promise<void> {
-  const { supabase } = await requireUserOrRedirect();
-  await supabase
+): Promise<ActionResult> {
+  const auth = await requireUser();
+  if (!auth.ok) return auth;
+  const { supabase } = auth;
+  const { error } = await supabase
     .from('board_members')
     .delete()
     .eq('board_id', boardId)
     .eq('member_id', memberId);
+  if (error) {
+    return reportAndFail('SB-BOARD-SAVE', 'board.member-remove', error, { boardId, memberId });
+  }
   revalidatePath('/boards');
+  return { ok: true };
 }
 
 export async function addBoardPost(
@@ -182,7 +195,7 @@ export async function addBoardPost(
   const { supabase, user } = auth;
 
   const title = input.title.trim();
-  if (!title) return { ok: false, error: 'Give it a title.' };
+  if (!title) return validation('Give it a title.');
 
   // "Listed until" applies only to offers/requests, and stays within a
   // sensible window so a typo can't pin a stale ask to the board for years.
@@ -191,7 +204,7 @@ export async function addBoardPost(
     const parsed = new Date(input.expiresAt);
     const fromNowMs = parsed.getTime() - Date.now();
     if (Number.isNaN(parsed.getTime()) || fromNowMs <= 0 || fromNowMs > 90 * 86_400_000) {
-      return { ok: false, error: 'Pick a listing window within the next 90 days.' };
+      return validation('Pick a listing window within the next 90 days.');
     }
     expiresAt = parsed.toISOString();
   }
@@ -207,7 +220,7 @@ export async function addBoardPost(
     starts_at: input.startsAt,
     expires_at: expiresAt,
   });
-  if (error) return { ok: false, error: error.message };
+  if (error) return reportAndFail('SB-BOARD-SAVE', 'board.post-create', error, { boardId });
 
   await capture(user.id, ANALYTICS_EVENTS.boardPostCreated, { kind: input.kind });
   revalidatePath('/boards');
@@ -225,7 +238,7 @@ export async function respondToBoardPost(
     responder_id: auth.user.id,
   });
   if (error?.code === '23505') return { ok: true };
-  if (error) return { ok: false, error: error.message };
+  if (error) return reportAndFail('SB-BOARD-SAVE', 'board.post-respond', error, { postId });
   const admin = createAdminClient();
   const [{ data: post }, { data: responder }] = await Promise.all([
     admin.from('board_posts').select('author_id, title, kind').eq('id', postId).maybeSingle(),
@@ -250,7 +263,10 @@ export async function fulfillBoardPost(postId: string, slug: string): Promise<Ac
   const auth = await requireUser();
   if (!auth.ok) return auth;
   const { data, error } = await auth.supabase.from('board_posts').update({ fulfilled_at: new Date().toISOString(), fulfilled_by: auth.user.id }).eq('id', postId).eq('author_id', auth.user.id).select('id, kind').maybeSingle();
-  if (error || !data) return { ok: false, error: 'Only the author can mark this complete.' };
+  if (error) return reportAndFail('SB-BOARD-SAVE', 'board.post-complete', error, { postId });
+  if (!data) {
+    return failure('SB-PERM-DENIED', 'Only the author can mark this complete.');
+  }
   await capture(auth.user.id, ANALYTICS_EVENTS.boardPostFulfilled, { kind: data.kind });
   revalidatePath(`/boards/${slug}`);
   return { ok: true };
@@ -272,7 +288,7 @@ export async function updateBoardPost(
   const { supabase, user } = auth;
 
   const title = input.title.trim().slice(0, 120);
-  if (!title) return { ok: false, error: 'Give it a title.' };
+  if (!title) return validation('Give it a title.');
 
   // The author predicate is repeated here even though RLS enforces it. A
   // successful request that updated zero rows must not be presented as saved.
@@ -290,8 +306,8 @@ export async function updateBoardPost(
     .eq('author_id', user.id)
     .select('id')
     .maybeSingle();
-  if (error) return { ok: false, error: 'Could not save that post.' };
-  if (!data) return { ok: false, error: 'Only the author can edit this post.' };
+  if (error) return reportAndFail('SB-BOARD-SAVE', 'board.post-update', error, { postId });
+  if (!data) return failure('SB-PERM-DENIED', 'Only the author can edit this post.');
 
   revalidatePath(`/boards/${slug}`);
   return { ok: true };
@@ -300,14 +316,13 @@ export async function updateBoardPost(
 export async function deleteBoardPost(
   postId: string,
   slug: string,
-): Promise<void> {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return;
-  await supabase.from('board_posts').delete().eq('id', postId);
+): Promise<ActionResult> {
+  const auth = await requireUser();
+  if (!auth.ok) return auth;
+  const { error } = await auth.supabase.from('board_posts').delete().eq('id', postId);
+  if (error) return reportAndFail('SB-BOARD-SAVE', 'board.post-delete', error, { postId });
   revalidatePath(`/boards/${slug}`);
+  return { ok: true };
 }
 
 /**
@@ -329,7 +344,7 @@ export async function reportBoardPost(
   reason: string,
 ): Promise<ActionResult> {
   const cleanReason = reason.trim().slice(0, 500);
-  if (!cleanReason) return { ok: false, error: 'Add a short reason.' };
+  if (!cleanReason) return validation('Add a short reason.');
 
   const auth = await requireUser();
   if (!auth.ok) return auth;
@@ -346,13 +361,13 @@ export async function reportBoardPost(
   if (!post) return failure('SB-POST-MISSING');
 
   if (post.author_id === user.id) {
-    return { ok: false, error: 'That’s your own post.' };
+    return validation('That’s your own post.');
   }
 
   // Same budget as profile reports: enough for a bad afternoon on a board,
   // not enough to flood the queue or mass-target one person.
   if (!(await checkRateLimit(`report:${user.id}`, 10, 60 * 60))) {
-    return { ok: false, error: 'You’ve filed several reports. Try again later.' };
+    return failure('SB-RATE-LIMIT', 'You’ve filed several reports. Try again later.');
   }
 
   const { error } = await supabase.from('user_reports').insert({
@@ -454,7 +469,8 @@ export async function planFromBoardPost(postId: string): Promise<ActionResult & 
     invitees: [],
   });
   if (!created.ok || !created.eventId) {
-    return { ok: false, error: created.error ?? 'Could not create the plan.' };
+    if (!created.ok) return created;
+    return failure('SB-PLAN-CREATE');
   }
 
   const { error } = await supabase

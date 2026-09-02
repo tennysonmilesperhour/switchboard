@@ -1,6 +1,6 @@
 'use client';
 
-import { useOptimistic, useRef, useState, useTransition } from 'react';
+import { useOptimistic, useState, useTransition } from 'react';
 import { Chip } from '@/components/ui/Chip';
 import { Card } from '@/components/ui/Card';
 import { MultiSelectChips } from '@/components/ui/MultiSelectChips';
@@ -99,27 +99,8 @@ export function SignalBar({ active, circles, defaultCircleId }: SignalBarProps) 
         )
       : null;
 
-  const locationPrompted = useRef(false);
-
-  function promptLocationOnce() {
-    if (locationPrompted.current) return;
-    if (typeof navigator === 'undefined' || !('geolocation' in navigator)) return;
-    if (typeof navigator.permissions === 'undefined') {
-      locationPrompted.current = true;
-      navigator.geolocation.getCurrentPosition(() => {}, () => {}, { timeout: 5_000 });
-      return;
-    }
-    locationPrompted.current = true;
-    navigator.permissions.query({ name: 'geolocation' }).then((result) => {
-      if (result.state === 'prompt') {
-        navigator.geolocation.getCurrentPosition(() => {}, () => {}, { timeout: 5_000 });
-      }
-    }).catch(() => {});
-  }
-
   function toggle(preset: { emoji: string; label: string }) {
     const turnOn = !activeLabels.has(preset.label);
-    if (turnOn) promptLocationOnce();
     startTransition(async () => {
       applyView({ type: 'set', label: preset.label, on: turnOn });
       const result = turnOn
@@ -160,7 +141,6 @@ export function SignalBar({ active, circles, defaultCircleId }: SignalBarProps) 
   function addCustom() {
     const label = customLabel.trim();
     if (!label) return;
-    promptLocationOnce();
     startTransition(async () => {
       applyView({ type: 'set', label, on: true });
       const result = await addSignal(customEmoji || '✨', label, audiences);

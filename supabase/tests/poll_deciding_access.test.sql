@@ -38,7 +38,7 @@ select set_config('request.jwt.claims',
   '{"sub":"00000000-0000-0000-0000-0000000d05e2","role":"authenticated"}', true);
 
 select ok(
-  public.can_view_event('00000000-0000-0000-0000-0000000e0002', '00000000-0000-0000-0000-0000000d05e2'),
+  public.can_current_user_view_event('00000000-0000-0000-0000-0000000e0002'),
   'H1: a queued invitee CAN view a deciding-phase event'
 );
 select is(
@@ -58,7 +58,7 @@ select set_config('request.jwt.claims',
   '{"sub":"00000000-0000-0000-0000-0000000d0111","role":"authenticated"}', true);
 
 select ok(
-  not public.can_view_event('00000000-0000-0000-0000-0000000e0002', '00000000-0000-0000-0000-0000000d0111'),
+  not public.can_current_user_view_event('00000000-0000-0000-0000-0000000e0002'),
   'H1: a non-invited stranger cannot view the deciding-phase event'
 );
 select is(
@@ -76,7 +76,7 @@ set local role authenticated;
 select set_config('request.jwt.claims',
   '{"sub":"00000000-0000-0000-0000-0000000d05e2","role":"authenticated"}', true);
 select ok(
-  not public.can_view_event('00000000-0000-0000-0000-0000000e0002', '00000000-0000-0000-0000-0000000d05e2'),
+  not public.can_current_user_view_event('00000000-0000-0000-0000-0000000e0002'),
   'H1: once the event leaves deciding, a still-queued invitee can no longer view it'
 );
 
