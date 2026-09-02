@@ -64,6 +64,11 @@ async function createPlan(
   if (details?.what) {
     await page.locator('#description').fill(details.what);
   }
+  if (!details?.where && !details?.what) {
+    await page
+      .locator('#description')
+      .fill('Seeded by the authenticated invite-link journey.');
+  }
 
   const submit = page.getByRole('button', {
     name: /Send invitations|Create & start deciding/,
