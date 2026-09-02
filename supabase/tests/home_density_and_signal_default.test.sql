@@ -5,7 +5,7 @@
 -- the 50 km city radius are enforced inside the database.
 
 begin;
-select plan(26);
+select plan(28);
 
 -- ————————————————————————— API privileges —————————————————————————
 select ok(
@@ -56,7 +56,9 @@ insert into auth.users (id, email) values
   ('00000000-0000-0000-0000-00000000e008', 'density-cape-town-private@example.com'),
   ('00000000-0000-0000-0000-00000000d009', 'density-buenos-aires@example.com'),
   ('00000000-0000-0000-0000-00000000e009', 'density-buenos-aires-friend@example.com'),
-  ('00000000-0000-0000-0000-00000000d010', 'density-zone-owner@example.com');
+  ('00000000-0000-0000-0000-00000000d010', 'density-zone-owner@example.com'),
+  ('00000000-0000-0000-0000-00000000d011', 'density-boulder@example.com'),
+  ('00000000-0000-0000-0000-00000000e011', 'density-boulder-sharer@example.com');
 
 insert into public.profiles (
   id, display_name, onboarded, home_latitude, home_longitude
@@ -76,7 +78,11 @@ insert into public.profiles (
   ('00000000-0000-0000-0000-00000000e008', 'Private Sharer', true, null, null),
   ('00000000-0000-0000-0000-00000000d009', 'Buenos Aires', true, -34.6037, -58.3816),
   ('00000000-0000-0000-0000-00000000e009', 'Connected Sharer', true, null, null),
-  ('00000000-0000-0000-0000-00000000d010', 'Zone Owner', true, null, null)
+  ('00000000-0000-0000-0000-00000000d010', 'Zone Owner', true, null, null),
+  -- Exactly 51.1 km due south of the Boulder sharer below: outside an exact
+  -- 50 km circle, inside the same coarse neighbourhood.
+  ('00000000-0000-0000-0000-00000000d011', 'Boulder', true, 39.90, -105.00),
+  ('00000000-0000-0000-0000-00000000e011', 'Boulder Sharer', true, null, null)
 on conflict (id) do update set
   display_name = excluded.display_name,
   onboarded = excluded.onboarded,
@@ -107,7 +113,9 @@ insert into public.live_locations (
   ('00000000-0000-0000-0000-00000000e008', -33.9252, 18.4245,
    'connections', now() + interval '2 hours'),
   ('00000000-0000-0000-0000-00000000e009', -34.6040, -58.3820,
-   'connections', now() + interval '2 hours');
+   'connections', now() + interval '2 hours'),
+  ('00000000-0000-0000-0000-00000000e011', 40.36, -105.00,
+   'sharers', now() + interval '2 hours');
 
 insert into public.profile_blocks (blocker_id, blocked_id) values
   ('00000000-0000-0000-0000-00000000d007',
@@ -175,6 +183,22 @@ select set_config('request.jwt.claims',
   '{"sub":"00000000-0000-0000-0000-00000000d009","role":"authenticated"}', true);
 select is(public.home_around_available(), true,
   'a connections-only share creates density for a connection');
+
+-- The oracle guard. A caller controls their own home point and may call this as
+-- often as they like, so the answer must be a function of the point's coarse
+-- cell, not of its exact position: an exact 50 km edge would let a caller walk
+-- the boundary and trilaterate a sharer's raw coordinate. The Boulder viewer is
+-- 51.1 km from the sharer by exact haversine (which would say false) and 27.8 km
+-- by coarse cell; moving 22 km closer, still inside the same cell, changes
+-- nothing.
+select set_config('request.jwt.claims',
+  '{"sub":"00000000-0000-0000-0000-00000000d011","role":"authenticated"}', true);
+select is(public.home_around_available(), true,
+  'density is decided between coarse cells, not at an exact 50 km edge');
+update public.profiles set home_latitude = 40.10, home_longitude = -105.00
+  where id = '00000000-0000-0000-0000-00000000d011';
+select is(public.home_around_available(), true,
+  'moving the home point inside its coarse cell never changes the answer');
 
 select is(
   pg_typeof(public.home_around_available())::text,

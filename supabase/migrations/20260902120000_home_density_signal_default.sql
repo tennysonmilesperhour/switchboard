@@ -86,6 +86,49 @@ grant execute on function public.my_home_point() to authenticated, service_role;
 -- Around is considered active within a city-sized 50 km radius when the
 -- viewer can access an anchored zone or another current live-location share.
 -- The result reveals no row, identity, count, or coordinate.
+--
+-- The comparison is between *coarse cells*, never exact points. The home point
+-- is self-writable and this function can be called as often as the caller
+-- likes, so an exact haversine against exact live_locations coordinates would
+-- be a trilateration oracle: move the home point, watch the boolean flip at the
+-- 50 km edge, repeat from three directions, and a sharer's raw fix falls out at
+-- better precision than find_nearby_people's ~110 m rounding ever returns
+-- (20260902023519_live_location_coarse_distance.sql is the same lesson). Both
+-- sides are therefore snapped to a 0.25° grid (~28 km) before the distance is
+-- taken, so moving a home point anywhere inside its cell changes nothing and
+-- the most a caller can learn is whether some cell of that size, city-wide, has
+-- someone visible to them in it — which is what the pillar says out loud.
+create function private.coarse_distance_m(
+  lat_a double precision,
+  lng_a double precision,
+  lat_b double precision,
+  lng_b double precision
+)
+returns double precision
+language sql
+immutable
+set search_path = ''
+as $$
+  select 2 * 6371000 * asin(least(1::double precision, sqrt(
+    power(sin(radians(
+      round(lat_b / 0.25) * 0.25 - round(lat_a / 0.25) * 0.25) / 2), 2)
+    + cos(radians(round(lat_a / 0.25) * 0.25))
+      * cos(radians(round(lat_b / 0.25) * 0.25))
+      * power(sin(radians(
+          round(lng_b / 0.25) * 0.25 - round(lng_a / 0.25) * 0.25) / 2), 2)
+  )));
+$$;
+
+-- Called only from the definer body below (which runs as the owner), so no
+-- browser role needs it. service_role keeps EXECUTE like every other body in
+-- private (service_role_grants.test.sql asserts that rule for the schema).
+revoke all on function private.coarse_distance_m(
+  double precision, double precision, double precision, double precision
+) from public, anon, authenticated;
+grant execute on function private.coarse_distance_m(
+  double precision, double precision, double precision, double precision
+) to service_role;
+
 create function private.home_around_available()
 returns boolean
 language sql
@@ -101,11 +144,9 @@ as $$
         where z.latitude is not null
           and z.longitude is not null
           and public.can_view_zone(z.id, me.id)
-          and 2 * 6371000 * asin(least(1, sqrt(
-            power(sin(radians(z.latitude - me.home_latitude) / 2), 2)
-            + cos(radians(me.home_latitude)) * cos(radians(z.latitude))
-              * power(sin(radians(z.longitude - me.home_longitude) / 2), 2)
-          ))) <= 50000
+          and private.coarse_distance_m(
+            me.home_latitude, me.home_longitude, z.latitude, z.longitude
+          ) <= 50000
       )
       or exists (
         select 1
@@ -120,11 +161,9 @@ as $$
               and public.are_connected(me.id, ll.user_id)
             )
           )
-          and 2 * 6371000 * asin(least(1, sqrt(
-            power(sin(radians(ll.latitude - me.home_latitude) / 2), 2)
-            + cos(radians(me.home_latitude)) * cos(radians(ll.latitude))
-              * power(sin(radians(ll.longitude - me.home_longitude) / 2), 2)
-          ))) <= 50000
+          and private.coarse_distance_m(
+            me.home_latitude, me.home_longitude, ll.latitude, ll.longitude
+          ) <= 50000
       )
     from public.profiles me
     where me.id = auth.uid()

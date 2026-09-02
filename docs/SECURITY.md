@@ -231,6 +231,31 @@ password reset, reports, uploads, guest RSVP, AI calls, and any
 account-existence oracle (contact matching). Password reset returns a **generic**
 response regardless of whether the account exists (no user enumeration).
 
+- **Auth and uploads fail closed.** Pass `{ failClosed: true }` anywhere an
+  unavailable limiter would otherwise admit credential guessing, account
+  creation, recovery/confirmation mail amplification, or uploads. Limiter
+  faults are reported as `SB-RATE-LIMIT`; they must not silently become an
+  unlimited path.
+- **Connection buckets stop brute force; identifiers only slow it down.**
+  Sign-in permits 30 attempts per Vercel-forwarded client IP per 10 minutes and
+  sign-up permits 12 per IP per hour. An identifier crossing its higher-volume signal
+  threshold (20 sign-ins per 10 minutes; 10 sign-ups per hour) gets a 750 ms
+  backoff, not a denial. A stranger who knows an email or handle must never be
+  able to lock that account out remotely.
+- **Contact matching is limited at the database boundary.**
+  `resolve_profile_contact` consumes an authenticated-user bucket of 10 calls
+  per hour inside the private function body. The action-level limiter is useful
+  defense in depth, but it is not the security boundary because future callers
+  could otherwise omit it.
+- **Recovery trusts proof of ownership, not editable profile text.** Reset and
+  confirmation resend resolve an email sign-up from `auth.users.email`; a
+  username account may recover only through a verified `profile_contacts`
+  email. Never use `profiles.contact_email`, which its owner can edit.
+- **Every AI entry point has its own per-user budget.** Discovery is 20/hour,
+  plan generation is 30/hour, and room-message extraction is 60/hour. If the
+  extraction budget is exhausted, the message still saves and only the AI
+  enrichment is skipped.
+
 ## 10. Diagnostics don't leak configuration
 
 Health/status endpoints return a coarse liveness boolean to anonymous callers.
@@ -266,6 +291,8 @@ integrations a deployment has wired up is reconnaissance, not public data.
   `find_nearby_people` mutual/block/visibility/radius/coarsening invariants.
 - `supabase/tests/zone_presence.test.sql` — `moments` stays owner-only and
   `zone_presence` counts only other, live, unblocked people in its own zone.
+- `supabase/tests/invite_blocks.test.sql` — event invite inserts honor blocks,
+  cap each plan at 100 rows, and never let a host write an accepted RSVP.
 - `supabase/tests/profile_column_grants.test.sql` — SB-01's column allowlist is
   actually in force (no table-wide SELECT on `profiles`), the withheld columns
   are still withheld, and the columns the app reads are readable.
@@ -286,6 +313,32 @@ working. Genuinely public media (profile avatars/covers, event covers) stays in
 the public buckets. When adding a new gated-media surface, upload to
 `media-private` and sign at the (server) render site — never store or render a
 public URL for gated content.
+
+## Event invitations (consent is not host-writable)
+
+An invitation lets a host ask; it never lets the host answer for somebody
+else. The write boundary is shared by the wizard, add-people controls, direct
+invites, open-table requests, and share-link RSVP rows:
+
+- **Blocks are symmetric at insert time.** The `enforce_invite_insert` trigger
+  compares the event's primary host with a profile invitee under the event-row
+  lock. A block in either direction rejects the insert, including through the
+  service-role and security-definer paths.
+- **A plan carries at most 100 invite rows.** The same trigger serializes on the
+  event and counts before inserting, so concurrent requests cannot race past
+  the ceiling. Server actions reject oversized batches earlier for a useful
+  message; the trigger remains authoritative.
+- **Hosts may enqueue or send, not RSVP.** `invites_insert` accepts only
+  `queued` and `sent`. `accepted`, `declined`, `waitlisted`, and the other
+  response states are written only by the recipient/token response functions.
+- **External text is metered.** Invitation and cancellation email/SMS consume
+  durable per-host daily allowances before a provider is called. Email and SMS
+  share the same allowance; in-app notifications are not part of that external
+  recipient limit.
+
+Litmus test: *can a host name an arbitrary profile/contact and either bypass a
+block, manufacture attendance, or turn one plan into an unbounded message
+sender?*
 
 ## Contact details on a plan (the invitee card)
 
@@ -324,6 +377,51 @@ accepted connection to the target read through *their own* RLS client, with
 Litmus test: *is any contact detail on this page something the viewer did not
 themselves supply?*
 
+## Guardian approval (two separately authorized paths)
+
+A guardian link is a capability that can decide whether an accepted RSVP
+counts, so creating it is not an ordinary form post. The first request and a
+host's recovery resend have different authority and must stay separate:
+
+- **The invitee creates the first request.** `requestParentalApproval` reads the
+  invite through the caller's session/RLS client and requires both
+  `invitee_id = user.id` and the submitted `event_id` to match before any
+  service-role read or write. The browser has no direct INSERT policy on
+  `parental_approvals`.
+- **A host may correct and resend, not impersonate the invitee path.**
+  `resendParentalApproval` first proves the caller manages the exact plan, then
+  scopes every service-role query and update to that plan, invite, and a
+  still-pending approval. Both paths are rate-limited per caller.
+- **The resolver distrusts even privileged rows.** The token-addressed
+  `resolve_parental_approval` function checks that the approval's `event_id`
+  equals its invite's `event_id` before mutating either row. A mismatch returns
+  `invite_mismatch` and leaves both records unchanged.
+
+Litmus test: *can this caller prove they own this RSVP, or manage this exact
+plan—and would a cross-plan approval row still be harmless?*
+
+## SMS consent and suppression
+
+Every outbound SMS calls `sendSmsWithResult`, which normalises the destination
+and checks the service-role-only `sms_opt_outs` table before contacting Twilio.
+The check fails closed: a database error cannot turn into an unguarded text.
+Only the signed `POST /api/sms/inbound` webhook can add or clear suppressions;
+it validates Twilio's HMAC over the exact configured public URL and every form
+field, and binds the request to the configured account and receiving number.
+No phone number or inbound message body is logged.
+
+STOP-class keywords upsert the normalised sender, START-class keywords remove
+it, and HELP does not change state. Twilio Advanced Opt-Out sends the human
+reply, so the app returns empty TwiML and never duplicates it. RLS is enabled
+and forced on `sms_opt_outs`, with no browser policy or browser privilege.
+
+A guest's phone-shaped `guest_contact` is not itself permission for future
+texts. Reminders and cancellation notices are restricted to invite ids with a
+successful SMS row in `invite_delivery_attempts`; a guest reached manually or
+by email cannot later be texted merely because a number was stored. Guest email
+paths carry an RFC 2369 `List-Unsubscribe` mailto header to the configured
+support address.
+
 ## Live location (opt-in presence)
 
 Live location (`live_locations`, `find_nearby_people`) is the most sensitive PII
@@ -342,7 +440,10 @@ security-definer function that encodes the privacy contract.
   only to a caller who is **themselves** currently sharing ("see and be seen"),
   filters on `are_blocked` and the target's `visibility` scope (`connections`
   requires `are_connected`), bounds by radius, and **rounds returned coordinates
-  to ~110 m** so a fellow sharer never receives an exact fix. The owner's own
+  to ~110 m** so a fellow sharer never receives an exact fix. Its returned
+  distance, radius filter, and ordering are calculated from those same rounded
+  caller and target points; an exact distance or exact boundary test would
+  otherwise undo the rounding through repeated spoofed queries. The owner's own
   precise point stays owner-only.
 - **Opt-in and ephemeral.** Nothing is stored until the user taps "Share my
   location"; every row carries an `expires_at` (clamped 1–8 h), is ignored past
@@ -361,25 +462,49 @@ The Around pillar appears only when a viewer's city has an anchored zone they
 may access or another active live-location sharer. That decision is made by
 `home_around_available` (`20260902120000_home_density_signal_default.sql`):
 
-- **Home receives one boolean.** The private definer body evaluates a 50 km
-  radius and returns no row, identity, count, or coordinate. It honors private
-  zone membership, blocks, and the sharer's `connections` visibility scope.
+- **Home receives one boolean.** The private definer body evaluates a
+  city-sized 50 km radius and returns no row, identity, count, or coordinate.
+  It honors private zone membership (`can_view_zone`), blocks, and the sharer's
+  `connections` visibility scope.
+- **The radius is measured between coarse cells, never exact points.** The home
+  point is self-writable and the RPC is unmetered, so an exact haversine against
+  raw `live_locations` coordinates would be a trilateration oracle: move the
+  point, watch the boolean flip at the 50 km edge, repeat from three sides, and a
+  sharer's raw fix falls out at finer precision than `find_nearby_people` ever
+  returns. Both sides are snapped to a 0.25° grid (~28 km) *before* the
+  distance is taken (`private.coarse_distance_m`), the same lesson as
+  `20260902023519_live_location_coarse_distance.sql`. Moving a home point
+  anywhere inside its cell changes nothing; the most a caller can learn is
+  whether some city-sized cell has someone visible to them in it, which is what
+  the pillar says out loud. `home_density_and_signal_default.test.sql` pins
+  this with a viewer 51 km from a sharer by exact distance who still gets
+  `true`, and gets the same answer after moving 22 km within the cell.
+- **Accepted exposure.** A viewer who is *not* sharing learns that someone with
+  `sharers` visibility is live somewhere in their city-sized cell. That is
+  strictly less than what the same person gets by opting in to share (a rounded
+  pin at ~110 m through `find_nearby_people`), and it carries no identity.
 - **A home point is owner-private.** `profiles.home_latitude` and
   `profiles.home_longitude` are deliberately absent from the profile SELECT
-  allowlist. The owner can retrieve that exact point only through
-  `my_home_point()` while editing their profile; ordinary profile readers and
-  Home cannot select it.
+  allowlist (`WITHHELD` in `profile-column-grants.test.ts`, and
+  `has_column_privilege` in pgTAP). The owner can retrieve that exact point only
+  through `my_home_point()` while editing their profile; ordinary profile
+  readers and Home cannot select it.
 - **The point is explicit.** Editing the city as free text clears a prior point;
   choosing a place suggestion stores a validated pair. The database rejects a
   half-coordinate, an out-of-range coordinate, and null island.
 
 Availability's remembered circle is private for the same reason:
 `last_signal_circle_id` is withheld and exposed only to its owner as a scalar
-through `my_signal_default_circle()`. A trigger and the setter both require it
-to name a circle owned by that profile.
+through `my_signal_default_circle()`. The server action, the setter
+(`set_my_signal_default_circle`), and a `BEFORE INSERT OR UPDATE` trigger on
+`profiles` all require it to name a circle owned by that profile, and the
+`signals_visible` policy is unchanged: `viewer_in_signal_audience` still
+requires every audience circle to belong to the signal's owner, so a forged id
+could never widen who sees a signal — it could only have been stored.
 
 Litmus test: *does any density surface reveal more than whether Around has
-something behind it, or let a user associate their preference with somebody
+something behind it, could repeated calls with a moved home point narrow that
+down to a person, or can a user associate their preference with somebody
 else's circle?*
 
 ## Shared Moments (identity unfolds only by mutual consent)
