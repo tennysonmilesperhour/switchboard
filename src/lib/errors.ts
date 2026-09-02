@@ -467,6 +467,15 @@ const REGISTRY = {
     fix: 'Reload and try again.',
     actor: 'reader',
   },
+  // Never shown to a reader: push is best-effort and the app never blocks on
+  // it. It exists so a provider rejecting a live subscription (anything other
+  // than 404/410, which just prune it) is a searchable log line, distinct from
+  // SB-CONFIG-PUSH, which means the VAPID keys are missing.
+  'SB-PUSH-SEND': {
+    message: 'A push notification couldn’t be delivered.',
+    fix: null,
+    actor: 'operator',
+  },
   'SB-VERIFY-START': {
     message: 'Switchboard couldn’t start verifying that contact.',
     fix: 'Check the address or number, then try again.',
@@ -903,7 +912,7 @@ const AREA_CODES: Record<string, ErrorCode> = {
 
   // Best-effort delivery still needs an operator-visible trace when a provider
   // rejects a live subscription for a reason other than "gone".
-  'push.send': 'SB-CONFIG-PUSH',
+  'push.send': 'SB-PUSH-SEND',
 
   // Uploads
   'audio-upload': 'SB-UPLOAD-FAILED',

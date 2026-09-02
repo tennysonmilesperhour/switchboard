@@ -246,13 +246,31 @@ interface RsvpAnswerExportRow extends Record<string, unknown> {
   invite_id: string;
 }
 
+export interface ExportClients {
+  /**
+   * Service role, used only for rows keyed directly on the caller's id: their
+   * profile (whose contact columns are withheld from the API by column grant,
+   * but are the owner's own data), their hosted plans, and the text they
+   * themselves authored. Every query on it filters on `user.id`.
+   */
+  admin: SupabaseClient;
+  /**
+   * The caller's own RLS session, used wherever the answer to "may they see
+   * this?" is someone else's decision — an invitation is visible only once the
+   * host's cascade has sent it, and a plan's summary only while `can_view_event`
+   * says so. Reading those through RLS means the export can never contain a
+   * plan the app itself would refuse to show.
+   */
+  reader: SupabaseClient;
+}
+
 /**
  * Read only the caller's records with explicit column allowlists. Capability
  * secrets (`calendar_token`, event `share_token`, invite `guest_token`) are
  * intentionally absent from the downloadable file.
  */
 export async function buildMyDataExport(
-  admin: SupabaseClient,
+  { admin, reader }: ExportClients,
   user: User,
   exportedAt = new Date().toISOString(),
 ): Promise<MyDataExport> {
@@ -264,7 +282,10 @@ export async function buildMyDataExport(
         .select(columns(PLAN_COLUMNS))
         .eq('host_id', user.id)
         .order('created_at', { ascending: true }),
-      admin
+      // `invites_select` shows an invitee their own row only once it has been
+      // sent; a queued invitation is the host's unsent plan, not the caller's
+      // RSVP, and must not surface here before it surfaces in the app.
+      reader
         .from('invites')
         .select(columns(RSVP_COLUMNS))
         .eq('invitee_id', user.id)
@@ -308,8 +329,10 @@ export async function buildMyDataExport(
   const inviteIds = rsvpRows.map((rsvp) => rsvp.id);
 
   const [rsvpPlansResult, answersResult] = await Promise.all([
+    // Through RLS: `events_select` is `can_view_event`, so a plan the caller
+    // may no longer open is summarised as `null`, not exported.
     visibleEventIds.length > 0
-      ? admin
+      ? reader
           .from('events')
           .select(columns(RSVP_PLAN_COLUMNS))
           .in('id', visibleEventIds)
