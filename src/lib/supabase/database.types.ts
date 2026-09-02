@@ -25,7 +25,6 @@ export type Database = {
         Returns: Json
       }
     }
-
     Enums: {
       [_ in never]: never
     }
@@ -2237,7 +2236,15 @@ export type Database = {
           tagline?: string | null
           timezone?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "profiles_last_signal_circle_id_fkey"
+            columns: ["last_signal_circle_id"]
+            isOneToOne: false
+            referencedRelation: "circles"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       push_subscriptions: {
         Row: {
@@ -3071,7 +3078,10 @@ export type Database = {
       }
       my_home_point: {
         Args: never
-        Returns: { latitude: number; longitude: number }[]
+        Returns: {
+          latitude: number
+          longitude: number
+        }[]
       }
       my_matchmaker_proposals: {
         Args: never
