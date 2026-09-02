@@ -6,7 +6,7 @@ import { revalidatePath } from 'next/cache';
 import { requireUser } from '@/lib/server/require-user';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { notifyUsers } from '@/lib/server/notify';
-import { sendEmails, looksLikeEmail, appUrl } from '@/lib/server/email';
+import { appUrl, guestEmailHeaders, looksLikeEmail, sendEmails } from '@/lib/server/email';
 import { reportAndFail } from '@/lib/server/observability';
 import type { Invite, SwitchboardEvent } from '@/lib/types';
 
@@ -98,6 +98,7 @@ async function fanOutAnnouncement(
       text:
         `${body}\n\n- from your host on Switchboard\n` +
         `Event details: ${appUrl(`/rsvp/${i.guest_token}`)}`,
+      headers: guestEmailHeaders(),
     }));
   if (emails.length > 0) {
     await sendEmails(emails);

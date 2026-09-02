@@ -400,6 +400,28 @@ host's recovery resend have different authority and must stay separate:
 Litmus test: *can this caller prove they own this RSVP, or manage this exact
 plan—and would a cross-plan approval row still be harmless?*
 
+## SMS consent and suppression
+
+Every outbound SMS calls `sendSmsWithResult`, which normalises the destination
+and checks the service-role-only `sms_opt_outs` table before contacting Twilio.
+The check fails closed: a database error cannot turn into an unguarded text.
+Only the signed `POST /api/sms/inbound` webhook can add or clear suppressions;
+it validates Twilio's HMAC over the exact configured public URL and every form
+field, and binds the request to the configured account and receiving number.
+No phone number or inbound message body is logged.
+
+STOP-class keywords upsert the normalised sender, START-class keywords remove
+it, and HELP does not change state. Twilio Advanced Opt-Out sends the human
+reply, so the app returns empty TwiML and never duplicates it. RLS is enabled
+and forced on `sms_opt_outs`, with no browser policy or browser privilege.
+
+A guest's phone-shaped `guest_contact` is not itself permission for future
+texts. Reminders and cancellation notices are restricted to invite ids with a
+successful SMS row in `invite_delivery_attempts`; a guest reached manually or
+by email cannot later be texted merely because a number was stored. Guest email
+paths carry an RFC 2369 `List-Unsubscribe` mailto header to the configured
+support address.
+
 ## Live location (opt-in presence)
 
 Live location (`live_locations`, `find_nearby_people`) is the most sensitive PII

@@ -1,6 +1,7 @@
 import { appUrl, type ProviderDeliveryResult } from '@/lib/server/email';
 import { normalizePhoneNumber, looksLikePhoneNumber } from '@/lib/phone';
 import { mapInBatches } from '@/lib/server/batches';
+import { smsOptOutStatus } from '@/lib/server/sms-opt-out';
 
 export const PROVIDER_TIMEOUT_MS = 10_000;
 
@@ -32,6 +33,18 @@ export async function sendSmsWithResult(
   if (!smsEnabled()) {
     console.info('[sms:skipped] provider is not configured');
     return { status: 'not_configured', provider: 'twilio' };
+  }
+
+  const permission = await smsOptOutStatus(to);
+  if (permission === 'opted_out') {
+    return { status: 'opted_out', provider: 'twilio' };
+  }
+  if (permission === 'unavailable') {
+    return {
+      status: 'failed',
+      provider: 'twilio',
+      errorCode: 'opt_out_check_failed',
+    };
   }
 
   const accountSid = process.env.TWILIO_ACCOUNT_SID as string;

@@ -100,6 +100,27 @@ The app reads these (see `.env.example` for the full list). Set them in Vercel
   `CONTACT_VERIFICATION_SECRET` — required together for phone verification
 - `NEXT_PUBLIC_VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY` — optional; web push
 
+## Twilio inbound SMS and opt-out
+
+Apply `20260902120000_sms_opt_outs.sql` before enabling SMS. Then configure the
+Twilio phone number or Messaging Service to send incoming messages by HTTP
+`POST` to:
+
+```text
+https://<the NEXT_PUBLIC_APP_URL host>/api/sms/inbound
+```
+
+The configured webhook URL must exactly match `NEXT_PUBLIC_APP_URL` plus
+`/api/sms/inbound`; Twilio includes that full URL in its signature. Use HTTPS
+in production. Enable **Advanced Opt-Out** for the Messaging Service and retain
+the standard STOP, START/UNSTOP, and HELP keywords. Twilio will send
+`OptOutType` and its own confirmation reply; Switchboard returns empty TwiML,
+stores STOP locally, clears it on START, and never sends a second reply.
+
+Verify the production setup from a real receiving phone: send `STOP`, confirm a
+new Switchboard SMS is suppressed, then send `START` and confirm delivery is
+restored. Do not log webhook bodies or phone numbers while testing.
+
 ## Scheduled work (cron)
 
 `vercel.json` schedules two authenticated sweeps:

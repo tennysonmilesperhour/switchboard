@@ -10,6 +10,7 @@
  */
 
 import { isEmail } from '@/lib/auth-identity';
+import { supportEmail } from '@/lib/contact';
 import { absoluteUrl } from '@/lib/links';
 import { mapInBatches } from '@/lib/server/batches';
 
@@ -21,9 +22,16 @@ export interface EmailMessage {
   /** Plain-text body. Always provided; html is an optional richer version. */
   text: string;
   html?: string;
+  /** Provider-level message headers, such as an RFC 2369 unsubscribe route. */
+  headers?: Record<string, string>;
 }
 
-export type DeliveryStatus = 'sent' | 'not_configured' | 'invalid_recipient' | 'failed';
+export type DeliveryStatus =
+  | 'sent'
+  | 'not_configured'
+  | 'invalid_recipient'
+  | 'opted_out'
+  | 'failed';
 
 export interface ProviderDeliveryResult {
   status: DeliveryStatus;
@@ -77,6 +85,7 @@ export async function sendEmailWithResult(
         subject: message.subject,
         text: message.text,
         ...(message.html ? { html: message.html } : {}),
+        ...(message.headers ? { headers: message.headers } : {}),
       }),
     });
     if (!response.ok) {
@@ -101,6 +110,13 @@ export async function sendEmailWithResult(
       errorCode: signal.aborted ? 'timeout' : 'network_error',
     };
   }
+}
+
+/** List-level escape hatch on every email sent to an off-platform guest. */
+export function guestEmailHeaders(): Record<string, string> {
+  return {
+    'List-Unsubscribe': `<mailto:${supportEmail()}?subject=unsubscribe>`,
+  };
 }
 
 /** Send in bounded groups; returns how many were dispatched. */
