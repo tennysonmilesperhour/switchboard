@@ -357,7 +357,7 @@ export async function reportBoardPost(
     .from('board_posts')
     .select('id, author_id, board_id')
     .eq('id', postId)
-    .maybeSingle<{ id: string; author_id: string; board_id: string }>();
+    .maybeSingle();
   if (!post) return failure('SB-POST-MISSING');
 
   if (post.author_id === user.id) {
@@ -416,15 +416,7 @@ export async function planFromBoardPost(postId: string): Promise<ActionResult & 
     .from('board_posts')
     .select('id, author_id, title, body, location, starts_at, event_id')
     .eq('id', postId)
-    .maybeSingle<{
-      id: string;
-      author_id: string;
-      title: string;
-      body: string | null;
-      location: string | null;
-      starts_at: string | null;
-      event_id: string | null;
-    }>();
+    .maybeSingle();
   if (!post) return failure('SB-POST-MISSING');
 
   // Already done. Returning the existing plan rather than an error means a

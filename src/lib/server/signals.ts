@@ -1,4 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
+import type { Database } from '@/lib/supabase/database.types';
 
 /** What someone is currently up for, as far as this viewer is allowed to know. */
 export interface VisibleSignal {
@@ -21,7 +22,7 @@ export interface VisibleSignal {
  * because that is the one that is actually about right now.
  */
 export async function loadVisibleSignals(
-  supabase: SupabaseClient,
+  supabase: SupabaseClient<Database>,
   userIds: string[],
 ): Promise<Record<string, VisibleSignal>> {
   const ids = [...new Set(userIds)].filter(Boolean);
@@ -36,10 +37,10 @@ export async function loadVisibleSignals(
 
   const byUser: Record<string, VisibleSignal> = {};
   for (const row of data ?? []) {
-    const userId = row.user_id as string;
+    const userId = row.user_id;
     // First wins: the query is ordered by soonest expiry.
     if (byUser[userId]) continue;
-    byUser[userId] = { emoji: row.emoji as string, label: row.label as string };
+    byUser[userId] = { emoji: row.emoji, label: row.label };
   }
   return byUser;
 }

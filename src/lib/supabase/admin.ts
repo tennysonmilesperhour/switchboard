@@ -1,6 +1,7 @@
 import 'server-only';
 
 import { createClient as createSupabaseClient } from '@supabase/supabase-js';
+import type { Database } from '@/lib/supabase/database.types';
 
 export function hasAdminCredentials() {
   return Boolean(
@@ -18,7 +19,7 @@ export function createAdminClient() {
   if (!url || !serviceKey) {
     throw new Error('Supabase admin credentials are not configured');
   }
-  return createSupabaseClient(url, serviceKey, {
+  return createSupabaseClient<Database>(url, serviceKey, {
     auth: { persistSession: false, autoRefreshToken: false },
   });
 }

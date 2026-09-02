@@ -40,7 +40,7 @@ import { googleCalendarUrl } from '@/lib/calendar-links';
 import { eventShareUrl } from '@/lib/links';
 import { hostCanEditInvitees, hostCanShare } from '@/lib/share-link';
 import type { SwitchboardEvent } from '@/lib/types';
-import { pollQuestion } from '@/lib/types';
+import { normalizePollTopic, pollQuestion } from '@/lib/types';
 import { loadEventPage } from '@/lib/server/event-page';
 
 /** Rich unfurl card for directly-shared event links (iMessage/WhatsApp/Slack). */
@@ -393,7 +393,7 @@ export default async function EventPage({
               id: q.id,
               prompt: q.prompt,
               required: q.required,
-              kind: q.kind,
+              kind: q.kind === 'choice' ? 'choice' : 'text',
               options: q.options,
             }))}
             expiresAtIso={
@@ -478,7 +478,7 @@ export default async function EventPage({
               <FollowUpComposer
                 parentPollId={poll.id}
                 eventId={event.id}
-                parentTopic={poll.topic}
+                parentTopic={normalizePollTopic(poll.topic)}
                 hasPending={pendingPolls.length > 0}
               />
             )}
