@@ -17,7 +17,6 @@ import { ErrorNotice } from '@/components/ui/ErrorNotice';
 import { InvitePlanDetails } from '@/components/events/InvitePlanDetails';
 import { RsvpSignInGate } from '@/components/events/RsvpSignInGate';
 import { ShareLinkRsvp } from './ShareLinkRsvp';
-import type { EventStatus } from '@/lib/types';
 
 /**
  * The public share link for a plan: `/i/<share_token>`.
@@ -38,25 +37,8 @@ import type { EventStatus } from '@/lib/types';
  * what stops this page rejecting a link the app itself just handed out.
  */
 
-interface ShareEvent {
-  id: string;
-  title: string;
-  description: string | null;
-  location_name: string | null;
-  location_address: string | null;
-  starts_at: string | null;
-  ends_at: string | null;
-  time_zone: string | null;
-  host_id: string;
-  status: EventStatus;
-  share_link_active: boolean;
-  cover_url: string | null;
-  wishlist_url: string | null;
-}
-
 const EVENT_FIELDS =
-  'id, title, description, location_name, location_address, starts_at, ends_at, ' +
-  'time_zone, host_id, status, share_link_active, cover_url, wishlist_url';
+  'id, title, description, location_name, location_address, starts_at, ends_at, time_zone, host_id, status, share_link_active, cover_url, wishlist_url';
 
 export async function generateMetadata({
   params,
@@ -71,12 +53,7 @@ export async function generateMetadata({
     .from('events')
     .select('id, title, status, share_link_active')
     .eq('share_token', token)
-    .maybeSingle<{
-      id: string;
-      title: string;
-      status: EventStatus;
-      share_link_active: boolean;
-    }>();
+    .maybeSingle();
 
   // Same classifier as the page body, so the unfurl a recipient sees in their
   // messages app can never promise a plan the page then refuses to show.
@@ -120,7 +97,7 @@ export default async function SharedInvitePage({
         .from('events')
         .select(EVENT_FIELDS)
         .eq('share_token', token)
-        .maybeSingle<ShareEvent>()
+        .maybeSingle()
     : { data: null, error: null };
   if (eventError) {
     await reportOperationalError('share-link.event-lookup', eventError, {});
@@ -132,7 +109,7 @@ export default async function SharedInvitePage({
         .from('profiles')
         .select('display_name')
         .eq('id', event.host_id)
-        .maybeSingle<{ display_name: string }>()
+        .maybeSingle()
     : { data: null };
 
   // Who is reading this decides which half of the page they get: the answer
@@ -146,7 +123,7 @@ export default async function SharedInvitePage({
         .from('profiles')
         .select('display_name')
         .eq('id', user.id)
-        .maybeSingle<{ display_name: string }>()
+        .maybeSingle()
     : { data: null };
 
   const zone = admin && event ? await resolveEventZone(admin, event) : null;

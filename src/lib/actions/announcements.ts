@@ -8,7 +8,6 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import { notifyUsers } from '@/lib/server/notify';
 import { appUrl, guestEmailHeaders, looksLikeEmail, sendEmails } from '@/lib/server/email';
 import { reportAndFail } from '@/lib/server/observability';
-import type { Invite, SwitchboardEvent } from '@/lib/types';
 
 export interface AnnouncementResult {
   ok: boolean;
@@ -65,17 +64,14 @@ async function fanOutAnnouncement(
     .from('events')
     .select('id, title, room_id, location_name')
     .eq('id', eventId)
-    .single<Pick<SwitchboardEvent, 'id' | 'title' | 'room_id' | 'location_name'>>();
+    .single();
   if (!event) return;
 
   const { data: invites } = await admin
     .from('invites')
     .select('invitee_id, guest_name, guest_contact, guest_token, status')
     .eq('event_id', eventId)
-    .eq('status', 'accepted')
-    .returns<
-      Pick<Invite, 'invitee_id' | 'guest_name' | 'guest_contact' | 'guest_token' | 'status'>[]
-    >();
+    .eq('status', 'accepted');
   const accepted = invites ?? [];
 
   const users = accepted

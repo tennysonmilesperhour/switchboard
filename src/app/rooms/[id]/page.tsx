@@ -3,10 +3,22 @@ import { createClient } from '@/lib/supabase/server';
 import { AppShell } from '@/components/shell/AppShell';
 import {
   RoomClient,
-  type RoomMessage,
   type RoomItemRow,
-  type ExpenseRow,
 } from './RoomClient';
+
+function roomItemKind(kind: string): RoomItemRow['kind'] {
+  switch (kind) {
+    case 'event':
+    case 'address':
+    case 'task':
+    case 'link':
+    case 'photo':
+    case 'note':
+      return kind;
+    default:
+      return 'note';
+  }
+}
 
 export default async function RoomPage({
   params,
@@ -63,9 +75,9 @@ export default async function RoomPage({
         roomId={room.id}
         currentUserId={user.id}
         memberNames={memberNames}
-        initialMessages={(messages ?? []) as RoomMessage[]}
-        items={(items ?? []) as RoomItemRow[]}
-        expenses={(expenses ?? []) as ExpenseRow[]}
+        initialMessages={messages ?? []}
+        items={(items ?? []).map((item) => ({ ...item, kind: roomItemKind(item.kind) }))}
+        expenses={expenses ?? []}
       />
     </AppShell>
   );

@@ -3,6 +3,17 @@ import { createClient } from '@/lib/supabase/server';
 import { AppShell } from '@/components/shell/AppShell';
 import { BoardClient, type BoardPostRow, type BoardMemberRow } from './BoardClient';
 
+function boardPostKind(kind: string): BoardPostRow['kind'] {
+  switch (kind) {
+    case 'event':
+    case 'offer':
+    case 'request':
+      return kind;
+    default:
+      return 'notice';
+  }
+}
+
 export default async function BoardPage({
   params,
 }: {
@@ -43,9 +54,9 @@ export default async function BoardPage({
   const members: BoardMemberRow[] = (memberRows ?? []).map((row) => {
     const profile = Array.isArray(row.profile) ? row.profile[0] : row.profile;
     return {
-      id: row.member_id as string,
-      name: (profile?.display_name as string) ?? 'Member',
-      role: (row.role as 'member' | 'moderator') ?? 'member',
+      id: row.member_id,
+      name: profile?.display_name ?? 'Member',
+      role: row.role === 'moderator' ? 'moderator' : 'member',
     };
   });
   const isModerator = members.some(
@@ -73,7 +84,10 @@ export default async function BoardPage({
           slug={board.slug}
           currentUserId={user.id}
           isModerator={isModerator}
-          initialPosts={(postRows ?? []) as BoardPostRow[]}
+          initialPosts={(postRows ?? []).map((post) => ({
+            ...post,
+            kind: boardPostKind(post.kind),
+          }))}
           members={members}
         />
       </div>

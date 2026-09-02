@@ -95,7 +95,7 @@ export function MutualClient({
           filter: `author_id=eq.${currentUserId}`,
         },
         (payload) => {
-          if ((payload.new as { status?: string }).status === 'matched') {
+          if (payload.new.status === 'matched') {
             router.refresh();
           }
         },

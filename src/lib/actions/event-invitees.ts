@@ -15,6 +15,7 @@ import { reportAndFail, reportOperationalError } from '@/lib/server/observabilit
 import type { ActionResult } from '@/lib/errors';
 import { failure, validation } from '@/lib/errors';
 import type { EventStatus, InviteMode } from '@/lib/types';
+import type { TablesInsert } from '@/lib/supabase/database.types';
 import { suggestWindow } from '@/lib/engine/windows';
 import { parseInviteEntries, type ParsedInviteEntry } from '@/lib/invite-entry';
 import { hostCanEditInvitees } from '@/lib/share-link';
@@ -255,7 +256,7 @@ export async function addPeopleToEvent(
       ? nextStage
       : 0;
 
-  const toInsert: Array<Record<string, unknown>> = [];
+  const toInsert: TablesInsert<'invites'>[] = [];
   for (const addition of additions) {
     if (addition.kind === 'member') {
       if (addition.profileId === user.id) {

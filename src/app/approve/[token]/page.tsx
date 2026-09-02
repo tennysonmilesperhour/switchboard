@@ -18,12 +18,7 @@ export default async function ApprovalPage({
     .from('parental_approvals')
     .select('id, status, guardian_name, event_id')
     .eq('token', token)
-    .maybeSingle<{
-      id: string;
-      status: string;
-      guardian_name: string | null;
-      event_id: string;
-    }>();
+    .maybeSingle();
 
   if (!approval) {
     return (
@@ -45,7 +40,7 @@ export default async function ApprovalPage({
     .from('events')
     .select('title')
     .eq('id', approval.event_id)
-    .maybeSingle<{ title: string }>();
+    .maybeSingle();
 
   return (
     <ApproveClient

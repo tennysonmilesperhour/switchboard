@@ -63,7 +63,8 @@ export type ShareLinkState =
 
 /** The fields of an event this module needs. Anything wider is fine. */
 export interface ShareLinkSubject {
-  status: EventStatus;
+  /** Generated database types expose CHECK-constrained text as `string`. */
+  status: string;
   share_link_active: boolean;
 }
 
@@ -107,6 +108,9 @@ export function shareLinkState(event: ShareLinkSubject | null | undefined): Shar
       return 'cancelled';
     case 'past':
       return 'past';
+    default:
+      // A newly introduced or corrupted state must never make a link usable.
+      return 'unpublished';
   }
 }
 
@@ -157,12 +161,18 @@ export function hostCanShare(state: ShareLinkState): boolean {
  * not started and its ordering is still derived from the wizard. Once the plan
  * is confirmed, the guest list is locked.
  */
-export function hostCanEditInvitees(status: EventStatus | null | undefined): boolean {
+export function hostCanEditInvitees(status: string | null | undefined): boolean {
   return status === 'inviting';
 }
 
-/** Can a visitor request a seat through the open-table join page? */
-export function canRequestOpenTable(status: EventStatus | null | undefined): boolean {
+/**
+ * Can a visitor request a seat through the open-table join page?
+ *
+ * Both predicates take the generated `string` (see `ShareLinkSubject`) rather
+ * than `EventStatus`, so callers pass a row's status straight through; an
+ * unknown or corrupted value simply fails the equality and stays closed.
+ */
+export function canRequestOpenTable(status: string | null | undefined): boolean {
   return status === 'inviting' || status === 'confirmed';
 }
 

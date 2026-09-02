@@ -9,6 +9,11 @@
 
 export type Weight = -1 | 0 | 1 | 2;
 
+/** PostgreSQL exposes CHECK-constrained numeric columns as `number`. */
+export function normalizeWeight(value: number): Weight {
+  return value === -1 || value === 1 || value === 2 ? value : 0;
+}
+
 export interface Vote {
   voterId: string;
   optionId: string;

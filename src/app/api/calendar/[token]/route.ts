@@ -40,13 +40,11 @@ export async function GET(
   ]);
 
   const byId = new Map<string, IcsEvent>();
-  for (const event of (hosted ?? []) as IcsEvent[]) {
+  for (const event of hosted ?? []) {
     byId.set(event.id, event);
   }
   for (const row of acceptedInvites ?? []) {
-    const event = (Array.isArray(row.event) ? row.event[0] : row.event) as
-      | (IcsEvent & { status?: string })
-      | null;
+    const event = Array.isArray(row.event) ? row.event[0] : row.event;
     if (event && event.status !== 'cancelled' && event.starts_at && event.starts_at >= since) {
       byId.set(event.id, event);
     }

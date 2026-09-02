@@ -172,7 +172,7 @@ export async function getMySharing(): Promise<LiveLocation | null> {
     .eq('user_id', user.id)
     .gt('expires_at', new Date().toISOString())
     .maybeSingle();
-  return (data as LiveLocation | null) ?? null;
+  return data ?? null;
 }
 
 /**
@@ -196,5 +196,5 @@ export async function getNearbyPeople(radiusM = DEFAULT_RADIUS_M): Promise<Nearb
 
   const { data, error } = await supabase.rpc('find_nearby_people', { p_radius_m: radius });
   if (error) return reportAndFail('SB-LOCATION-LOAD', 'location.load', error, { radius });
-  return { ok: true, people: (data as NearbyPerson[]) ?? [] };
+  return { ok: true, people: data ?? [] };
 }

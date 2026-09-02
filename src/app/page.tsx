@@ -10,7 +10,7 @@ import { GettingStarted } from '@/components/home/GettingStarted';
 import { Greeting } from '@/components/home/Greeting';
 import { PillarRow } from '@/components/home/PillarRow';
 import { PassportCard } from '@/components/home/PassportCard';
-import { RecentMatches, type RecentMatch } from '@/components/home/RecentMatches';
+import { RecentMatches } from '@/components/home/RecentMatches';
 import { loadPassport } from '@/lib/server/passport';
 import { loadFindability } from '@/lib/server/findability';
 import { findabilitySettled } from '@/lib/findability';
@@ -26,7 +26,6 @@ import { getReconnectionSuggestions } from '@/lib/server/radar';
 import { formatDateTime, formatRelative } from '@/lib/format';
 import { greetingFor } from '@/lib/greeting';
 import { resolveDefaultSignalCircle } from '@/lib/signal-audience';
-import type { SwitchboardEvent } from '@/lib/types';
 
 export default async function HomePage() {
   const supabase = await createClient();
@@ -215,12 +214,7 @@ export default async function HomePage() {
             <SectionHeader title="Waiting on you 💌" />
             <div className="space-y-2">
               {(pendingInvites ?? []).map((invite) => {
-                const event = (
-                  Array.isArray(invite.event) ? invite.event[0] : invite.event
-                ) as Pick<
-                  SwitchboardEvent,
-                  'id' | 'title' | 'starts_at' | 'time_zone'
-                > | null;
+                const event = Array.isArray(invite.event) ? invite.event[0] : invite.event;
                 if (!event) return null;
                 return (
                   <Link key={invite.id} href={`/events/${event.id}`} className="block group">
@@ -240,7 +234,7 @@ export default async function HomePage() {
         {/* Plan feed - the heart of Home */}
         {(upcoming?.length ?? 0) > 0 ? (
           <section aria-label="Your plans" className="space-y-4">
-            {(upcoming as SwitchboardEvent[]).map((event, i) => (
+            {upcoming?.map((event, i) => (
               <PlanCard
                 key={event.id}
                 href={`/events/${event.id}`}
@@ -441,7 +435,7 @@ export default async function HomePage() {
         )}
 
         {/* Fresh matches — each one clearable, by swipe or by button. */}
-        <RecentMatches matches={(recentMatches ?? []) as RecentMatch[]} />
+        <RecentMatches matches={recentMatches ?? []} />
       </div>
     </AppShell>
   );

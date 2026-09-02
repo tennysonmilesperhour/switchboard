@@ -3,7 +3,7 @@ import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
 import { AppShell } from '@/components/shell/AppShell';
 import { SOCIAL_BY_ID } from '@/lib/socials';
-import type { ProfileLink, ProfileSocial } from '@/lib/types';
+import { parseProfileLinks, parseProfileSocials } from '@/lib/supabase/json';
 import { ProfileEditForm } from './ProfileEditForm';
 
 export const metadata: Metadata = { title: 'Edit profile' };
@@ -32,8 +32,8 @@ export default async function EditProfilePage() {
     .rpc('my_home_point')
     .maybeSingle<{ latitude: number; longitude: number }>();
 
-  const links: ProfileLink[] = Array.isArray(profile?.links) ? profile!.links : [];
-  const socials: ProfileSocial[] = (Array.isArray(profile?.socials) ? profile!.socials : []).filter(
+  const links = parseProfileLinks(profile?.links ?? []);
+  const socials = parseProfileSocials(profile?.socials ?? []).filter(
     (s) => SOCIAL_BY_ID[s.platform],
   );
 

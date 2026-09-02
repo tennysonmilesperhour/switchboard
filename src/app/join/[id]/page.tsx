@@ -14,7 +14,6 @@ import {
   shareLinkState,
 } from '@/lib/share-link';
 import { errorRef } from '@/lib/errors';
-import type { EventStatus } from '@/lib/types';
 import { Button } from '@/components/ui/Button';
 import { Icon } from '@/components/ui/Icon';
 import { JoinViaLinkClient } from './JoinViaLinkClient';
@@ -31,7 +30,7 @@ export async function generateMetadata({
     .from('events')
     .select('title, open_table')
     .eq('id', id)
-    .maybeSingle<{ title: string; open_table: boolean }>();
+    .maybeSingle();
   const title = event?.open_table ? `You’re invited: ${event.title}` : 'You’re invited';
   return {
     title,
@@ -78,24 +77,9 @@ export default async function JoinPage({
   const { data: event, error: eventError } = admin
     ? await admin
         .from('events')
-        .select(
-          'id, title, description, location_name, starts_at, time_zone, host_id, status, ' +
-            'open_table, share_token, share_link_active',
-        )
+        .select('id, title, description, location_name, starts_at, time_zone, host_id, status, open_table, share_token, share_link_active')
         .eq('id', id)
-        .maybeSingle<{
-          id: string;
-          title: string;
-          description: string | null;
-          location_name: string | null;
-          starts_at: string | null;
-          time_zone: string | null;
-          host_id: string;
-          status: EventStatus;
-          open_table: boolean;
-          share_token: string;
-          share_link_active: boolean;
-        }>()
+        .maybeSingle()
     : { data: null, error: null };
   if (eventError) {
     await reportOperationalError('join.event-lookup', eventError, {});
@@ -134,7 +118,7 @@ export default async function JoinPage({
           .select('status')
           .eq('event_id', event.id)
           .eq('invitee_id', user.id)
-          .maybeSingle<{ status: string }>()
+          .maybeSingle()
       : { data: null };
     const { data: cohost } = admin
       ? await admin
@@ -166,7 +150,7 @@ export default async function JoinPage({
             .from('profiles')
             .select('display_name')
             .eq('id', event.host_id)
-            .maybeSingle<{ display_name: string }>()
+            .maybeSingle()
         ).data
       : null;
 

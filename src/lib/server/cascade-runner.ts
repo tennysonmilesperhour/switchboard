@@ -20,6 +20,8 @@ import {
 } from '@/lib/server/sms';
 import type { Invite, SwitchboardEvent } from '@/lib/types';
 import { directInvitePath } from '@/lib/invite-links';
+import { normalizeInviteStatus } from '@/lib/invite-status';
+import { toJson } from '@/lib/supabase/json';
 import { consumeEventOutboundSlot } from '@/lib/server/invite-delivery-limit';
 
 function toEngineInvite(invite: Invite): CascadeInvite {
@@ -27,7 +29,7 @@ function toEngineInvite(invite: Invite): CascadeInvite {
     id: invite.id,
     position: invite.position,
     groupStage: invite.group_stage,
-    status: invite.status,
+    status: normalizeInviteStatus(invite.status),
     windowMinutes: invite.window_minutes,
     sentAt: invite.sent_at,
   };
@@ -197,13 +199,12 @@ export async function notifyCurrentInviteWave(
 ): Promise<InvitationDeliverySummary> {
   const admin = createAdminClient();
   const [{ data: event }, { data: invites }] = await Promise.all([
-    admin.from('events').select('*').eq('id', eventId).single<SwitchboardEvent>(),
+    admin.from('events').select('*').eq('id', eventId).single(),
     admin
       .from('invites')
       .select('*')
       .eq('event_id', eventId)
-      .eq('status', 'sent')
-      .returns<Invite[]>(),
+      .eq('status', 'sent'),
   ]);
   if (!event || !invites?.length) return emptyDeliverySummary();
   return deliverInvitations(event, invites, new Set(invites.map((invite) => invite.id)));
@@ -225,8 +226,8 @@ export async function deliverInviteNow(
 ): Promise<InvitationDeliverySummary> {
   const admin = createAdminClient();
   const [{ data: event }, { data: invite }] = await Promise.all([
-    admin.from('events').select('*').eq('id', eventId).single<SwitchboardEvent>(),
-    admin.from('invites').select('*').eq('id', inviteId).maybeSingle<Invite>(),
+    admin.from('events').select('*').eq('id', eventId).single(),
+    admin.from('invites').select('*').eq('id', inviteId).maybeSingle(),
   ]);
   if (!event || !invite || invite.event_id !== eventId) return emptyDeliverySummary();
   return deliverInvitations(event, [invite], new Set([invite.id]));
@@ -245,14 +246,13 @@ export async function advanceEventCascade(
     .from('events')
     .select('*')
     .eq('id', eventId)
-    .single<SwitchboardEvent>();
+    .single();
   if (!event || event.status !== 'inviting') return emptyDeliverySummary();
 
   const { data: invites } = await admin
     .from('invites')
     .select('*')
-    .eq('event_id', eventId)
-    .returns<Invite[]>();
+    .eq('event_id', eventId);
   if (!invites || invites.length === 0) return emptyDeliverySummary();
 
   const updates = advanceCascade(
@@ -268,11 +268,11 @@ export async function advanceEventCascade(
   // the event filled between our snapshot read and the locked apply).
   const { data: sentRows } = await admin.rpc('apply_cascade_updates', {
     p_event: eventId,
-    p_updates: updates,
+    p_updates: toJson(updates),
   });
 
   const sentIds = new Set(
-    ((sentRows as { sent_id: string }[] | null) ?? []).map((row) => row.sent_id),
+    (sentRows ?? []).map((row) => row.sent_id),
   );
   return deliverInvitations(event, invites, sentIds);
 }
