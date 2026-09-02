@@ -7,6 +7,7 @@ import { MultiSelectChips } from '@/components/ui/MultiSelectChips';
 import { useToast } from '@/components/ui/Toast';
 import { addSignal, clearSignal, removeSignal, setSignalsAudience } from '@/lib/actions/signals';
 import { formatRelative } from '@/lib/format';
+import { mostRecentlyChosenCircle, resolveSignalAudience } from '@/lib/signal-audience';
 import { SIGNAL_PRESETS } from '@/lib/types';
 
 interface CircleOption {
@@ -25,6 +26,7 @@ interface ActiveSignal {
 interface SignalBarProps {
   active: ActiveSignal[];
   circles: CircleOption[];
+  defaultCircleId: string | null;
 }
 
 /** What the bar shows: which signals are lit and the audience they share. */
@@ -36,19 +38,23 @@ interface SignalView {
 type ViewAction =
   | { type: 'set'; label: string; on: boolean }
   | { type: 'audience'; audiences: string[] }
-  | { type: 'clear' };
+  | { type: 'clear'; audiences: string[] };
 
 /** One-tap availability from the home screen. Toggle as many signals on as you like. */
-export function SignalBar({ active, circles }: SignalBarProps) {
+export function SignalBar({ active, circles, defaultCircleId }: SignalBarProps) {
   const [pending, startTransition] = useTransition();
   const toast = useToast();
   const [customEmoji, setCustomEmoji] = useState('✨');
   const [customLabel, setCustomLabel] = useState('');
 
-  // Every live signal shares one audience; fall back to "everyone" when nothing is on.
+  // Every live signal shares one audience. A fresh composer starts at the
+  // remembered circle (or the first circle), never Everyone when circles exist.
   const serverView: SignalView = {
     labels: active.map((s) => s.label),
-    audiences: active.length > 0 ? active[0].circle_ids : [],
+    audiences: resolveSignalAudience(
+      active.length > 0 ? active[0].circle_ids : null,
+      defaultCircleId,
+    ),
   };
 
   // Reflect taps immediately, then reconcile when each server action's
@@ -75,7 +81,7 @@ export function SignalBar({ active, circles }: SignalBarProps) {
         case 'audience':
           return { ...state, audiences: action.audiences };
         case 'clear':
-          return { labels: [], audiences: [] };
+          return { labels: [], audiences: action.audiences };
       }
     },
   );
@@ -107,9 +113,10 @@ export function SignalBar({ active, circles }: SignalBarProps) {
   }
 
   function chooseAudiences(circleIds: string[]) {
+    const rememberedCircleId = mostRecentlyChosenCircle(audiences, circleIds);
     startTransition(async () => {
       applyView({ type: 'audience', audiences: circleIds });
-      const result = await setSignalsAudience(circleIds);
+      const result = await setSignalsAudience(circleIds, rememberedCircleId);
       if (!result.ok) {
         toast.error(result.error ?? 'Could not change who can see this.', result.code);
       }
@@ -118,7 +125,10 @@ export function SignalBar({ active, circles }: SignalBarProps) {
 
   function turnAllOff() {
     startTransition(async () => {
-      applyView({ type: 'clear' });
+      applyView({
+        type: 'clear',
+        audiences: defaultCircleId ? [defaultCircleId] : [],
+      });
       const result = await clearSignal();
       if (!result.ok) {
         toast.error(result.error ?? 'Could not turn your signals off.', result.code);

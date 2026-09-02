@@ -21,6 +21,7 @@ import { LEGAL_VERSION } from '@/lib/legal';
 import { capture } from '@/lib/analytics/server';
 import { ANALYTICS_EVENTS } from '@/lib/analytics/events';
 import { sanitizeUrl } from '@/lib/url';
+import { isValidCoordinate } from '@/lib/geo';
 import type { ProfileLink, ProfileSocial } from '@/lib/types';
 import type { NotificationPrefs } from '@/lib/notifications';
 
@@ -157,6 +158,29 @@ export async function updateProfileDetails(
     return validation('Unexpected image location - please re-upload.');
   }
 
+  const locationChanged = formData.get('location_changed') === 'true';
+  const rawLatitude = String(formData.get('home_latitude') ?? '').trim();
+  const rawLongitude = String(formData.get('home_longitude') ?? '').trim();
+  let homeCoordinateUpdate: {
+    home_latitude?: number | null;
+    home_longitude?: number | null;
+  } = {};
+  if (locationChanged) {
+    if (!rawLatitude && !rawLongitude) {
+      homeCoordinateUpdate = { home_latitude: null, home_longitude: null };
+    } else {
+      const latitude = Number(rawLatitude);
+      const longitude = Number(rawLongitude);
+      if (!isValidCoordinate(latitude, longitude)) {
+        return validation('Choose a valid city or save the location as text.');
+      }
+      homeCoordinateUpdate = {
+        home_latitude: latitude,
+        home_longitude: longitude,
+      };
+    }
+  }
+
   const { error } = await supabase
     .from('profiles')
     .update({
@@ -173,6 +197,7 @@ export async function updateProfileDetails(
       contact_email: email,
       contact_phone: phone,
       contact_public: formData.get('contact_public') === 'on',
+      ...homeCoordinateUpdate,
     })
     .eq('id', user.id);
 
