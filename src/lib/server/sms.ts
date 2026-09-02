@@ -1,3 +1,5 @@
+import 'server-only';
+
 import { appUrl, type ProviderDeliveryResult } from '@/lib/server/email';
 import { normalizePhoneNumber, looksLikePhoneNumber } from '@/lib/phone';
 import { mapInBatches } from '@/lib/server/batches';
