@@ -119,6 +119,9 @@ jobs:
           echo "E2E_DB=1" >> "$GITHUB_ENV"
           echo "NEXT_PUBLIC_APP_URL=http://localhost:3000" >> "$GITHUB_ENV"
 
+      - name: Verify account export and complete deletion
+        run: npx vitest run src/lib/server/account-data.integration.test.ts
+
       - name: Seed authenticated E2E fixtures
         run: node e2e/seed.mjs
 

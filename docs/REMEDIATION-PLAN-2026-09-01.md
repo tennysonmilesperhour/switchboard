@@ -456,16 +456,16 @@ Target: this quarter. These are the product and structure decisions.
 
 ### 21. Retention, deletion, export
 
-- [ ] Extend `src/lib/server/cleanup.ts` to delete
+- [x] (PR #181) Extend `src/lib/server/cleanup.ts` to delete
   `contact_verification_requests` past `expires_at`, `rate_limits` older than
   a day, read `notifications` older than 90 days, closed `moments` older than
   30 days. Coarsen `live_locations` at write, not read.
-- [ ] On account deletion, remove the user's storage objects (avatars, covers,
+- [x] On account deletion, remove the user's storage objects (avatars, covers,
   room photos, voice notes) before `auth.admin.deleteUser`, so `/privacy`'s
   promise is true.
-- [ ] A `exportMyData` action producing a JSON download of the caller's
+- [x] A `exportMyData` action producing a JSON download of the caller's
   profile, plans, RSVPs, messages, and signals.
-- [ ] Dedupe the observability webhook by `area + code` with a 60 second
+- [x] Dedupe the observability webhook by `area + code` with a 60 second
   window. Log web-push failures other than 404 and 410 through
   `reportOperationalError`. Upload PostHog source maps per
   `docs/POSTHOG_SOURCEMAPS.md`. `Cache-Control: public, s-maxage=3600` on

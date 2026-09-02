@@ -1,5 +1,31 @@
 import { codeForArea, failure, type ErrorCode, type Failure } from '@/lib/errors';
 
+export const OBSERVABILITY_WEBHOOK_DEDUPE_MS = 60_000;
+
+// Best-effort, per-instance storm control. Serverless instances do not share
+// memory, but this still collapses the common case: one broken dependency
+// causing the same failure many times inside a warm instance.
+const webhookSentAt = new Map<string, number>();
+
+function claimWebhookWindow(area: string, code: ErrorCode, now: number): boolean {
+  const key = `${area}:${code}`;
+  const previous = webhookSentAt.get(key);
+  if (previous !== undefined && now - previous < OBSERVABILITY_WEBHOOK_DEDUPE_MS) {
+    return false;
+  }
+
+  webhookSentAt.set(key, now);
+  // Bound the map even when callers invent high-cardinality areas. Areas should
+  // be stable literals, but observability must not become its own memory leak.
+  if (webhookSentAt.size > 1_000) {
+    const staleBefore = now - OBSERVABILITY_WEBHOOK_DEDUPE_MS;
+    for (const [candidate, sentAt] of webhookSentAt) {
+      if (sentAt < staleBefore) webhookSentAt.delete(candidate);
+    }
+  }
+  return true;
+}
+
 /**
  * Safely extract a human-readable message plus structured fields from any thrown
  * value. Plain `String(error)` turns a Supabase/PostgREST error object into the
@@ -63,6 +89,7 @@ export async function reportOperationalError(
 
   const webhook = process.env.OBSERVABILITY_WEBHOOK_URL;
   if (!webhook) return;
+  if (!claimWebhookWindow(area, shown, Date.now())) return;
   await fetch(webhook, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },

@@ -270,6 +270,11 @@ const REGISTRY = {
     fix: 'Try again in a moment.',
     actor: 'reader',
   },
+  'SB-ACCOUNT-EXPORT': {
+    message: 'Switchboard couldn’t prepare your data download.',
+    fix: 'Try again in a moment.',
+    actor: 'reader',
+  },
   'SB-PERM-HOST': {
     message: 'Only the plan’s host can do that.',
     fix: 'Ask the host, or ask them to make you a co-host.',
@@ -461,6 +466,15 @@ const REGISTRY = {
     message: 'Switchboard couldn’t clear your notifications.',
     fix: 'Reload and try again.',
     actor: 'reader',
+  },
+  // Never shown to a reader: push is best-effort and the app never blocks on
+  // it. It exists so a provider rejecting a live subscription (anything other
+  // than 404/410, which just prune it) is a searchable log line, distinct from
+  // SB-CONFIG-PUSH, which means the VAPID keys are missing.
+  'SB-PUSH-SEND': {
+    message: 'A push notification couldn’t be delivered.',
+    fix: null,
+    actor: 'operator',
   },
   'SB-VERIFY-START': {
     message: 'Switchboard couldn’t start verifying that contact.',
@@ -893,6 +907,12 @@ const AREA_CODES: Record<string, ErrorCode> = {
 
   // Getting into an account
   'auth.resend-confirmation': 'SB-AUTH-RESEND',
+  'account.delete': 'SB-AUTH-DELETE',
+  'account.export': 'SB-ACCOUNT-EXPORT',
+
+  // Best-effort delivery still needs an operator-visible trace when a provider
+  // rejects a live subscription for a reason other than "gone".
+  'push.send': 'SB-PUSH-SEND',
 
   // Uploads
   'audio-upload': 'SB-UPLOAD-FAILED',
