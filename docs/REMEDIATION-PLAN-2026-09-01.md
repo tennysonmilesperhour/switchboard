@@ -210,6 +210,8 @@ production defect or an exploitable gap today.
 
 ### 8. Three one-liners
 
+*Fixed in PR #168.*
+
 - [x] **Digest cron.** Add `{ "path": "/api/cron/digest", "schedule": "0 * * * *" }`
   to `vercel.json`. Mention it in `docs/DEPLOYMENT.md`.
 - [x] **Legal re-acceptance.** Set `LEGAL_VERSION` in `src/lib/legal.ts` to
