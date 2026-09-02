@@ -166,9 +166,6 @@ export async function GET(request: Request) {
       schemaVersion,
       expectedSchemaVersion: EXPECTED_SCHEMA_VERSION,
       missingSchemaObjects,
-      // Kept for operator clients deployed before the schema probe switched
-      // from migration-history gaps to actual missing objects.
-      missingMigrations: missingSchemaObjects,
       storage,
       services: checks,
       cronHeartbeat: {
