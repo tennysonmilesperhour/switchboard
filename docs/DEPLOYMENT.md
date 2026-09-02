@@ -102,12 +102,19 @@ The app reads these (see `.env.example` for the full list). Set them in Vercel
 
 ## Scheduled work (cron)
 
-`vercel.json` schedules `/api/cron/cascade` every minute — it advances cascades,
-resolves due polls, fires reminders, and sweeps expired rows. **Sub-daily cron
-requires a Vercel Pro plan**; on the free (Hobby) tier cron runs at most once per
-day, so time-based behavior won't fire reliably. On Hobby, either upgrade or
-drive the endpoint from an external scheduler (GitHub Actions cron, Upstash,
-cron-job.org) with an `Authorization: Bearer $CRON_SECRET` header.
+`vercel.json` schedules two authenticated sweeps:
+
+- `/api/cron/cascade` runs every minute to advance cascades, resolve due polls,
+  fire reminders, and remove expired rows.
+- `/api/cron/digest` runs at the top of every hour to reach each person's chosen
+  local delivery hour. `digest_sent_at` keeps the result to one digest per day,
+  even when a sweep retries.
+
+**Sub-daily cron requires a Vercel Pro plan**; on the free (Hobby) tier cron
+runs at most once per day, so time-based behavior and local-hour digest delivery
+won't fire reliably. On Hobby, either upgrade or drive both endpoints from an
+external scheduler (GitHub Actions cron, Upstash, cron-job.org) with an
+`Authorization: Bearer $CRON_SECRET` header.
 
 ## Appointing moderators
 

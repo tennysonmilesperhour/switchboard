@@ -210,12 +210,12 @@ production defect or an exploitable gap today.
 
 ### 8. Three one-liners
 
-- [ ] **Digest cron.** Add `{ "path": "/api/cron/digest", "schedule": "0 * * * *" }`
+- [x] **Digest cron.** Add `{ "path": "/api/cron/digest", "schedule": "0 * * * *" }`
   to `vercel.json`. Mention it in `docs/DEPLOYMENT.md`.
-- [ ] **Legal re-acceptance.** Set `LEGAL_VERSION` in `src/lib/legal.ts` to
+- [x] **Legal re-acceptance.** Set `LEGAL_VERSION` in `src/lib/legal.ts` to
   `'2026-08-31'` to match the effective date on `/privacy` and `/terms`, so
   the SMS clause is re-accepted.
-- [ ] **Moderators can delete their accounts.** New migration:
+- [x] **Moderators can delete their accounts.** New migration:
   `alter table user_reports alter column resolved_by ... on delete set null`
   and the same for `venues.reviewed_by` (drop and re-add the FK constraints).
   Add a pgTAP test that deletes a user who has rows in every FK-bearing
