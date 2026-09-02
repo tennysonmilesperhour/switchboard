@@ -7,8 +7,9 @@ import Link from 'next/link';
  * were the feed, and Mutual and Zones were two of four tiles in a
  * "Make something happen" grid below every conditional section — so which
  * pathways a person noticed depended on how much of their Home was populated.
- * These four are the product's pillars, so they get one row, one size, one
- * tone, above everything that varies.
+ * These four are the product's pillars, so they get one row, one size, and one
+ * tone. Home puts urgent invitations, the plan feed, and one guidance card
+ * first; the row is the stable set of doors after that focused sequence.
  *
  * Deliberately not styled with the brand gradient: the moment one tile gets the
  * loud treatment, the row stops being four equal doors and becomes one CTA with
