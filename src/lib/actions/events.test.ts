@@ -81,7 +81,11 @@ describe('event management actions', () => {
       profileIds: ['person-1'],
     });
 
-    expect(result).toEqual({ ok: false, error: 'Only the host can add people.' });
+    expect(result).toMatchObject({
+      ok: false,
+      code: 'SB-PERM-HOST',
+      error: 'Only the host can add people.',
+    });
     expect(mocks.isEventManager).toHaveBeenCalledWith('user-1', 'event-1');
     expect(mocks.createAdminClient).not.toHaveBeenCalled();
   });

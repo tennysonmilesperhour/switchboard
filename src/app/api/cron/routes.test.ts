@@ -8,6 +8,10 @@ const mocks = vi.hoisted(() => ({
   sweepReminders: vi.fn(),
   sweepExpired: vi.fn(),
   sweepDigests: vi.fn(),
+  claimCronSweep: vi.fn(),
+  finishCronSweep: vi.fn(),
+  logCronFailure: vi.fn(),
+  logCronSummary: vi.fn(),
 }));
 
 vi.mock('@/lib/server/rate-limit', () => ({
@@ -25,6 +29,12 @@ vi.mock('@/lib/server/reminders', () => ({
 }));
 vi.mock('@/lib/server/cleanup', () => ({ sweepExpired: mocks.sweepExpired }));
 vi.mock('@/lib/server/digest', () => ({ sweepDigests: mocks.sweepDigests }));
+vi.mock('@/lib/server/cron-runtime', () => ({
+  claimCronSweep: mocks.claimCronSweep,
+  finishCronSweep: mocks.finishCronSweep,
+  logCronFailure: mocks.logCronFailure,
+  logCronSummary: mocks.logCronSummary,
+}));
 
 import { GET as runCascade } from './cascade/route';
 import { GET as runDigest } from './digest/route';
@@ -49,6 +59,8 @@ beforeEach(() => {
     liveLocationsDeleted: 8,
   });
   mocks.sweepDigests.mockResolvedValue(9);
+  mocks.claimCronSweep.mockResolvedValue(true);
+  mocks.finishCronSweep.mockResolvedValue(undefined);
 });
 
 afterEach(() => {
