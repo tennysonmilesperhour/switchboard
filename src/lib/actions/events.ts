@@ -583,8 +583,9 @@ export async function addPeopleToEvent(
   }
   if (!canAddInvitees(rows.length, toInsert.length)) {
     return {
-      ok: false,
-      error: `A plan can include up to ${MAX_INVITEES_PER_EVENT} people. Remove someone before adding more.`,
+      ...validation(
+        `A plan can include up to ${MAX_INVITEES_PER_EVENT} people. Remove someone before adding more.`,
+      ),
       skipped,
     };
   }
@@ -708,10 +709,7 @@ export async function inviteConnectionNow(
     return validation(`${name} is already on this plan.`);
   }
   if (!canAddInvitees(rows.length, 1)) {
-    return {
-      ok: false,
-      error: `A plan can include up to ${MAX_INVITEES_PER_EVENT} people.`,
-    };
+    return validation(`A plan can include up to ${MAX_INVITEES_PER_EVENT} people.`);
   }
 
   // Same reasoning as resendInvite: don't send into a full plan.

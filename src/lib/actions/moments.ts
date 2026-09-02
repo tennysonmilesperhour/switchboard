@@ -106,6 +106,11 @@ type CandidateAuthorization =
     }
   | { ok: false; result: MomentActionResult };
 
+function rejectCandidate(result: MomentActionResult): CandidateAuthorization {
+  const rejection = { ok: false as const, result };
+  return rejection;
+}
+
 /**
  * Revalidate an anonymous candidate without ever returning its owner id to the
  * browser. The caller's session RPC proves the moment is still discoverable
@@ -121,22 +126,21 @@ async function authorizeMomentCandidate(
     { p_place: mine.place_name },
   );
   if (visibleError) {
-    return {
-      ok: false,
-      result: await reportAndFail(
+    return rejectCandidate(
+      await reportAndFail(
         'SB-MOMENT-SAVE',
         'moment.candidate',
         visibleError,
         { momentId: mine.id },
         'Could not verify this shared moment. Refresh and try again.',
       ),
-    };
+    );
   }
   const isVisible = ((visible ?? []) as Array<{ id: string }>).some(
     (candidate) => candidate.id === otherMomentId,
   );
   if (!isVisible) {
-    return { ok: false, result: failure('SB-MOMENT-ACCESS') };
+    return rejectCandidate(failure('SB-MOMENT-ACCESS'));
   }
 
   const admin = createAdminClient();
@@ -148,19 +152,18 @@ async function authorizeMomentCandidate(
     .gt('available_until', new Date().toISOString())
     .maybeSingle<{ user_id: string; place_name: string }>();
   if (otherError) {
-    return {
-      ok: false,
-      result: await reportAndFail(
+    return rejectCandidate(
+      await reportAndFail(
         'SB-MOMENT-SAVE',
         'moment.candidate',
         otherError,
         { momentId: mine.id },
         'Could not verify this shared moment. Refresh and try again.',
       ),
-    };
+    );
   }
   if (!other || other.user_id === mine.user.id) {
-    return { ok: false, result: failure('SB-MOMENT-ACCESS') };
+    return rejectCandidate(failure('SB-MOMENT-ACCESS'));
   }
 
   // Explicit action-time recheck. The discovery RPC already filters blocks,
@@ -171,19 +174,18 @@ async function authorizeMomentCandidate(
     { p_user_a: mine.user.id, p_user_b: other.user_id },
   );
   if (blockError) {
-    return {
-      ok: false,
-      result: await reportAndFail(
+    return rejectCandidate(
+      await reportAndFail(
         'SB-MOMENT-SAVE',
         'moment.candidate',
         blockError,
         { momentId: mine.id },
         'Could not verify this shared moment. Refresh and try again.',
       ),
-    };
+    );
   }
   if (blocked) {
-    return { ok: false, result: failure('SB-MOMENT-ACCESS') };
+    return rejectCandidate(failure('SB-MOMENT-ACCESS'));
   }
 
   return { ok: true, admin, other };

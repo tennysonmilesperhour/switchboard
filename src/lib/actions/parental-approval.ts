@@ -174,7 +174,7 @@ export async function resendParentalApproval(
   const guardianEmail = input.guardianEmail.trim().toLowerCase();
   const guardianName = input.guardianName?.trim() || null;
   if (!looksLikeEmail(guardianEmail)) {
-    return { ok: false, error: 'Enter a valid email address for the guardian.' };
+    return validation('Enter a valid email address for the guardian.');
   }
 
   const manager = await checkEventManager(user.id, input.eventId);

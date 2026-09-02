@@ -562,11 +562,6 @@ const REGISTRY = {
     fix: 'Reload the queue and try again.',
     actor: 'reader',
   },
-  'SB-MOMENT-SAVE': {
-    message: 'That moment didn’t save.',
-    fix: 'Try again.',
-    actor: 'reader',
-  },
   'SB-MOMENT-CHAT': {
     message: 'Switchboard couldn’t open that moment chat.',
     fix: 'Reload and try again while the moment is still live.',
