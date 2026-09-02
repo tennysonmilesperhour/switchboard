@@ -419,24 +419,24 @@ Target: this quarter. These are the product and structure decisions.
 
 ### 20. One catalogue, honest docs
 
-- [ ] `src/lib/features.ts` is the only list of what ships. README's feature
+- [x] (PR #180) `src/lib/features.ts` is the only list of what ships. README's feature
   table becomes a pointer; `docs/INNOVATIONS.md` drops the seven ideas that
   are built (Run it back, co-hosts, split the bill, heatmap, calendar sync,
   sabbatical, boards) and its "none are built yet" line;
   `public/scope-verification.js` and `/scope-verification` leave the app
   bundle (move the checklist to `docs/archive/`).
-- [ ] Fix the five docket contradictions named in the audit §8 (geolocation,
+- [x] (PR #180) Fix the five docket contradictions named in the audit §8 (geolocation,
   live people on the map, Google free/busy, the plan-parser fallback,
   `suggest_deadline`). Delete the stale "Needs Docker" line. Archive
   `WEEKLY-PLAN-2026-08-11.md` with a banner. Index `POSTHOG_SOURCEMAPS.md`.
-  Move `AUDIT-2026-09-01.md` and this file to `archive/` once every box here
-  is ticked.
-- [ ] Resolve the five `docs/NAMING.md` decide rows in one PR: Explore on the
+- [ ] Final closeout: move `AUDIT-2026-09-01.md` and this file to `archive/`
+  once every box in this plan is ticked.
+- [x] (PR #180) Resolve the five `docs/NAMING.md` decide rows in one PR: Explore on the
   Home tile (`page.tsx:442`); short `metadata.title` for Mutual, Zones,
   Moments; one name for the create button; "invite link" everywhere;
   "Serendipity" only on first introduction. Replace "event" with "plan" and
   "cascade" with plain words in the strings the audit lists.
-- [ ] Remove `/design` from the bundle (it 404s in production). Remove the
+- [x] (PR #180) Remove `/design` from the bundle (it 404s in production). Remove the
   `migrate:legacy-media` and `backfill:guest-invites` npm scripts and move the
   scripts to `scripts/archive/`. Move `leaflet` to `dependencies`. Add
   `tsconfig.tsbuildinfo` to `.gitignore`.
