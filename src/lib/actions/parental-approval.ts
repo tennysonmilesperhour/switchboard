@@ -3,7 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { requireUser } from '@/lib/server/require-user';
-import { checkEventManager, isEventManager } from '@/lib/server/authz';
+import { checkEventManager } from '@/lib/server/authz';
 import { advanceEventCascade } from '@/lib/server/cascade-runner';
 import { notifyUsers } from '@/lib/server/notify';
 import { reportAndFail, reportOperationalError } from '@/lib/server/observability';
@@ -407,33 +407,4 @@ async function eventIdForApprovalToken(
     .eq('token', token)
     .maybeSingle<{ event_id: string }>();
   return data?.event_id ?? null;
-}
-export async function toggleParentalApproval(
-  eventId: string,
-  enabled: boolean,
-): Promise<ActionResult> {
-  const auth = await requireUser();
-  if (!auth.ok) return auth;
-  const { user } = auth;
-  if (!(await isEventManager(user.id, eventId))) {
-    return failure('SB-PERM-HOST', 'Only the host can change this.');
-  }
-
-  const admin = createAdminClient();
-  const { error } = await admin
-    .from('events')
-    .update({ parental_approval: enabled })
-    .eq('id', eventId);
-  if (error) {
-    return reportAndFail(
-      'SB-PLAN-SAVE',
-      'event-update',
-      error,
-      { eventId },
-      'Could not update parental approval. Try again.',
-    );
-  }
-
-  revalidatePath(`/events/${eventId}`);
-  return { ok: true };
 }
