@@ -75,6 +75,8 @@ const NOT_INDEXED: Record<string, string> = {
   u: 'someone else’s public profile; reached by handle',
   terms: 'covered by the “Privacy, terms, and copyright” entry',
   copyright: 'covered by the “Privacy, terms, and copyright” entry',
+  'sms-compliance':
+    'public page for the carrier’s A2P 10DLC reviewer, linked from the sitemap; not a feature people use',
   moderation: 'operator screen, gated to appointed moderators',
   api: 'not a page',
   auth: 'not a page',
