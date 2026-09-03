@@ -120,12 +120,40 @@ export async function resolveProfileByContact(
   supabase: Awaited<ReturnType<typeof createClient>>,
   identifier: string,
 ): Promise<{ id: string; name: string } | null> {
-  const { data } = await supabase
+  const { data, error } = await supabase
     .rpc('resolve_profile_contact', { p_identifier: identifier })
     .maybeSingle<{ id: string; display_name: string | null; handle: string | null }>();
+  if (error && isContactMatchRateLimit(error)) throw new ContactMatchRateLimitError();
   if (!data?.id) return null;
   return { id: data.id, name: data.display_name ?? data.handle ?? 'Friend' };
 }
+
+/**
+ * The database throttle on `resolve_profile_contact` raises once a person has
+ * spent their hourly email/phone lookups, rather than returning "no match",
+ * so a host is told to wait instead of watching friends become unlinked
+ * guests. Callers that resolve several identifiers catch this once and turn it
+ * into `SB-RATE-LIMIT`.
+ */
+export class ContactMatchRateLimitError extends Error {
+  constructor() {
+    super('contact-match rate limit');
+    this.name = 'ContactMatchRateLimitError';
+  }
+}
+
+export function isContactMatchRateLimit(error: unknown): boolean {
+  if (error instanceof ContactMatchRateLimitError) return true;
+  if (!error || typeof error !== 'object') return false;
+  const { message, hint } = error as { message?: unknown; hint?: unknown };
+  return (
+    hint === 'SB-RATE-LIMIT' ||
+    (typeof message === 'string' && message.includes('contact-match rate limit'))
+  );
+}
+
+export const CONTACT_MATCH_LIMIT_MESSAGE =
+  'You looked up a lot of contacts in a short time. Wait a few minutes, or add people by @handle.';
 
 export async function resolveInvitees(
   supabase: Awaited<ReturnType<typeof createClient>>,

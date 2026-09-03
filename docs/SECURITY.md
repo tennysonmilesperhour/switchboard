@@ -242,11 +242,16 @@ response regardless of whether the account exists (no user enumeration).
   threshold (20 sign-ins per 10 minutes; 10 sign-ups per hour) gets a 750 ms
   backoff, not a denial. A stranger who knows an email or handle must never be
   able to lock that account out remotely.
-- **Contact matching is limited at the database boundary.**
-  `resolve_profile_contact` consumes an authenticated-user bucket of 10 calls
-  per hour inside the private function body. The action-level limiter is useful
-  defense in depth, but it is not the security boundary because future callers
-  could otherwise omit it.
+- **Contact matching is limited at the database boundary, and says so.**
+  `resolve_profile_contact` consumes an authenticated-user bucket of 10 email
+  or phone lookups per hour inside the private function body; on exhaustion it
+  raises (`P0001`, hint `SB-RATE-LIMIT`) rather than returning no rows, so a
+  throttled host is told to wait instead of watching friends silently become
+  unlinked guests (`20260903120000_contact_match_throttle_signal.sql`). A
+  handle-shaped identifier does not spend the bucket: handles are public at
+  `/u/<handle>`, so a handle lookup reveals nothing the bucket protects. The
+  action-level limiter is useful defense in depth, but it is not the security
+  boundary because future callers could otherwise omit it.
 - **Recovery trusts proof of ownership, not editable profile text.** Reset and
   confirmation resend resolve an email sign-up from `auth.users.email`; a
   username account may recover only through a verified `profile_contacts`

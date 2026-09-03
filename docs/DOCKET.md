@@ -142,6 +142,20 @@ reader can redo it in one command rather than trust this file.
 
 Code can't close these; they need the owner or a dashboard:
 
+- **Production is stale (found 2026-09-03).** switchboardsocial.me still serves
+  the Sept 1 build (#159) while its database carries every migration through
+  #184. #161 disabled Vercel's automatic `main` deploys and the deploy hook that
+  replaced them was never created, so nothing has shipped since. The old build
+  calls `are_blocked`/`are_connected` through the user client, which #172
+  revoked: adding people to a plan and matchmaker suggestions fail in
+  production today. Do a manual production deploy of `main` from the Vercel
+  dashboard now, then finish the deploy-hook item below so it cannot recur.
+- **GitHub Actions is not starting runners (since 2026-09-03 04:35 UTC).**
+  Every job on every workflow fails two seconds after creation with no runner
+  assigned and zero billable time, on `main` and on PRs, with unchanged
+  workflow files. That is the account's Actions spending limit or included
+  minutes, the same failure the audit found for late August. Until it clears,
+  no PR gets a real CI result and the migration deploy job cannot run.
 - **Production deploy gate**: create the Vercel `production-after-schema`
   deploy hook for `main`, save its URL as the GitHub production-environment
   secret `VERCEL_DEPLOY_HOOK_URL`, and confirm Vercel's normal Git production
@@ -244,6 +258,47 @@ Code can't close these; they need the owner or a dashboard:
   run.
 - Legal copy sign-off; run `supabase test db` + the `E2E_DB=1` suite once
   against a disposable project before any release.
+
+### 🛠️ Follow-ups from the 2026-09-03 post-merge review
+
+Fifteen remediation PRs were auto-merged before review. #184 and its
+follow-up fixed what had a single right answer. These need a product call,
+with the recommendation each time:
+
+- **"Put the best times on the poll" has no host override.**
+  `recommendAvailability` only returns `ready` when every eligible person has
+  answered, and `proposeBestAvailability` refuses anything else, so one
+  invitee who never opens the plan blocks the host for good. Recommend: let the
+  host proceed from `provisional` once at least two people have answered, with
+  the "Best so far, N of M answered" line shown on the confirm step, and keep
+  `no_overlap` as the only hard refusal.
+- **Offline is only the service worker's navigation fallback.** A loaded app
+  that loses its connection shows the generic error page on the next tab tap.
+  Recommend: an `online`/`offline` listener in the shell that shows a small
+  banner and retries the failed navigation on `online`, plus treating a failed
+  RSC fetch as offline when `navigator.onLine` is false.
+- **Contact-match limits are sized for enumeration, not for use.** Ten email
+  or phone lookups an hour is right for the database oracle, but
+  `resolveContactMatches` walks every identifier of every imported contact
+  through it, so a 20-person import exhausts the bucket on the first try (its
+  own action-level gate returns an empty list at the same threshold). Recommend:
+  keep the per-lookup oracle limit, but dedupe identifiers and let the import
+  path run under the service-role client after its own authorization, metered
+  per import rather than per identifier.
+- **The deploy gate is not chained to CI.** `deploy-migrations.yml` runs in
+  parallel with `ci.yml` and `db-tests.yml`, so a red unit test or pgTAP on
+  `main` does not stop a migration from applying, and the deploy hook builds
+  whatever `main` points at when it fires rather than the verified commit.
+  Recommend: trigger it with `workflow_run` on both, conditioned on success,
+  and pass the verified SHA to the hook (Vercel deploy hooks accept a branch
+  only, so a job-level check that `main` still equals the verified SHA before
+  the hook call is the practical form). The dry-run parity step also swallows
+  CLI failure (`|| true`); make it fail closed.
+- **Guardian approval co-host scope.** `invite_authorization.sql` and the
+  matching TypeScript check test host↔invitee blocks only; a co-host adding
+  someone who blocked the co-host passes. Consistent, but narrower than the
+  "blocked profiles cannot be invited" claim. Recommend: check the acting
+  manager as well as the host.
 
 ### 💭 Deferred epics still parked (from the archived strategy docs)
 

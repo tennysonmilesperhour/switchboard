@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { createClient, getRenderUser } from '@/lib/supabase/server';
+import { pendingInvitesInOrder } from '@/lib/home-focus';
 import { AppShell } from '@/components/shell/AppShell';
 import { Card, SectionHeader } from '@/components/ui/Card';
 import { Avatar } from '@/components/ui/Avatar';
@@ -95,6 +96,8 @@ export default async function HomePage() {
   ]);
 
   const hasConnections = (friendCount ?? 0) > 0;
+  // Only invitations a person can still act on, soonest first.
+  const waitingOnYou = pendingInvitesInOrder(pendingInvites, new Date(nowIso));
   const defaultSignalCircleId = resolveDefaultSignalCircle(
     (circles ?? []).map((circle) => circle.id),
     typeof rememberedSignalCircle === 'string' ? rememberedSignalCircle : null,
@@ -209,15 +212,13 @@ export default async function HomePage() {
         {/* Invitations are the only time-sensitive thing on Home. Keep them
             directly below the greeting so a 390px viewport never buries the
             response behind discovery or setup UI. */}
-        {(pendingInvites?.length ?? 0) > 0 && (
+        {waitingOnYou.length > 0 && (
           <section>
             <SectionHeader title="Waiting on you 💌" />
             <div className="space-y-2">
-              {(pendingInvites ?? []).map((invite) => {
-                const event = Array.isArray(invite.event) ? invite.event[0] : invite.event;
-                if (!event) return null;
+              {waitingOnYou.map(({ id, event }) => {
                 return (
-                  <Link key={invite.id} href={`/events/${event.id}`} className="block group">
+                  <Link key={id} href={`/events/${event.id}`} className="block group">
                     <Card tone="gold" className="group-hover:shadow-lift transition-shadow">
                       <p className="font-medium">{event.title}</p>
                       <p className="text-xs text-ink-soft mt-0.5">

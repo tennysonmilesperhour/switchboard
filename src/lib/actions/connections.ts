@@ -1,6 +1,11 @@
 'use server';
 
 import { failure, validation, type ErrorCode } from '@/lib/errors';
+import {
+  ContactMatchRateLimitError,
+  CONTACT_MATCH_LIMIT_MESSAGE,
+  isContactMatchRateLimit,
+} from '@/lib/actions/event-action-shared';
 
 import { revalidatePath } from 'next/cache';
 import type { createClient } from '@/lib/supabase/server';
@@ -51,9 +56,10 @@ async function resolveProfile(
   supabase: Awaited<ReturnType<typeof createClient>>,
   identifier: string,
 ) {
-  const { data } = await supabase
+  const { data, error } = await supabase
     .rpc('resolve_profile_contact', { p_identifier: identifier })
     .maybeSingle();
+  if (error && isContactMatchRateLimit(error)) throw new ContactMatchRateLimitError();
   return data ?? null;
 }
 
@@ -129,7 +135,13 @@ export async function sendConnectionRequest(identifier: string): Promise<Connect
 
   const cleaned = identifier.trim();
   if (!cleaned) return validation('Enter a handle, email, or phone number.');
-  const target = await resolveProfile(supabase, cleaned);
+  let target: Awaited<ReturnType<typeof resolveProfile>>;
+  try {
+    target = await resolveProfile(supabase, cleaned);
+  } catch (error) {
+    if (!isContactMatchRateLimit(error)) throw error;
+    return failure('SB-RATE-LIMIT', CONTACT_MATCH_LIMIT_MESSAGE);
+  }
   if (!target) {
     // Not "no such person". A handle always matches; an email or phone only
     // matches once its owner has verified it (resolve_profile_contact), which
@@ -265,12 +277,22 @@ export async function resolveContactMatches(
   }));
 
   const rows: ContactMatch[] = [];
+  let throttled = false;
   for (const contact of cleanedContacts) {
     const identifiers = [...contact.emails, ...contact.phones];
     let resolved: Awaited<ReturnType<typeof resolveProfile>> = null;
     let matchedIdentifier = identifiers[0] ?? '';
     for (const identifier of identifiers) {
-      resolved = await resolveProfile(supabase, identifier);
+      if (throttled) break;
+      try {
+        resolved = await resolveProfile(supabase, identifier);
+      } catch (error) {
+        if (!isContactMatchRateLimit(error)) throw error;
+        // The database bucket is spent: stop asking, and let the rest of the
+        // list come back unmatched rather than fail the whole import.
+        throttled = true;
+        break;
+      }
       if (resolved) {
         matchedIdentifier = identifier;
         break;

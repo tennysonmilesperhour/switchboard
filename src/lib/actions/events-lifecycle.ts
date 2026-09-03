@@ -37,6 +37,8 @@ import {
   deliveryWarning,
   persistEventCoordinates,
   resolveInvitees,
+  isContactMatchRateLimit,
+  CONTACT_MATCH_LIMIT_MESSAGE,
   type CreateEventInput,
   type CreateEventResult,
   type UpdateEventInput,
@@ -85,7 +87,13 @@ export async function createEvent(input: CreateEventInput): Promise<CreateEventR
     }
   }
 
-  const invitees = await resolveInvitees(supabase, input.invitees);
+  let invitees: typeof input.invitees;
+  try {
+    invitees = await resolveInvitees(supabase, input.invitees);
+  } catch (error) {
+    if (!isContactMatchRateLimit(error)) throw error;
+    return failure('SB-RATE-LIMIT', CONTACT_MATCH_LIMIT_MESSAGE);
+  }
 
   // Both land in an `href`/`src` on pages guests open, including the public
   // invitation links — so they get the same scheme check `updateEvent` applies,
