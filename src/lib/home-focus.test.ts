@@ -11,8 +11,8 @@ describe('focused Home hierarchy', () => {
     const landmarks = [
       '<Greeting',
       'title="Waiting on you',
-      'Plan feed - the heart of Home',
-      'Exactly one guidance card',
+      'aria-label="Your plans"',
+      '<PassportCard',
       '<PillarRow',
     ].map((needle) => home.indexOf(needle));
 

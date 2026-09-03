@@ -519,7 +519,7 @@ describe('the wallpaper scrim', () => {
         }
       }
     }
-  }, 15_000);
+  }, 30_000); // exhaustive palette sweep; ~6s on a slow CI runner
 
   it('honours a strength below the ceiling rather than always maximising', () => {
     const base = {

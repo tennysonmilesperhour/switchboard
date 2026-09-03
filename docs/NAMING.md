@@ -41,7 +41,7 @@ Drawn from what shipped, so new names inherit the same voice:
 | Name | Where it appears | Legacy / alternates | Decision |
 |---|---|---|---|
 | Home | Bottom bar tab 1, `/` | — | keep |
-| Explore | Bottom bar tab 2, Home tile, and page heading; routes to `/discover` | "Discover" (internal route name) | rename → **Explore** everywhere user-facing. The route stays `/discover`; it is implementation detail. |
+| Explore | Bottom bar tab 2 and page heading; routes to `/discover` (the Home tile that also said Discover was removed with the quick-action grid in #177) | "Discover" (internal route name) | rename → **Explore** everywhere user-facing. The route stays `/discover`; it is implementation detail. |
 | (create FAB) | Bottom bar center, `/create`, and generic create calls to action | "New plan", "Create a plan", "Make a plan" | rename → **Start something**. It covers all three doors: a plan you have, one to figure out, or ideas to browse. Specific wizard headings may still say “New plan.” |
 | Calendar | Bottom bar tab 4, `/plans` | "Plans", "Coming up" | keep — "Calendar" as the tab, "Coming up" as the section inside it, is working |
 | More | Bottom bar tab 5 (sheet) | — | keep |

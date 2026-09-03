@@ -220,7 +220,7 @@ export function MutualClient({
           <EmptyState
             emoji="☺"
             title="No connections yet"
-            body="Mutual is a private, two-sided signal: choose a friend and something you would enjoy doing, and neither person hears a thing unless they independently choose the same thing. Add a connection first, then come back when there is someone to choose."
+            body="Mutual is a private, two-sided signal: pick a friend and something you would enjoy doing together, and neither of you hears a word unless you both pick the same one. Add a connection first, then come back when there is someone to choose."
             action={
               <Link
                 href="/people"
