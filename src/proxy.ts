@@ -17,6 +17,7 @@ const PUBLIC_PREFIXES = [
   '/reset-password',
   '/privacy',
   '/terms',
+  '/sms-compliance',
   '/community',
   '/copyright',
   '/auth',
