@@ -92,6 +92,14 @@ describe('web-push failure observability', () => {
 
     await sendPushToUsers(['user-1'], { title: 'Hello', body: 'World' });
 
+    expect(mocks.sendNotification).toHaveBeenCalledWith(
+      {
+        endpoint: 'https://push.example.test/one',
+        keys: { p256dh: 'key', auth: 'secret' },
+      },
+      JSON.stringify({ title: 'Hello', body: 'World' }),
+      { timeout: 10_000 },
+    );
     expect(mocks.reportOperationalError).toHaveBeenCalledWith(
       'push.send',
       error,

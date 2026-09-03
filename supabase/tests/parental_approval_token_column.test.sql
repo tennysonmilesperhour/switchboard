@@ -2,7 +2,17 @@
 -- co-host who could SELECT it could approve a minor's RSVP as the guardian.
 
 begin;
-select plan(5);
+select plan(7);
+
+select ok(
+  not has_table_privilege('authenticated', 'public.parental_approvals', 'SELECT'),
+  'authenticated has no table-wide SELECT that bypasses the column allowlist'
+);
+
+select ok(
+  not has_table_privilege('anon', 'public.parental_approvals', 'SELECT'),
+  'anon has no table-wide SELECT that bypasses the column allowlist'
+);
 
 select ok(
   not has_column_privilege('authenticated', 'public.parental_approvals', 'token', 'SELECT'),
