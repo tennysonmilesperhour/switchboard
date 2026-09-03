@@ -525,8 +525,9 @@ profile:
 - **Blocks close discovery in both directions.** `find_shared_moments` applies
   `are_blocked(auth.uid(), candidate.user_id)`, so either person's block removes
   the pair for both callers. Curiosity and acceptance re-run the same discovery
-  check and an explicit block check immediately before any service-role write
-  or notification.
+  check and an explicit block check before any service-role write or
+  notification. That check goes through `is_blocked_with`, the caller-bound
+  wrapper; the two-id `are_blocked` is service-role only.
 - **Safety does not require identity disclosure.** Block/report buttons on an
   unrevealed card send only the caller's and candidate's moment ids to a server
   action. The action proves the caller owns a live moment, revalidates that the

@@ -42,7 +42,7 @@ function arrangePair(blocked = true) {
     if (name === 'find_shared_moments') {
       return { data: [{ id: 'moment-other' }], error: null };
     }
-    if (name === 'are_blocked') return { data: blocked, error: null };
+    if (name === 'is_blocked_with') return { data: blocked, error: null };
     return { data: null, error: null };
   });
   const supabase = {
@@ -83,9 +83,8 @@ describe('Moments block recheck', () => {
     const result = await action('moment-mine', 'moment-other');
 
     expect(result).toMatchObject({ ok: false, code: 'SB-MOMENT-ACCESS' });
-    expect(rpc).toHaveBeenCalledWith('are_blocked', {
-      p_user_a: 'user-mine',
-      p_user_b: 'user-other',
+    expect(rpc).toHaveBeenCalledWith('is_blocked_with', {
+      p_other: 'user-other',
     });
     // Resolving the candidate for the check is allowed; no interest write and
     // no notification may happen after that check says the pair is blocked.
