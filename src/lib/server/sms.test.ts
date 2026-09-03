@@ -23,6 +23,7 @@ afterEach(() => {
   delete process.env.TWILIO_ACCOUNT_SID;
   delete process.env.TWILIO_AUTH_TOKEN;
   delete process.env.TWILIO_FROM_NUMBER;
+  delete process.env.TWILIO_MESSAGING_SERVICE_SID;
 });
 
 beforeEach(() => {
@@ -69,6 +70,29 @@ describe('sendSmsWithResult', () => {
     );
     const form = new URLSearchParams(init.body as string);
     expect(form.get('From')).toBe('+15555550199');
+    expect(form.get('To')).toBe('+15555550100');
+    expect(form.get('Body')).toBe('Hello');
+  });
+
+  test('uses the approved Messaging Service when one is configured', async () => {
+    process.env.TWILIO_ACCOUNT_SID = 'ACtest';
+    process.env.TWILIO_AUTH_TOKEN = 'test-auth-token';
+    process.env.TWILIO_FROM_NUMBER = '+15555550199';
+    process.env.TWILIO_MESSAGING_SERVICE_SID = 'MGtest';
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ sid: 'SM123' }), { status: 201 }),
+    ));
+
+    await expect(sendSmsWithResult({ to: '+1 555 555 0100', body: 'Hello' })).resolves.toEqual({
+      status: 'sent',
+      provider: 'twilio',
+      providerMessageId: 'SM123',
+    });
+
+    const [, init] = (fetch as unknown as ReturnType<typeof vi.fn>).mock.calls[0];
+    const form = new URLSearchParams(init.body as string);
+    expect(form.get('MessagingServiceSid')).toBe('MGtest');
+    expect(form.get('From')).toBeNull();
     expect(form.get('To')).toBe('+15555550100');
     expect(form.get('Body')).toBe('Hello');
   });

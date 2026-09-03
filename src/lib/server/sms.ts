@@ -18,7 +18,10 @@ export function smsEnabled(): boolean {
   return Boolean(
     process.env.TWILIO_ACCOUNT_SID
       && process.env.TWILIO_AUTH_TOKEN
-      && process.env.TWILIO_FROM_NUMBER,
+      && (
+        process.env.TWILIO_MESSAGING_SERVICE_SID
+        || process.env.TWILIO_FROM_NUMBER
+      ),
   );
 }
 
@@ -51,13 +54,18 @@ export async function sendSmsWithResult(
 
   const accountSid = process.env.TWILIO_ACCOUNT_SID as string;
   const authToken = process.env.TWILIO_AUTH_TOKEN as string;
-  const from = normalizePhoneNumber(process.env.TWILIO_FROM_NUMBER) as string;
+  const messagingServiceSid = process.env.TWILIO_MESSAGING_SERVICE_SID?.trim();
+  const from = normalizePhoneNumber(process.env.TWILIO_FROM_NUMBER);
   const authorization = Buffer.from(`${accountSid}:${authToken}`).toString('base64');
   const form = new URLSearchParams({
-    From: from,
     To: to,
     Body: message.body,
   });
+  if (messagingServiceSid) {
+    form.set('MessagingServiceSid', messagingServiceSid);
+  } else if (from) {
+    form.set('From', from);
+  }
 
   const signal = AbortSignal.timeout(PROVIDER_TIMEOUT_MS);
   try {
