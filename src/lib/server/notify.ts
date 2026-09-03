@@ -1,6 +1,7 @@
 import 'server-only';
 
 import webPush from 'web-push';
+import { mapInBatches } from '@/lib/server/batches';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { reportOperationalError } from '@/lib/server/observability';
 import {
@@ -8,6 +9,11 @@ import {
   columnForCategory,
   type NotificationCategory,
 } from '@/lib/notifications';
+
+/** Per-endpoint ceiling for a push delivery; web-push aborts the request past it. */
+const WEB_PUSH_TIMEOUT_MS = 10_000;
+/** Concurrent push deliveries in flight; the same shape as the email fan-out. */
+const WEB_PUSH_BATCH_SIZE = 10;
 
 export interface PushPayload {
   title: string;
@@ -407,8 +413,11 @@ export async function sendPushToUsers(
     .select('id, endpoint, p256dh, auth')
     .in('user_id', awake);
 
-  await Promise.all(
-    (subs ?? []).map(async (sub) => {
+  // Push endpoints are third-party servers: bound the fan-out like every
+  // other provider call so one hung endpoint cannot pin a cron sweep.
+  await mapInBatches(
+    subs ?? [],
+    async (sub) => {
       try {
         await webPush.sendNotification(
           {
@@ -416,6 +425,7 @@ export async function sendPushToUsers(
             keys: { p256dh: sub.p256dh, auth: sub.auth },
           },
           JSON.stringify(payload),
+          { timeout: WEB_PUSH_TIMEOUT_MS },
         );
       } catch (error: unknown) {
         const statusCode = (error as { statusCode?: number }).statusCode;
@@ -428,6 +438,7 @@ export async function sendPushToUsers(
           statusCode: statusCode ?? null,
         });
       }
-    }),
+    },
+    WEB_PUSH_BATCH_SIZE,
   );
 }

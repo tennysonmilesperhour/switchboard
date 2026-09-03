@@ -48,6 +48,7 @@ vi.mock('@/lib/server/observability', () => ({
 
 import {
   requestParentalApproval,
+  resendParentalApproval,
   resolveParentalApproval,
 } from './parental-approval';
 
@@ -191,6 +192,54 @@ describe('parental approval actions', () => {
       3600,
     );
     expect(mocks.createAdminClient).not.toHaveBeenCalled();
+  });
+
+  it('rotates the guardian token on resend so the mis-addressed link dies', async () => {
+    mocks.requireUser.mockResolvedValue({
+      ok: true,
+      user: { id: 'host-1' },
+      supabase: sessionClient({ invite: null }),
+    });
+    mocks.checkEventManager.mockResolvedValue({ ok: true, isManager: true });
+
+    const updates: Array<Record<string, unknown>> = [];
+    const admin = {
+      from: vi.fn((table: string) => {
+        const builder = {
+          select: vi.fn(() => builder),
+          eq: vi.fn(() => builder),
+          update: vi.fn((payload: Record<string, unknown>) => {
+            updates.push(payload);
+            return builder;
+          }),
+          maybeSingle: vi.fn(async () => ({
+            data:
+              table === 'parental_approvals'
+                ? { id: 'approval-1', token: 'old-token' }
+                : { id: 'event-1', title: 'Youth plan', parental_approval: true },
+            error: null,
+          })),
+        };
+        return builder;
+      }),
+    };
+    mocks.createAdminClient.mockReturnValue(admin);
+
+    const result = await resendParentalApproval({
+      eventId: 'event-1',
+      inviteId: 'invite-1',
+      guardianEmail: 'guardian@example.com',
+      guardianName: 'Guardian',
+    });
+
+    expect(result.ok).toBe(true);
+    expect(updates).toHaveLength(1);
+    const token = updates[0].token;
+    expect(token).toMatch(/^[0-9a-f]{48}$/);
+    expect(token).not.toBe('old-token');
+    const sent = JSON.stringify(mocks.sendEmails.mock.calls);
+    expect(sent).toContain(`/approve/${token}`);
+    expect(sent).not.toContain('old-token');
   });
 
   it('maps an unknown approval token to the stable link error', async () => {

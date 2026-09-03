@@ -157,6 +157,9 @@ export async function requestContactVerification(
       .eq('user_id', user.id)
       .eq('kind', kind);
     if (delivery.status === 'not_configured') return failure('SB-CONFIG-SMS');
+    // A STOP on record is the reader's own choice, not a delivery fault: the
+    // route out is texting START, and "try again" would never succeed.
+    if (delivery.status === 'opted_out') return failure('SB-VERIFY-STOPPED');
     return reportAndFail(
       'SB-VERIFY-START',
       'contact.verify-start',

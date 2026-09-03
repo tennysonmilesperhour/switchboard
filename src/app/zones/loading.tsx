@@ -1,5 +1,5 @@
 import { PageSkeleton } from '@/components/shell/PageSkeleton';
 
 export default function Loading() {
-  return <PageSkeleton title="Zones" back="/moments" variant="list" />;
+  return <PageSkeleton title="Around" variant="list" />;
 }

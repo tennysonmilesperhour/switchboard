@@ -1,5 +1,6 @@
 'use server';
 
+import { randomBytes } from 'node:crypto';
 import { revalidatePath } from 'next/cache';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { requireUser } from '@/lib/server/require-user';
@@ -199,11 +200,11 @@ export async function resendParentalApproval(
     await Promise.all([
       admin
         .from('parental_approvals')
-        .select('id, token')
+        .select('id')
         .eq('event_id', input.eventId)
         .eq('invite_id', input.inviteId)
         .eq('status', 'pending')
-        .maybeSingle<{ id: string; token: string }>(),
+        .maybeSingle<{ id: string }>(),
       admin
         .from('events')
         .select('id, title, parental_approval')
@@ -230,9 +231,13 @@ export async function resendParentalApproval(
     );
   }
 
+  // Resend exists to correct a mistyped address, so the old link must stop
+  // working: whoever received the mis-addressed email holds the old token.
+  // Same shape as the column default (24 random bytes, hex).
+  const token = randomBytes(24).toString('hex');
   const { data: updated, error: updateError } = await admin
     .from('parental_approvals')
-    .update({ guardian_email: guardianEmail, guardian_name: guardianName })
+    .update({ guardian_email: guardianEmail, guardian_name: guardianName, token })
     .eq('id', approval.id)
     .eq('event_id', input.eventId)
     .eq('invite_id', input.inviteId)
@@ -254,7 +259,7 @@ export async function resendParentalApproval(
     eventTitle: event.title,
     guardianEmail,
     guardianName,
-    token: approval.token,
+    token,
   });
 
   revalidatePath(`/events/${input.eventId}`);

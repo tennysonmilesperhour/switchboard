@@ -481,6 +481,11 @@ const REGISTRY = {
     fix: 'Check the address or number, then try again.',
     actor: 'reader',
   },
+  'SB-VERIFY-STOPPED': {
+    message: 'This number has texted STOP, so Switchboard cannot text it a code.',
+    fix: 'Text START to the Switchboard number, then request the code again.',
+    actor: 'reader',
+  },
   'SB-VERIFY-CHECK': {
     message: 'Switchboard couldn’t check that verification code.',
     fix: 'Request a new code and try again.',

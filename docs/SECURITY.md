@@ -391,7 +391,17 @@ host's recovery resend have different authority and must stay separate:
 - **A host may correct and resend, not impersonate the invitee path.**
   `resendParentalApproval` first proves the caller manages the exact plan, then
   scopes every service-role query and update to that plan, invite, and a
-  still-pending approval. Both paths are rate-limited per caller.
+  still-pending approval. Both paths are rate-limited per caller. A resend
+  rotates the token, so the mis-addressed link it exists to correct stops
+  working the moment the corrected one is sent.
+- **The token column is withheld from browser roles.**
+  `parental_approvals_host_read` lets a host see the guardian's name and
+  address, but the token is the guardian's decision, so
+  `20260903050000_parental_approval_token_column.sql` drops the table-level
+  SELECT and grants back every column except `token` (the `profiles` column
+  precedent). Every app read of the table goes through the service-role client
+  after its own authorization check; `parental_approval_token_column.test.sql`
+  proves the column stays out of reach.
 - **The resolver distrusts even privileged rows.** The token-addressed
   `resolve_parental_approval` function checks that the approval's `event_id`
   equals its invite's `event_id` before mutating either row. A mismatch returns
