@@ -7,7 +7,16 @@ const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000';
  * the session gate and intentionally excluded (see robots.ts).
  */
 export default function sitemap(): MetadataRoute.Sitemap {
-  const routes = ['', '/welcome', '/login', '/privacy', '/terms', '/community', '/copyright'];
+  const routes = [
+    '',
+    '/welcome',
+    '/login',
+    '/privacy',
+    '/terms',
+    '/sms-compliance',
+    '/community',
+    '/copyright',
+  ];
   return routes.map((route) => ({
     url: `${appUrl}${route || '/'}`,
     changeFrequency: 'monthly',
