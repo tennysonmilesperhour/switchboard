@@ -62,8 +62,11 @@ revoke insert, update, delete on public.event_availability_responses from anon, 
 -- `calendar_subscriptions` follows the same pattern: `ics_url` is a bearer
 -- credential, so 20260829140000_calendar_subscriptions.sql revokes the hosted
 -- table-wide default and grants back only the safe status columns. Keep both
--- column-allowlist carve-outs here. `sms_opt_outs` is omitted altogether: its
--- phone suppressions are never browser-readable.
+-- column-allowlist carve-outs here. `parental_approvals.token` is the guardian
+-- approval capability, so 20260903050000_parental_approval_token_column.sql
+-- likewise replaces table-wide SELECT with a safe column allowlist.
+-- `sms_opt_outs` is omitted altogether: its phone suppressions are never
+-- browser-readable.
 do $$
 declare
   relation record;
@@ -74,7 +77,12 @@ begin
       join pg_namespace n on n.oid = c.relnamespace
      where n.nspname = 'public'
        and c.relkind in ('r', 'p', 'v', 'm', 'f')
-       and c.relname not in ('profiles', 'calendar_subscriptions', 'sms_opt_outs')
+       and c.relname not in (
+         'profiles',
+         'calendar_subscriptions',
+         'parental_approvals',
+         'sms_opt_outs'
+       )
   loop
     execute format(
       'grant select on public.%I to anon, authenticated', relation.relname

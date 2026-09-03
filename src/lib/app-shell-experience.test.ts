@@ -58,8 +58,21 @@ describe('offline and overlay shell', () => {
     const darkSystem = css.match(
       /@media \(prefers-color-scheme: dark\)[\s\S]*?:root:not\(\[data-theme\]\) \{([\s\S]*?)\n  \}/,
     );
-    expect(darkSystem?.[1]).toContain('--color-paper: #1e1712');
-    expect(darkSystem?.[1]).toContain('--color-terracotta: #e8a24b');
+    expect(darkSystem?.[1]).toContain('color-scheme: dark');
+
+    // The system-dark block must be Dusk, declaration for declaration. #176
+    // hand-copied it from an older Dusk and silently undid the AA contrast
+    // work #167 had just done on the accent tokens; comparing against the
+    // Dusk block itself means a Dusk change can never leave this behind.
+    const dusk = css.match(/\[data-theme="dusk"\] \{\n([\s\S]*?)\n\}/);
+    const declarations = (block: string | undefined) =>
+      (block ?? '')
+        .split('\n')
+        .map((line) => line.trim())
+        .filter((line) => line.startsWith('--'))
+        .sort();
+    expect(declarations(darkSystem?.[1])).toEqual(declarations(dusk?.[1]));
+    expect(declarations(dusk?.[1]).length).toBeGreaterThan(20);
 
     const layout = read('src/app/layout.tsx');
     expect(layout).toContain('export async function generateViewport()');

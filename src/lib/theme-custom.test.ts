@@ -590,7 +590,7 @@ describe('the wallpaper scrim', () => {
         expect(plateVeil({ ...base, wallpaperStrength: strength })).toBe(atFull);
       }
     }
-  });
+  }, 30_000); // exhaustive palette sweep; ~6s on a slow CI runner
 
   it('treats a zero strength as no wallpaper at all', () => {
     const wallpaper =
