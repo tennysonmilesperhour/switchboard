@@ -24,6 +24,8 @@ import {
   HANDLE_PATTERN,
   deliveryWarning,
   resolveProfileByContact,
+  isContactMatchRateLimit,
+  CONTACT_MATCH_LIMIT_MESSAGE,
   type AddPeopleResult,
 } from '@/lib/actions/event-action-shared';
 
@@ -143,12 +145,18 @@ export async function addPeopleToEvent(
 
   // Resolve free-typed entries into members/guests.
   const parsedEntries = parseInviteEntries(input.entries ?? []);
-  const resolutions = await Promise.all(
-    parsedEntries.map(async (parsed) => ({
-      parsed,
-      resolved: await resolveAddition(supabase, parsed),
-    })),
-  );
+  let resolutions: Array<{ parsed: ParsedInviteEntry; resolved: ResolvedAddition | null }>;
+  try {
+    resolutions = await Promise.all(
+      parsedEntries.map(async (parsed) => ({
+        parsed,
+        resolved: await resolveAddition(supabase, parsed),
+      })),
+    );
+  } catch (error) {
+    if (!isContactMatchRateLimit(error)) throw error;
+    return failure('SB-RATE-LIMIT', CONTACT_MATCH_LIMIT_MESSAGE);
+  }
   let additions: ResolvedAddition[] = [];
   for (const { parsed, resolved } of resolutions) {
     if (!resolved) {

@@ -1,7 +1,7 @@
 -- Verified contact matching and host-only delivery evidence.
 
 begin;
-select plan(14);
+select plan(15);
 
 insert into auth.users (id, email) values
   ('10000000-0000-0000-0000-000000000001', 'contact-alice@example.com'),
@@ -99,11 +99,16 @@ select is(
   'contact matching permits the remainder of ten attempts in an hour'
 );
 
+select throws_ok(
+  $$ select * from public.resolve_profile_contact('mallory-contact@example.com') $$,
+  'P0001',
+  'contact-match rate limit',
+  'contact matching rejects the eleventh attempt at the database boundary, out loud'
+);
 select is(
-  (select count(*)::int
-   from public.resolve_profile_contact('mallory-contact@example.com')),
-  0,
-  'contact matching rejects the eleventh attempt at the database boundary'
+  (select id from public.resolve_profile_contact('@contact_mallory')),
+  '10000000-0000-0000-0000-000000000002'::uuid,
+  'a handle lookup is public and does not spend the contact-match bucket'
 );
 
 select set_config(
