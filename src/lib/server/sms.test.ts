@@ -108,8 +108,27 @@ describe('sendSmsWithResult', () => {
     await expect(sendSmsWithResult({ to: '+1 555 555 0100', body: 'Hello' })).resolves.toEqual({
       status: 'failed',
       provider: 'twilio',
-      errorCode: 'provider_error',
+      errorCode: 'twilio_30007',
     });
+  });
+
+  test.each([[21610, 'opted_out'], [30034, 'failed'], [20003, 'failed']])('preserves Twilio error %s without private body text', async (code, status) => {
+    process.env.TWILIO_ACCOUNT_SID = 'ACtest';
+    process.env.TWILIO_AUTH_TOKEN = 'test';
+    process.env.TWILIO_FROM_NUMBER = '+15555550199';
+    const log = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({ code, message: 'private recipient detail' }), { status: 400 })));
+    expect(await sendSmsWithResult({ to: '+15555550100', body: 'secret code' })).toEqual({ status, provider: 'twilio', errorCode: `twilio_${code}` });
+    expect(JSON.stringify(log.mock.calls)).not.toContain('private recipient');
+    expect(JSON.stringify(log.mock.calls)).not.toContain('secret code');
+  });
+
+  test('does not claim success for malformed provider success responses', async () => {
+    process.env.TWILIO_ACCOUNT_SID = 'ACtest';
+    process.env.TWILIO_AUTH_TOKEN = 'test';
+    process.env.TWILIO_FROM_NUMBER = '+15555550199';
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response('{}', { status: 201 })));
+    expect(await sendSmsWithResult({ to: '+15555550100', body: 'Hello' })).toMatchObject({ status: 'failed', errorCode: 'invalid_response' });
   });
 
   test('aborts a stalled provider at the configured timeout', async () => {

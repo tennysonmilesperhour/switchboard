@@ -16,11 +16,11 @@ export { looksLikePhoneNumber, normalizePhoneNumber };
 
 export function smsEnabled(): boolean {
   return Boolean(
-    process.env.TWILIO_ACCOUNT_SID
-      && process.env.TWILIO_AUTH_TOKEN
+    process.env.TWILIO_ACCOUNT_SID?.trim()
+      && process.env.TWILIO_AUTH_TOKEN?.trim()
       && (
-        process.env.TWILIO_MESSAGING_SERVICE_SID
-        || process.env.TWILIO_FROM_NUMBER
+        process.env.TWILIO_MESSAGING_SERVICE_SID?.trim()
+        || normalizePhoneNumber(process.env.TWILIO_FROM_NUMBER)
       ),
   );
 }
@@ -52,8 +52,8 @@ export async function sendSmsWithResult(
     };
   }
 
-  const accountSid = process.env.TWILIO_ACCOUNT_SID as string;
-  const authToken = process.env.TWILIO_AUTH_TOKEN as string;
+  const accountSid = process.env.TWILIO_ACCOUNT_SID!.trim();
+  const authToken = process.env.TWILIO_AUTH_TOKEN!.trim();
   const messagingServiceSid = process.env.TWILIO_MESSAGING_SERVICE_SID?.trim();
   const from = normalizePhoneNumber(process.env.TWILIO_FROM_NUMBER);
   const authorization = Buffer.from(`${accountSid}:${authToken}`).toString('base64');
@@ -81,19 +81,26 @@ export async function sendSmsWithResult(
         body: form.toString(),
       },
     );
-    if (!response.ok) {
-      console.error(`[sms:failed] provider returned ${response.status}`);
+    const body = await response.json().catch(() => null) as
+      | { sid?: unknown; code?: unknown; error_code?: unknown; status?: unknown }
+      | null;
+    // Preserve Twilio's diagnostic code, never its message (which may contain
+    // the recipient or other private data). HTTP 201 only means accepted.
+    const rawCode = body?.error_code ?? body?.code;
+    const providerCode = /^(?:[1-9]\d{3,5})$/.test(String(rawCode))
+      ? String(rawCode)
+      : null;
+    if (!response.ok || providerCode || body?.status === 'failed' || body?.status === 'undelivered') {
+      const errorCode = providerCode ? `twilio_${providerCode}` : `http_${response.status}`;
+      console.error('[sms:failed]', { httpStatus: response.status, errorCode });
       return {
-        status: 'failed',
+        status: providerCode === '21610' ? 'opted_out' : 'failed',
         provider: 'twilio',
-        errorCode: `http_${response.status}`,
+        errorCode,
       };
     }
-    const body = await response.json().catch(() => null) as
-      | { sid?: unknown; error_code?: unknown }
-      | null;
-    if (body?.error_code) {
-      return { status: 'failed', provider: 'twilio', errorCode: 'provider_error' };
+    if (typeof body?.sid !== 'string' || !body.sid.startsWith('SM')) {
+      return { status: 'failed', provider: 'twilio', errorCode: 'invalid_response' };
     }
     return {
       status: 'sent',

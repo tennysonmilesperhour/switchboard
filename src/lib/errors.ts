@@ -92,7 +92,7 @@ const REGISTRY = {
     actor: 'operator',
   },
   'SB-CONFIG-SMS': {
-    message: 'Text delivery isn’t configured, so invitations can’t be texted.',
+    message: 'Text delivery isn’t configured, so verification codes and invitations cannot be sent.',
     fix: null,
     actor: 'operator',
   },
@@ -473,6 +473,16 @@ const REGISTRY = {
   // SB-CONFIG-PUSH, which means the VAPID keys are missing.
   'SB-PUSH-SEND': {
     message: 'A push notification couldn’t be delivered.',
+    fix: null,
+    actor: 'operator',
+  },
+  'SB-VERIFY-CONFIG': {
+    message: 'Phone verification is unavailable because Switchboard’s text service needs setup.',
+    fix: null,
+    actor: 'operator',
+  },
+  'SB-VERIFY-DELIVERY': {
+    message: 'The text service could not send your verification code.',
     fix: null,
     actor: 'operator',
   },
