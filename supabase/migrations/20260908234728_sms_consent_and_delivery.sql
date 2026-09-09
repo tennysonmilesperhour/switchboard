@@ -124,7 +124,7 @@ returns boolean language plpgsql security definer set search_path='' as $$
 declare v_count integer;
 begin
  if p_status not in ('accepted','queued','sending_provider','sent','failed','undelivered','delivered') then return false; end if;
- update public.sms_jobs set status=p_status,provider_message_id=p_sid,error_code=p_error,body=null,updated_at=now()
+ update public.sms_jobs set status=p_status,provider_message_id=p_sid,error_code=nullif(p_error,''),body=null,updated_at=now()
  where id=p_id and phone=p_phone and (provider_message_id is null or provider_message_id=p_sid)
  and status in ('sending','unknown','accepted','queued','sending_provider','sent','failed','undelivered')
  and case status when 'sending' then 0 when 'unknown' then 0 when 'accepted' then 1 when 'queued' then 2 when 'sending_provider' then 3 when 'sent' then 4 else 5 end

@@ -20,7 +20,7 @@ export async function POST(request: Request) {
   if (!/^SM[0-9a-f]{32}$/.test(sid) || !(status in RANK) || ['sending','unknown'].includes(status)) return new Response('Invalid status', { status: 400 });
   const admin = createAdminClient();
   const code = form.get('ErrorCode');
-  const { data: changed, error } = await admin.rpc('record_sms_status', { p_id: id, p_sid: sid, p_phone: form.get('To') ?? '', p_status: status, p_error: code && /^\d{4,6}$/.test(code) ? `twilio_${code}` : null });
+  const { data: changed, error } = await admin.rpc('record_sms_status', { p_id: id, p_sid: sid, p_phone: form.get('To') ?? '', p_status: status, p_error: code && /^\d{4,6}$/.test(code) ? `twilio_${code}` : '' });
   if (!error && changed && ['failed','undelivered'].includes(status)) await reportOperationalError('sms.delivery', new Error('Carrier did not deliver SMS'), { jobId: id, status, errorCode: code && /^\d{4,6}$/.test(code) ? code : null });
   return new Response(null, { status: error ? 503 : 204 });
 }
