@@ -1,8 +1,6 @@
 import { createAdminClient } from '@/lib/supabase/admin';
 import { notifyUsers } from '@/lib/server/notify';
 import { appUrl, guestEmailHeaders, looksLikeEmail, sendEmails } from '@/lib/server/email';
-import { sendSmsMessages, looksLikePhoneNumber } from '@/lib/server/sms';
-import { inviteIdsSentBySms } from '@/lib/server/sms-opt-out';
 import { formatDateTime } from '@/lib/format';
 import type { SwitchboardEvent } from '@/lib/types';
 
@@ -77,11 +75,6 @@ async function remindOneEvent(
     .select('id, invitee_id, guest_name, guest_contact, guest_token, status')
     .eq('event_id', event.id);
   const rows = invites ?? [];
-  const textableGuests = rows.filter(
-    (invite) => !invite.invitee_id && looksLikePhoneNumber(invite.guest_contact),
-  );
-  const smsInviteIds = await inviteIdsSentBySms(textableGuests.map((invite) => invite.id));
-
   const accepted = rows.filter((i) => i.status === 'accepted');
   // In the plan's own zone — a reminder email/push has no viewer zone, so
   // without this it would announce the server's UTC time.
@@ -122,25 +115,10 @@ async function remindOneEvent(
       headers: guestEmailHeaders(),
     }));
 
-  // Guest attendees reachable by phone → the same reminder over SMS.
-  const attendeeTexts = accepted
-    .filter((i) => (
-      !i.invitee_id
-      && looksLikePhoneNumber(i.guest_contact)
-      && i.guest_token
-      && smsInviteIds.has(i.id)
-    ))
-    .map((i) => ({
-      to: i.guest_contact as string,
-      body:
-        `${event.title} is ${kind === 'soon' ? 'starting soon' : 'coming up'} - ${when}. ` +
-        (event.location_name ? `At ${event.location_name}. ` : '') +
-        `Details: ${appUrl(`/rsvp/${i.guest_token}`)}`,
-    }));
+  // Guest SMS is queued atomically when the reminder window is claimed.
 
   // On the day-before pass, gently nudge people still holding a live invite.
   let nudgeEmails: typeof attendeeEmails = [];
-  let nudgeTexts: typeof attendeeTexts = [];
   if (kind === 'day_before') {
     const pending = rows.filter((i) => i.status === 'sent');
     const pendingUsers = pending
@@ -165,26 +143,11 @@ async function remindOneEvent(
           `open, no pressure.\n\nRSVP: ${appUrl(`/rsvp/${i.guest_token}`)}\n\n- Switchboard`,
         headers: guestEmailHeaders(),
       }));
-    nudgeTexts = pending
-      .filter((i) => (
-        !i.invitee_id
-        && looksLikePhoneNumber(i.guest_contact)
-        && i.guest_token
-        && smsInviteIds.has(i.id)
-      ))
-      .map((i) => ({
-        to: i.guest_contact as string,
-        body:
-          `${event.title} is coming up - ${when}. Your invite is still open, ` +
-          `no pressure: ${appUrl(`/rsvp/${i.guest_token}`)}`,
-      }));
+
   }
 
   if (attendeeEmails.length + nudgeEmails.length > 0) {
     await sendEmails([...attendeeEmails, ...nudgeEmails]);
-  }
-  if (attendeeTexts.length + nudgeTexts.length > 0) {
-    await sendSmsMessages([...attendeeTexts, ...nudgeTexts].map(message => ({ ...message, category: 'reminders' as const })));
   }
   // The window was already marked (claimed) at the top of this function.
 }

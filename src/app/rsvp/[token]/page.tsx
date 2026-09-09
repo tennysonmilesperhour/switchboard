@@ -1,3 +1,5 @@
+import { canSubscribeGuestSms } from '@/lib/sms-commands';
+import { normalizePhoneNumber } from '@/lib/phone';
 import type { Metadata } from 'next';
 import { createAdminClient, hasAdminCredentials } from '@/lib/supabase/admin';
 import { getUser } from '@/lib/supabase/server';
@@ -94,7 +96,7 @@ export default async function GuestRsvpPage({
   const { data: event, error: eventError } = invite && admin
     ? await admin
         .from('events')
-        .select('title, description, location_name, location_address, starts_at, ends_at, time_zone, host_id, cover_url, wishlist_url')
+        .select('status, title, description, location_name, location_address, starts_at, ends_at, time_zone, host_id, cover_url, wishlist_url')
         .eq('id', invite.event_id)
         .maybeSingle()
     : { data: null, error: null };
@@ -137,6 +139,7 @@ export default async function GuestRsvpPage({
   // and a missing session must never break this public page — so treat an
   // unresolved viewer as logged-out.
   const user = await getUser().catch(() => null);
+  const smsNumber = normalizePhoneNumber(process.env.TWILIO_FROM_NUMBER);
   const hostName = host?.display_name ?? 'Your host';
   // Show the plan's local time, not the server's UTC. Falls back to the host's
   // profile zone for plans created before the zone was captured on the event.
@@ -201,6 +204,15 @@ export default async function GuestRsvpPage({
               description={event.description}
               wishlistUrl={event.wishlist_url}
             />
+            {smsNumber && !invite.invitee_id && ['sent', 'accepted'].includes(invite.status) && canSubscribeGuestSms(event.status, event.starts_at) && (
+              <section className="my-5 rounded-card border border-line p-4 space-y-2">
+                <h2 className="font-bold">Text updates for this invitation</h2>
+                <p className="text-sm text-ink-soft">No account needed for updates. Send the prepared JOIN message from your phone to agree to Switchboard texts about this invitation, including time/place changes, cancellations and reminders. This does not RSVP or subscribe you to other plans.</p>
+                <a className="inline-block underline font-semibold" href={`sms:${smsNumber}?body=${encodeURIComponent(`JOIN ${token}`)}`}>Subscribe by text</a>
+                <p className="text-xs text-ink-soft">Send JOIN {token} to {smsNumber}. Texts wait between 10pm and 8am in the plan’s timezone. Subscription ends with the plan or after 30 days. Message frequency varies. Msg & data rates may apply. Reply STOP to stop all texts or HELP for help. No marketing.</p>
+                <p className="text-xs"><a className="underline" href="/sms-compliance">SMS terms</a> · <a className="underline" href="/privacy">Privacy</a></p>
+              </section>
+            )}
             {jsonLd && (
               <script
                 type="application/ld+json"

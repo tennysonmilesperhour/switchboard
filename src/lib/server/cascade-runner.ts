@@ -13,11 +13,6 @@ import {
   type DeliveryStatus,
 } from '@/lib/server/email';
 import { formatDateTime } from '@/lib/format';
-import {
-  guestInviteSmsText,
-  looksLikePhoneNumber,
-  sendSmsWithResult,
-} from '@/lib/server/sms';
 import type { Invite, SwitchboardEvent } from '@/lib/types';
 import { directInvitePath } from '@/lib/invite-links';
 import { normalizeInviteStatus } from '@/lib/invite-status';
@@ -117,7 +112,11 @@ async function deliverInvitations(
       });
     }
 
-    if (invite.guest_token && looksLikeEmail(invite.guest_contact)) {
+    const { data: route, error: routeError } = invite.invitee_id
+      ? await createAdminClient().from('notification_routes').select('plans').eq('user_id', invite.invitee_id).maybeSingle()
+      : { data: null, error: null };
+    const legacyEmail = !invite.invitee_id || (!routeError && (!route || route.plans === 'existing'));
+    if (legacyEmail && invite.guest_token && looksLikeEmail(invite.guest_contact)) {
       hasChannel = true;
       if (await consumeEventOutboundSlot(event.host_id, 'invitation')) {
         const result = await sendEmailWithResult({
@@ -150,37 +149,8 @@ async function deliverInvitations(
       }
     }
 
-    if (!invite.invitee_id && invite.guest_token && looksLikePhoneNumber(invite.guest_contact)) {
-      hasChannel = true;
-      if (await consumeEventOutboundSlot(event.host_id, 'invitation')) {
-        const result = await sendSmsWithResult({
-          to: invite.guest_contact,
-          body: invite.invitee_id
-            ? `You are invited to ${event.title} on Switchboard: ${appUrl(invitePath)}`
-            : guestInviteSmsText(event.title, invite.guest_token),
-        });
-        countDelivery(summary, result.status);
-        attempts.push({
-          invite_id: invite.id,
-          channel: 'sms',
-          status: result.status,
-          provider: result.provider,
-          provider_message_id: result.providerMessageId ?? null,
-          error_code: result.errorCode ?? null,
-        });
-      } else {
-        countDelivery(summary, 'failed');
-        attempts.push({
-          invite_id: invite.id,
-          channel: 'sms',
-          status: 'failed',
-          provider: 'switchboard',
-          provider_message_id: null,
-          error_code: 'host_daily_limit',
-        });
-      }
-    }
-
+    // A guest phone is not a subscription. The host shares the personal link;
+    // its recipient may initiate JOIN, after which the durable queue owns SMS.
     if (!hasChannel) summary.manual += 1;
   }));
 

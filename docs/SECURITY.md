@@ -430,12 +430,25 @@ it, and HELP does not change state. Twilio Advanced Opt-Out sends the human
 reply, so the app returns empty TwiML and never duplicates it. RLS is enabled
 and forced on `sms_opt_outs`, with no browser policy or browser privilege.
 
-A guest's phone-shaped `guest_contact` is not itself permission for future
-texts. Reminders and cancellation notices are restricted to invite ids with a
-successful SMS row in `invite_delivery_attempts`; a guest reached manually or
-by email cannot later be texted merely because a number was stored. Guest email
-paths carry an RFC 2369 `List-Unsubscribe` mailto header to the configured
-support address.
+A guest's phone-shaped `guest_contact` does not authorize texts. Guests initiate
+`JOIN <personal invitation token>` from their own phone after the disclosure on
+the invitation. Consent is confined to one unclaimed invite and expires with the
+plan or after 30 days. Event triggers queue logistics/reminders; legacy guest
+SMS fan-out is removed. The queue and dispatch both use this consent, not host
+contact text. Guest email paths retain their existing unsubscribe headers.
+
+Coded YES/NO/CONFIRM replies require a signed Twilio sender, a delivered/sending
+job for that exact phone and member, and a still-current verified contact with
+SMS enabled. The RPC rechecks invitation ownership, blocks, active event state,
+required questions and guardian approval. It shares the web RSVP capacity and
+room-membership transition. MessageSid is an atomic receipt key. Bare YES remains
+a Twilio subscription keyword; unknown messages return instructions rather than
+guessing an event. Every reply is rate limited and XML escaped.
+
+Notification routing is recipient-owned and rechecked at dispatch. New channel
+choices suppress legacy member email and push/SMS duplicates. Opting into urgent
+SMS does not bypass consent, STOP, channel preferences, budget limits, or the
+explicit deadline. See `docs/SMS.md` for the complete behavior and retention.
 
 ## Live location (opt-in presence)
 

@@ -183,6 +183,11 @@ export default function SmsCompliancePage() {
       </section>
 
       <section className="mt-8 rounded-card border border-line bg-paper p-6">
+        <h2 className="text-2xl font-black">Replies and guest subscriptions</h2>
+        <p className="mt-3 leading-relaxed text-ink-soft">Invitation texts include a plan-specific code: reply YES followed by that code to accept, or NO followed by the code to decline. A reminder may offer CONFIRM with its code. A bare YES is reserved for resubscribing. Plans needing guardian approval or required answers must be completed in the app.</p>
+        <p className="mt-3 leading-relaxed text-ink-soft">Guests may send the prepared JOIN message from a personal invitation to consent to updates for that invitation only. No account is created, and the host cannot opt someone in. Guest consent expires with the plan or after 30 days. Quiet hours are 10pm–8am in the plan’s timezone. Account holders may separately allow imminent time or location changes during their quiet hours in Settings.</p>
+      </section>
+      <section className="mt-8 rounded-card border border-line bg-paper p-6">
         <h2 className="text-2xl font-black">Opt-out and help</h2>
         <p className="mt-3 leading-relaxed text-ink-soft">
           Users can reply STOP, STOPALL, UNSUBSCRIBE, CANCEL, END, QUIT, OPTOUT,

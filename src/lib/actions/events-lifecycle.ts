@@ -1,4 +1,5 @@
 'use server';
+import { imminentChange, urgentChangeDeadline } from '@/lib/sms-commands';
 
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
@@ -25,8 +26,6 @@ import { reportAndFail, reportOperationalError } from '@/lib/server/observabilit
 import type { ActionResult } from '@/lib/errors';
 import { failure, validation } from '@/lib/errors';
 import { guestEmailHeaders, looksLikeEmail, sendEmails } from '@/lib/server/email';
-import { looksLikePhoneNumber, sendSmsMessages } from '@/lib/server/sms';
-import { inviteIdsSentBySms } from '@/lib/server/sms-opt-out';
 import { canAddInvitees, MAX_INVITEES_PER_EVENT } from '@/lib/invite-limits';
 import { consumeEventOutboundSlot } from '@/lib/server/invite-delivery-limit';
 import { safeHttpUrl } from '@/lib/security';
@@ -175,7 +174,7 @@ export async function updateEventDetails(
   const admin = createAdminClient();
   const { data: before } = await admin
     .from('events')
-    .select('starts_at, location_name, title')
+    .select('starts_at, location_name, location_address, title')
     .eq('id', eventId)
     .maybeSingle();
   if (!before) return validation('Plan not found.');
@@ -210,7 +209,7 @@ export async function updateEventDetails(
 
   // Notify accepted guests only when the logistics they'd act on actually change.
   const whenChanged = (before.starts_at ?? null) !== (input.startsAt || null);
-  const whereChanged = (before.location_name ?? null) !== (input.locationName?.trim() || null);
+  const whereChanged = (before.location_name ?? null) !== (input.locationName?.trim() || null) || (before.location_address ?? null) !== (input.locationAddress?.trim() || null);
   if (whenChanged || whereChanged) {
     const { data: accepted } = await admin
       .from('invites')
@@ -224,7 +223,8 @@ export async function updateEventDetails(
     if (recipients.length > 0) {
       const changed = whenChanged && whereChanged ? 'time and place' : whenChanged ? 'time' : 'place';
       await notifyUsers(recipients, {
-        kind: 'event_updated',
+        kind: imminentChange(before.starts_at, input.startsAt || null) ? 'event_urgent_change' : 'event_updated',
+        urgentUntil: urgentChangeDeadline(before.starts_at, input.startsAt || null),
         title: 'Plan updated ✏️',
         body: `The ${changed} for ${title} changed. Tap for the latest.`,
         url: `/events/${eventId}`,
@@ -431,26 +431,7 @@ export async function cancelEvent(
     )
   ).filter((message): message is (typeof guestEmails)[number] => message !== null);
   if (permittedGuestEmails.length > 0) await sendEmails(permittedGuestEmails);
-  const textableGuests = guests.filter((invite) => looksLikePhoneNumber(invite.guest_contact));
-  const smsInviteIds = await inviteIdsSentBySms(textableGuests.map((invite) => invite.id));
-  const guestSms = textableGuests
-    .filter((invite) => smsInviteIds.has(invite.id))
-    .map((invite) => ({
-      to: invite.guest_contact as string,
-      body: `${title} on Switchboard has been cancelled.${cleanReason ? ` Reason: ${cleanReason}` : ''}`,
-    }));
-  const permittedGuestSms = (
-    await Promise.all(
-      guestSms.map(async (message) =>
-        (await consumeEventOutboundSlot(
-          event?.host_id ?? user.id,
-          'cancellation',
-        ))
-          ? message
-          : null),
-    )
-  ).filter((message): message is (typeof guestSms)[number] => message !== null);
-  if (permittedGuestSms.length > 0) await sendSmsMessages(permittedGuestSms);
+  // Guest SMS is queued by the event trigger using guest-initiated consent.
 
   // Retire any invite still in motion so the (now belt-and-suspenders) RSVP
   // guard has nothing live to act on.

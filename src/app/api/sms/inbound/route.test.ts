@@ -2,6 +2,8 @@ import { afterEach, describe, expect, test, vi } from 'vitest';
 import { expectedTwilioSignature } from '@/lib/server/twilio-signature';
 
 const suppression = vi.hoisted(() => ({
+  rpc: vi.fn(),
+  limit: vi.fn().mockResolvedValue(true),
   clear: vi.fn(),
   record: vi.fn(),
 }));
@@ -11,6 +13,9 @@ vi.mock('@/lib/server/sms-opt-out', () => ({
   recordSmsOptOut: suppression.record,
 }));
 
+vi.mock('@/lib/supabase/admin', () => ({ createAdminClient: () => ({ rpc: suppression.rpc }) }));
+vi.mock('@/lib/server/rate-limit', () => ({ checkRateLimit: suppression.limit }));
+vi.mock('@/lib/server/sms-policy', () => ({ smsBudgetAllows: suppression.limit }));
 import { POST } from './route';
 
 const WEBHOOK_URL = 'https://switchboardsocial.me/api/sms/inbound';
@@ -41,6 +46,8 @@ function signedRequest(
 }
 
 afterEach(() => {
+  suppression.rpc.mockReset();
+  suppression.limit.mockResolvedValue(true);
   suppression.clear.mockReset();
   suppression.record.mockReset();
   vi.unstubAllEnvs();
@@ -86,4 +93,38 @@ describe('POST /api/sms/inbound', () => {
     expect(suppression.record).not.toHaveBeenCalled();
     expect(suppression.clear).not.toHaveBeenCalled();
   });
+  test('routes a signed coded RSVP and XML-escapes its reply', async () => {
+    configure();
+    suppression.rpc.mockResolvedValue({ data: 'You are in! <yes> & confirmed', error: null });
+    const response = await POST(signedRequest({ Body: 'YES ABCDEF123456', MessageSid: 'SM11111111111111111111111111111111' }));
+    expect(response.status).toBe(200);
+    expect(await response.text()).toContain('&lt;yes&gt; &amp; confirmed');
+    expect(suppression.rpc).toHaveBeenCalledWith('handle_sms_command', { p_phone: '+15555550100', p_command: 'YES', p_code: 'ABCDEF123456', p_sid: 'SM11111111111111111111111111111111' });
+    expect(suppression.clear).not.toHaveBeenCalled();
+  });
+  test('invalid signature and another destination cannot execute RSVP', async () => {
+    configure();
+    expect((await POST(signedRequest({ Body: 'YES ABCDEF123456' }, 'wrong'))).status).toBe(403);
+    expect((await POST(signedRequest({ Body: 'YES ABCDEF123456', To: '+15555550198' }))).status).toBe(403);
+    expect(suppression.rpc).not.toHaveBeenCalled();
+  });
+  test('duplicate receipt returns no second acknowledgment', async () => {
+    configure();
+    suppression.rpc.mockResolvedValue({ data: '', error: null });
+    expect(await (await POST(signedRequest({ Body: 'YES ABCDEF123456', MessageSid: 'SM11111111111111111111111111111111' }))).text()).not.toContain('<Message>');
+  });
+  test('rate limit fails closed before executing a command', async () => {
+    configure();
+    suppression.limit.mockResolvedValue(false);
+    await POST(signedRequest({ Body: 'YES ABCDEF123456', MessageSid: 'SM11111111111111111111111111111111' }));
+    expect(suppression.rpc).not.toHaveBeenCalled();
+  });
+  test('unknown messages get usage instructions without guessing a plan', async () => {
+    configure();
+    suppression.rpc.mockResolvedValue({ data: 'Use YES plus your code.', error: null });
+    const response = await POST(signedRequest({ Body: 'yes 123', MessageSid: 'SM11111111111111111111111111111111' }));
+    expect(await response.text()).toContain('Use YES plus your code.');
+    expect(suppression.rpc).toHaveBeenCalledWith('handle_sms_command', expect.objectContaining({ p_command: 'UNKNOWN' }));
+  });
+
 });

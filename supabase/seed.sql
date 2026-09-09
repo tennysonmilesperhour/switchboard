@@ -100,3 +100,7 @@ grant usage, select on all sequences in schema public to service_role;
 -- Preserve SMS evidence and consent mutation grants when simulating hosted defaults.
 revoke all on public.sms_jobs, public.sms_consent_events from anon, authenticated;
 revoke insert, update, delete on public.sms_preferences from anon, authenticated;
+
+revoke all on public.notification_email_jobs,public.guest_sms_consents,public.sms_inbound_receipts from anon,authenticated;
+revoke all on public.notification_routes from anon,authenticated;
+grant select on public.notification_routes to authenticated;

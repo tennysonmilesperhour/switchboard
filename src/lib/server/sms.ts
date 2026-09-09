@@ -19,6 +19,8 @@ export interface SmsMessage {
   jobId?: string;
   recipientUserId?: string;
   expiresAt?: string;
+  guestInviteId?: string;
+  urgentUntil?: string;
 }
 
 export { looksLikePhoneNumber, normalizePhoneNumber };
@@ -84,7 +86,7 @@ async function dispatchSms(
   const prefixes = (process.env.SMS_ALLOWED_PREFIXES ?? '+1').split(',').map(value => value.trim()).filter(value => /^\+\d{1,4}$/.test(value));
   if (!prefixes.some(prefix => to.startsWith(prefix))) return { status: 'invalid_recipient', provider: 'twilio', errorCode: 'destination_not_allowed' };
   if (message.body.length > 450) return { status: 'failed', provider: 'twilio', errorCode: 'message_too_long' };
-  if (message.category !== 'verification' && !(await smsConsentAllows(to, message.category ?? 'plans', message.recipientUserId))) {
+  if (message.category !== 'verification' && !(await smsConsentAllows(to, message.category ?? 'plans', message.recipientUserId, message.guestInviteId, message.urgentUntil))) {
     return { status: 'opted_out', provider: 'twilio', errorCode: 'consent_required' };
   }
   if (!(await smsBudgetAllows(to))) return { status: 'failed', provider: 'twilio', errorCode: 'sms_budget' };

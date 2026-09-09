@@ -698,4 +698,19 @@ test.describe('authenticated surface', () => {
     await aCtx.close();
     await bCtx.close();
   });
+  test('notification channel choice persists without opting into SMS', async ({ page }) => {
+    await login(page, 'e2eguest');
+    await page.goto('/settings');
+    const routes = page.getByRole('heading', { name: 'How plan alerts reach you', exact: true }).locator('..');
+    await routes.getByRole('combobox').first().selectOption('in_app');
+    await routes.getByRole('button', { name: 'Save notification channels', exact: true }).click();
+    await expect(routes.getByRole('status')).toHaveText('Notification channels saved.');
+    await page.reload();
+    await expect(routes.getByRole('combobox').first()).toHaveValue('in_app');
+    await expect(page.getByLabel('I agree to receive these text messages.', { exact: true })).not.toBeChecked();
+    await routes.getByRole('combobox').first().selectOption('existing');
+    await routes.getByRole('button', { name: 'Save notification channels', exact: true }).click();
+    await expect(routes.getByRole('status')).toHaveText('Notification channels saved.');
+  });
+
 });

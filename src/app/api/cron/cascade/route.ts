@@ -1,3 +1,4 @@
+import { sweepNotificationEmails } from '@/lib/server/notification-emails';
 import { sweepSmsJobs } from '@/lib/server/sms-jobs';
 import { NextResponse } from 'next/server';
 import { sweepCascades } from '@/lib/server/cascade-runner';
@@ -56,10 +57,11 @@ export async function GET(request: Request) {
       sweepReminders(),
       sweepExpired(),
     ]);
-    const smsAccepted = await sweepSmsJobs();
+    const [smsAccepted, notificationEmailsSent] = await Promise.all([sweepSmsJobs(), sweepNotificationEmails()]);
     const summary = {
       ok: true,
       smsAccepted,
+      notificationEmailsSent,
       eventsAdvanced,
       suggestionsClosed,
       pollsResolved,

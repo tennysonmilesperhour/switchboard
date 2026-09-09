@@ -616,14 +616,14 @@ export const FEATURE_GROUPS: readonly FeatureGroup[] = [
       {
         id: 'sms-preferences',
         title: 'Optional text messages',
-        blurb: 'Verify your phone, then opt in to invitations, important plan changes, and reminders. SMS has separate preferences and quiet hours.',
+        blurb: 'Opt into texts, answer invitations with a reply code, and optionally allow imminent time or location changes during quiet hours. Guests can subscribe from their invitation.',
         where: 'Settings → Notifications → Text messages',
         href: '/settings',
       },
       {
         id: 'notification-preferences',
         title: 'What you get notified about',
-        blurb: 'Per-category control over plans, suggestions, reminders, messages, and social news.',
+        blurb: 'Choose SMS, push, email, or the in-app inbox for plan alerts and reminders. Other categories have separate push controls.',
         where: 'Settings → Notifications',
         href: '/settings',
       },

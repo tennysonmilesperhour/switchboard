@@ -1,3 +1,7 @@
+import { parseSmsCommand } from '@/lib/sms-commands';
+import { createAdminClient } from '@/lib/supabase/admin';
+import { checkRateLimit } from '@/lib/server/rate-limit';
+import { smsBudgetAllows } from '@/lib/server/sms-policy';
 import { absoluteUrl } from '@/lib/links';
 import { normalizePhoneNumber } from '@/lib/phone';
 import { clearSmsOptOut, recordSmsOptOut } from '@/lib/server/sms-opt-out';
@@ -65,7 +69,9 @@ export async function POST(request: Request): Promise<Response> {
   let form: URLSearchParams;
   let webhookUrl: string;
   try {
-    form = new URLSearchParams(await request.text());
+    const raw = await request.text();
+    if (raw.length > 16_384) return new Response('Request too large', { status: 413 });
+    form = new URLSearchParams(raw);
     webhookUrl = absoluteUrl('/api/sms/inbound');
   } catch (error) {
     await reportOperationalError('sms.inbound', error);
@@ -93,6 +99,20 @@ export async function POST(request: Request): Promise<Response> {
     const action = optOutType(form);
     if (action === 'STOP') await recordSmsOptOut(from);
     if (action === 'START') await clearSmsOptOut(from);
+    if (!action) {
+      const parsed = parseSmsCommand(form.get('Body') ?? '');
+      const sid = form.get('MessageSid') ?? '';
+      if (!/^SM[0-9a-f]{32}$/i.test(sid)) return emptyTwiml();
+      if (!(await checkRateLimit(`sms-inbound:${from}`, 20, 3600, { failClosed: true })) || !(await smsBudgetAllows(from))) return emptyTwiml();
+      // Identity is established by Twilio's signed sender; the RPC additionally
+      // binds the code to that phone, current verified account and exact invite.
+      const { data, error } = await createAdminClient().rpc('handle_sms_command', { p_phone: from, p_command: parsed?.command ?? 'UNKNOWN', p_code: parsed?.code ?? '', p_sid: sid });
+      if (error) throw error;
+      if (!data) return emptyTwiml();
+      const reply = data + (parsed?.command === 'JOIN' && data.startsWith('Subscribed') ? `\n${absoluteUrl(`/rsvp/${parsed.code}`)}` : '');
+      const escaped = reply.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;');
+      return new Response(`<?xml version="1.0" encoding="UTF-8"?><Response><Message>${escaped}</Message></Response>`, { headers: { 'Content-Type': 'application/xml; charset=utf-8' } });
+    }
     // Twilio Advanced Opt-Out sends its own STOP/START/HELP reply. Returning
     // empty TwiML avoids sending a duplicate application-authored message.
     return emptyTwiml();
