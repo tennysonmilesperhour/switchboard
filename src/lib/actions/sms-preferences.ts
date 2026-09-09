@@ -14,3 +14,14 @@ export async function updateSmsPreferences(enabled: boolean, plans: boolean, rem
   revalidatePath('/settings');
   return { ok: true as const };
 }
+
+export async function updateNotificationRoutes(plans: string, reminders: string, urgent: boolean) {
+  const auth = await requireUser();
+  if (!auth.ok) return auth;
+  const allowed = ['existing', 'sms', 'push', 'email', 'in_app'];
+  if (!allowed.includes(plans) || !allowed.includes(reminders) || typeof urgent !== 'boolean') return validation('Choose a notification channel.');
+  const { error } = await auth.supabase.rpc('set_notification_routes', { p_plans: plans, p_reminders: reminders, p_urgent: urgent });
+  if (error) return failure('SB-SMS-PREFERENCES');
+  revalidatePath('/settings');
+  return { ok: true as const };
+}

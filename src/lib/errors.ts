@@ -57,6 +57,11 @@ export interface SwitchboardError {
 }
 
 const REGISTRY = {
+  'SB-SMS-REPLY': {
+    message: 'This text reply could not complete your RSVP.',
+    fix: 'Open the invitation to view its status and respond.',
+    actor: 'reader',
+  },
   'SB-SMS-PREFERENCES': {
     message: 'Could not save your SMS preferences.',
     fix: 'Check that your current phone number is verified, then try again.',

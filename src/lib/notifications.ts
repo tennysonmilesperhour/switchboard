@@ -103,6 +103,7 @@ const KIND_TO_CATEGORY: Record<string, NotificationCategory> = {
   join_request: 'plans',
   join_approved: 'plans',
   event_updated: 'plans',
+  event_urgent_change: 'plans',
   event_cancelled: 'plans',
   announcement: 'plans',
   board_response: 'plans',

@@ -1,12 +1,14 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => {
+  const route = { plans: 'existing', reminders: 'existing' };
   const sendNotification = vi.fn();
   const setVapidDetails = vi.fn();
   const reportOperationalError = vi.fn(async () => undefined);
   const deleteSubscription = vi.fn(async () => ({ data: null, error: null }));
 
   return {
+    route,
     sendNotification,
     setVapidDetails,
     reportOperationalError,
@@ -28,6 +30,7 @@ vi.mock('@/lib/server/observability', () => ({
 vi.mock('@/lib/supabase/admin', () => ({
   createAdminClient: () => ({
     from: (table: string) => {
+      if (table === 'notification_routes') return { select: () => ({ in: async () => ({ data: [{ user_id: 'user-1', ...mocks.route }], error: null }) }) };
       if (table === 'profiles') {
         return {
           select: () => ({
@@ -122,4 +125,16 @@ describe('web-push failure observability', () => {
       expect(mocks.reportOperationalError).not.toHaveBeenCalled();
     },
   );
+});
+
+it('channel selection suppresses push for SMS and email preferences', async () => {
+  vi.stubEnv('NEXT_PUBLIC_VAPID_PUBLIC_KEY', 'public-key');
+  vi.stubEnv('VAPID_PRIVATE_KEY', 'private-key');
+  mocks.sendNotification.mockClear();
+  mocks.route.plans = 'sms';
+  await sendPushToUsers(['user-1'], { title: 'Plan', body: 'Changed' }, 'plans');
+  mocks.route.plans = 'email';
+  await sendPushToUsers(['user-1'], { title: 'Plan', body: 'Changed' }, 'plans');
+  expect(mocks.sendNotification).not.toHaveBeenCalled();
+  mocks.route.plans = 'existing';
 });

@@ -996,6 +996,41 @@ export type Database = {
           },
         ]
       }
+      guest_sms_consents: {
+        Row: {
+          consent_at: string
+          expires_at: string
+          invite_id: string
+          phone: string
+          policy_version: string
+          source: string
+        }
+        Insert: {
+          consent_at?: string
+          expires_at: string
+          invite_id: string
+          phone: string
+          policy_version?: string
+          source?: string
+        }
+        Update: {
+          consent_at?: string
+          expires_at?: string
+          invite_id?: string
+          phone?: string
+          policy_version?: string
+          source?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "guest_sms_consents_invite_id_fkey"
+            columns: ["invite_id"]
+            isOneToOne: true
+            referencedRelation: "invites"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       household_members: {
         Row: {
           household_id: string
@@ -1686,6 +1721,83 @@ export type Database = {
           },
         ]
       }
+      notification_email_jobs: {
+        Row: {
+          category: string
+          created_at: string
+          email: string
+          expires_at: string
+          id: string
+          notification_id: string
+          status: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          category: string
+          created_at?: string
+          email: string
+          expires_at: string
+          id?: string
+          notification_id: string
+          status?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          category?: string
+          created_at?: string
+          email?: string
+          expires_at?: string
+          id?: string
+          notification_id?: string
+          status?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "notification_email_jobs_notification_id_fkey"
+            columns: ["notification_id"]
+            isOneToOne: true
+            referencedRelation: "notifications"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "notification_email_jobs_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      notification_routes: {
+        Row: {
+          plans: string
+          reminders: string
+          user_id: string
+        }
+        Insert: {
+          plans?: string
+          reminders?: string
+          user_id: string
+        }
+        Update: {
+          plans?: string
+          reminders?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "notification_routes_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: true
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       notifications: {
         Row: {
           body: string | null
@@ -1694,6 +1806,7 @@ export type Database = {
           kind: string
           read_at: string | null
           title: string
+          urgent_until: string | null
           url: string | null
           user_id: string
         }
@@ -1704,6 +1817,7 @@ export type Database = {
           kind: string
           read_at?: string | null
           title: string
+          urgent_until?: string | null
           url?: string | null
           user_id: string
         }
@@ -1714,6 +1828,7 @@ export type Database = {
           kind?: string
           read_at?: string | null
           title?: string
+          urgent_until?: string | null
           url?: string | null
           user_id?: string
         }
@@ -2486,6 +2601,7 @@ export type Database = {
           recorded_at: string
           reminders: boolean
           source: string
+          urgent_changes: boolean
           user_id: string | null
         }
         Insert: {
@@ -2497,6 +2613,7 @@ export type Database = {
           recorded_at?: string
           reminders: boolean
           source?: string
+          urgent_changes?: boolean
           user_id?: string | null
         }
         Update: {
@@ -2508,6 +2625,7 @@ export type Database = {
           recorded_at?: string
           reminders?: boolean
           source?: string
+          urgent_changes?: boolean
           user_id?: string | null
         }
         Relationships: [
@@ -2519,6 +2637,21 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      sms_inbound_receipts: {
+        Row: {
+          created_at: string
+          sid: string
+        }
+        Insert: {
+          created_at?: string
+          sid: string
+        }
+        Update: {
+          created_at?: string
+          sid?: string
+        }
+        Relationships: []
       }
       sms_jobs: {
         Row: {
@@ -2534,8 +2667,10 @@ export type Database = {
           notification_id: string | null
           phone: string
           provider_message_id: string | null
+          reply_code: string
           status: string
           updated_at: string
+          urgent_until: string | null
           user_id: string | null
         }
         Insert: {
@@ -2551,8 +2686,10 @@ export type Database = {
           notification_id?: string | null
           phone: string
           provider_message_id?: string | null
+          reply_code?: string
           status?: string
           updated_at?: string
+          urgent_until?: string | null
           user_id?: string | null
         }
         Update: {
@@ -2568,8 +2705,10 @@ export type Database = {
           notification_id?: string | null
           phone?: string
           provider_message_id?: string | null
+          reply_code?: string
           status?: string
           updated_at?: string
+          urgent_until?: string | null
           user_id?: string | null
         }
         Relationships: [
@@ -2621,6 +2760,7 @@ export type Database = {
           policy_version: string
           reminders: boolean
           updated_at: string
+          urgent_changes: boolean
           user_id: string
         }
         Insert: {
@@ -2632,6 +2772,7 @@ export type Database = {
           policy_version?: string
           reminders?: boolean
           updated_at?: string
+          urgent_changes?: boolean
           user_id: string
         }
         Update: {
@@ -2643,6 +2784,7 @@ export type Database = {
           policy_version?: string
           reminders?: boolean
           updated_at?: string
+          urgent_changes?: boolean
           user_id?: string
         }
         Relationships: [
@@ -3040,6 +3182,26 @@ export type Database = {
       }
       claim_guest_invite: { Args: { p_token: string }; Returns: string }
       claim_guest_invites_by_contact: { Args: never; Returns: number }
+      claim_notification_emails: {
+        Args: never
+        Returns: {
+          category: string
+          created_at: string
+          email: string
+          expires_at: string
+          id: string
+          notification_id: string
+          status: string
+          updated_at: string
+          user_id: string
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "notification_email_jobs"
+          isOneToOne: false
+          isSetofReturn: true
+        }
+      }
       claim_sms_jobs: {
         Args: never
         Returns: {
@@ -3055,8 +3217,10 @@ export type Database = {
           notification_id: string | null
           phone: string
           provider_message_id: string | null
+          reply_code: string
           status: string
           updated_at: string
+          urgent_until: string | null
           user_id: string | null
         }[]
         SetofOptions: {
@@ -3146,6 +3310,19 @@ export type Database = {
       finish_operator_sweep: {
         Args: { p_counts: Json; p_sweep: string }
         Returns: undefined
+      }
+      guest_sms_allowed: {
+        Args: { p_invite: string; p_phone: string }
+        Returns: boolean
+      }
+      handle_sms_command: {
+        Args: {
+          p_code: string
+          p_command: string
+          p_phone: string
+          p_sid: string
+        }
+        Returns: string
       }
       home_around_available: { Args: never; Returns: boolean }
       is_blocked_with: { Args: { p_other: string }; Returns: boolean }
@@ -3404,6 +3581,10 @@ export type Database = {
       }
       set_my_signal_default_circle: {
         Args: { p_circle: string }
+        Returns: undefined
+      }
+      set_notification_routes: {
+        Args: { p_plans: string; p_reminders: string; p_urgent: boolean }
         Returns: undefined
       }
       set_sms_preferences: {

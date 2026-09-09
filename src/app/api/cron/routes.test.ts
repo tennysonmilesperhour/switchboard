@@ -1,3 +1,4 @@
+vi.mock('@/lib/server/notification-emails', () => ({ sweepNotificationEmails: vi.fn().mockResolvedValue(0) }));
 vi.mock('@/lib/server/sms-jobs', () => ({ sweepSmsJobs: vi.fn().mockResolvedValue(0) }));
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -89,6 +90,7 @@ describe('cron route handlers', () => {
     expect(await response.json()).toEqual({
       ok: true,
       smsAccepted: 0,
+      notificationEmailsSent: 0,
       eventsAdvanced: 2,
       suggestionsClosed: 3,
       pollsResolved: 4,

@@ -22,6 +22,7 @@ export interface PushPayload {
 }
 
 export interface NotificationPayload extends PushPayload {
+  urgentUntil?: string;
   /** Coarse category, e.g. 'connection_accepted', 'match', 'reminder'. */
   kind: string;
 }
@@ -53,6 +54,7 @@ export async function notifyUsers(
       title: payload.title,
       body: payload.body,
       url: payload.url ?? null,
+      ...(payload.urgentUntil ? { urgent_until: payload.urgentUntil } : {}),
     })),
   );
   // In-app recording is best-effort — never block the domain action on it.
@@ -398,7 +400,14 @@ export async function sendPushToUsers(
     )
     .in('id', userIds);
 
+  const routedCategory = category === 'plans' || category === 'reminders' ? category : null;
+  const { data: routes, error: routeError } = routedCategory
+    ? await admin.from('notification_routes').select('user_id, plans, reminders').in('user_id', userIds)
+    : { data: [], error: null };
+  if (routeError) throw new Error('Notification routing unavailable');
+  const routeByUser = new Map((routes ?? []).map(r => [r.user_id, r]));
   const awake = (profiles ?? [])
+    .filter(p => !routedCategory || ['existing', 'push'].includes(routeByUser.get(p.id)?.[routedCategory] ?? 'existing'))
     .filter(
       (p) => !isQuietTime(p.quiet_hours_start, p.quiet_hours_end, p.timezone),
     )

@@ -1,0 +1,97 @@
+begin;
+select no_plan();
+insert into auth.users(id,email) values
+ ('21000000-0000-0000-0000-000000000001','sms-host@example.com'),
+ ('21000000-0000-0000-0000-000000000002','sms-member@example.com');
+update public.profiles set contact_phone='+15555550777',contact_email='sms-member@example.com',timezone='UTC',quiet_hours_start=0,quiet_hours_end=0 where id='21000000-0000-0000-0000-000000000002';
+update public.profile_contacts set verified_at=now() where user_id='21000000-0000-0000-0000-000000000002';
+set local role authenticated;
+select set_config('request.jwt.claims','{"sub":"21000000-0000-0000-0000-000000000002","role":"authenticated"}',true);
+select throws_ok($$select public.set_notification_routes('sms','existing',false)$$,'P0001','Enable SMS first','Routing cannot invent SMS consent');
+select public.set_sms_preferences(true,true,true);
+select lives_ok($$select public.set_notification_routes('email','in_app',false)$$,'Recipient selects verified email');
+select throws_ok($$insert into public.guest_sms_consents(invite_id,phone,expires_at) values(gen_random_uuid(),'+15555550777',now())$$,'42501',null,'Hosts cannot forge guest consent');
+select throws_ok($$select public.handle_sms_command('+15555550777','YES','ABCDEF123456','SM11111111111111111111111111111111')$$,'42501',null,'Browser cannot impersonate signed inbound');
+select throws_ok($$select * from public.notification_email_jobs$$,'42501',null,'Email queue private');
+select throws_ok($$select * from public.sms_inbound_receipts$$,'42501',null,'Inbound receipt ledger private');
+reset role;
+insert into public.notifications(user_id,kind,title,body) values('21000000-0000-0000-0000-000000000002','event_updated','Plan changed','Details');
+select is((select count(*)::int from public.notification_email_jobs),1,'Email route enqueues exactly one email');
+select is((select count(*)::int from public.sms_jobs),0,'Email choice suppresses SMS');
+select is((select count(*)::int from public.claim_notification_emails()),1,'Email claimed once');
+select is((select count(*)::int from public.claim_notification_emails()),0,'Concurrent email claim cannot duplicate');
+set local role authenticated;
+select public.set_notification_routes('sms','sms',false);
+reset role;
+insert into public.events(id,host_id,title,status,starts_at,invite_mode,capacity,time_zone) values
+ ('21000000-0000-0000-0000-000000000010','21000000-0000-0000-0000-000000000001','SMS plan','inviting',now()+interval '1 day','group',1,'UTC');
+insert into public.invites(id,event_id,invitee_id,status,position) values
+ ('21000000-0000-0000-0000-000000000020','21000000-0000-0000-0000-000000000010','21000000-0000-0000-0000-000000000002','sent',0);
+insert into public.notifications(user_id,kind,title,body,url) values('21000000-0000-0000-0000-000000000002','event_invite','SMS plan','Invitation','/events/21000000-0000-0000-0000-000000000010');
+select is((select invite_id from public.sms_jobs),'21000000-0000-0000-0000-000000000020'::uuid,'Invite replies bind to member event URLs too');
+update public.sms_jobs set status='delivered',reply_code='ABCDEF123456';
+select alike(public.handle_sms_command('+15555550666','YES','ABCDEF123456','SM00000000000000000000000000000001'),'%unavailable%','Another sender cannot use reply code');
+update public.events set parental_approval=true where id='21000000-0000-0000-0000-000000000010';
+select alike(public.handle_sms_command('+15555550777','YES','ABCDEF123456','SM00000000000000000000000000000002'),'%additional details%','SMS does not bypass guardian requirements');
+select is((select status from public.invites where id='21000000-0000-0000-0000-000000000020'),'sent','Guardian-required RSVP untouched');
+update public.events set parental_approval=false where id='21000000-0000-0000-0000-000000000010';
+select alike(public.handle_sms_command('+15555550777','YES','ABCDEF123456','SM00000000000000000000000000000003'),'You are in!%','Verified recipient accepts by SMS');
+select is((select status from public.invites where id='21000000-0000-0000-0000-000000000020'),'accepted','RSVP persisted');
+select is(public.handle_sms_command('+15555550777','NO','ABCDEF123456','SM00000000000000000000000000000003'),'','Replayed SID cannot change RSVP or duplicate response');
+select is((select count(*)::int from public.notifications where kind='rsvp_accepted'),1,'Host notified once');
+select alike(public.handle_sms_command('+15555550777','CONFIRM','ABCDEF123456','SM00000000000000000000000000000004'),'You are confirmed%','Accepted member confirms attendance');
+update public.profiles set contact_phone='+15555550888' where id='21000000-0000-0000-0000-000000000002';
+select alike(public.handle_sms_command('+15555550777','CONFIRM','ABCDEF123456','SM00000000000000000000000000000005'),'Verify your current phone%','Previous phone loses reply authority');
+-- Re-verify after a contact change; exercise capacity, required answers and closed plans.
+update public.profiles set contact_phone='+15555550777' where id='21000000-0000-0000-0000-000000000002';
+update public.profile_contacts set verified_at=now() where user_id='21000000-0000-0000-0000-000000000002' and kind='phone';
+update public.invites set status='sent' where id='21000000-0000-0000-0000-000000000020';
+insert into public.invites(id,event_id,guest_name,status,position) values('21000000-0000-0000-0000-000000000022','21000000-0000-0000-0000-000000000010','Other guest','sent',2);
+update public.invites set status='accepted' where id='21000000-0000-0000-0000-000000000022';
+select alike(public.handle_sms_command('+15555550777','YES','ABCDEF123456','SM00000000000000000000000000000009'),'%waitlist%','Full plans waitlist, never overbook');
+select is((select status from public.invites where id='21000000-0000-0000-0000-000000000020'),'waitlisted','Capacity transition persists');
+update public.invites set status='sent' where id='21000000-0000-0000-0000-000000000020';
+insert into public.event_questions(event_id,prompt,required,position) values('21000000-0000-0000-0000-000000000010','Required question',true,0);
+select alike(public.handle_sms_command('+15555550777','YES','ABCDEF123456','SM00000000000000000000000000000010'),'%additional details%','Required answers cannot be skipped by SMS');
+delete from public.event_questions where event_id='21000000-0000-0000-0000-000000000010';
+update public.events set status='cancelled' where id='21000000-0000-0000-0000-000000000010';
+select alike(public.handle_sms_command('+15555550777','YES','ABCDEF123456','SM00000000000000000000000000000011'),'%no longer taking text replies%','Cancelled plans reject stale replies');
+update public.events set status='confirmed' where id='21000000-0000-0000-0000-000000000010';
+select alike(public.handle_sms_command('+15555550777','NO','ABCDEF123456','SM00000000000000000000000000000012'),'%decline is saved%','Confirmed plans still accept an outstanding invitation decline');
+update public.invites set status='sent' where id='21000000-0000-0000-0000-000000000020';
+insert into public.profile_blocks(blocker_id,blocked_id) values('21000000-0000-0000-0000-000000000002','21000000-0000-0000-0000-000000000001');
+select alike(public.handle_sms_command('+15555550777','YES','ABCDEF123456','SM00000000000000000000000000000013'),'%no longer taking text replies%','New blocks invalidate previously sent reply codes');
+delete from public.profile_blocks where blocker_id='21000000-0000-0000-0000-000000000002';
+update public.profiles set quiet_hours_start=extract(hour from now() at time zone 'UTC')::int,quiet_hours_end=(extract(hour from now() at time zone 'UTC')::int+1)%24 where id='21000000-0000-0000-0000-000000000002';
+update public.sms_jobs set status='pending',urgent_until=now()+interval '5 minutes';
+select is((select count(*)::int from public.claim_sms_jobs()),0,'Quiet hours hold urgent notices without explicit permission');
+set local role authenticated;
+select public.set_notification_routes('sms','sms',true);
+reset role;
+select is((select count(*)::int from public.claim_sms_jobs()),1,'Explicit urgent preference releases eligible imminent change');
+select ok((select urgent_changes from public.sms_consent_events order by recorded_at desc,urgent_changes desc limit 1),'Urgent permission evidence is recorded');
+update public.sms_jobs set status='pending',urgent_until=now()-interval '1 second';
+select is((select count(*)::int from public.claim_sms_jobs()),0,'Expired urgent exception respects quiet hours again');
+update public.sms_jobs set status='delivered';
+
+-- Guest subscriptions are initiated by a signed sender carrying their invitation.
+insert into public.invites(id,event_id,guest_name,guest_token,status,position) values
+ ('21000000-0000-0000-0000-000000000021','21000000-0000-0000-0000-000000000010','Guest','21000000-0000-0000-0000-000000000030','sent',1);
+select alike(public.handle_sms_command('+15555550555','JOIN','21000000-0000-0000-0000-000000000030','SM00000000000000000000000000000006'),'Subscribed%','Guest consents from their own phone');
+select is((select invitee_id from public.invites where id='21000000-0000-0000-0000-000000000021'),null::uuid,'JOIN does not create/claim an account');
+select is((select status from public.invites where id='21000000-0000-0000-0000-000000000021'),'sent','JOIN does not RSVP');
+select alike(public.handle_sms_command('+15555550444','JOIN','21000000-0000-0000-0000-000000000030','SM00000000000000000000000000000007'),'%already has a text subscriber%','Forwarded token cannot replace subscriber');
+update public.events set location_address='New address' where id='21000000-0000-0000-0000-000000000010';
+select is((select count(*)::int from public.sms_jobs where user_id is null),1,'Address change queues guest update');
+select ok(public.guest_sms_allowed('21000000-0000-0000-0000-000000000021','+15555550555'),'Guest permission is invite-and-phone scoped');
+select ok(not public.guest_sms_allowed('21000000-0000-0000-0000-000000000021','+15555550444'),'Other phone cannot receive guest job');
+insert into public.sms_opt_outs(normalized_number) values('+15555550555');
+select is(public.handle_sms_command('+15555550555','JOIN','21000000-0000-0000-0000-000000000030','SM00000000000000000000000000000008'),'','JOIN cannot override STOP or send an extra reply');
+update public.guest_sms_consents set expires_at=now()-interval '1 minute';
+select ok(not public.guest_sms_allowed('21000000-0000-0000-0000-000000000021','+15555550555'),'Expired guest consent cannot send');
+set local role anon;
+select throws_ok($$select * from public.notification_routes$$,'42501',null,'Routing is unavailable to anonymous clients');
+select throws_ok($$select public.guest_sms_allowed(gen_random_uuid(),'+15555550555')$$,'42501',null,'Guest phone lookup is not an enumeration API');
+reset role;
+select * from finish();
+rollback;
