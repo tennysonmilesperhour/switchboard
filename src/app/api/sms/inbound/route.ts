@@ -1,7 +1,7 @@
 import { parseSmsCommand } from '@/lib/sms-commands';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { checkRateLimit } from '@/lib/server/rate-limit';
-import { smsBudgetAllows } from '@/lib/server/sms-policy';
+import { smsBudgetAllows, smsDestinationAllowed } from '@/lib/server/sms-policy';
 import { absoluteUrl } from '@/lib/links';
 import { normalizePhoneNumber } from '@/lib/phone';
 import { clearSmsOptOut, recordSmsOptOut } from '@/lib/server/sms-opt-out';
@@ -100,6 +100,7 @@ export async function POST(request: Request): Promise<Response> {
     if (action === 'STOP') await recordSmsOptOut(from);
     if (action === 'START') await clearSmsOptOut(from);
     if (!action) {
+      if (!smsDestinationAllowed(from)) return emptyTwiml();
       const parsed = parseSmsCommand(form.get('Body') ?? '');
       const sid = form.get('MessageSid') ?? '';
       if (!/^SM[0-9a-f]{32}$/i.test(sid)) return emptyTwiml();

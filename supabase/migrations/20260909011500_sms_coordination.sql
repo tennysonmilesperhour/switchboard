@@ -118,7 +118,8 @@ begin
  end if;
  select * into j from public.sms_jobs where reply_code=upper(p_code) and phone=p_phone and user_id is not null and invite_id is not null and expires_at>now() and status in ('sending','accepted','queued','sending_provider','sent','delivered','unknown');
  if not found then return 'That reply code is unavailable. Open the plan to respond. SB-SMS-REPLY'; end if;
- if not exists(select 1 from public.profile_contacts c join public.sms_preferences s on s.user_id=c.user_id and s.phone=c.normalized_value where c.user_id=j.user_id and c.kind='phone' and c.normalized_value=p_phone and c.verified_at is not null and s.enabled) then return 'Verify your current phone in Settings, then open the plan to respond. SB-SMS-REPLY'; end if;
+ perform 1 from public.profile_contacts c join public.sms_preferences s on s.user_id=c.user_id and s.phone=c.normalized_value where c.user_id=j.user_id and c.kind='phone' and c.normalized_value=p_phone and c.verified_at is not null and s.enabled for share of c,s;
+ if not found then return 'Verify your current phone in Settings, then open the plan to respond. SB-SMS-REPLY'; end if;
  select * into i from public.invites where id=j.invite_id and invitee_id=j.user_id for update;
  if not found then return 'Open the plan to respond. SB-SMS-REPLY'; end if;
  select * into e from public.events where id=i.event_id for update;

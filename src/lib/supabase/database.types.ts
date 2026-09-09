@@ -3316,7 +3316,12 @@ export type Database = {
         Returns: boolean
       }
       handle_sms_command: {
-        Args: { p_code: string; p_command: string; p_phone: string; p_sid: string }
+        Args: {
+          p_code: string
+          p_command: string
+          p_phone: string
+          p_sid: string
+        }
         Returns: string
       }
       home_around_available: { Args: never; Returns: boolean }

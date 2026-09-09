@@ -11,3 +11,23 @@ For guests, the host shares a personal invitation link. The guest sends its prep
 The signed webhook binds account, receiving number, sender, invitation and current verified identity. Parser inputs and acknowledgments contain no arbitrary code execution; replies are XML escaped. Rate limits apply before executing commands or sending acknowledgments. Delivery workers use atomic claims; only explicit SMS throttling rejections retry. Email and ambiguous sends never automatically repeat. RLS and restrictive grants protect routing, consent, jobs and inbound receipt IDs; retention sweeps remove receipt IDs and email jobs after 30 days and expired guest consent after a further 30 days.
 
 Release through the existing migration-first GitHub workflow after CI. The schema health probe checks the new objects. Local tests use PGlite with simulated Supabase platform tables; GitHub runs native Supabase/pgTAP plus authenticated browser journeys. A provider-free test is not evidence that a carrier delivered a real SMS; live command exchanges require an explicitly authorized test recipient.
+
+## Verification and operating controls
+
+Phone verification still uses the hardened custom six-digit, ten-minute HMAC challenge bound to the account and current phone. Twilio Programmable Messaging transports the code; this is not Twilio Verify and it does not enable phone login/recovery. Verification does not subscribe the account to transactional messages.
+
+Every outbound provider request passes current consent, STOP and configuration checks. `SMS_PAUSED` pauses application sends. `SMS_DAILY_LIMIT` defaults to 100 attempts per day; each destination is limited to 12 attempts per day. The body ceiling is 450 UTF-16 units. `SMS_ALLOWED_PREFIXES` defaults to `+1` (the NANP calling code, not US-only). These are attempt/segment bounds, not a Twilio dollar-spend guarantee. Notification email has 12-per-recipient and 100-global daily attempt ceilings. Account-wide provider spending and geographic permissions remain operator settings.
+
+Member/guest SMS jobs are claimed three at a time. At most three attempts are allowed after explicit HTTP 429/Twilio 20429 rejection. Timeouts, network ambiguity and killed workers are never automatically resent. Signed `/api/sms/status` callbacks write monotonic delivery status and provider IDs; API acceptance is distinct from carrier delivery. Queued bodies are cleared after submission, verification bodies never enter receipts, and SMS receipts are removed after 30 days. Safe failure alerts use the existing optional `OBSERVABILITY_WEBHOOK_URL`. Unknown results require operator review; there is no automatic provider reconciliation.
+
+Advanced Opt-Out owns branded STOP/START/HELP responses. The service inbound webhook is `POST https://switchboardsocial.me/api/sms/inbound`. Its queue validity is 900 seconds; verification requests shorten that to 600 seconds, and expiring jobs shorten it to their remaining lifetime. New coded RSVP responses are TwiML replies to the sender's explicit request and do not create an SMS subscription.
+
+## Earlier incident and release evidence
+
+On September 8, production was missing four notification preference columns despite a recorded migration. Forward repair `20260908225045_restore_notification_preferences.sql` restored them and their narrow grants. The client's historical failed request remains uncorrelated; the repair is not proof of that request's exact cause.
+
+An explicitly approved Settings verification request at 23:47:19 UTC produced message `SM188d49042ffc62421b5be39f9a33183b`, which Twilio reported delivered. Its code was not read from the provider or stored in these notes, and user completion of code entry was not confirmed. The active Messaging Service had one sender and a verified A2P campaign. Earlier 21704 errors belonged to an empty sibling service on September 3.
+
+PRs #187 and #188 deployed the verification/consent/receipts work and repaired canonical-host redirects that prevented Vercel cron from reaching its secret-authenticated handler. Production commit `d3c918c5949e0983c12da603d25f6de3337f16d5` completed a successful scheduled sweep at `2026-09-09T00:42:09.336Z`. The deployment hook is stored only in GitHub's `VERCEL_DEPLOY_HOOK_URL` secret. Production releases apply migrations and verify parity before invoking it.
+
+Provider references: [Advanced Opt-Out](https://www.twilio.com/docs/messaging/tutorials/advanced-opt-out), [message status callbacks](https://www.twilio.com/docs/messaging/guides/outbound-message-status-in-status-callbacks), and [Message resource](https://www.twilio.com/docs/messaging/api/message-resource).

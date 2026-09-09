@@ -15,7 +15,7 @@ vi.mock('@/lib/server/sms-opt-out', () => ({
 
 vi.mock('@/lib/supabase/admin', () => ({ createAdminClient: () => ({ rpc: suppression.rpc }) }));
 vi.mock('@/lib/server/rate-limit', () => ({ checkRateLimit: suppression.limit }));
-vi.mock('@/lib/server/sms-policy', () => ({ smsBudgetAllows: suppression.limit }));
+vi.mock('@/lib/server/sms-policy', () => ({ smsBudgetAllows: suppression.limit, smsDestinationAllowed: () => process.env.SMS_PAUSED !== 'true' }));
 import { POST } from './route';
 
 const WEBHOOK_URL = 'https://switchboardsocial.me/api/sms/inbound';

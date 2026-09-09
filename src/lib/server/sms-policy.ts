@@ -36,3 +36,9 @@ export async function smsBudgetAllows(phone: string): Promise<boolean> {
   if (!(await checkRateLimit(`sms-destination:${phone}`, 12, 86400, { failClosed: true }))) return false;
   return checkRateLimit('sms-global', limit, 86400, { failClosed: true });
 }
+
+export function smsDestinationAllowed(phone: string): boolean {
+  if (process.env.SMS_PAUSED === 'true') return false;
+  const prefixes = (process.env.SMS_ALLOWED_PREFIXES ?? '+1').split(',').map(value => value.trim()).filter(value => /^\+\d{1,4}$/.test(value));
+  return prefixes.some(prefix => phone.startsWith(prefix));
+}

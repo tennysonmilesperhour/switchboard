@@ -5,7 +5,7 @@ vi.mock('@/lib/server/rate-limit', () => ({ checkRateLimit: vi.fn().mockResolved
 vi.mock('@/lib/supabase/admin', () => ({ createAdminClient: () => ({ from: (name: string) => {
   const chain = { select: () => chain, eq: () => chain, not: () => chain, maybeSingle: async () => ({ data: name === 'profile_contacts' ? mocks.contact : name === 'sms_preferences' ? mocks.prefs : name === 'notification_routes' ? mocks.route : { timezone: 'UTC', quiet_hours_start: null, quiet_hours_end: null }, error: null }) }; return chain;
 } }) }));
-import { smsConsentAllows } from './sms-policy';
+import { smsConsentAllows, smsDestinationAllowed } from './sms-policy';
 beforeEach(() => { mocks.contact.user_id = 'original'; mocks.prefs.enabled = true; mocks.prefs.phone = '+15555550100'; mocks.route.plans = 'existing'; mocks.prefs.urgent_changes = false; mocks.quiet.mockReturnValue(false); });
 test('permits current verified recipient with explicit category consent', async () => { expect(await smsConsentAllows('+15555550100', 'plans', 'original')).toBe(true); });
 test('never sends old queued messages to a recycled phone owner', async () => { mocks.contact.user_id = 'new-owner'; expect(await smsConsentAllows('+15555550100', 'plans', 'original')).toBe(false); });
@@ -24,4 +24,12 @@ test('only explicit urgent permission bypasses quiet hours before expiry', async
  mocks.prefs.urgent_changes = true;
  expect(await smsConsentAllows('+15555550100', 'plans', 'original', undefined, until)).toBe(true);
  expect(await smsConsentAllows('+15555550100', 'plans', 'original', undefined, new Date(0).toISOString())).toBe(false);
+});
+
+test('reply destinations honor the pause and calling-code policy', () => {
+  expect(smsDestinationAllowed('+15555550100')).toBe(true);
+  expect(smsDestinationAllowed('+445555555555')).toBe(false);
+  vi.stubEnv('SMS_PAUSED', 'true');
+  expect(smsDestinationAllowed('+15555550100')).toBe(false);
+  vi.unstubAllEnvs();
 });
