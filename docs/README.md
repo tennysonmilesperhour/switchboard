@@ -63,3 +63,5 @@ files are historical evidence, never a source of current product truth.
   remaining work carried into `DOCKET.md` first.
 - **Behavior documentation** → the living doc that owns it, updated in the same
   PR as the change.
+
+- [SMS purpose, current behavior, and repair notes](SMS.md)

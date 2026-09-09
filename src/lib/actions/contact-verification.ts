@@ -15,7 +15,7 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import { requireUser } from '@/lib/server/require-user';
 import { checkRateLimit } from '@/lib/server/rate-limit';
 import { appUrl, sendEmailWithResult } from '@/lib/server/email';
-import { sendSmsWithResult } from '@/lib/server/sms';
+import { smsEnabled, sendSmsWithResult } from '@/lib/server/sms';
 import { reportAndFail } from '@/lib/server/observability';
 
 export type ContactKind = 'email' | 'phone';
@@ -57,6 +57,11 @@ export async function requestContactVerification(
   const auth = await requireUser();
   if (!auth.ok) return auth;
   const { user } = auth;
+  if (kind !== 'email' && kind !== 'phone') return validation('Choose email or phone.');
+  if (kind === 'phone' && (!verificationSecret() || !smsEnabled())) {
+    return reportAndFail('SB-VERIFY-CONFIG', 'contact.verify-start',
+      new Error('Phone verification configuration is incomplete'), { kind });
+  }
 
   if (!(await checkRateLimit(
     `contact-verify-send:${user.id}:${kind}`,
@@ -68,23 +73,34 @@ export async function requestContactVerification(
   }
 
   const admin = createAdminClient();
-  const { data: contact } = await admin
+  const { data: contact, error: contactError } = await admin
     .from('profile_contacts')
     .select('normalized_value, verified_at')
     .eq('user_id', user.id)
     .eq('kind', kind)
     .maybeSingle();
 
+  if (contactError) {
+    return reportAndFail('SB-VERIFY-START', 'contact.verify-start', contactError, { kind });
+  }
   if (!contact) {
     return validation(`Add a ${kind === 'email' ? 'contact email' : 'phone number'} first.`);
   }
   if (contact.verified_at) return { ok: true, message: 'That contact is already verified.' };
 
-  await admin
+  if (kind === 'phone' && !(await checkRateLimit(
+    `contact-verify-number:${tokenHash(contact.normalized_value)}`,
+    8, 60 * 60, { failClosed: true },
+  ))) return failure('SB-RATE-LIMIT', 'Too many codes requested for this number. Try again later.');
+
+  const { error: deleteError } = await admin
     .from('contact_verification_requests')
     .delete()
     .eq('user_id', user.id)
     .eq('kind', kind);
+  if (deleteError) {
+    return reportAndFail('SB-VERIFY-START', 'contact.verify-start', deleteError, { kind });
+  }
 
   if (kind === 'email') {
     const token = randomBytes(32).toString('base64url');
@@ -133,7 +149,7 @@ export async function requestContactVerification(
   const code = String(randomInt(0, 1_000_000)).padStart(6, '0');
   const codeHash = phoneCodeHash(user.id, contact.normalized_value, code);
   if (!codeHash) {
-    return failure('SB-CONFIG-SMS');
+    return failure('SB-VERIFY-CONFIG');
   }
   const { error: requestError } = await admin.from('contact_verification_requests').insert({
     user_id: user.id,
@@ -147,6 +163,7 @@ export async function requestContactVerification(
   }
 
   const delivery = await sendSmsWithResult({
+      category: 'verification',
     to: contact.normalized_value,
     body: `Your Switchboard verification code is ${code}. It expires in 10 minutes.`,
   });
@@ -155,20 +172,21 @@ export async function requestContactVerification(
       .from('contact_verification_requests')
       .delete()
       .eq('user_id', user.id)
-      .eq('kind', kind);
-    if (delivery.status === 'not_configured') return failure('SB-CONFIG-SMS');
+      .eq('kind', kind)
+      .eq('code_hash', codeHash);
+    if (delivery.status === 'not_configured') return failure('SB-VERIFY-CONFIG');
     // A STOP on record is the reader's own choice, not a delivery fault: the
     // route out is texting START, and "try again" would never succeed.
     if (delivery.status === 'opted_out') return failure('SB-VERIFY-STOPPED');
     return reportAndFail(
-      'SB-VERIFY-START',
+      'SB-VERIFY-DELIVERY',
       'contact.verify-start',
-      new Error(`SMS delivery failed: ${delivery.status}`),
-      { kind },
-      'The verification text could not be sent. Try again later.',
+      new Error('SMS verification delivery failed'),
+      { kind, deliveryStatus: delivery.status, providerCode: delivery.errorCode },
     );
   }
-  return { ok: true, message: 'Verification code sent. It expires in 10 minutes.' };
+  console.info('[contact.verify-requested]', { kind, providerMessageId: delivery.providerMessageId });
+  return { ok: true, message: 'Code requested. It may take a minute to arrive and expires in 10 minutes.' };
 }
 
 export async function confirmPhoneContact(code: string): Promise<ContactVerificationResult> {
@@ -187,12 +205,14 @@ export async function confirmPhoneContact(code: string): Promise<ContactVerifica
   }
 
   const admin = createAdminClient();
-  const { data: request } = await admin
+  const { data: request, error: readError } = await admin
     .from('contact_verification_requests')
     .select('normalized_value, code_hash, attempts, expires_at')
     .eq('user_id', user.id)
     .eq('kind', 'phone')
     .maybeSingle();
+  if (readError) return reportAndFail('SB-VERIFY-CHECK', 'contact.verify-check', readError, { kind: 'phone' });
+  if (!verificationSecret()) return failure('SB-VERIFY-CONFIG');
   if (!request || !request.code_hash || new Date(request.expires_at).getTime() <= Date.now()) {
     return validation('That code expired. Request a new one.');
   }
@@ -207,23 +227,27 @@ export async function confirmPhoneContact(code: string): Promise<ContactVerifica
     return validation('That code did not match.');
   }
 
-  const { error } = await admin
+  const { data: verifiedContact, error } = await admin
     .from('profile_contacts')
     .update({ verified_at: new Date().toISOString(), updated_at: new Date().toISOString() })
     .eq('user_id', user.id)
     .eq('kind', 'phone')
-    .eq('normalized_value', request.normalized_value);
+    .eq('normalized_value', request.normalized_value)
+    .select('user_id')
+    .maybeSingle();
   if (error) {
     if (error.code === '23505') {
       return validation('That phone number is already verified on another account.');
     }
     return reportAndFail('SB-VERIFY-CHECK', 'contact.verify-check', error, { kind: 'phone' });
   }
+  if (!verifiedContact) return validation('Your phone number changed. Request a code for the current number.');
   await admin
     .from('contact_verification_requests')
     .delete()
     .eq('user_id', user.id)
-    .eq('kind', 'phone');
+    .eq('kind', 'phone')
+    .eq('code_hash', request.code_hash);
   revalidatePath('/settings');
   return { ok: true, message: 'Phone number verified.' };
 }

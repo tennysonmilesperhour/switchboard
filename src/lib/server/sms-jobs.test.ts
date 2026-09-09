@@ -1,0 +1,11 @@
+import { beforeEach, expect, test, vi } from 'vitest';
+const mocks = vi.hoisted(() => ({ rpc: vi.fn(), send: vi.fn(), update: vi.fn() }));
+vi.mock('@/lib/supabase/admin', () => ({ createAdminClient: () => ({ rpc: mocks.rpc, from: () => ({ update: (value: unknown) => { mocks.update(value); return { eq: () => ({ eq: async () => ({ error: null }) }) }; } }) }) }));
+vi.mock('@/lib/server/sms', () => ({ sendSmsWithResult: mocks.send }));
+vi.mock('@/lib/links', () => ({ absoluteUrl: (path: string) => `https://switchboardsocial.me${path}` }));
+import { sweepSmsJobs } from './sms-jobs';
+beforeEach(() => { vi.clearAllMocks(); mocks.rpc.mockResolvedValue({ data: [{ id: 'job', phone: '+15555550999', category: 'plans', body: 'Plan\n/notifications', attempts: 1 }], error: null }); });
+test.each(['timeout','network_error','invalid_response'])('never retries ambiguous outcome %s', async errorCode => { mocks.send.mockResolvedValue({ status: 'failed', errorCode }); await sweepSmsJobs(); expect(mocks.update).toHaveBeenCalledWith(expect.objectContaining({ status: 'unknown', body: null })); });
+test('retries an explicit throttle rejection', async () => { mocks.send.mockResolvedValue({ status: 'failed', errorCode: 'twilio_20429' }); await sweepSmsJobs(); expect(mocks.update).toHaveBeenCalledWith(expect.objectContaining({ status: 'pending' })); });
+test('does not retry permanent errors', async () => { mocks.send.mockResolvedValue({ status: 'failed', errorCode: 'twilio_30034' }); await sweepSmsJobs(); expect(mocks.update).toHaveBeenCalledWith(expect.objectContaining({ status: 'failed', body: null })); });
+test('does not treat API acceptance as delivery', async () => { mocks.send.mockResolvedValue({ status: 'sent', providerMessageId: 'SMtest' }); expect(await sweepSmsJobs()).toBe(1); expect(mocks.update).toHaveBeenCalledWith(expect.objectContaining({ status: 'accepted' })); });

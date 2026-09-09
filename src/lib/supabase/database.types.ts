@@ -2476,6 +2476,126 @@ export type Database = {
           },
         ]
       }
+      sms_consent_events: {
+        Row: {
+          enabled: boolean
+          id: string
+          phone: string
+          plans: boolean
+          policy_version: string
+          recorded_at: string
+          reminders: boolean
+          source: string
+          user_id: string | null
+        }
+        Insert: {
+          enabled: boolean
+          id?: string
+          phone: string
+          plans: boolean
+          policy_version?: string
+          recorded_at?: string
+          reminders: boolean
+          source?: string
+          user_id?: string | null
+        }
+        Update: {
+          enabled?: boolean
+          id?: string
+          phone?: string
+          plans?: boolean
+          policy_version?: string
+          recorded_at?: string
+          reminders?: boolean
+          source?: string
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sms_consent_events_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      sms_jobs: {
+        Row: {
+          attempts: number
+          available_at: string
+          body: string | null
+          category: string
+          created_at: string
+          error_code: string | null
+          expires_at: string
+          id: string
+          invite_id: string | null
+          notification_id: string | null
+          phone: string
+          provider_message_id: string | null
+          status: string
+          updated_at: string
+          user_id: string | null
+        }
+        Insert: {
+          attempts?: number
+          available_at?: string
+          body?: string | null
+          category: string
+          created_at?: string
+          error_code?: string | null
+          expires_at?: string
+          id?: string
+          invite_id?: string | null
+          notification_id?: string | null
+          phone: string
+          provider_message_id?: string | null
+          status?: string
+          updated_at?: string
+          user_id?: string | null
+        }
+        Update: {
+          attempts?: number
+          available_at?: string
+          body?: string | null
+          category?: string
+          created_at?: string
+          error_code?: string | null
+          expires_at?: string
+          id?: string
+          invite_id?: string | null
+          notification_id?: string | null
+          phone?: string
+          provider_message_id?: string | null
+          status?: string
+          updated_at?: string
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sms_jobs_invite_id_fkey"
+            columns: ["invite_id"]
+            isOneToOne: false
+            referencedRelation: "invites"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sms_jobs_notification_id_fkey"
+            columns: ["notification_id"]
+            isOneToOne: true
+            referencedRelation: "notifications"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sms_jobs_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       sms_opt_outs: {
         Row: {
           normalized_number: string
@@ -2490,6 +2610,50 @@ export type Database = {
           opted_out_at?: string
         }
         Relationships: []
+      }
+      sms_preferences: {
+        Row: {
+          consent_at: string
+          consent_source: string
+          enabled: boolean
+          phone: string
+          plans: boolean
+          policy_version: string
+          reminders: boolean
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          consent_at?: string
+          consent_source?: string
+          enabled?: boolean
+          phone: string
+          plans?: boolean
+          policy_version?: string
+          reminders?: boolean
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          consent_at?: string
+          consent_source?: string
+          enabled?: boolean
+          phone?: string
+          plans?: boolean
+          policy_version?: string
+          reminders?: boolean
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sms_preferences_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: true
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       usage_events: {
         Row: {
@@ -2876,6 +3040,32 @@ export type Database = {
       }
       claim_guest_invite: { Args: { p_token: string }; Returns: string }
       claim_guest_invites_by_contact: { Args: never; Returns: number }
+      claim_sms_jobs: {
+        Args: never
+        Returns: {
+          attempts: number
+          available_at: string
+          body: string | null
+          category: string
+          created_at: string
+          error_code: string | null
+          expires_at: string
+          id: string
+          invite_id: string | null
+          notification_id: string | null
+          phone: string
+          provider_message_id: string | null
+          status: string
+          updated_at: string
+          user_id: string | null
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "sms_jobs"
+          isOneToOne: false
+          isSetofReturn: true
+        }
+      }
       compatibility_between: {
         Args: { p_other: string }
         Returns: {
@@ -3135,6 +3325,16 @@ export type Database = {
           voters: number
         }[]
       }
+      record_sms_status: {
+        Args: {
+          p_error: string
+          p_id: string
+          p_phone: string
+          p_sid: string
+          p_status: string
+        }
+        Returns: boolean
+      }
       replace_event_availability: {
         Args: { p_event: string; p_slots: string[] }
         Returns: undefined
@@ -3204,6 +3404,10 @@ export type Database = {
       }
       set_my_signal_default_circle: {
         Args: { p_circle: string }
+        Returns: undefined
+      }
+      set_sms_preferences: {
+        Args: { p_enabled: boolean; p_plans: boolean; p_reminders: boolean }
         Returns: undefined
       }
       shared_facets_of: {

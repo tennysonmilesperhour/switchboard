@@ -100,6 +100,9 @@ The app reads these (see `.env.example` for the full list). Set them in Vercel
   `CONTACT_VERIFICATION_SECRET` — required together for phone verification
 - `NEXT_PUBLIC_VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY` — optional; web push
 
+See [SMS purpose and acceptance checks](SMS.md) for implemented behavior, gaps,
+and the September 8 database repair.
+
 ## Twilio inbound SMS and opt-out
 
 Apply `20260902120000_sms_opt_outs.sql` before enabling SMS. Then configure the

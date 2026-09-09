@@ -1,4 +1,9 @@
+import { smsConsentAllows, smsBudgetAllows } from '@/lib/server/sms-policy';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
+
+vi.mock('@/lib/server/sms-policy', () => ({ smsConsentAllows: vi.fn().mockResolvedValue(true), smsBudgetAllows: vi.fn().mockResolvedValue(true) }));
+
+vi.mock('@/lib/supabase/admin', () => ({ createAdminClient: () => ({ from: () => ({ insert: async () => ({ error: null }), update: () => ({ eq: () => ({ eq: async () => ({ error: null }) }) }) }) }) }));
 
 const optOutStatus = vi.hoisted(() => vi.fn());
 
@@ -27,6 +32,9 @@ afterEach(() => {
 });
 
 beforeEach(() => {
+  vi.stubEnv('NEXT_PUBLIC_APP_URL', 'https://switchboardsocial.me');
+  vi.mocked(smsConsentAllows).mockResolvedValue(true);
+  vi.mocked(smsBudgetAllows).mockResolvedValue(true);
   optOutStatus.mockReset();
   optOutStatus.mockResolvedValue('allowed');
 });
@@ -108,8 +116,27 @@ describe('sendSmsWithResult', () => {
     await expect(sendSmsWithResult({ to: '+1 555 555 0100', body: 'Hello' })).resolves.toEqual({
       status: 'failed',
       provider: 'twilio',
-      errorCode: 'provider_error',
+      errorCode: 'twilio_30007',
     });
+  });
+
+  test.each([[21610, 'opted_out'], [30034, 'failed'], [20003, 'failed']])('preserves Twilio error %s without private body text', async (code, status) => {
+    process.env.TWILIO_ACCOUNT_SID = 'ACtest';
+    process.env.TWILIO_AUTH_TOKEN = 'test';
+    process.env.TWILIO_FROM_NUMBER = '+15555550199';
+    const log = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({ code, message: 'private recipient detail' }), { status: 400 })));
+    expect(await sendSmsWithResult({ to: '+15555550100', body: 'secret code' })).toEqual({ status, provider: 'twilio', errorCode: `twilio_${code}` });
+    expect(JSON.stringify(log.mock.calls)).not.toContain('private recipient');
+    expect(JSON.stringify(log.mock.calls)).not.toContain('secret code');
+  });
+
+  test('does not claim success for malformed provider success responses', async () => {
+    process.env.TWILIO_ACCOUNT_SID = 'ACtest';
+    process.env.TWILIO_AUTH_TOKEN = 'test';
+    process.env.TWILIO_FROM_NUMBER = '+15555550199';
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response('{}', { status: 201 })));
+    expect(await sendSmsWithResult({ to: '+15555550100', body: 'Hello' })).toMatchObject({ status: 'failed', errorCode: 'invalid_response' });
   });
 
   test('aborts a stalled provider at the configured timeout', async () => {
@@ -178,5 +205,38 @@ describe('guestInviteSmsText', () => {
     // arrives broken — some clients swallow it into the href, others stop the
     // link short. The URL must be the last thing in the message.
     expect(body.trimEnd()).toBe(body);
+  });
+});
+
+
+describe('SMS consent and spending guards', () => {
+  beforeEach(() => {
+    vi.stubEnv('TWILIO_ACCOUNT_SID', 'ACtest');
+    vi.stubEnv('TWILIO_AUTH_TOKEN', 'token');
+    vi.stubEnv('TWILIO_FROM_NUMBER', '+15555550199');
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({ sid: 'SM123' }), { status: 201 })));
+  });
+  test('never sends a transactional message without consent', async () => {
+    vi.mocked(smsConsentAllows).mockResolvedValue(false);
+    expect(await sendSmsWithResult({ to: '+15555550100', body: 'Plan' })).toMatchObject({ errorCode: 'consent_required' });
+    expect(fetch).not.toHaveBeenCalled();
+  });
+  test('a requested verification does not require subscription consent', async () => {
+    vi.mocked(smsConsentAllows).mockResolvedValue(false);
+    expect(await sendSmsWithResult({ to: '+15555550100', body: 'Code', category: 'verification' })).toMatchObject({ status: 'sent' });
+  });
+  test('verification still respects the global budget', async () => {
+    vi.mocked(smsBudgetAllows).mockResolvedValue(false);
+    expect(await sendSmsWithResult({ to: '+15555550100', body: 'Code', category: 'verification' })).toMatchObject({ errorCode: 'sms_budget' });
+    expect(fetch).not.toHaveBeenCalled();
+  });
+  test('rejects destinations outside the calling-code policy', async () => {
+    expect(await sendSmsWithResult({ to: '+442079460123', body: 'Plan' })).toMatchObject({ errorCode: 'destination_not_allowed' });
+    expect(fetch).not.toHaveBeenCalled();
+  });
+  test('the kill switch prevents provider requests', async () => {
+    vi.stubEnv('SMS_PAUSED', 'true');
+    expect(await sendSmsWithResult({ to: '+15555550100', body: 'Plan' })).toMatchObject({ errorCode: 'sms_paused' });
+    expect(fetch).not.toHaveBeenCalled();
   });
 });

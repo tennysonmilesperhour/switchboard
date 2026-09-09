@@ -1,8 +1,12 @@
 'use client';
 
-import { useState, useTransition } from 'react';
+import { useEffect, useState, useTransition } from 'react';
+import { useRouter } from 'next/navigation';
+import { ErrorNotice } from '@/components/ui/ErrorNotice';
+import { failure } from '@/lib/errors';
 import { Button } from '@/components/ui/Button';
 import {
+  type ContactVerificationResult,
   confirmPhoneContact,
   requestContactVerification,
 } from '@/lib/actions/contact-verification';
@@ -20,38 +24,60 @@ export function ContactVerification({
   emailVerified,
   phoneVerified,
 }: ContactVerificationProps) {
+  const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [message, setMessage] = useState('');
-  const [error, setError] = useState('');
+  const [error, setError] = useState<ContactVerificationResult | null>(null);
+  const [cooldown, setCooldown] = useState(0);
+  const [activeAction, setActiveAction] = useState<'email' | 'phone' | 'confirm' | null>(null);
+  useEffect(() => {
+    if (!cooldown) return;
+    const timer = window.setTimeout(() => setCooldown(cooldown - 1), 1000);
+    return () => window.clearTimeout(timer);
+  }, [cooldown]);
   const [phoneCodeSent, setPhoneCodeSent] = useState(false);
   const [code, setCode] = useState('');
 
   function request(kind: 'email' | 'phone') {
     setMessage('');
-    setError('');
+    setError(null);
+    setActiveAction(kind);
     startTransition(async () => {
-      const result = await requestContactVerification(kind);
-      if (!result.ok) {
-        setError(result.error ?? 'Could not start verification.');
-        return;
+      try {
+        const result = await requestContactVerification(kind);
+        if (!result.ok) {
+          setError(result);
+          return;
+        }
+        if (kind === 'phone') {
+          setPhoneCodeSent(true);
+          setCooldown(30);
+        }
+        setMessage(result.message ?? 'Verification requested.');
+      } catch {
+        setError(failure('SB-VERIFY-START', 'The verification request was interrupted.'));
       }
-      if (kind === 'phone') setPhoneCodeSent(true);
-      setMessage(result.message ?? 'Verification sent.');
     });
   }
 
   function confirmPhone() {
     setMessage('');
-    setError('');
+    setError(null);
+    setActiveAction('confirm');
     startTransition(async () => {
-      const result = await confirmPhoneContact(code);
-      if (!result.ok) {
-        setError(result.error ?? 'Could not verify that code.');
-        return;
+      try {
+        const result = await confirmPhoneContact(code);
+        if (!result.ok) {
+          setError(result);
+          return;
+        }
+        setMessage(result.message ?? 'Phone number verified.');
+        setPhoneCodeSent(false);
+        setCode('');
+        router.refresh();
+      } catch {
+        setError(failure('SB-VERIFY-CHECK', 'The verification check was interrupted.'));
       }
-      setMessage(result.message ?? 'Phone number verified.');
-      setPhoneCodeSent(false);
-      window.location.reload();
     });
   }
 
@@ -69,7 +95,7 @@ export function ContactVerification({
         </div>
         {email && !emailVerified && (
           <Button type="button" variant="secondary" disabled={pending} onClick={() => request('email')}>
-            Send link
+            {pending && activeAction === 'email' ? 'Sending…' : 'Send link'}
           </Button>
         )}
       </div>
@@ -86,11 +112,16 @@ export function ContactVerification({
             )}
           </div>
           {phone && !phoneVerified && (
-            <Button type="button" variant="secondary" disabled={pending} onClick={() => request('phone')}>
-              Text code
+            <Button type="button" variant="secondary" disabled={pending || cooldown > 0} onClick={() => request('phone')}>
+              {pending && activeAction === 'phone' ? 'Sending…' : cooldown > 0 ? `Resend in ${cooldown}s` : phoneCodeSent ? 'Resend code' : 'Text code'}
             </Button>
           )}
         </div>
+        {phone && !phoneVerified && (
+          <p className="mt-2 text-xs text-ink-soft">
+            Choose Text code to receive a one-time verification text. Message and data rates may apply.
+          </p>
+        )}
         {phoneCodeSent && !phoneVerified && (
           <div className="mt-3 flex gap-2">
             <label htmlFor="phone-verification-code" className="sr-only">Verification code</label>
@@ -105,7 +136,7 @@ export function ContactVerification({
               className="min-w-0 flex-1 rounded-card border border-line bg-paper px-3.5 py-2.5 text-sm outline-none focus:border-terracotta"
             />
             <Button type="button" disabled={pending || code.length !== 6} onClick={confirmPhone}>
-              Verify
+              {pending && activeAction === 'confirm' ? 'Checking…' : 'Verify'}
             </Button>
           </div>
         )}
@@ -116,11 +147,12 @@ export function ContactVerification({
           Add an email or phone number from Edit profile before verifying it.
         </p>
       )}
-      {(message || error) && (
-        <p role={error ? 'alert' : 'status'} className={`text-sm ${error ? 'text-rose-deep' : 'text-sage-deep'}`}>
-          {error || message}
-        </p>
+      {error && (
+        <div role="alert">
+          <ErrorNotice message={error.error ?? 'Verification failed.'} code={error.code} fix={error.fix} />
+        </div>
       )}
+      {message && <p role="status" className="text-sm text-sage-deep">{message}</p>}
     </div>
   );
 }

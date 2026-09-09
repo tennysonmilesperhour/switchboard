@@ -38,6 +38,11 @@ describe('production deployment gate', () => {
     );
   });
 
+  it('fails closed when the schema parity command fails', () => {
+    expect(WORKFLOW).toContain('if ! out="$(supabase db push --dry-run 2>&1)"; then');
+    expect(WORKFLOW).not.toContain('out="$(supabase db push --dry-run 2>&1)" || true');
+  });
+
   it('triggers Vercel only after the schema parity check', () => {
     const parity = WORKFLOW.indexOf('Verify schema parity');
     const deploy = WORKFLOW.indexOf('Trigger production deployment');
