@@ -385,25 +385,30 @@ test.describe('authenticated surface', () => {
 
     const title = page.getByPlaceholder(TITLE);
     await clickWizardNext(page);
+    // People is the second step and needs someone on the list before it lets
+    // go. One friend, invited everyone-at-once (the default), makes a
+    // five-step plan: there is no order to set for one person.
+    await page.getByRole('button', { name: /E2E Guest/ }).click();
+    await expect(page.getByText('1 person selected')).toBeVisible({ timeout: 5_000 });
     await clickWizardNext(page);
-    await expect(page.getByText('Step 3 of 6')).toBeVisible();
+    await expect(page.getByText('Step 3 of 5')).toBeVisible();
 
     // 1. The Back button.
     await page.getByRole('button', { name: 'Back', exact: true }).click();
-    await expect(page.getByText('Step 2 of 6')).toBeVisible();
+    await expect(page.getByText('Step 2 of 5')).toBeVisible();
 
     // 2. The browser/phone back gesture — one step, not out of the wizard.
     await page.goBack();
-    await expect(page.getByText('Step 1 of 6')).toBeVisible();
+    await expect(page.getByText('Step 1 of 5')).toBeVisible();
     await expect(page).toHaveURL(/\/events\/new/);
     await expect(title).toHaveValue('E2E back navigation');
 
     // 3. A progress segment, jumping more than one step at a time.
     await clickWizardNext(page);
     await clickWizardNext(page);
-    await expect(page.getByText('Step 3 of 6')).toBeVisible();
+    await expect(page.getByText('Step 3 of 5')).toBeVisible();
     await page.getByRole('button', { name: 'Step 1, Basics' }).click();
-    await expect(page.getByText('Step 1 of 6')).toBeVisible();
+    await expect(page.getByText('Step 1 of 5')).toBeVisible();
     await expect(title).toHaveValue('E2E back navigation');
 
     // Editing after going back is the point of going back.
