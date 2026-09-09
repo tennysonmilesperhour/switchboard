@@ -99,7 +99,11 @@ jobs:
           # After a successful push nothing should remain to apply. `db push
           # --dry-run` prints the pending list (empty when in parity). Treat any
           # listed local migration version as drift.
-          out="$(supabase db push --dry-run 2>&1)" || true
+          if ! out="$(supabase db push --dry-run 2>&1)"; then
+            echo "$out"
+            echo "::error::Schema parity could not be verified. Production deployment is blocked."
+            exit 1
+          fi
           echo "$out"
           if echo "$out" | grep -qE '^[[:space:]]*[0-9]{14}_'; then
             echo "::error::Migrations still pending after push — production is not at schema parity."
