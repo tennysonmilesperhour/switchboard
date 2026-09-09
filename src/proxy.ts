@@ -43,6 +43,13 @@ function isPublicPath(pathname: string): boolean {
 }
 
 export async function proxy(request: NextRequest) {
+  // Vercel cron invokes the deployment hostname and does not follow redirects.
+  // These two JSON endpoints authenticate their own CRON_SECRET; browser
+  // canonicalization and session refresh must not intercept the scheduler.
+  if (['/api/cron/cascade', '/api/cron/digest'].includes(request.nextUrl.pathname)) {
+    return NextResponse.next();
+  }
+
   // Keep one canonical origin in production. This makes old bookmarks and
   // shared invite links converge before auth/session cookies are evaluated,
   // while leaving local development and Vercel preview URLs usable.
