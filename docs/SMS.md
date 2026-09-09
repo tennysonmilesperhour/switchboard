@@ -13,7 +13,7 @@ Reply-based RSVP, text-only participation, and SMS chat are separate product
 choices and are not implemented. Confirm whether those are desired before
 promising or building them.
 
-## What ships today
+## Production behavior at initial diagnosis
 
 - Settings generates a six-digit code, stores an HMAC bound to the account and
   number, and checks it within ten minutes. Twilio Programmable Messaging sends
@@ -116,3 +116,76 @@ Primary references:
 - https://www.twilio.com/docs/verify
 - https://www.twilio.com/docs/verify/consent-opt-in
 - https://www.twilio.com/en-us/legal/messaging-policy
+
+## Implemented completion work (pending application release)
+
+The follow-up to PR #187 adds:
+
+- A separate unchecked SMS agreement in Settings, with plan/reminder categories.
+  A database RPC binds consent to the caller's currently verified number and
+  appends timestamp/source/policy/scope evidence. Existing users are not enrolled.
+- A private notification-triggered queue for member invitations, important plan
+  changes, cancellations, announcements, and reminders. Other categories never
+  enqueue SMS. Member invitations no longer also take the guest SMS path.
+- Consent, current recipient identity, verification, STOP, and quiet-hour checks
+  immediately before sending. A recycled phone number cannot receive queued
+  messages intended for its previous owner. Raw guest numbers without verified
+  account consent are suppressed; hosts can share the invitation link instead.
+- Signed `/api/sms/status` callbacks, persisted provider IDs, monotonic status
+  writes, and host invitation receipts. API acceptance is distinct from delivery.
+  OTP bodies are never stored in the receipt table. Callback endpoints bypass
+  browser authentication but require the provider signature and account binding.
+- Three jobs per sweep, atomic claims, at most three attempts after explicit
+  HTTP 429/Twilio 20429 rejection, and no automatic retry after timeout/network
+  ambiguity or a killed worker. Ambiguous work is marked `unknown` for review.
+- Default quiet hours 22:00–08:00 in the profile timezone unless customized,
+  including cancellations (no urgency exception). Reminders expire after one
+  hour; other queued messages after 24 hours. In-app notifications remain.
+- A default 100-attempt daily application budget, 12 attempts per destination
+  daily, a 450-UTF-16-unit body ceiling, a calling-code allowlist defaulting to
+  `+1`, and `SMS_PAUSED`. These bound attempts/segments, not exact dollar spend.
+  The existing verification account and destination limits remain in force.
+- Redacted operational failure alerts through the existing optional
+  `OBSERVABILITY_WEBHOOK_URL`, and SMS/phone-verification configuration included
+  in the privileged health launch gate. Message bodies are cleared after
+  submission and receipts expire after 30 days through the regular sweep.
+
+The current hardened custom OTP implementation remains. Twilio Verify is a
+separate provider migration, not needed to repair the now-delivering verification
+path. It should be chosen if managed OTP/fraud handling is worth the additional
+provider dependency and pricing. Reply-based RSVP/chat is still outside the
+implemented scope: messages link back into Switchboard; STOP/START/HELP are the
+supported inbound controls.
+
+Remaining operational limits: the account-wide Twilio dollar budget, geographic
+permissions, and alert destination must be set by the operator to match business
+policy. `+1` is the NANP calling code, not a guarantee of US-only delivery. The app
+budget is fixed-window and includes unsuccessful attempts. Guest legacy direct
+sends receive receipts and consent checks but are not retried through the member
+queue. No automatic provider reconciliation is attempted for `unknown` results.
+
+### Live evidence, September 8
+
+The existing `Switchboard SMS Alerts` Messaging Service has one sender and a
+verified A2P campaign. Its older sibling service is empty; the three error-21704
+failures belong to September 3, not today's test. At 23:47:19 UTC, the approved
+Settings verification request created message
+`SM188d49042ffc62421b5be39f9a33183b`; Twilio reports **Delivered**. The code was not
+read from Twilio or recorded. User completion of code entry remains to be
+confirmed. This establishes the current provider delivery path, not the exact
+cause of the client's uncorrelated failed attempt.
+
+The missing Vercel production deploy hook has been created for `main`, and its
+URL stored only in GitHub's `VERCEL_DEPLOY_HOOK_URL` secret. It was not triggered.
+GitHub currently refuses to start the required checks because of failed account
+payments or a spending limit. The new migration/application must remain together
+behind the repository's schema-gated release workflow.
+
+Advanced Opt-Out was enabled and the STOP/START/HELP replies were branded. START
+now says that saved SMS preferences still apply; it does not claim to create a
+new application subscription. The service inbound URL is configured as
+`https://switchboardsocial.me/api/sms/inbound` using POST. The service queue
+validity is 900 seconds; application requests shorten verification to 600
+seconds and queued reminders to their remaining lifetime. The inbound app route
+fix must be released before application-side STOP persistence can be accepted
+end to end. No STOP/START test messages were sent in this task.

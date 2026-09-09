@@ -45,7 +45,7 @@ export type EventPageInvite = Invite & {
   invitee_avatar_url: string | null;
   deliveries?: Array<{
     channel: 'in_app' | 'email' | 'sms';
-    status: 'sent' | 'not_configured' | 'invalid_recipient' | 'opted_out' | 'failed';
+    status: string;
   }>;
 };
 
@@ -404,6 +404,12 @@ export async function loadEventPage(
       : Promise.resolve({ data: [] }),
   ]);
 
+  // Only hosts/co-hosts reach this read; return delivery status, never numbers or bodies.
+  const inviteIdsForSms = (hostInviteResult.data ?? []).map(row => row.id);
+  const smsReceipts = canManage && inviteIdsForSms.length
+    ? await admin.from('sms_jobs').select('invite_id, status, created_at').in('invite_id', inviteIdsForSms).order('created_at', { ascending: false })
+    : { data: [] };
+
   const hostInvites: EventPageInvite[] = (hostInviteResult.data ?? []).map((row) => {
     const {
       invitee: profileRaw,
@@ -431,6 +437,8 @@ export async function loadEventPage(
           | 'failed',
       });
     }
+    const smsReceipt = smsReceipts.data?.find(receipt => receipt.invite_id === inviteFields.id);
+    if (smsReceipt) latestByChannel.set('sms', { channel: 'sms', status: smsReceipt.status });
     return {
       ...(inviteFields as Invite),
       invitee_name: profile?.display_name ?? inviteFields.guest_name ?? 'Guest',

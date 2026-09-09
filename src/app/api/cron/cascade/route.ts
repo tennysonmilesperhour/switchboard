@@ -1,3 +1,4 @@
+import { sweepSmsJobs } from '@/lib/server/sms-jobs';
 import { NextResponse } from 'next/server';
 import { sweepCascades } from '@/lib/server/cascade-runner';
 import { sweepDuePolls, sweepSuggestionDeadlines } from '@/lib/server/poll-runner';
@@ -55,8 +56,10 @@ export async function GET(request: Request) {
       sweepReminders(),
       sweepExpired(),
     ]);
+    const smsAccepted = await sweepSmsJobs();
     const summary = {
       ok: true,
+      smsAccepted,
       eventsAdvanced,
       suggestionsClosed,
       pollsResolved,

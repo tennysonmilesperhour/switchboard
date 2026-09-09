@@ -81,7 +81,9 @@ begin
          'profiles',
          'calendar_subscriptions',
          'parental_approvals',
-         'sms_opt_outs'
+         'sms_opt_outs',
+         'sms_jobs',
+         'sms_consent_events'
        )
   loop
     execute format(
@@ -94,3 +96,7 @@ end $$;
 -- SB-01 revoked from `anon, authenticated` only, so profiles is included here.
 grant select, insert, update, delete on all tables in schema public to service_role;
 grant usage, select on all sequences in schema public to service_role;
+
+-- Preserve SMS evidence and consent mutation grants when simulating hosted defaults.
+revoke all on public.sms_jobs, public.sms_consent_events from anon, authenticated;
+revoke insert, update, delete on public.sms_preferences from anon, authenticated;

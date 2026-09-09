@@ -30,7 +30,7 @@ interface CascadeProgressProps {
       invitee_name: string;
       deliveries?: Array<{
         channel: 'in_app' | 'email' | 'sms';
-        status: 'sent' | 'not_configured' | 'invalid_recipient' | 'opted_out' | 'failed';
+        status: string;
       }>;
     }
   >;
@@ -191,6 +191,10 @@ export function CascadeProgress({
                     const channel = delivery.channel === 'in_app'
                       ? 'in-app'
                       : delivery.channel;
+                    if (channel === 'sms') {
+                      const labels: Record<string, string> = { pending: 'SMS waiting', sending: 'SMS submitting', accepted: 'SMS accepted by Twilio', queued: 'SMS queued by Twilio', sending_provider: 'SMS sending', sent: 'SMS sent; delivery unconfirmed', delivered: 'SMS delivered', undelivered: 'SMS undelivered', unknown: 'SMS outcome unknown', expired: 'SMS expired', suppressed: 'SMS suppressed', opted_out: 'SMS not subscribed' };
+                      if (labels[delivery.status]) return labels[delivery.status];
+                    }
                     if (delivery.status === 'sent') return `${channel} sent`;
                     if (delivery.status === 'not_configured') return `${channel} not configured`;
                     if (delivery.status === 'invalid_recipient') return `${channel} address invalid`;

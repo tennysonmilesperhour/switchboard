@@ -34,6 +34,96 @@ export type Database = {
   }
   public: {
     Tables: {
+      sms_preferences: {
+        Row: {
+          user_id: string
+          phone: string
+          enabled: boolean
+          plans: boolean
+          reminders: boolean
+          consent_at: string
+          consent_source: string
+          policy_version: string
+          updated_at: string
+        }
+        Insert: {
+          user_id: string
+          phone: string
+          enabled?: boolean
+          plans?: boolean
+          reminders?: boolean
+          consent_at?: string
+          consent_source?: string
+          policy_version?: string
+          updated_at?: string
+        }
+        Update: {
+          user_id?: string
+          phone?: string
+          enabled?: boolean
+          plans?: boolean
+          reminders?: boolean
+          consent_at?: string
+          consent_source?: string
+          policy_version?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      sms_jobs: {
+        Row: {
+          id: string
+          invite_id: string | null
+          notification_id: string | null
+          user_id: string | null
+          phone: string
+          body: string | null
+          category: string
+          status: string
+          provider_message_id: string | null
+          error_code: string | null
+          attempts: number
+          created_at: string
+          updated_at: string
+          available_at: string
+          expires_at: string
+        }
+        Insert: {
+          id?: string
+          invite_id?: string | null
+          notification_id?: string | null
+          user_id?: string | null
+          phone: string
+          body?: string | null
+          category: string
+          status?: string
+          provider_message_id?: string | null
+          error_code?: string | null
+          attempts?: number
+          created_at?: string
+          updated_at?: string
+          available_at?: string
+          expires_at?: string
+        }
+        Update: {
+          id?: string
+          invite_id?: string | null
+          notification_id?: string | null
+          user_id?: string | null
+          phone?: string
+          body?: string | null
+          category?: string
+          status?: string
+          provider_message_id?: string | null
+          error_code?: string | null
+          attempts?: number
+          created_at?: string
+          updated_at?: string
+          available_at?: string
+          expires_at?: string
+        }
+        Relationships: []
+      }
       announcements: {
         Row: {
           author_id: string
@@ -2832,6 +2922,19 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      set_sms_preferences: {
+        Args: { p_enabled: boolean; p_plans: boolean; p_reminders: boolean }
+        Returns: undefined
+      }
+      record_sms_status: {
+        Args: { p_id: string; p_sid: string; p_phone: string; p_status: string; p_error: string | null }
+        Returns: boolean
+      }
+      claim_sms_jobs: {
+        Args: Record<string, never>
+        Returns: Database['public']['Tables']['sms_jobs']['Row'][]
+      }
+
       app_schema_status: { Args: never; Returns: Json }
       app_schema_version: { Args: never; Returns: string }
       apply_cascade_updates: {

@@ -57,6 +57,11 @@ export interface SwitchboardError {
 }
 
 const REGISTRY = {
+  'SB-SMS-PREFERENCES': {
+    message: 'Could not save your SMS preferences.',
+    fix: 'Check that your current phone number is verified, then try again.',
+    actor: 'reader',
+  },
   // ————————————————————————— deployment & configuration —————————————————————
   // Nothing a user did. These exist because a misconfigured deployment used to
   // masquerade as ordinary user-facing failure — a missing service-role key
@@ -806,6 +811,7 @@ const AREA_CODES: Record<string, ErrorCode> = {
   'invite-connection-now': 'SB-INVITE-SEND',
   'invite-connection-deliver': 'SB-INVITE-SEND',
   'sms.consent-check': 'SB-CONFIG-SMS',
+  'sms.delivery': 'SB-CONFIG-SMS',
   'sms.inbound': 'SB-CONFIG-SMS',
   'sms.opt-out-check': 'SB-CONFIG-SMS',
   'event-invite-link': 'SB-SHARE-SAVE',

@@ -163,6 +163,7 @@ export async function requestContactVerification(
   }
 
   const delivery = await sendSmsWithResult({
+      category: 'verification',
     to: contact.normalized_value,
     body: `Your Switchboard verification code is ${code}. It expires in 10 minutes.`,
   });

@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
+  smsEnabled: vi.fn(),
   from: vi.fn(),
   rpc: vi.fn(),
   listBuckets: vi.fn(),
@@ -14,7 +15,7 @@ vi.mock('@/lib/supabase/admin', () => ({
     storage: { listBuckets: mocks.listBuckets },
   }),
 }));
-vi.mock('@/lib/server/sms', () => ({ smsEnabled: () => false }));
+vi.mock('@/lib/server/sms', () => ({ smsEnabled: mocks.smsEnabled }));
 
 import { EXPECTED_SCHEMA_VERSION } from '@/lib/health';
 import { GET } from './route';
@@ -68,6 +69,8 @@ beforeEach(() => {
   vi.useFakeTimers();
   vi.setSystemTime(NOW);
   vi.clearAllMocks();
+  mocks.smsEnabled.mockReturnValue(true);
+  vi.stubEnv('CONTACT_VERIFICATION_SECRET', 'test-verify-secret');
   process.env.NEXT_PUBLIC_SUPABASE_URL = 'https://local-test.supabase.co';
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = 'anon-key';
   process.env.NEXT_PUBLIC_APP_URL = 'http://localhost:3000';
@@ -87,6 +90,7 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.useRealTimers();
+  vi.unstubAllEnvs();
   for (const key of [
     'NEXT_PUBLIC_SUPABASE_URL',
     'NEXT_PUBLIC_SUPABASE_ANON_KEY',
@@ -178,4 +182,10 @@ describe('anonymous health', () => {
     expect(mocks.from).not.toHaveBeenCalled();
     expect(mocks.listBuckets).not.toHaveBeenCalled();
   });
+});
+
+it('fails the SMS launch gate when SMS is unavailable', async () => {
+  heartbeatAt(NOW.toISOString());
+  mocks.smsEnabled.mockReturnValue(false);
+  expect((await GET(healthRequest())).status).toBe(503);
 });

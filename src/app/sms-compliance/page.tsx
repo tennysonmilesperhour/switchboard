@@ -30,7 +30,7 @@ const consentSteps = [
   },
   {
     title: '4. Manage notification preferences',
-    body: 'The Notifications section lets users choose which account, invitation, RSVP, reminder, schedule-change, and cancellation updates they want to receive. Users can disable notifications in account settings.',
+    body: 'After verification, users separately check “I agree to receive these text messages” and save SMS preferences. Invitations and important plan changes, and event reminders, have independent SMS controls. Consent is recorded with the current number, time, source, and policy version. Push controls do not subscribe users to SMS.',
   },
 ] as const;
 
@@ -44,7 +44,7 @@ function ScreenshotCard({
   return (
     <section className="rounded-card border border-line bg-paper p-5 shadow-sm">
       <p className="text-xs font-black uppercase tracking-[0.18em] text-terracotta">
-        Reviewer screenshot
+        Flow illustration
       </p>
       <h3 className="mt-2 text-lg font-extrabold text-ink">{title}</h3>
       <div className="mt-4 rounded-[1.5rem] border border-line bg-cream p-4">
@@ -87,10 +87,9 @@ export default function SmsCompliancePage() {
         <h2 className="text-2xl font-black">What messages are sent</h2>
         <p className="mt-3 leading-relaxed text-ink-soft">
           Switchboard sends transactional SMS messages only to users or guests
-          who have provided a phone number for event and account communication.
+          who have verified their current number and separately opted in. A user may also request a one-time verification code before subscribing.
           Messages may include phone verification codes, event invitations,
-          RSVP-related updates, reminders, schedule changes, cancellations, and
-          service/account notices. Switchboard does not send marketing or
+          reminders, schedule changes, cancellations, and host announcements. Switchboard does not send marketing or
           promotional SMS through this campaign.
         </p>
       </section>
@@ -145,23 +144,23 @@ export default function SmsCompliancePage() {
           </div>
         </ScreenshotCard>
 
-        <ScreenshotCard title="Notification preference flow">
+        <ScreenshotCard title="Separate SMS agreement">
           <div className="space-y-3">
             <div>
-              <p className="text-sm font-bold text-ink">What to notify me about</p>
+              <p className="text-sm font-bold text-ink">Text messages</p>
               <p className="mt-0.5 text-sm text-ink-soft">
-                Choose what sends a push or SMS. Everything still appears in
-                your notifications feed.
+                SMS starts off. After verification, check the agreement and save your SMS preferences. Push controls are separate.
               </p>
             </div>
-            {['Invitations', 'RSVPs', 'Reminders', 'Schedule changes'].map((item) => (
+            <p className="rounded-card border border-line p-3 text-sm">☐ I agree to receive these text messages.</p>
+            {['Invitations and important plan changes', 'Event reminders'].map((item) => (
               <div
                 key={item}
                 className="flex items-center justify-between rounded-card bg-paper px-3 py-2"
               >
                 <span className="text-sm font-medium text-ink">{item}</span>
                 <span className="rounded-full bg-sage px-3 py-1 text-xs font-bold text-sage-deep">
-                  On
+                  Optional
                 </span>
               </div>
             ))}

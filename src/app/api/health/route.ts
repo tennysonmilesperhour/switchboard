@@ -115,15 +115,16 @@ export async function GET(request: Request) {
     checks.cron = false;
   }
 
-  // SMS is intentionally not launch-blocking while text delivery is shelved.
-  // Keep reporting `services.sms` so operators can see when it is configured,
-  // but do not mark the demo unhealthy solely because texting is disabled.
+  // Phone verification and SMS are now part of the launch contract.
   const required =
     checks.supabasePublic &&
     checks.supabaseAdmin &&
     checks.appUrl &&
     checks.cron &&
     checks.email &&
+    checks.sms &&
+    checks.phoneVerification &&
+    process.env.SMS_PAUSED !== 'true' &&
     database &&
     schema &&
     storage;

@@ -184,7 +184,7 @@ async function remindOneEvent(
     await sendEmails([...attendeeEmails, ...nudgeEmails]);
   }
   if (attendeeTexts.length + nudgeTexts.length > 0) {
-    await sendSmsMessages([...attendeeTexts, ...nudgeTexts]);
+    await sendSmsMessages([...attendeeTexts, ...nudgeTexts].map(message => ({ ...message, category: 'reminders' as const })));
   }
   // The window was already marked (claimed) at the top of this function.
 }

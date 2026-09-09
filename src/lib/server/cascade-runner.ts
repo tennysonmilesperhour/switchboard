@@ -150,7 +150,7 @@ async function deliverInvitations(
       }
     }
 
-    if (invite.guest_token && looksLikePhoneNumber(invite.guest_contact)) {
+    if (!invite.invitee_id && invite.guest_token && looksLikePhoneNumber(invite.guest_contact)) {
       hasChannel = true;
       if (await consumeEventOutboundSlot(event.host_id, 'invitation')) {
         const result = await sendSmsWithResult({

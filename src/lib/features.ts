@@ -614,6 +614,13 @@ export const FEATURE_GROUPS: readonly FeatureGroup[] = [
         href: '/notifications',
       },
       {
+        id: 'sms-preferences',
+        title: 'Optional text messages',
+        blurb: 'Verify your phone, then opt in to invitations, important plan changes, and reminders. SMS has separate preferences and quiet hours.',
+        where: 'Settings → Notifications → Text messages',
+        href: '/settings',
+      },
+      {
         id: 'notification-preferences',
         title: 'What you get notified about',
         blurb: 'Per-category control over plans, suggestions, reminders, messages, and social news.',

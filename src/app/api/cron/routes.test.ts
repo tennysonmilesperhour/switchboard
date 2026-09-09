@@ -1,3 +1,4 @@
+vi.mock('@/lib/server/sms-jobs', () => ({ sweepSmsJobs: vi.fn().mockResolvedValue(0) }));
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
@@ -87,6 +88,7 @@ describe('cron route handlers', () => {
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual({
       ok: true,
+      smsAccepted: 0,
       eventsAdvanced: 2,
       suggestionsClosed: 3,
       pollsResolved: 4,

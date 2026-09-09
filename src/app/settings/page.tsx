@@ -1,3 +1,4 @@
+import { SmsPreferences } from './SmsPreferences';
 import type { Metadata } from 'next';
 import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
@@ -59,6 +60,8 @@ export default async function SettingsPage({
     phoneVerified,
     isModerator,
   } = await loadSettingsPage(user);
+  const { data: smsPreferences } = await supabase.from('sms_preferences').select('enabled, plans, reminders, phone').eq('user_id', user.id).maybeSingle();
+  const currentSmsPreferences = smsPreferences && smsPreferences.phone === privateProfile?.contact_phone ? smsPreferences : null;
   const calendarToken = privateProfile?.calendar_token ?? null;
 
   const interests: string[] = profile?.interests ?? [];
@@ -284,6 +287,7 @@ export default async function SettingsPage({
 
                 <div className="py-5">
                   <NotificationPreferences initial={notificationPrefs} />
+                  <SmsPreferences key={`${privateProfile?.contact_phone}:${phoneVerified}`} initial={currentSmsPreferences} verified={phoneVerified} />
                   <DigestPreference
                     enabled={profile?.digest_enabled ?? false}
                     hour={profile?.digest_hour ?? 8}

@@ -1,3 +1,4 @@
+vi.mock('@/lib/server/sms-jobs', () => ({ sweepSmsJobs: vi.fn().mockResolvedValue(0) }));
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
@@ -82,6 +83,7 @@ describe('cron overlap leases', () => {
     expect(bodies).toContainEqual({ ok: true, skipped: 'overlap' });
     expect(bodies).toContainEqual({
       ok: true,
+      smsAccepted: 0,
       eventsAdvanced: 2,
       suggestionsClosed: 1,
       pollsResolved: 3,
