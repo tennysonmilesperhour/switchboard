@@ -40,3 +40,44 @@ export function canJumpTo(
 export function previousStep(current: number): number {
   return Math.max(0, current - 1);
 }
+
+/** The steps the plan wizard can show, in the order a person meets them. */
+export type WizardStepKey =
+  | 'basics'
+  | 'people'
+  | 'style'
+  | 'order'
+  | 'visibility'
+  | 'review';
+
+export const ALL_WIZARD_STEPS: readonly WizardStepKey[] = [
+  'basics',
+  'people',
+  'style',
+  'order',
+  'visibility',
+  'review',
+];
+
+/**
+ * Whether "Set the order" has anything to decide. Everyone-at-once has no
+ * order, and one person has nobody to be ahead of. The response window those
+ * plans still need is asked on the invites step instead, so skipping this one
+ * never hides a setting — it only drops a screen whose heading would be
+ * telling the host to decide something that does not exist.
+ */
+export function orderStepNeeded(
+  inviteMode: 'individual' | 'group' | 'all_at_once',
+  inviteeCount: number,
+): boolean {
+  return inviteMode !== 'all_at_once' && inviteeCount > 1;
+}
+
+/** The steps this particular plan goes through, in order. */
+export function wizardSteps(
+  inviteMode: 'individual' | 'group' | 'all_at_once',
+  inviteeCount: number,
+): WizardStepKey[] {
+  const needsOrder = orderStepNeeded(inviteMode, inviteeCount);
+  return ALL_WIZARD_STEPS.filter((key) => key !== 'order' || needsOrder);
+}

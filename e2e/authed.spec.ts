@@ -385,25 +385,30 @@ test.describe('authenticated surface', () => {
 
     const title = page.getByPlaceholder(TITLE);
     await clickWizardNext(page);
+    // People is the second step and needs someone on the list before it lets
+    // go. One friend, invited everyone-at-once (the default), makes a
+    // five-step plan: there is no order to set for one person.
+    await page.getByRole('button', { name: /E2E Guest/ }).click();
+    await expect(page.getByText('1 person selected')).toBeVisible({ timeout: 5_000 });
     await clickWizardNext(page);
-    await expect(page.getByText('Step 3 of 6')).toBeVisible();
+    await expect(page.getByText('Step 3 of 5')).toBeVisible();
 
     // 1. The Back button.
     await page.getByRole('button', { name: 'Back', exact: true }).click();
-    await expect(page.getByText('Step 2 of 6')).toBeVisible();
+    await expect(page.getByText('Step 2 of 5')).toBeVisible();
 
     // 2. The browser/phone back gesture — one step, not out of the wizard.
     await page.goBack();
-    await expect(page.getByText('Step 1 of 6')).toBeVisible();
+    await expect(page.getByText('Step 1 of 5')).toBeVisible();
     await expect(page).toHaveURL(/\/events\/new/);
     await expect(title).toHaveValue('E2E back navigation');
 
     // 3. A progress segment, jumping more than one step at a time.
     await clickWizardNext(page);
     await clickWizardNext(page);
-    await expect(page.getByText('Step 3 of 6')).toBeVisible();
+    await expect(page.getByText('Step 3 of 5')).toBeVisible();
     await page.getByRole('button', { name: 'Step 1, Basics' }).click();
-    await expect(page.getByText('Step 1 of 6')).toBeVisible();
+    await expect(page.getByText('Step 1 of 5')).toBeVisible();
     await expect(title).toHaveValue('E2E back navigation');
 
     // Editing after going back is the point of going back.
@@ -423,7 +428,7 @@ test.describe('authenticated surface', () => {
       name: /Send invitations|Create & start deciding/,
     });
     await reachWizardReview(page, async (step) => {
-      if (step === 3) {
+      if (step === 2) {
         const guestName = page.getByPlaceholder('Name (optional)');
         await guestName.fill('Casey Guest');
         await page.getByPlaceholder('@username, email, or phone').fill('casey@example.com');
@@ -454,7 +459,7 @@ test.describe('authenticated surface', () => {
     });
     await reachWizardReview(host, async (step) => {
       // People step: pick the seeded friend as a real member.
-      if (step === 3) {
+      if (step === 2) {
         await host.getByRole('button', { name: /E2E Guest/ }).click();
         await expect(host.getByText('1 person selected')).toBeVisible({ timeout: 5_000 });
       }
@@ -487,12 +492,12 @@ test.describe('authenticated surface', () => {
       name: /Create & start deciding|Send invitations/,
     });
     await reachWizardReview(page, async (step) => {
-      // Style step: turn on "let the group decide".
-      if (step === 2) await page.getByText('Let the group decide what to do 🗳️').click();
-      if (step === 3) {
+      // People step first, then the invites step: turn on "let the group decide".
+      if (step === 2) {
         await page.getByRole('button', { name: /E2E Guest/ }).click();
         await expect(page.getByText('1 person selected')).toBeVisible({ timeout: 5_000 });
       }
+      if (step === 3) await page.getByText('Let the group decide what to do 🗳️').click();
     });
     await expect(submit).toBeVisible({ timeout: 5_000 });
     await submit.click();
@@ -586,7 +591,7 @@ test.describe('authenticated surface', () => {
       name: /Send invitations|Create & start deciding/,
     });
     await reachWizardReview(page, async (step) => {
-      if (step === 3) {
+      if (step === 2) {
         await page.getByPlaceholder('Name (optional)').fill('Casey Guest');
         await page.getByPlaceholder('@username, email, or phone').fill('casey@example.com');
         await page.getByRole('button', { name: 'Add', exact: true }).click();
@@ -629,7 +634,7 @@ test.describe('authenticated surface', () => {
       name: /Send invitations|Create & start deciding/,
     });
     await reachWizardReview(host, async (step) => {
-      if (step === 3) {
+      if (step === 2) {
         await host.getByPlaceholder('Name (optional)').fill('Casey Guest');
         await host.getByPlaceholder('@username, email, or phone').fill('casey@example.com');
         await host.getByRole('button', { name: 'Add', exact: true }).click();

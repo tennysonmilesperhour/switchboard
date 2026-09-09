@@ -3,9 +3,11 @@
 import type { ReactNode } from 'react';
 import { Button } from '@/components/ui/Button';
 import { canJumpTo, previousStep } from '@/lib/wizard-steps';
-import { STEPS, STEP_META } from './wizard-types';
+import { STEP_META, type WizardStepKey } from './wizard-types';
 
 interface WizardFrameProps {
+  /** The steps this plan goes through, in order (`wizardSteps`). */
+  steps: readonly WizardStepKey[];
   step: number;
   stepComplete: boolean[];
   goToStep: (step: number) => void;
@@ -17,6 +19,7 @@ interface WizardFrameProps {
 }
 
 export function WizardFrame({
+  steps,
   step,
   stepComplete,
   goToStep,
@@ -27,13 +30,16 @@ export function WizardFrame({
   children,
 }: WizardFrameProps) {
   const canNext = stepComplete[step];
+  const current = STEP_META[steps[step]];
+  const previousLabel = STEP_META[steps[previousStep(step)]].label;
   return (
     <div className="space-y-6">
       <ol aria-label="Steps" className="flex items-center gap-1.5">
-        {STEPS.map((label, index) => {
+        {steps.map((key, index) => {
+          const label = STEP_META[key].label;
           const reachable = canJumpTo(index, step, stepComplete);
           return (
-            <li key={label} className="flex-1">
+            <li key={key} className="flex-1">
               <button
                 type="button"
                 disabled={!reachable}
@@ -61,7 +67,7 @@ export function WizardFrame({
       <header key={step} className="animate-rise">
         <div className="flex items-center gap-3">
           <p className="text-xs font-bold uppercase tracking-[0.16em] text-terracotta-deep">
-            Step {step + 1} of {STEPS.length}
+            Step {step + 1} of {steps.length}
           </p>
           {step > 0 && (
             <button
@@ -72,7 +78,7 @@ export function WizardFrame({
               <svg viewBox="0 0 24 24" aria-hidden className="size-3.5 fill-current">
                 <path d="M14.7 6.7 13.3 5.3 6.6 12l6.7 6.7 1.4-1.4-5.3-5.3z" />
               </svg>
-              Back to {STEPS[previousStep(step)]}
+              Back to {previousLabel}
             </button>
           )}
         </div>
@@ -83,10 +89,10 @@ export function WizardFrame({
               : 'text-[1.75rem] leading-tight font-extrabold'
           }`}
         >
-          {STEP_META[step].heading}
+          {current.heading}
         </h2>
         <p className="mt-1.5 text-sm leading-relaxed text-ink-soft">
-          {STEP_META[step].sub}
+          {current.sub}
         </p>
       </header>
 
@@ -112,7 +118,7 @@ export function WizardFrame({
             Back
           </Button>
         )}
-        {step < STEPS.length - 1 ? (
+        {step < steps.length - 1 ? (
           <Button
             type="button"
             size="lg"

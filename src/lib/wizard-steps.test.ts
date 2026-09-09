@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { canJumpTo, previousStep } from './wizard-steps';
+import { canJumpTo, orderStepNeeded, previousStep, wizardSteps } from './wizard-steps';
 
 /** Six steps, with the first three finished — mid-wizard, mid-plan. */
 const PART_DONE = [true, true, true, false, false, false];
@@ -50,5 +50,45 @@ describe('previousStep', () => {
 
   it('stops at the first step — leaving is the browser’s job, not ours', () => {
     expect(previousStep(0)).toBe(0);
+  });
+});
+
+describe('wizardSteps', () => {
+  it('asks who is coming before how invites go out', () => {
+    const steps = wizardSteps('individual', 3);
+    expect(steps.indexOf('people')).toBeLessThan(steps.indexOf('style'));
+    expect(steps).toEqual(['basics', 'people', 'style', 'order', 'visibility', 'review']);
+  });
+
+  it('drops "Set the order" when everyone is invited at once', () => {
+    expect(orderStepNeeded('all_at_once', 5)).toBe(false);
+    expect(wizardSteps('all_at_once', 5)).toEqual([
+      'basics',
+      'people',
+      'style',
+      'visibility',
+      'review',
+    ]);
+  });
+
+  it('drops "Set the order" when there is only one person to order', () => {
+    expect(orderStepNeeded('individual', 1)).toBe(false);
+    expect(orderStepNeeded('group', 0)).toBe(false);
+    expect(wizardSteps('individual', 1)).not.toContain('order');
+  });
+
+  it('keeps it for a chain or waves with two or more people', () => {
+    expect(orderStepNeeded('individual', 2)).toBe(true);
+    expect(orderStepNeeded('group', 2)).toBe(true);
+  });
+
+  it('always starts on basics and ends on review', () => {
+    for (const mode of ['individual', 'group', 'all_at_once'] as const) {
+      for (const count of [0, 1, 2, 8]) {
+        const steps = wizardSteps(mode, count);
+        expect(steps[0]).toBe('basics');
+        expect(steps[steps.length - 1]).toBe('review');
+      }
+    }
   });
 });

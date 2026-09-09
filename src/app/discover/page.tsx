@@ -76,16 +76,18 @@ export default async function DiscoverPage() {
     <AppShell title="Explore">
       <div className="space-y-8">
         <IntentLaunchpad />
-        <div id="browse">
-        <PeopleDiscoveryClient
-          people={people ?? []}
-          matches={matches}
-          discoverable={Boolean(profile?.discoverable)}
-        />
-        <OpenTables tables={openTables ?? []} />
+        {/* Ideas first: it is what Explore is named for, and the door on
+            /create that leads here promises "browse ideas". */}
+        <div id="brainstorm" className="scroll-mt-20">
+          <DiscoverClient defaultInterests={profile?.interests ?? []} />
         </div>
-        <div id="brainstorm">
-        <DiscoverClient defaultInterests={profile?.interests ?? []} />
+        <div id="browse" className="scroll-mt-20 space-y-8">
+          <PeopleDiscoveryClient
+            people={people ?? []}
+            matches={matches}
+            discoverable={Boolean(profile?.discoverable)}
+          />
+          <OpenTables tables={openTables ?? []} />
         </div>
         <VenuePerks
           venues={venues ?? []}

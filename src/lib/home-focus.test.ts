@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, test } from 'vitest';
-import { pendingInvitesInOrder } from './home-focus';
+import { homePlans, pendingInvitesInOrder } from './home-focus';
 
 const read = (path: string) => readFileSync(join(process.cwd(), path), 'utf8');
 
@@ -77,5 +77,61 @@ describe('pendingInvitesInOrder', () => {
 
   test('skips an invite whose plan is gone', () => {
     expect(pendingInvitesInOrder([{ id: 'orphan', event: null }], now)).toEqual([]);
+  });
+});
+
+describe('homePlans', () => {
+  const me = 'me';
+  const event = (
+    id: string,
+    host_id: string,
+    status: string,
+    starts_at: string | null,
+  ) => ({ id, host_id, status, starts_at });
+
+  test('keeps plans you host, plans you accepted, and deciding plans you are queued on', () => {
+    const kept = homePlans(
+      [
+        event('hosting', me, 'inviting', '2026-09-12T18:00:00Z'),
+        event('going', 'ana', 'confirmed', '2026-09-11T18:00:00Z'),
+        event('deciding', 'ben', 'deciding', null),
+      ],
+      {
+        userId: me,
+        acceptedEventIds: new Set(['going']),
+        queuedEventIds: new Set(['deciding']),
+        limit: 4,
+      },
+    );
+    expect(kept.map((e) => e.id)).toEqual(['going', 'hosting', 'deciding']);
+  });
+
+  test('drops a plan you can read but are not part of: declined, pending, or merely queued', () => {
+    const kept = homePlans(
+      [
+        event('declined', 'ana', 'confirmed', '2026-09-11T18:00:00Z'),
+        event('pending', 'ana', 'inviting', '2026-09-11T19:00:00Z'),
+        event('queued-but-inviting', 'ana', 'inviting', '2026-09-11T20:00:00Z'),
+      ],
+      {
+        userId: me,
+        acceptedEventIds: new Set(),
+        queuedEventIds: new Set(['queued-but-inviting']),
+        limit: 4,
+      },
+    );
+    expect(kept).toEqual([]);
+  });
+
+  test('puts undated plans last and honours the limit', () => {
+    const kept = homePlans(
+      [
+        event('undated', me, 'deciding', null),
+        event('late', me, 'confirmed', '2026-09-20T18:00:00Z'),
+        event('soon', me, 'confirmed', '2026-09-10T18:00:00Z'),
+      ],
+      { userId: me, acceptedEventIds: new Set(), queuedEventIds: new Set(), limit: 2 },
+    );
+    expect(kept.map((e) => e.id)).toEqual(['soon', 'late']);
   });
 });

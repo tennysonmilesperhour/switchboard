@@ -134,14 +134,14 @@ export const FEATURE_GROUPS: readonly FeatureGroup[] = [
         title: 'Automatic reminders',
         blurb:
           'A day-before note to people who are in, a nudge to anyone still holding an invite, and a starting-soon ping — all inside quiet hours.',
-        where: 'Plan wizard → Visibility (on by default)',
+        where: 'Plan wizard → Privacy (on by default)',
       },
       {
         id: 'parental-approval',
         title: 'Parental approval',
         blurb:
           'Require a parent or guardian to approve before someone can RSVP yes — for plans that need an adult in the loop.',
-        where: 'Plan wizard → Visibility',
+        where: 'Plan wizard → Privacy',
       },
       {
         id: 'cover-image',
@@ -161,7 +161,7 @@ export const FEATURE_GROUPS: readonly FeatureGroup[] = [
         title: 'Open Table',
         blurb:
           'Leave a few seats open to friends-of-friends; they ask to join and you approve, so the guest list still belongs to you.',
-        where: 'Plan wizard → Visibility, requests arrive on the plan page',
+        where: 'Plan wizard → Privacy, requests arrive on the plan page',
         href: '/discover',
       },
       {
@@ -262,7 +262,7 @@ export const FEATURE_GROUPS: readonly FeatureGroup[] = [
         title: 'Polls that close themselves',
         blurb:
           'Set a deadline and let a poll resolve on its own, pick the winner yourself, or run a runoff between the top options.',
-        where: 'Plan wizard → Style, then the plan page',
+        where: 'Plan wizard → Invites, then the plan page',
       },
       {
         id: 'poll-chain',

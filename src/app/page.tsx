@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { createClient, getRenderUser } from '@/lib/supabase/server';
-import { pendingInvitesInOrder } from '@/lib/home-focus';
+import { homePlans, pendingInvitesInOrder } from '@/lib/home-focus';
 import { AppShell } from '@/components/shell/AppShell';
 import { Card, SectionHeader } from '@/components/ui/Card';
 import { Avatar } from '@/components/ui/Avatar';
@@ -46,7 +46,7 @@ export default async function HomePage() {
     { data: circles },
     { data: friendSignals },
     { data: pendingInvites },
-    { data: upcoming },
+    { data: myInvites },
     { data: recentMatches },
     { count: friendCount },
     { data: aroundAvailable },
@@ -75,13 +75,14 @@ export default async function HomePage() {
       .select('id, event:events(id, title, starts_at, time_zone)')
       .eq('invitee_id', user.id)
       .eq('status', 'sent'),
+    // The plans you are actually part of. Everything you can *read* is wider
+    // than that (see `homePlans`), so the feed is built from your own invite
+    // rows plus what you host, not from every event RLS lets through.
     supabase
-      .from('events')
-      .select('*')
-      .in('status', ['confirmed', 'inviting', 'deciding'])
-      .gte('starts_at', nowIso)
-      .order('starts_at')
-      .limit(4),
+      .from('invites')
+      .select('event_id, status')
+      .eq('invitee_id', user.id)
+      .in('status', ['accepted', 'queued']),
     // Via the function rather than the table: it drops the ones this person
     // has cleared *before* taking three, so clearing a card promotes the next
     // match up instead of just leaving a shorter list.
@@ -96,6 +97,19 @@ export default async function HomePage() {
   ]);
 
   const hasConnections = (friendCount ?? 0) > 0;
+  const acceptedEventIds = new Set(
+    (myInvites ?? []).filter((i) => i.status === 'accepted').map((i) => i.event_id),
+  );
+  const queuedEventIds = new Set(
+    (myInvites ?? []).filter((i) => i.status === 'queued').map((i) => i.event_id),
+  );
+  const partOfIds = [...new Set([...acceptedEventIds, ...queuedEventIds])];
+  // Hosted, or one of the plans an invite row names. Ids are uuids from our
+  // own rows, so the PostgREST filter string cannot carry anything else.
+  const mineOrHosted =
+    partOfIds.length > 0
+      ? `host_id.eq.${user.id},id.in.(${partOfIds.join(',')})`
+      : `host_id.eq.${user.id}`;
   // Only invitations a person can still act on, soonest first.
   const waitingOnYou = pendingInvitesInOrder(pendingInvites, new Date(nowIso));
   const defaultSignalCircleId = resolveDefaultSignalCircle(
@@ -112,6 +126,7 @@ export default async function HomePage() {
     radar,
     { data: recentPast },
     { data: energyLogged },
+    { data: upcomingRows },
   ] = await Promise.all([
     supabase.rpc('my_matchmaker_proposals'),
     supabase
@@ -122,15 +137,35 @@ export default async function HomePage() {
       .or(`creator_id.eq.${user.id},partner_id.eq.${user.id}`)
       .in('status', ['proposed', 'active']),
     getReconnectionSuggestions(user.id),
+    // Only plans you hosted or said yes to: being asked how a plan you
+    // declined left you feeling is a question with no answer.
     supabase
       .from('events')
-      .select('id, title, starts_at')
+      .select('id, title, starts_at, host_id, status')
+      .or(mineOrHosted)
       .lt('starts_at', nowIso)
       .gte('starts_at', threeDaysAgo)
       .neq('status', 'cancelled')
       .limit(3),
     supabase.from('energy_logs').select('event_id').eq('user_id', user.id),
+    // A plan with no date yet is still ahead of you, so it is not dropped by
+    // the "already started" cut. Two `.or()` filters are ANDed by PostgREST.
+    supabase
+      .from('events')
+      .select('*')
+      .or(mineOrHosted)
+      .in('status', ['confirmed', 'inviting', 'deciding'])
+      .or(`starts_at.is.null,starts_at.gte.${nowIso}`)
+      .order('starts_at', { ascending: true, nullsFirst: false })
+      .limit(8),
   ]);
+
+  const upcoming = homePlans(upcomingRows, {
+    userId: user.id,
+    acceptedEventIds,
+    queuedEventIds,
+    limit: 4,
+  });
 
   const proposals: ProposalCardData[] = (proposalRows ?? []).map(
     (row: {
@@ -178,7 +213,11 @@ export default async function HomePage() {
     .filter((ritual) => (ritual.status === 'proposed' && !ritual.isMine) || ritual.due);
 
   const loggedIds = new Set((energyLogged ?? []).map((log) => log.event_id));
-  const energyPrompts = (recentPast ?? []).filter((event) => !loggedIds.has(event.id));
+  const energyPrompts = (recentPast ?? []).filter(
+    (event) =>
+      !loggedIds.has(event.id) &&
+      (event.host_id === user.id || acceptedEventIds.has(event.id)),
+  );
 
   // The getting-started card owns the first run; the passport only appears
   // after its steps are behind you, so a new user is never shown two progress
@@ -186,7 +225,7 @@ export default async function HomePage() {
   const findableDone = findabilitySettled(await loadFindability());
   const gettingStartedDone =
     hasConnections &&
-    (upcoming?.length ?? 0) > 0 &&
+    upcoming.length > 0 &&
     (mySignals?.length ?? 0) > 0 &&
     findableDone;
   const passportSummary = gettingStartedDone
@@ -233,9 +272,9 @@ export default async function HomePage() {
         )}
 
         {/* Plan feed - the heart of Home */}
-        {(upcoming?.length ?? 0) > 0 ? (
+        {upcoming.length > 0 ? (
           <section aria-label="Your plans" className="space-y-4">
-            {upcoming?.map((event, i) => (
+            {upcoming.map((event, i) => (
               <PlanCard
                 key={event.id}
                 href={`/events/${event.id}`}
@@ -243,7 +282,13 @@ export default async function HomePage() {
                 color={planColor(i)}
                 when={formatDateTime(event.starts_at, event.time_zone)}
                 where={event.location_name ?? undefined}
-                status={event.status === 'confirmed' ? 'Confirmed' : undefined}
+                status={
+                  event.status === 'confirmed'
+                    ? 'Confirmed'
+                    : event.status === 'deciding'
+                      ? 'Deciding'
+                      : undefined
+                }
                 className="animate-card-in"
               />
             ))}
@@ -293,7 +338,7 @@ export default async function HomePage() {
         ) : (
           <GettingStarted
             friendDone={hasConnections}
-            planDone={(upcoming?.length ?? 0) > 0}
+            planDone={upcoming.length > 0}
             signalDone={(mySignals?.length ?? 0) > 0}
             findableDone={findableDone}
           />
@@ -353,7 +398,11 @@ export default async function HomePage() {
               {radar.map((suggestion) => (
                 <Link
                   key={suggestion.friendId}
-                  href={`/mutual?person=${suggestion.friendId}`}
+                  // Straight into a plan with them already on the list. This
+                  // used to open Mutual, where nothing is sent unless they
+                  // independently pick you back, under a label that promised
+                  // to reach out.
+                  href={`/events/new?invite=${suggestion.friendId}`}
                   className="block group"
                 >
                   <Card className="group-hover:border-terracotta transition-colors">
@@ -371,8 +420,8 @@ export default async function HomePage() {
                             : '· you two haven’t gotten together yet'}
                         </span>
                       </p>
-                      <span className="text-xs text-terracotta-deep whitespace-nowrap">
-                        Reach out quietly
+                      <span className="text-xs font-bold text-terracotta-deep whitespace-nowrap">
+                        Make a plan
                       </span>
                     </div>
                   </Card>
@@ -410,8 +459,13 @@ export default async function HomePage() {
                   ? signal.profile[0]
                   : signal.profile;
                 const name = profileRow?.display_name ?? 'Friend';
-                const handle = profileRow?.handle;
-                const href = handle ? `/u/${handle}?from=/` : '/mutual';
+                // A signal is an opening, so the card answers it: a plan with
+                // them already invited and the signal as the working title.
+                // It used to open their profile, which does not show the
+                // signal, and offered nothing to do about it.
+                const href = `/events/new?invite=${signal.user_id}&title=${encodeURIComponent(
+                  signal.label,
+                )}`;
                 return (
                   <Link key={signal.id} href={href} className="block group">
                     <Card tone="sage" className="group-hover:shadow-lift transition-shadow">
@@ -423,8 +477,13 @@ export default async function HomePage() {
                             is {signal.emoji} {signal.label}
                           </span>
                         </span>
-                        <span className="text-xs text-ink-faint">
-                          {formatRelative(signal.expires_at).replace('in ', '')} left
+                        <span className="flex flex-col items-end gap-0.5">
+                          <span className="text-xs font-bold text-terracotta-deep whitespace-nowrap">
+                            Make a plan
+                          </span>
+                          <span className="text-xs text-ink-faint whitespace-nowrap">
+                            {formatRelative(signal.expires_at).replace('in ', '')} left
+                          </span>
                         </span>
                       </div>
                     </Card>

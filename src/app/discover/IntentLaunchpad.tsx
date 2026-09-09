@@ -3,23 +3,33 @@
 import Link from 'next/link';
 import { Card } from '@/components/ui/Card';
 
+/**
+ * Three different things this page can do, named for what each one is.
+ *
+ * These used to reuse the labels from the "Start something" doors ("Help me
+ * figure it out", "Find something to do") for destinations that were not the
+ * same: on `/create` the second door opens the group poll and the third lands
+ * here, while here they scrolled to the idea generator and to people
+ * discovery. Someone who tapped "Find something to do" arrived on a page
+ * offering "Find something to do" again, meaning something else.
+ */
 const INTENTS = [
   {
-    emoji: '🗓️',
-    title: "I've got a plan",
-    subtitle: 'Create a plan and start inviting',
+    emoji: '🪜',
+    title: 'Start a plan',
+    subtitle: 'You know the gist. Set it up and send the invites.',
     href: '/events/new',
   },
   {
     emoji: '💡',
-    title: 'Help me figure it out',
-    subtitle: 'Describe a vibe — get curated ideas',
+    title: 'Get ideas',
+    subtitle: 'Describe the evening you want and get a few that fit',
     anchor: 'brainstorm',
   },
   {
-    emoji: '🔍',
-    title: 'Find something to do',
-    subtitle: 'Browse open tables and meet people',
+    emoji: '👋',
+    title: 'Meet people and open tables',
+    subtitle: 'Who is discoverable, and plans with a seat still open',
     anchor: 'browse',
   },
 ] as const;
