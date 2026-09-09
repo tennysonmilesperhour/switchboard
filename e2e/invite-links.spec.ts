@@ -102,7 +102,7 @@ async function createPlan(
   for (let i = 0; i < 6; i += 1) {
     const { current, total } = await currentWizardStep(page);
     if (current === total) break;
-    if (current === 3) {
+    if (current === 2) {
       await page.getByRole('button', { name: /E2E Guest/ }).click();
       await expect(page.getByText('1 person selected')).toBeVisible({ timeout: 5_000 });
     }
@@ -405,7 +405,7 @@ test.describe('invite link contract', () => {
     for (let i = 0; i < 6; i += 1) {
       const { current, total } = await currentWizardStep(page);
       if (current === total) break;
-      if (current === 3) {
+      if (current === 2) {
         await page.getByPlaceholder('Name (optional)').fill('Casey Guest');
         await page.getByPlaceholder('@username, email, or phone').fill('casey@example.com');
         await page.getByRole('button', { name: 'Add', exact: true }).click();
