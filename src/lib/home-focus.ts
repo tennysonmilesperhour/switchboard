@@ -49,3 +49,53 @@ export function pendingInvitesInOrder<E extends PendingInviteEvent>(
     return left - right;
   });
 }
+
+export interface HomePlanEvent {
+  id: string;
+  host_id: string;
+  status: string;
+  starts_at: string | null;
+}
+
+/**
+ * Which plans belong in the Home feed: ones you are hosting, ones you said
+ * yes to, and ones still deciding their date that you are part of. Read
+ * access is wider than that — an invitee can open a plan they declined, and a
+ * pending invitation is readable too — so filtering on what you can *see*
+ * put a plan you declined in your upcoming list, and showed a pending
+ * invitation twice: once under "Waiting on you" and again right below it.
+ *
+ * A plan with no date yet (still being polled) is upcoming, not past, so it
+ * stays; the query is expected to have already dropped dated plans that have
+ * started.
+ */
+export function homePlans<E extends HomePlanEvent>(
+  events: readonly E[] | null | undefined,
+  {
+    userId,
+    acceptedEventIds,
+    queuedEventIds,
+    limit,
+  }: {
+    userId: string;
+    acceptedEventIds: ReadonlySet<string>;
+    queuedEventIds: ReadonlySet<string>;
+    limit: number;
+  },
+): E[] {
+  const kept: E[] = [];
+  for (const event of events ?? []) {
+    const hosting = event.host_id === userId;
+    const going = acceptedEventIds.has(event.id);
+    const deciding = queuedEventIds.has(event.id) && event.status === 'deciding';
+    if (!hosting && !going && !deciding) continue;
+    kept.push(event);
+  }
+  return kept
+    .sort((a, b) => {
+      const left = a.starts_at ? Date.parse(a.starts_at) : Number.POSITIVE_INFINITY;
+      const right = b.starts_at ? Date.parse(b.starts_at) : Number.POSITIVE_INFINITY;
+      return left - right;
+    })
+    .slice(0, limit);
+}

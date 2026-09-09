@@ -562,12 +562,19 @@ export default async function EventPage({
           />
         )}
 
-        {/* Host cascade view */}
-        {canManage && hostInvites.length > 0 && event.status !== 'deciding' && (
+        {/* Host cascade view. Shown while the group is still deciding too:
+            hiding it there left a host with no list of who they had invited,
+            and a creation banner pointing at a delivery status that was not
+            on the page. The rows are read-only until invites start moving. */}
+        {canManage && hostInvites.length > 0 && (
           <section>
             <SectionHeader
-              title="Invitation flow"
-              hint="Only you see this - reorder or re-time anyone still in line"
+              title={event.status === 'deciding' ? 'Who is invited' : 'Invitation flow'}
+              hint={
+                event.status === 'deciding'
+                  ? 'Only you see this - invitations go out once the group has decided'
+                  : 'Only you see this - reorder or re-time anyone still in line'
+              }
             />
             <CascadeProgress
               invites={hostInvites.filter((invite) => invite.status !== 'requested')}

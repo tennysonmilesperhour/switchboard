@@ -76,7 +76,10 @@ export default async function PlansPage() {
       .from('invites')
       .select('status, event_id')
       .eq('invitee_id', user.id)
-      .in('status', ['sent', 'accepted', 'waitlisted']),
+      // `queued` is included for one reason: a plan still deciding its date
+      // shows its whole invited group the poll before any invite is sent, and
+      // those people were the only ones whose plan had no card here.
+      .in('status', ['sent', 'accepted', 'waitlisted', 'queued']),
   ]);
 
   if (hostingError || invitesError) {
@@ -122,7 +125,10 @@ export default async function PlansPage() {
       (row): row is { status: string; event: SwitchboardEvent } =>
         row.event !== null &&
         row.event.host_id !== user.id &&
-        row.event.status !== 'cancelled',
+        row.event.status !== 'cancelled' &&
+        // A queued invite is only yours to see while the group is deciding;
+        // once invites start going out, it becomes `sent` and shows up above.
+        (row.status !== 'queued' || row.event.status === 'deciding'),
     );
 
   // "Already happened" is judged by the actual start time (with the 'past'
@@ -139,14 +145,20 @@ export default async function PlansPage() {
 
   const upcomingInvited = invited.filter((row) => !hasHappened(row.event));
   const needsResponse = upcomingInvited.filter((i) => i.status === 'sent');
-  const going = upcomingInvited.filter((i) => i.status !== 'sent');
+  const deciding = upcomingInvited.filter((i) => i.status === 'queued');
+  const going = upcomingInvited.filter(
+    (i) => i.status !== 'sent' && i.status !== 'queued',
+  );
 
   // Past plans you hosted or committed to, newest first. Invitations you never
   // answered for events that have since passed are dropped rather than archived.
   const pastEvents = [
     ...hostingAll.filter(hasHappened),
     ...invited
-      .filter((row) => row.status !== 'sent' && hasHappened(row.event))
+      .filter(
+        (row) =>
+          row.status !== 'sent' && row.status !== 'queued' && hasHappened(row.event),
+      )
       .map((row) => row.event),
   ].sort((a, b) => {
     const ta = a.starts_at ? new Date(a.starts_at).getTime() : 0;
@@ -157,6 +169,7 @@ export default async function PlansPage() {
   const isEmpty =
     hostingUpcoming.length === 0 &&
     needsResponse.length === 0 &&
+    deciding.length === 0 &&
     going.length === 0 &&
     pastEvents.length === 0;
 
@@ -181,6 +194,19 @@ export default async function PlansPage() {
               <div className="grid grid-cols-2 gap-3">
                 {needsResponse.map(({ event }, i) => (
                   <EventCard key={event.id} event={event} index={i} note="Respond soon" />
+                ))}
+              </div>
+            </section>
+          )}
+          {deciding.length > 0 && (
+            <section>
+              <SectionHeader
+                title="Help pick a date"
+                hint="The group decides before invitations go out"
+              />
+              <div className="grid grid-cols-2 gap-3">
+                {deciding.map(({ event }, i) => (
+                  <EventCard key={event.id} event={event} index={i} note="Vote" />
                 ))}
               </div>
             </section>

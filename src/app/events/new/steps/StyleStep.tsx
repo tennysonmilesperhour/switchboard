@@ -8,6 +8,7 @@ import type { CreateEventInput } from '@/lib/actions/events';
 import type { EventTheme, InviteMode } from '@/lib/types';
 import { EVENT_THEMES } from '@/lib/themes';
 import { FIELD, MODE_OPTIONS } from './wizard-types';
+import { ResponseWindowPicker } from './ResponseWindowPicker';
 
 interface StyleStepProps {
   inviteMode: InviteMode;
@@ -25,6 +26,16 @@ interface StyleStepProps {
   setRemindersEnabled: Dispatch<SetStateAction<boolean>>;
   theme: EventTheme;
   setTheme: Dispatch<SetStateAction<EventTheme>>;
+  /** How many people are on the list, so the copy can speak about them. */
+  inviteeCount: number;
+  /**
+   * When the order step is skipped (everyone at once, or one person), the
+   * response window is asked here instead, so it is never silently defaulted.
+   */
+  showWindow: boolean;
+  commonWindow: number | null;
+  setWindowForEveryone: (minutes: number) => void;
+  suggested: { windowMinutes: number; label: string };
 }
 
 export function StyleStep({
@@ -43,6 +54,11 @@ export function StyleStep({
   setRemindersEnabled,
   theme,
   setTheme,
+  inviteeCount,
+  showWindow,
+  commonWindow,
+  setWindowForEveryone,
+  suggested,
 }: StyleStepProps) {
   return (
         <div className="space-y-3 animate-rise">
@@ -89,6 +105,20 @@ export function StyleStep({
               </button>
             );
           })}
+
+          {showWindow && (
+            <ResponseWindowPicker
+              label={inviteeCount > 1 ? 'Everyone gets' : 'Time to respond'}
+              commonWindow={commonWindow}
+              setWindowForEveryone={setWindowForEveryone}
+              suggested={suggested}
+              hint={
+                inviteeCount > 1
+                  ? 'How long each person has to answer before the invitation lapses.'
+                  : 'How long they have to answer before the invitation lapses.'
+              }
+            />
+          )}
 
           <Card tone="cream" className="mt-2">
             <label className="flex items-start gap-3 cursor-pointer">

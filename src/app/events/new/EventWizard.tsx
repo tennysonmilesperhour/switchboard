@@ -39,7 +39,12 @@ import { WizardFrame } from './steps/WizardFrame';
 import {
   DEFAULT_START_TIME,
   OUTDOOR_HINTS,
+  contactMatchSelected,
+  inviteTargetFor,
   localDateTimeToIso,
+  normalizeWizardQuestions,
+  orderStepNeeded,
+  wizardSteps,
   type DraftInvitee,
   type WizardCircle,
   type WizardFriend,
@@ -94,7 +99,7 @@ export function EventWizard({
   const backTarget = useRef<number | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(initialError);
 
-  // Step 1 - basics
+  // Basics
   const [title, setTitle] = useState(initialTitle);
   const [description, setDescription] = useState(initialDescription);
   const [locationName, setLocationName] = useState('');
@@ -113,8 +118,10 @@ export function EventWizard({
   const [theme, setTheme] = useState<EventTheme>('default');
   const [questions, setQuestions] = useState<WizardQuestion[]>([]);
 
-  // Step 2 - style
-  const [inviteMode, setInviteMode] = useState<InviteMode>('individual');
+  // Invites step. Everyone at once is the default because it is what most
+  // plans mean by "invite"; the chain is opt-in, chosen once the host can see
+  // who is on the list and how many spots there are.
+  const [inviteMode, setInviteMode] = useState<InviteMode>('all_at_once');
   // Arriving via the "Help me figure it out" door starts the plan in deciding
   // mode, so the group votes on what to do before invites go out.
   const [enablePoll, setEnablePoll] = useState(initialDecide);
@@ -123,7 +130,7 @@ export function EventWizard({
   const [suggestDeadline, setSuggestDeadline] = useState('');
   const [voteDeadline, setVoteDeadline] = useState('');
 
-  // Step 3/4 - people & order
+  // People & order
   const [invitees, setInvitees] = useState<DraftInvitee[]>(() => {
     const preselected = friends.find((f) => f.id === initialInviteeId);
     if (!preselected) return [];
@@ -148,7 +155,7 @@ export function EventWizard({
   // guest box below stay reachable without a marathon scroll.
   const [friendsOpen, setFriendsOpen] = useState(friends.length <= 12);
 
-  // Step 5 - visibility
+  // Privacy
   const [showInviteList, setShowInviteList] = useState(false);
   const [showAccepted, setShowAccepted] = useState(true);
   const [showExpired, setShowExpired] = useState(false);
@@ -368,24 +375,8 @@ export function EventWizard({
     addGuestInvite(name, contact);
   }
 
-  // The invite target we'd stage for a matched contact: a real profile if the
-  // contact is on Switchboard, otherwise a textable phone/email guest. Matches
-  // with neither (name-only, no account) can't be invited, so we skip them.
-  function inviteTargetFor(match: ContactMatch) {
-    if (match.profile) return { profileId: match.profile.id, contact: null as string | null };
-    const contact = match.smsTarget ?? match.identifier ?? null;
-    if (!contact) return null;
-    return { profileId: null as string | null, contact };
-  }
-
   function isMatchSelected(match: ContactMatch) {
-    const target = inviteTargetFor(match);
-    if (!target) return false;
-    return invitees.some((invitee) =>
-      target.profileId
-        ? invitee.profileId === target.profileId
-        : invitee.profileId === null && invitee.guestContact === target.contact,
-    );
+    return contactMatchSelected(match, invitees);
   }
 
   function toggleContactMatch(match: ContactMatch) {
@@ -553,23 +544,34 @@ export function EventWizard({
 
   const selectedFriendCount = invitees.filter((i) => i.profileId).length;
 
+  // The steps this plan goes through. "Set the order" only appears when there
+  // is an order to set; the response window it would have asked for moves to
+  // the invites step. Both inputs are decided on earlier steps, so the current
+  // index never shifts underneath the host.
+  const steps = useMemo(
+    () => wizardSteps(inviteMode, invitees.length),
+    [inviteMode, invitees.length],
+  );
+
   // Per-step: does this step have everything it needs? The Next button reads
   // its own entry; the progress bar reads the whole array to decide which steps
   // can be jumped to. One source, so the two can never disagree about whether
   // Basics is finished.
   const stepComplete = useMemo(
-    () => [
-      title.trim().length > 0 &&
-        hasInviteDetails(locationName, description) &&
-        !startsInPast &&
-        !endsBeforeStart,
-      true,
-      invitees.length > 0,
-      true,
-      true,
-      true,
-    ],
-    [title, locationName, description, startsInPast, endsBeforeStart, invitees.length],
+    () =>
+      steps.map((key) => {
+        if (key === 'basics') {
+          return (
+            title.trim().length > 0 &&
+            hasInviteDetails(locationName, description) &&
+            !startsInPast &&
+            !endsBeforeStart
+          );
+        }
+        if (key === 'people') return invitees.length > 0;
+        return true;
+      }),
+    [steps, title, locationName, description, startsInPast, endsBeforeStart, invitees.length],
   );
   useEffect(() => {
     // Nothing to protect on the first step: back should leave, as it always
@@ -643,23 +645,7 @@ export function EventWizard({
         recurrence,
         recurrenceIntervalDays:
           recurrence === 'custom' ? Number(customDays) || null : null,
-        questions: questions
-          .map((q) => {
-            const options = q.options
-              .map((o) => o.trim())
-              .filter((o) => o.length > 0);
-            // Only keep it a choice question if it has at least two real
-            // options; otherwise it falls back to free text (the server
-            // enforces the same rule).
-            const isChoice = q.kind === 'choice' && options.length >= 2;
-            return {
-              prompt: q.prompt.trim(),
-              required: q.required,
-              kind: (isChoice ? 'choice' : 'text') as 'text' | 'choice',
-              options: isChoice ? options : [],
-            };
-          })
-          .filter((q) => q.prompt.length > 0),
+        questions: normalizeWizardQuestions(questions),
         ritualId,
         invitees: invitees.map((invitee) => ({
           profileId: invitee.profileId,
@@ -686,6 +672,7 @@ export function EventWizard({
     }
   }
 
+  const current = steps[Math.min(step, steps.length - 1)];
   const stageCount =
     inviteMode === 'group'
       ? Math.max(1, ...invitees.map((i) => i.groupStage + 1))
@@ -693,11 +680,12 @@ export function EventWizard({
 
   return (
     <WizardFrame
+      steps={steps}
       step={step} stepComplete={stepComplete} goToStep={goToStep}
       submitError={submitError} submitting={submitting} enablePoll={enablePoll}
       submit={submit}
     >
-      {step === 0 && (
+      {current === 'basics' && (
         <BasicsStep
           userId={userId}
           applyDraft={applyDraft}
@@ -721,7 +709,7 @@ export function EventWizard({
         />
       )}
 
-      {step === 1 && (
+      {current === 'style' && (
         <StyleStep
           inviteMode={inviteMode} setInviteMode={setInviteMode}
           enablePoll={enablePoll} setEnablePoll={setEnablePoll}
@@ -731,10 +719,15 @@ export function EventWizard({
           minDate={minDate}
           remindersEnabled={remindersEnabled} setRemindersEnabled={setRemindersEnabled}
           theme={theme} setTheme={setTheme}
+          inviteeCount={invitees.length}
+          showWindow={!orderStepNeeded(inviteMode, invitees.length)}
+          commonWindow={commonWindow}
+          setWindowForEveryone={setWindowForEveryone}
+          suggested={suggested}
         />
       )}
 
-      {step === 2 && (
+      {current === 'people' && (
         <PeopleStep
           households={households}
           circles={circles}
@@ -760,7 +753,7 @@ export function EventWizard({
         />
       )}
 
-      {step === 3 && (
+      {current === 'order' && (
         <OrderStep
           inviteMode={inviteMode}
           invitees={invitees}
@@ -773,7 +766,7 @@ export function EventWizard({
         />
       )}
 
-      {step === 4 && (
+      {current === 'visibility' && (
         <VisibilityStep
           showInviteList={showInviteList} setShowInviteList={setShowInviteList}
           showAccepted={showAccepted} setShowAccepted={setShowAccepted}
@@ -785,7 +778,7 @@ export function EventWizard({
         />
       )}
 
-      {step === 5 && (
+      {current === 'review' && (
         <ReviewStep
           title={title} startsAt={startsAt} endsAt={endsAt}
           locationName={locationName} invitees={invitees} inviteMode={inviteMode}
