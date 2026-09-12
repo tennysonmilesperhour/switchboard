@@ -245,6 +245,13 @@ export const FEATURE_GROUPS: readonly FeatureGroup[] = [
           'Start something → Help me figure it out (leave the date open), then the plan’s page',
       },
       {
+        id: 'poll-idea-details',
+        title: 'Ideas with links and photos',
+        blurb:
+          'Attach a description, a link, and a photo to any idea on a poll. Whoever suggested it, or the host, can fix its wording or take it off the list while voting is open.',
+        where: 'Any plan with a poll open → Add details, or Edit under an idea',
+      },
+      {
         id: 'consensus-meter',
         title: 'Consensus meter',
         blurb: 'Watch where the group is actually leaning, as an aggregate and nothing more.',
@@ -525,7 +532,8 @@ export const FEATURE_GROUPS: readonly FeatureGroup[] = [
       {
         id: 'event-thread',
         title: 'The plan’s own thread',
-        blurb: 'Questions and chatter attached to the plan page itself, for people not in the room.',
+        blurb:
+          'Questions and chatter attached to the plan page itself, for people not in the room. Reply to any message and your answer quotes it, so a busy thread stays readable.',
         where: 'Any plan’s page',
       },
       {
@@ -547,7 +555,7 @@ export const FEATURE_GROUPS: readonly FeatureGroup[] = [
         id: 'availability-signals',
         title: 'Availability signals',
         blurb:
-          'One tap says “coffee?” to just the circles you choose. No broadcast, and it expires on its own.',
+          'Say “coffee?” to exactly who you mean: circles, specific people, or a whole group you belong to. Each signal picks its own audience, nothing goes live until you tap Turn on, and it expires on its own.',
         where: 'Home → I’m free',
         href: '/',
       },

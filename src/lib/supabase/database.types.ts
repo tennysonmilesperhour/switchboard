@@ -75,6 +75,8 @@ export type Database = {
       }
       availability_signals: {
         Row: {
+          board_ids: string[]
+          person_ids: string[]
           circle_ids: string[]
           created_at: string
           emoji: string
@@ -84,6 +86,8 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          board_ids?: string[]
+          person_ids?: string[]
           circle_ids?: string[]
           created_at?: string
           emoji: string
@@ -93,6 +97,8 @@ export type Database = {
           user_id: string
         }
         Update: {
+          board_ids?: string[]
+          person_ids?: string[]
           circle_ids?: string[]
           created_at?: string
           emoji?: string
@@ -696,6 +702,7 @@ export type Database = {
       }
       event_comments: {
         Row: {
+          reply_to_id: string | null
           author_id: string
           body: string | null
           created_at: string
@@ -705,6 +712,7 @@ export type Database = {
           voice_url: string | null
         }
         Insert: {
+          reply_to_id?: string | null
           author_id: string
           body?: string | null
           created_at?: string
@@ -714,6 +722,7 @@ export type Database = {
           voice_url?: string | null
         }
         Update: {
+          reply_to_id?: string | null
           author_id?: string
           body?: string | null
           created_at?: string
@@ -1947,6 +1956,10 @@ export type Database = {
       }
       poll_options: {
         Row: {
+          author_id: string | null
+          image_url: string | null
+          link_url: string | null
+          updated_at: string | null
           created_at: string
           detail: string | null
           id: string
@@ -1955,6 +1968,10 @@ export type Database = {
           source: string
         }
         Insert: {
+          author_id?: string | null
+          image_url?: string | null
+          link_url?: string | null
+          updated_at?: string | null
           created_at?: string
           detail?: string | null
           id?: string
@@ -1963,6 +1980,10 @@ export type Database = {
           source?: string
         }
         Update: {
+          author_id?: string | null
+          image_url?: string | null
+          link_url?: string | null
+          updated_at?: string | null
           created_at?: string
           detail?: string | null
           id?: string

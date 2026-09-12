@@ -6,7 +6,7 @@
  * the two disagree. It went stale for four migrations once, which left the
  * check reporting `schema:false` regardless of reality.
  */
-export const EXPECTED_SCHEMA_VERSION = '20260909011500';
+export const EXPECTED_SCHEMA_VERSION = '20260912120200';
 
 export interface EvaluatedSchemaStatus {
   current: string | null;

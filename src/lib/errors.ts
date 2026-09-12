@@ -347,6 +347,14 @@ const REGISTRY = {
     fix: 'It’s still in the box — try again. Reload first if this page has been open a while.',
     actor: 'reader',
   },
+  // Editing or removing an idea. The database refuses silently (zero rows)
+  // for anyone but the idea's author or the host, and for everyone once the
+  // poll is decided; the message names both so the reader knows which applies.
+  'SB-POLL-EDIT': {
+    message: 'That idea didn’t change.',
+    fix: 'Only whoever suggested it or the host can change it, and only while the poll is open. Reload to see the current list.',
+    actor: 'reader',
+  },
   // A post someone is trying to flag has to still exist, and has to be one they
   // can see. Both come out as "not found" on purpose: a stranger probing post
   // ids should not learn which of them are real.
@@ -834,6 +842,8 @@ const AREA_CODES: Record<string, ErrorCode> = {
 
   // Poll input
   'poll.suggest': 'SB-POLL-SUGGEST',
+  'poll.edit': 'SB-POLL-EDIT',
+  'poll.remove': 'SB-POLL-EDIT',
   'poll.vote': 'SB-PLAN-SAVE',
 
   // Answering
@@ -924,9 +934,8 @@ const AREA_CODES: Record<string, ErrorCode> = {
   'ritual.create': 'SB-RITUAL-SAVE',
   'room.message': 'SB-ROOM-SAVE',
   'room.image': 'SB-ROOM-SAVE',
-  'signal.add': 'SB-SIGNAL-SAVE',
+  'signal.activate': 'SB-SIGNAL-SAVE',
   'signal.remove': 'SB-SIGNAL-SAVE',
-  'signal.audience': 'SB-SIGNAL-SAVE',
   'signal.clear': 'SB-SIGNAL-SAVE',
   'venue.claim': 'SB-VENUE-SAVE',
   'venue.review': 'SB-VENUE-SAVE',
