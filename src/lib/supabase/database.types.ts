@@ -76,35 +76,35 @@ export type Database = {
       availability_signals: {
         Row: {
           board_ids: string[]
-          person_ids: string[]
           circle_ids: string[]
           created_at: string
           emoji: string
           expires_at: string
           id: string
           label: string
+          person_ids: string[]
           user_id: string
         }
         Insert: {
           board_ids?: string[]
-          person_ids?: string[]
           circle_ids?: string[]
           created_at?: string
           emoji: string
           expires_at: string
           id?: string
           label: string
+          person_ids?: string[]
           user_id: string
         }
         Update: {
           board_ids?: string[]
-          person_ids?: string[]
           circle_ids?: string[]
           created_at?: string
           emoji?: string
           expires_at?: string
           id?: string
           label?: string
+          person_ids?: string[]
           user_id?: string
         }
         Relationships: [
@@ -702,32 +702,32 @@ export type Database = {
       }
       event_comments: {
         Row: {
-          reply_to_id: string | null
           author_id: string
           body: string | null
           created_at: string
           event_id: string
           id: string
+          reply_to_id: string | null
           voice_duration_seconds: number | null
           voice_url: string | null
         }
         Insert: {
-          reply_to_id?: string | null
           author_id: string
           body?: string | null
           created_at?: string
           event_id: string
           id?: string
+          reply_to_id?: string | null
           voice_duration_seconds?: number | null
           voice_url?: string | null
         }
         Update: {
-          reply_to_id?: string | null
           author_id?: string
           body?: string | null
           created_at?: string
           event_id?: string
           id?: string
+          reply_to_id?: string | null
           voice_duration_seconds?: number | null
           voice_url?: string | null
         }
@@ -744,6 +744,13 @@ export type Database = {
             columns: ["event_id"]
             isOneToOne: false
             referencedRelation: "events"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "event_comments_reply_to_id_fkey"
+            columns: ["reply_to_id"]
+            isOneToOne: false
+            referencedRelation: "event_comments"
             referencedColumns: ["id"]
           },
         ]
@@ -1957,41 +1964,48 @@ export type Database = {
       poll_options: {
         Row: {
           author_id: string | null
-          image_url: string | null
-          link_url: string | null
-          updated_at: string | null
           created_at: string
           detail: string | null
           id: string
+          image_url: string | null
           label: string
+          link_url: string | null
           poll_id: string
           source: string
+          updated_at: string | null
         }
         Insert: {
           author_id?: string | null
-          image_url?: string | null
-          link_url?: string | null
-          updated_at?: string | null
           created_at?: string
           detail?: string | null
           id?: string
+          image_url?: string | null
           label: string
+          link_url?: string | null
           poll_id: string
           source?: string
+          updated_at?: string | null
         }
         Update: {
           author_id?: string | null
-          image_url?: string | null
-          link_url?: string | null
-          updated_at?: string | null
           created_at?: string
           detail?: string | null
           id?: string
+          image_url?: string | null
           label?: string
+          link_url?: string | null
           poll_id?: string
           source?: string
+          updated_at?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "poll_options_author_id_fkey"
+            columns: ["author_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "poll_options_poll_id_fkey"
             columns: ["poll_id"]
