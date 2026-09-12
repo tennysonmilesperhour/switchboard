@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useTransition } from 'react';
+import { useRef, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { Button } from '@/components/ui/Button';
@@ -20,6 +20,8 @@ export interface ThreadCommentView {
   created_at: string;
   author_id: string;
   author_name: string;
+  /** The message this one answers: who wrote it and a few of its words. */
+  reply_to: { author_name: string; excerpt: string | null } | null;
 }
 
 interface EventThreadProps {
@@ -53,9 +55,25 @@ export function EventThread({
 }: EventThreadProps) {
   const [body, setBody] = useState('');
   const [clip, setClip] = useState<RecordedClip | null>(null);
+  // The message being answered. Chosen with a Reply button; shown as a quote
+  // above the box so the writer can see what they are replying to.
+  const [replyTo, setReplyTo] = useState<ThreadCommentView | null>(null);
   const [error, setError] = useState('');
   const [pending, startTransition] = useTransition();
   const router = useRouter();
+  const composerRef = useRef<HTMLTextAreaElement>(null);
+
+  function startReply(comment: ThreadCommentView) {
+    setReplyTo(comment);
+    setError('');
+    // Bring the box to the reader and put the cursor in it: the composer sits
+    // above the list, so a tap on Reply far down would otherwise change
+    // nothing on screen.
+    requestAnimationFrame(() => {
+      composerRef.current?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+      composerRef.current?.focus();
+    });
+  }
 
   function send() {
     const trimmed = body.trim();
@@ -80,6 +98,7 @@ export function EventThread({
         body: trimmed || undefined,
         voiceUrl,
         voiceDurationSeconds,
+        replyToId: replyTo?.id ?? null,
       });
       if (!result.ok) {
         setError(result.error ?? 'Something went wrong');
@@ -87,6 +106,7 @@ export function EventThread({
       }
       setBody('');
       setClip(null);
+      setReplyTo(null);
       router.refresh();
     });
   }
@@ -113,16 +133,41 @@ export function EventThread({
 
       {unlocked && (
         <Card className="mb-3">
+          {replyTo && (
+            <div className="mb-2 flex items-start justify-between gap-2 rounded-card border-l-4 border-terracotta bg-cream px-3 py-2">
+              <p className="min-w-0 text-xs text-ink-soft">
+                <span className="font-bold text-ink">Replying to {replyTo.author_name}</span>
+                {replyTo.body || replyTo.voice_url ? (
+                  <span className="block truncate">
+                    {replyTo.body
+                      ? replyTo.body.length > 90
+                        ? `${replyTo.body.slice(0, 89)}…`
+                        : replyTo.body
+                      : '🎤 Voice note'}
+                  </span>
+                ) : null}
+              </p>
+              <button
+                type="button"
+                onClick={() => setReplyTo(null)}
+                aria-label="Cancel reply"
+                className="shrink-0 text-xs text-ink-faint hover:text-ink"
+              >
+                ✕
+              </button>
+            </div>
+          )}
           <label htmlFor="event-comment" className="sr-only">
-            Add to the thread
+            {replyTo ? `Reply to ${replyTo.author_name}` : 'Add to the thread'}
           </label>
           <textarea
             id="event-comment"
+            ref={composerRef}
             value={body}
             rows={2}
             maxLength={2000}
             onChange={(e) => setBody(e.target.value)}
-            placeholder="Say something to the group…"
+            placeholder={replyTo ? `Reply to ${replyTo.author_name}…` : 'Say something to the group…'}
             className="w-full rounded-card border border-line bg-paper px-3.5 py-2.5 text-sm outline-none transition-colors focus:border-terracotta focus:ring-2 focus:ring-terracotta-soft resize-none"
           />
           {error && (
@@ -171,6 +216,14 @@ export function EventThread({
                         {formatRelative(comment.created_at)}
                       </span>
                     </div>
+                    {comment.reply_to && (
+                      <p className="mt-1 rounded-card border-l-2 border-line bg-paper/70 px-2.5 py-1.5 text-xs text-ink-soft">
+                        <span className="font-bold">↩ {comment.reply_to.author_name}</span>
+                        {comment.reply_to.excerpt && (
+                          <span className="block truncate">{comment.reply_to.excerpt}</span>
+                        )}
+                      </p>
+                    )}
                     {comment.body && (
                       <p className="text-sm text-ink whitespace-pre-wrap leading-relaxed mt-0.5">
                         {comment.body}
@@ -184,16 +237,29 @@ export function EventThread({
                         />
                       </div>
                     )}
-                    {(mine || canModerate) && (
-                      <button
-                        type="button"
-                        disabled={pending}
-                        onClick={() => remove(comment.id)}
-                        className="text-xs text-ink-faint hover:text-rose-deep mt-1.5 disabled:opacity-40"
-                      >
-                        Remove
-                      </button>
-                    )}
+                    <div className="mt-1.5 flex gap-3">
+                      {unlocked && (
+                        <button
+                          type="button"
+                          disabled={pending}
+                          onClick={() => startReply(comment)}
+                          aria-label={`Reply to ${comment.author_name}`}
+                          className="text-xs font-bold text-ink-faint hover:text-terracotta-deep disabled:opacity-40"
+                        >
+                          Reply
+                        </button>
+                      )}
+                      {(mine || canModerate) && (
+                        <button
+                          type="button"
+                          disabled={pending}
+                          onClick={() => remove(comment.id)}
+                          className="text-xs text-ink-faint hover:text-rose-deep disabled:opacity-40"
+                        >
+                          Remove
+                        </button>
+                      )}
+                    </div>
                   </div>
                 </div>
               </li>
