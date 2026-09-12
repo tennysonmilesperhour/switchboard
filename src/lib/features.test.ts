@@ -78,6 +78,7 @@ const NOT_INDEXED: Record<string, string> = {
   'sms-compliance':
     'public page for the carrier’s A2P 10DLC reviewer, linked from the sitemap; not a feature people use',
   moderation: 'operator screen, gated to appointed moderators',
+  'scope-verification': 'client-facing verification checklist, URL-only access',
   api: 'not a page',
   auth: 'not a page',
 };

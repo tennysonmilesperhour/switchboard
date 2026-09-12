@@ -25,6 +25,7 @@ const PUBLIC_PREFIXES = [
   '/i', // public per-plan share links (the one a host texts); token-authed
   '/join', // shareable plan links; auth returns here via a validated next path
   '/verify-contact',
+  '/scope-verification', // client-facing checklist, shared by URL; nothing private on it
   '/api/sms/inbound',
   '/api/sms/status', // Twilio signature-authenticated; never redirect to browser login
   '/api/cron',

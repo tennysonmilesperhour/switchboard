@@ -19,6 +19,7 @@ files are historical evidence, never a source of current product truth.
 | [`DOCKET.md`](DOCKET.md) | The living backlog: strategy, queued builds, design threads, and carried residuals. |
 | [`INNOVATIONS.md`](INNOVATIONS.md) | Unshipped ideas only; shipped features are removed. |
 | [`POSTHOG_SOURCEMAPS.md`](POSTHOG_SOURCEMAPS.md) | How to upload production source maps to PostHog and verify the result. |
+| [`scope-of-work-verification.html`](scope-of-work-verification.html) | The client-facing verification checklist, served live at `/scope-verification`. Add a section per delivered round. |
 
 ## Archive
 
@@ -38,8 +39,6 @@ files are historical evidence, never a source of current product truth.
 | [`archive/REMEDIATION-PLAN-2026-09-01.md`](archive/REMEDIATION-PLAN-2026-09-01.md) | Completed 21-item work order from the September 1 audit; dashboard-only residuals live in `DOCKET.md`. |
 | [`archive/SHIP-READINESS-AUDIT.md`](archive/SHIP-READINESS-AUDIT.md) | Earlier ship-readiness audit. |
 | [`archive/WEEKLY-PLAN-2026-08-11.md`](archive/WEEKLY-PLAN-2026-08-11.md) | Completed six-item weekly plan. |
-| [`archive/scope-of-work-verification.html`](archive/scope-of-work-verification.html) | Standalone client-facing verification checklist captured on August 10, 2026. |
-| [`archive/scope-verification.js`](archive/scope-verification.js) | Script companion to the archived HTML checklist. |
 
 ## Historical specs
 
