@@ -5,13 +5,18 @@ import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { Button } from '@/components/ui/Button';
 import { Card, SectionHeader } from '@/components/ui/Card';
+import { ImageInput } from '@/components/ui/ImageInput';
 import {
   addSuggestion,
   castVote,
   closeVoting,
+  deleteSuggestion,
   openVoting,
   pickWinner,
+  updateSuggestion,
+  type SuggestionInput,
 } from '@/lib/actions/polls';
+import { linkHostname, OPTION_DETAIL_MAX } from '@/lib/poll-option-input';
 import { nextWeight, type Weight } from '@/lib/engine/scoring';
 import { errorFor, errorRef, type ErrorCode } from '@/lib/errors';
 import type { Poll, PollOption } from '@/lib/types';
@@ -31,6 +36,125 @@ interface PollSectionProps {
   myVotes: Record<string, Weight>;
   isHost: boolean;
   eventId: string;
+  /** Whose ideas the Edit and Remove controls belong to. */
+  currentUserId: string;
+}
+
+/** The optional parts of an idea, shared by the suggestion box and the editor. */
+interface IdeaExtras {
+  detail: string;
+  linkUrl: string;
+  imageUrl: string;
+}
+
+const EMPTY_EXTRAS: IdeaExtras = { detail: '', linkUrl: '', imageUrl: '' };
+
+function extrasOf(option: PollOption): IdeaExtras {
+  return {
+    detail: option.detail ?? '',
+    linkUrl: option.link_url ?? '',
+    imageUrl: option.image_url ?? '',
+  };
+}
+
+/**
+ * Description, link, and photo for an idea.
+ *
+ * Client feedback: a link had to be pasted into the idea's name, and a photo
+ * could not be attached at all. These live behind one "Add details" toggle so
+ * the fast path (type an idea, tap Add) stays one field.
+ */
+function IdeaFields({
+  value,
+  onChange,
+  idPrefix,
+  disabled,
+  userId,
+}: {
+  value: IdeaExtras;
+  onChange: (next: IdeaExtras) => void;
+  idPrefix: string;
+  disabled: boolean;
+  userId: string;
+}) {
+  const fieldClass =
+    'w-full rounded-card border border-line bg-card px-3.5 py-2.5 text-sm outline-none transition-colors focus:border-terracotta';
+  return (
+    <div className="space-y-2.5">
+      <div>
+        <label htmlFor={`${idPrefix}-detail`} className="text-xs font-bold text-ink-soft">
+          Description
+        </label>
+        <textarea
+          id={`${idPrefix}-detail`}
+          value={value.detail}
+          rows={2}
+          maxLength={OPTION_DETAIL_MAX}
+          disabled={disabled}
+          onChange={(e) => onChange({ ...value, detail: e.target.value })}
+          placeholder="What is it, when, how much…"
+          className={`${fieldClass} mt-1 resize-none`}
+        />
+      </div>
+      <div>
+        <label htmlFor={`${idPrefix}-link`} className="text-xs font-bold text-ink-soft">
+          Link
+        </label>
+        <input
+          id={`${idPrefix}-link`}
+          type="url"
+          inputMode="url"
+          value={value.linkUrl}
+          disabled={disabled}
+          onChange={(e) => onChange({ ...value, linkUrl: e.target.value })}
+          placeholder="https://…"
+          className={`${fieldClass} mt-1`}
+        />
+      </div>
+      <div>
+        <p className="text-xs font-bold text-ink-soft mb-1">Photo</p>
+        <ImageInput
+          value={value.imageUrl}
+          onChange={(url) => onChange({ ...value, imageUrl: url })}
+          userId={userId}
+          pathPrefix="poll-idea"
+          bucket="media"
+          aspect="video"
+          label="idea photo"
+          allowLink={false}
+        />
+      </div>
+    </div>
+  );
+}
+
+/** The link and photo an idea carries, as the group sees them. */
+function IdeaMedia({ option }: { option: PollOption }) {
+  return (
+    <>
+      {option.link_url && (
+        <a
+          href={option.link_url}
+          target="_blank"
+          rel="noopener noreferrer nofollow"
+          className="mt-1.5 inline-flex max-w-full items-center gap-1 text-xs font-bold text-terracotta-deep underline decoration-terracotta/40 underline-offset-2"
+        >
+          <span aria-hidden>🔗</span>
+          <span className="truncate">{linkHostname(option.link_url)}</span>
+          <span className="sr-only">(opens in a new tab)</span>
+        </a>
+      )}
+      {option.image_url && (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={option.image_url}
+          alt=""
+          loading="lazy"
+          className="mt-2 w-full max-h-56 rounded-card object-cover border border-line"
+        />
+      )}
+    </>
+  );
 }
 
 const WEIGHT_BUTTONS: Array<{ weight: Weight; emoji: string; label: string }> = [
@@ -60,8 +184,20 @@ export function PollSection({
   myVotes,
   isHost,
   eventId,
+  currentUserId,
 }: PollSectionProps) {
   const [suggestion, setSuggestion] = useState('');
+  const [extras, setExtras] = useState<IdeaExtras>(EMPTY_EXTRAS);
+  const [showExtras, setShowExtras] = useState(false);
+  // The idea being edited in place, with its working copy of every field.
+  const [editing, setEditing] = useState<{
+    id: string;
+    label: string;
+    extras: IdeaExtras;
+  } | null>(null);
+  // Ideas this device removed, hidden until the server's list agrees. Same
+  // reason as `justAdded`: the re-render is not reliably prompt.
+  const [justRemoved, setJustRemoved] = useState<Set<string>>(() => new Set());
   // Options this device added, kept until a server render includes them.
   //
   // Not an optimistic overlay: these are rows the server has already saved and
@@ -133,7 +269,16 @@ export function PollSection({
   // added that has not come back yet is appended. Once a render includes it,
   // the `seen` check drops the local copy rather than showing it twice.
   const seen = new Set(options.map((option) => option.id));
-  const shownOptions = [...options, ...justAdded.filter((option) => !seen.has(option.id))];
+  const shownOptions = [...options, ...justAdded.filter((option) => !seen.has(option.id))]
+    // An edit's saved row replaces the server's copy until a render carries
+    // it — and only while it is the newer of the two.
+    .map((option) => {
+      const local = justAdded.find((added) => added.id === option.id);
+      const localIsNewer =
+        local?.updated_at && (!option.updated_at || local.updated_at > option.updated_at);
+      return localIsNewer ? local : option;
+    })
+    .filter((option) => !justRemoved.has(option.id));
 
   const ranked = [...shownOptions].sort((a, b) => {
     const ra = resultFor(a.id);
@@ -189,14 +334,22 @@ export function PollSection({
   function submitSuggestion(e: React.FormEvent) {
     e.preventDefault();
     const label = suggestion;
+    const input: SuggestionInput = {
+      label,
+      detail: extras.detail,
+      linkUrl: extras.linkUrl,
+      imageUrl: extras.imageUrl,
+    };
     setSuggestion('');
     setError('');
     setErrorCode(null);
     startTransition(async () => {
       try {
-        const result = await addSuggestion(poll.id, eventId, label);
+        const result = await addSuggestion(poll.id, eventId, input);
         if (result.ok) {
           if (result.option) setJustAdded((current) => [...current, result.option!]);
+          setExtras(EMPTY_EXTRAS);
+          setShowExtras(false);
           router.refresh();
           return;
         }
@@ -208,6 +361,82 @@ export function PollSection({
         const failed = errorFor('SB-POLL-SUGGEST');
         setError(failed.message);
         setErrorCode('SB-POLL-SUGGEST');
+      }
+    });
+  }
+
+  function canEdit(option: PollOption): boolean {
+    return votingOpen && (isHost || option.author_id === currentUserId);
+  }
+
+  function beginEdit(option: PollOption) {
+    setError('');
+    setErrorCode(null);
+    setEditing({ id: option.id, label: option.label, extras: extrasOf(option) });
+  }
+
+  /**
+   * Save an edit. The row the server hands back is kept locally for the same
+   * reason `justAdded` exists: the re-render that should show the change does
+   * not reliably arrive, and an edit that appears to revert reads as "it did
+   * not take", which is exactly what the client reported about typos.
+   */
+  function saveEdit() {
+    if (!editing) return;
+    const draft = editing;
+    setError('');
+    setErrorCode(null);
+    startTransition(async () => {
+      try {
+        const result = await updateSuggestion(poll.id, eventId, draft.id, {
+          label: draft.label,
+          detail: draft.extras.detail,
+          linkUrl: draft.extras.linkUrl,
+          imageUrl: draft.extras.imageUrl,
+        });
+        if (result.ok) {
+          if (result.option) {
+            const saved = result.option;
+            setJustAdded((current) => [...current.filter((o) => o.id !== saved.id), saved]);
+          }
+          setEditing(null);
+          router.refresh();
+          return;
+        }
+        setError(result.error ?? 'Could not save that');
+        setErrorCode(result.code ?? null);
+      } catch {
+        const failed = errorFor('SB-POLL-EDIT');
+        setError(failed.message);
+        setErrorCode('SB-POLL-EDIT');
+      }
+    });
+  }
+
+  function removeIdea(option: PollOption) {
+    const votes = resultFor(option.id)?.voters ?? 0;
+    const warning =
+      votes > 0
+        ? `Remove “${option.label}”? ${votes} ${votes === 1 ? 'person has' : 'people have'} already rated it.`
+        : `Remove “${option.label}”?`;
+    if (!window.confirm(warning)) return;
+    setError('');
+    setErrorCode(null);
+    startTransition(async () => {
+      try {
+        const result = await deleteSuggestion(poll.id, eventId, option.id);
+        if (result.ok) {
+          setJustRemoved((current) => new Set(current).add(option.id));
+          if (editing?.id === option.id) setEditing(null);
+          router.refresh();
+          return;
+        }
+        setError(result.error ?? 'Could not remove that');
+        setErrorCode(result.code ?? null);
+      } catch {
+        const failed = errorFor('SB-POLL-EDIT');
+        setError(failed.message);
+        setErrorCode('SB-POLL-EDIT');
       }
     });
   }
@@ -282,20 +511,73 @@ export function PollSection({
           const mine = shownVotes[option.id] ?? 0;
           const consensus = consensusOf(result);
           const isWinner = poll.winning_option_id === option.id;
+          if (editing?.id === option.id) {
+            const draft = editing;
+            return (
+              <li key={option.id}>
+                <Card className="border-terracotta border-2">
+                  <form
+                    onSubmit={(e) => {
+                      e.preventDefault();
+                      saveEdit();
+                    }}
+                    className="space-y-2.5"
+                    aria-label={`Edit ${option.label}`}
+                  >
+                    <div>
+                      <label htmlFor={`edit-${option.id}-label`} className="text-xs font-bold text-ink-soft">
+                        Idea
+                      </label>
+                      <input
+                        id={`edit-${option.id}-label`}
+                        value={draft.label}
+                        maxLength={120}
+                        disabled={pending}
+                        onChange={(e) => setEditing({ ...draft, label: e.target.value })}
+                        className="mt-1 w-full rounded-card border border-line bg-card px-3.5 py-2.5 text-sm font-bold outline-none focus:border-terracotta"
+                      />
+                    </div>
+                    <IdeaFields
+                      value={draft.extras}
+                      onChange={(next) => setEditing({ ...draft, extras: next })}
+                      idPrefix={`edit-${option.id}`}
+                      disabled={pending}
+                      userId={currentUserId}
+                    />
+                    <div className="flex gap-2 justify-end">
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="secondary"
+                        disabled={pending}
+                        onClick={() => setEditing(null)}
+                      >
+                        Cancel
+                      </Button>
+                      <Button type="submit" size="sm" disabled={pending || !draft.label.trim()}>
+                        {pending ? 'Saving…' : 'Save'}
+                      </Button>
+                    </div>
+                  </form>
+                </Card>
+              </li>
+            );
+          }
           return (
             <li key={option.id}>
               <Card className={isWinner ? 'border-sage border-2' : ''}>
                 <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <p className="font-bold truncate">{option.label}</p>
+                  <div className="min-w-0 flex-1">
+                    <p className="font-bold break-words">{option.label}</p>
                     {option.detail && (
-                      <p className="text-xs text-ink-faint mt-0.5">{option.detail}</p>
+                      <p className="text-xs text-ink-faint mt-0.5 whitespace-pre-wrap">{option.detail}</p>
                     )}
                     {option.source === 'ai' && (
                       <span className="text-[10px] uppercase tracking-wide text-terracotta-deep">
                         ✨ suggested by Switchboard
                       </span>
                     )}
+                    <IdeaMedia option={option} />
                   </div>
                   {(result?.voters ?? 0) > 0 && (
                     <span
@@ -341,6 +623,27 @@ export function PollSection({
                   </div>
                 )}
 
+                {canEdit(option) && (
+                  <div className="mt-2 flex gap-3">
+                    <button
+                      type="button"
+                      disabled={pending}
+                      onClick={() => beginEdit(option)}
+                      className="text-xs text-ink-faint hover:text-ink disabled:opacity-40"
+                    >
+                      Edit
+                    </button>
+                    <button
+                      type="button"
+                      disabled={pending}
+                      onClick={() => removeIdea(option)}
+                      className="text-xs text-ink-faint hover:text-rose-deep disabled:opacity-40"
+                    >
+                      Remove
+                    </button>
+                  </div>
+                )}
+
                 {isHost && poll.phase === 'decided' && !poll.winning_option_id && (
                   <Button
                     size="sm"
@@ -363,17 +666,38 @@ export function PollSection({
       </ul>
 
       {votingOpen && (poll.allow_suggestions || isHost) && poll.phase !== 'runoff' && (
-        <form onSubmit={submitSuggestion} className="flex gap-2 mt-4">
-          <input
-            value={suggestion}
-            onChange={(e) => setSuggestion(e.target.value)}
-            placeholder="Suggest an idea…"
-            aria-label="Suggest an idea"
-            className="flex-1 rounded-pill border border-line bg-card px-4 py-2.5 text-sm outline-none focus:border-terracotta"
-          />
-          <Button type="submit" size="sm" variant="secondary" disabled={pending || !suggestion.trim()}>
-            Add
-          </Button>
+        <form onSubmit={submitSuggestion} className="mt-4">
+          <div className="flex gap-2">
+            <input
+              value={suggestion}
+              onChange={(e) => setSuggestion(e.target.value)}
+              placeholder="Suggest an idea…"
+              aria-label="Suggest an idea"
+              className="flex-1 min-w-0 rounded-pill border border-line bg-card px-4 py-2.5 text-sm outline-none focus:border-terracotta"
+            />
+            <Button type="submit" size="sm" variant="secondary" disabled={pending || !suggestion.trim()}>
+              Add
+            </Button>
+          </div>
+          <button
+            type="button"
+            onClick={() => setShowExtras((v) => !v)}
+            aria-expanded={showExtras}
+            className="mt-2 text-xs font-medium text-ink-faint underline decoration-line underline-offset-2 hover:text-ink"
+          >
+            {showExtras ? 'Hide details' : 'Add details: description, link, or photo'}
+          </button>
+          {showExtras && (
+            <div className="mt-2 rounded-card border border-line bg-cream/60 p-3">
+              <IdeaFields
+                value={extras}
+                onChange={setExtras}
+                idPrefix="suggest"
+                disabled={pending}
+                userId={currentUserId}
+              />
+            </div>
+          )}
         </form>
       )}
 

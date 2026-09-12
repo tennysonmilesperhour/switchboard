@@ -473,6 +473,7 @@ export default async function EventPage({
               myVotes={myVotes}
               isHost={isHost}
               eventId={event.id}
+              currentUserId={user.id}
             />
             {canManage && (
               <FollowUpComposer
