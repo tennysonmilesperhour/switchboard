@@ -45,3 +45,15 @@ freeze triggers (F1/F2), the block check on the raw `mutual_intents` write
 column (`role`, `is_admin`, `credits`, …) is added to the column-open
 `profiles` table without write protection. Positive controls prove the
 legitimate accept/edit/insert paths still succeed. See `docs/SECURITY.md`.
+
+`poll_option_details.test.sql` covers editing and removing poll ideas: the
+idea's author or the host may, another guest may not, nobody may once the poll
+is decided, and an idea can never be re-attributed (`author_id` is frozen).
+
+`thread_replies.test.sql` proves a reply can only answer a comment on the same
+plan.
+
+`signal_audiences.test.sql` walks the per-signal audience rule: a named person
+sees only the signal naming them, a group member sees only the group signal
+(connected or not), a block hides it, a stranger sees nothing, a group the
+owner is not in reaches nobody, and the audience arrays are bounded.

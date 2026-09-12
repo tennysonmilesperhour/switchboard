@@ -300,7 +300,7 @@ export async function loadEventPage(
   let commentsQuery = admin
     .from('event_comments')
     .select(
-      'id, body, voice_url, voice_duration_seconds, created_at, author_id, author:profiles(display_name)',
+      'id, body, voice_url, voice_duration_seconds, created_at, author_id, reply_to_id, author:profiles(display_name)',
       { count: 'exact' },
     )
     .eq('event_id', id)
@@ -526,9 +526,29 @@ export async function loadEventPage(
   });
   const threadTotal = commentResult.count ?? 0;
   const threadGateInfo = threadGate(threadTotal, canAccessThread);
-  const threadComments = await Promise.all(
-    (commentResult.data ?? []).map(async (row): Promise<ThreadCommentView> => {
+  // What a reply quotes. Resolved from the rows already loaded: a full thread
+  // has every parent, and the preview slice may not — in which case the reply
+  // still says who it answered, just without the words.
+  const commentRows = commentResult.data ?? [];
+  const quoteById = new Map(
+    commentRows.map((row) => {
       const author = Array.isArray(row.author) ? row.author[0] : row.author;
+      return [
+        row.id as string,
+        {
+          author_name: author?.display_name ?? 'Guest',
+          excerpt: threadExcerpt(
+            (row.body as string | null) ?? null,
+            Boolean(row.voice_url),
+          ),
+        },
+      ];
+    }),
+  );
+  const threadComments = await Promise.all(
+    commentRows.map(async (row): Promise<ThreadCommentView> => {
+      const author = Array.isArray(row.author) ? row.author[0] : row.author;
+      const replyToId = (row.reply_to_id as string | null) ?? null;
       return {
         id: row.id as string,
         body: (row.body as string | null) ?? null,
@@ -537,6 +557,9 @@ export async function loadEventPage(
         created_at: row.created_at as string,
         author_id: row.author_id as string,
         author_name: author?.display_name ?? 'Guest',
+        reply_to: replyToId
+          ? (quoteById.get(replyToId) ?? { author_name: 'an earlier message', excerpt: null })
+          : null,
       };
     }),
   );
@@ -706,4 +729,11 @@ export async function loadEventPage(
     attendeeCards,
     cancelVoiceUrl,
   };
+}
+
+/** The few words of a comment a reply quotes above itself. */
+export function threadExcerpt(body: string | null, hasVoice: boolean): string | null {
+  const text = body?.replace(/\s+/g, ' ').trim() ?? '';
+  if (text) return text.length > 90 ? `${text.slice(0, 89)}…` : text;
+  return hasVoice ? '🎤 Voice note' : null;
 }

@@ -13,6 +13,41 @@ from working sessions. Newest thinking lives here so nothing evaporates.
 
 ---
 
+## ✅ Shipped 2026-09-12 — client feedback round 4
+
+Six pieces of feedback from Gina's walkthrough, each with a verification line
+in the live checklist at `/scope-verification` (section J).
+
+- **The scope checklist link 404'd.** The `/scope-verification` route was
+  deleted in #180 when its HTML moved to the archive. Restored, served from
+  `docs/scope-of-work-verification.html` with the request's CSP nonce stamped
+  on its inline script (without it the page renders empty), made public, and
+  extended with a section per delivered round. `route.test.ts` guards both.
+- **Edit or remove a poll idea.** `poll_options` gained `author_id` (stamped
+  from `auth.uid()`, frozen), `link_url`, `image_url`, `updated_at`, plus
+  UPDATE/DELETE policies: the idea's author or the host, while the poll is not
+  decided. `updateSuggestion` / `deleteSuggestion`, an inline editor and Remove
+  on each card. pgTAP: `poll_option_details.test.sql`.
+- **Description, link, and photo on an idea.** "Add details" under the
+  suggestion box. A URL pasted into the idea's name is lifted into the link
+  field (`src/lib/poll-option-input.ts`, tested), which is what people were
+  doing by hand. Photos go through `/api/uploads/image` and must be our own
+  storage URL; links must be http(s).
+- **Reply to a thread message.** `event_comments.reply_to_id`, a trigger that
+  refuses a cross-plan parent, a Reply button that quotes the message above the
+  composer, and a "replied to you" notification for the person answered.
+- **Signals: finalize before going live, an audience per signal, specific
+  people, whole groups.** `SignalBar` is now a draft-then-Turn-on composer;
+  `activateSignals` replaces `addSignal` / `setSignalsAudience`. Rows carry
+  `person_ids` (must be accepted connections) and `board_ids` (boards the
+  owner belongs to; visible to fellow members even when not connected, blocks
+  win). `signals_visible` is the single audience rule. pgTAP:
+  `signal_audiences.test.sql`.
+- **"Message the whole group."** Boards already let any member post; members
+  are now notified of each new post, which is the designed answer to a
+  community organizer reaching everyone. A signal can also be aimed at a
+  board via the composer's "A whole group".
+
 ## 🧹 2026-08-11 consolidation — what moved, what shipped, what's still open
 
 The point-in-time plans and audits were archived to `docs/archive/` (they had

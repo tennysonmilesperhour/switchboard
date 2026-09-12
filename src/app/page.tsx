@@ -51,10 +51,12 @@ export default async function HomePage() {
     { count: friendCount },
     { data: aroundAvailable },
     { data: rememberedSignalCircle },
+    { data: signalPeople },
+    { data: signalGroups },
   ] = await Promise.all([
     supabase
       .from('availability_signals')
-      .select('emoji, label, expires_at, circle_ids')
+      .select('id, emoji, label, expires_at, circle_ids, person_ids, board_ids')
       .eq('user_id', user.id)
       .gt('expires_at', nowIso)
       .order('created_at'),
@@ -94,7 +96,26 @@ export default async function HomePage() {
       .or(`requester_id.eq.${user.id},addressee_id.eq.${user.id}`),
     supabase.rpc('home_around_available'),
     supabase.rpc('my_signal_default_circle'),
+    // The composer's "specific people": accepted connections, by name.
+    supabase
+      .from('connections')
+      .select(
+        'requester_id, addressee_id, requester:profiles!connections_requester_id_fkey(id, display_name), addressee:profiles!connections_addressee_id_fkey(id, display_name)',
+      )
+      .eq('status', 'accepted')
+      .or(`requester_id.eq.${user.id},addressee_id.eq.${user.id}`),
+    // And "a whole group": the boards RLS says this person belongs to.
+    supabase.from('boards').select('id, name').order('name'),
   ]);
+
+  const peopleForSignals = (signalPeople ?? [])
+    .map((row) => {
+      const otherRaw = row.requester_id === user.id ? row.addressee : row.requester;
+      const other = Array.isArray(otherRaw) ? otherRaw[0] : otherRaw;
+      return other ? { id: other.id, name: other.display_name } : null;
+    })
+    .filter((person): person is { id: string; name: string } => person !== null)
+    .sort((a, b) => a.name.localeCompare(b.name));
 
   const hasConnections = (friendCount ?? 0) > 0;
   const acceptedEventIds = new Set(
@@ -360,6 +381,8 @@ export default async function HomePage() {
             <SignalBar
               active={mySignals ?? []}
               circles={circles ?? []}
+              people={peopleForSignals}
+              groups={signalGroups ?? []}
               defaultCircleId={defaultSignalCircleId}
             />
           </div>
@@ -451,7 +474,7 @@ export default async function HomePage() {
           <section>
             <SectionHeader
               title="Around right now"
-              hint="Friends open to connecting"
+              hint="People open to connecting"
             />
             <div className="space-y-2">
               {(friendSignals ?? []).map((signal) => {

@@ -22,7 +22,12 @@ interface CommentInput {
   body?: string;
   voiceUrl?: string | null;
   voiceDurationSeconds?: number | null;
+  /** The comment this one answers, when it is a reply. */
+  replyToId?: string | null;
 }
+
+const UUID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 
 /**
@@ -51,10 +56,29 @@ export async function postComment(
   if (voiceUrl && !isValidMediaRef(voiceUrl)) {
     return validation('That voice note could not be saved.');
   }
+  const replyToId = normalized.replyToId?.trim() || null;
+  if (replyToId && !UUID_PATTERN.test(replyToId)) {
+    return validation('That message is no longer here to reply to.');
+  }
 
   const auth = await requireUser();
   if (!auth.ok) return auth;
   const { supabase, user } = auth;
+
+  // The comment being answered has to be one this person can read, on this
+  // plan. The trigger refuses a cross-plan pointer too; checking here turns
+  // that into a sentence rather than a database error.
+  let replyTarget: { author_id: string } | null = null;
+  if (replyToId) {
+    const { data: parent } = await supabase
+      .from('event_comments')
+      .select('author_id')
+      .eq('id', replyToId)
+      .eq('event_id', eventId)
+      .maybeSingle();
+    if (!parent) return validation('That message is no longer here to reply to.');
+    replyTarget = parent;
+  }
 
   // RLS: only accepted invitees / host / co-hosts may insert. A locked viewer
   // fails cleanly here.
@@ -64,6 +88,7 @@ export async function postComment(
     body: trimmed || null,
     voice_url: voiceUrl,
     voice_duration_seconds: voiceUrl ? duration : null,
+    reply_to_id: replyToId,
   });
   if (error) {
     if (error.code === '42501') {
@@ -75,7 +100,9 @@ export async function postComment(
   // Nudge the people already in the conversation — the host and prior
   // commenters — not everyone who's coming. Best-effort; the comment is saved.
   try {
-    await notifyThreadParticipants(eventId, user.id, trimmed, Boolean(voiceUrl));
+    await notifyThreadParticipants(eventId, user.id, trimmed, Boolean(voiceUrl), {
+      repliedToId: replyTarget?.author_id ?? null,
+    });
   } catch (notifyError) {
     console.error('Thread notify failed', notifyError);
   }
@@ -115,13 +142,13 @@ async function notifyThreadParticipants(
   authorId: string,
   body: string,
   hasVoice: boolean,
+  options: { repliedToId: string | null } = { repliedToId: null },
 ): Promise<void> {
   const admin = createAdminClient();
-  const { data: event } = await admin
-    .from('events')
-    .select('id, title, host_id')
-    .eq('id', eventId)
-    .single();
+  const [{ data: event }, { data: author }] = await Promise.all([
+    admin.from('events').select('id, title, host_id').eq('id', eventId).single(),
+    admin.from('profiles').select('display_name').eq('id', authorId).maybeSingle(),
+  ]);
   if (!event) return;
 
   const { data: priorComments } = await admin
@@ -134,7 +161,6 @@ async function notifyThreadParticipants(
     if (row.author_id) participants.add(row.author_id);
   }
   participants.delete(authorId);
-  if (participants.size === 0) return;
 
   const preview = body
     ? body.length > 140
@@ -143,10 +169,27 @@ async function notifyThreadParticipants(
     : hasVoice
       ? '🎤 Voice note'
       : '';
+  const url = `/events/${event.id}`;
+
+  // The person being answered hears that first and by name: "replied to you"
+  // is the notification that makes a reply feel like one. They are then left
+  // out of the general nudge so one message never buzzes them twice.
+  const repliedTo = options.repliedToId;
+  if (repliedTo && repliedTo !== authorId) {
+    participants.delete(repliedTo);
+    await notifyUsers([repliedTo], {
+      kind: 'event_comment',
+      title: `${author?.display_name ?? 'Someone'} replied to you · ${event.title}`,
+      body: preview,
+      url,
+    });
+  }
+
+  if (participants.size === 0) return;
   await notifyUsers([...participants], {
     kind: 'event_comment',
     title: `New comment · ${event.title}`,
     body: preview,
-    url: `/events/${event.id}`,
+    url,
   });
 }

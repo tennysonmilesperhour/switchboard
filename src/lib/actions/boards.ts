@@ -222,6 +222,31 @@ export async function addBoardPost(
   });
   if (error) return reportAndFail('SB-BOARD-SAVE', 'board.post-create', error, { boardId });
 
+  // A post is the way to reach the whole group, so the whole group hears
+  // about it. The roster and the board's name come through the author's own
+  // client: `board_members_select` returns members only to a member, which
+  // the insert above already proved this person is. Best-effort — the post is
+  // saved either way.
+  try {
+    const [{ data: members }, { data: board }] = await Promise.all([
+      supabase.from('board_members').select('member_id').eq('board_id', boardId),
+      supabase.from('boards').select('name, slug').eq('id', boardId).maybeSingle(),
+    ]);
+    const recipients = (members ?? [])
+      .map((row) => row.member_id)
+      .filter((id) => id && id !== user.id);
+    if (recipients.length > 0 && board) {
+      await notifyUsers(recipients, {
+        kind: 'board_post',
+        title: `New on ${board.name} · ${title}`,
+        body: input.body.trim().slice(0, 140) || 'Open the board to read it.',
+        url: `/boards/${board.slug}`,
+      });
+    }
+  } catch (notifyError) {
+    console.error('Board post notify failed', notifyError);
+  }
+
   await capture(user.id, ANALYTICS_EVENTS.boardPostCreated, { kind: input.kind });
   revalidatePath('/boards');
   return { ok: true };

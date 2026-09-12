@@ -1,6 +1,6 @@
 'use server';
 
-import type { ActionResult } from '@/lib/errors';
+import type { ActionResult, ValidationFailure } from '@/lib/errors';
 
 import { revalidatePath } from 'next/cache';
 import { after } from 'next/server';
@@ -9,6 +9,8 @@ import { isEventManager } from '@/lib/server/authz';
 import { openFollowUpPolls, resolvePoll } from '@/lib/server/poll-runner';
 import { notifySuggestionAdded } from '@/lib/server/notify';
 import { failure, validation } from '@/lib/errors';
+import { isOwnPublicStorageUrl } from '@/lib/server/media';
+import { OPTION_LINK_MAX, prepareOptionFields } from '@/lib/poll-option-input';
 import { reportAndFail } from '@/lib/server/observability';
 import { capture } from '@/lib/analytics/server';
 import { ANALYTICS_EVENTS } from '@/lib/analytics/events';
@@ -28,14 +30,42 @@ import type { PollOption, PollTopic } from '@/lib/types';
  */
 export type SuggestionResult = ActionResult & { option?: PollOption };
 
+/** Everything an idea may carry. Only the label is required. */
+export interface SuggestionInput {
+  label: string;
+  detail?: string | null;
+  linkUrl?: string | null;
+  imageUrl?: string | null;
+}
+
+/**
+ * The image must be one of our own public uploads (`/api/uploads/image`, the
+ * `media` bucket). An arbitrary URL would let a card load a tracking pixel or
+ * point at an attacker's host, and the upload route already applies the size
+ * and type rules — so a pasted address is refused rather than stored.
+ */
+function preparedImage(raw: string | null | undefined): string | null | ValidationFailure {
+  const trimmed = raw?.trim() ?? '';
+  if (!trimmed) return null;
+  if (trimmed.length > OPTION_LINK_MAX || !isOwnPublicStorageUrl(trimmed, ['media'])) {
+    return validation('Photos need to be uploaded here, not pasted as a link.');
+  }
+  return trimmed;
+}
+
 export async function addSuggestion(
   pollId: string,
   eventId: string,
-  label: string,
+  input: SuggestionInput | string,
   detail?: string,
 ): Promise<SuggestionResult> {
-  const trimmed = label.trim();
-  if (!trimmed) return validation('Suggestion is empty');
+  // Back-compat: a bare string is the label.
+  const normalized: SuggestionInput =
+    typeof input === 'string' ? { label: input, detail } : input;
+  const prepared = prepareOptionFields(normalized);
+  if (!prepared.ok) return validation(prepared.error);
+  const imageUrl = preparedImage(normalized.imageUrl);
+  if (imageUrl && typeof imageUrl === 'object') return imageUrl;
 
   const auth = await requireUser();
   if (!auth.ok) return auth;
@@ -59,8 +89,11 @@ export async function addSuggestion(
     .from('poll_options')
     .insert({
       poll_id: pollId,
-      label: trimmed,
-      detail: detail?.trim() || null,
+      label: prepared.fields.label,
+      detail: prepared.fields.detail,
+      link_url: prepared.fields.linkUrl,
+      image_url: imageUrl,
+      author_id: user.id,
       source: isHost ? 'host' : 'guests',
     })
     .select('*')
@@ -70,13 +103,85 @@ export async function addSuggestion(
   // Tell the people who already ranked this poll that the list they ranked has
   // changed. Best-effort: the idea is saved either way.
   try {
-    await notifySuggestionAdded(pollId, poll.event_id, trimmed, user.id);
+    await notifySuggestionAdded(pollId, poll.event_id, prepared.fields.label, user.id);
   } catch (notifyError) {
     console.error('Suggestion notify failed', notifyError);
   }
 
   revalidatePath(`/events/${eventId}`);
   return { ok: true, option: option ?? undefined };
+}
+
+/**
+ * Correct an idea: its wording, description, link, or photo.
+ *
+ * Who may is decided by the `poll_options_update` policy (the idea's author or
+ * the plan's host, while the poll is open), so a refused edit comes back as
+ * zero rows rather than an error. That is reported with a code that names both
+ * conditions, because "nothing happened" is exactly the silence this app's
+ * error rules exist to end. Votes already cast on the idea are untouched: a
+ * spelling fix should not throw away the group's ranking.
+ */
+export async function updateSuggestion(
+  pollId: string,
+  eventId: string,
+  optionId: string,
+  input: SuggestionInput,
+): Promise<SuggestionResult> {
+  const prepared = prepareOptionFields(input);
+  if (!prepared.ok) return validation(prepared.error);
+  const imageUrl = preparedImage(input.imageUrl);
+  if (imageUrl && typeof imageUrl === 'object') return imageUrl;
+
+  const auth = await requireUser();
+  if (!auth.ok) return auth;
+  const { supabase } = auth;
+
+  const { data: option, error } = await supabase
+    .from('poll_options')
+    .update({
+      label: prepared.fields.label,
+      detail: prepared.fields.detail,
+      link_url: prepared.fields.linkUrl,
+      image_url: imageUrl,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', optionId)
+    .eq('poll_id', pollId)
+    .select('*')
+    .maybeSingle();
+  if (error) return reportAndFail('SB-POLL-EDIT', 'poll.edit', error, { pollId, optionId });
+  if (!option) return failure('SB-POLL-EDIT');
+
+  revalidatePath(`/events/${eventId}`);
+  return { ok: true, option };
+}
+
+/**
+ * Take an idea off the list. Same gate as editing; the votes on it go with it
+ * (the database cascades), and if it was the leader the meter simply moves to
+ * the next idea.
+ */
+export async function deleteSuggestion(
+  pollId: string,
+  eventId: string,
+  optionId: string,
+): Promise<ActionResult> {
+  const auth = await requireUser();
+  if (!auth.ok) return auth;
+  const { supabase } = auth;
+
+  const { data: removed, error } = await supabase
+    .from('poll_options')
+    .delete()
+    .eq('id', optionId)
+    .eq('poll_id', pollId)
+    .select('id');
+  if (error) return reportAndFail('SB-POLL-EDIT', 'poll.remove', error, { pollId, optionId });
+  if (!removed || removed.length === 0) return failure('SB-POLL-EDIT');
+
+  revalidatePath(`/events/${eventId}`);
+  return { ok: true };
 }
 
 export async function castVote(

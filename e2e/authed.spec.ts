@@ -315,11 +315,16 @@ test.describe('authenticated surface', () => {
 
     await login(page, 'e2ehost');
     await page.goto('/');
-    const signal = page.getByRole('button', { name: /Down to Hang/ });
+    // The composer's status chips. A live signal adds "Turn off …" and
+    // "Change who sees …" buttons that carry the same words, so the chip is
+    // found inside its own group rather than by name alone.
+    const signal = page
+      .getByRole('group', { name: 'Statuses' })
+      .getByRole('button', { name: /Down to Hang/ });
     await expect(signal).toBeVisible();
 
-    // Make the final tap an on-tap even when a prior local run left this
-    // fixture's signal active.
+    // Tapping a chip only drafts it (nothing is live until Turn on), so start
+    // from an unselected chip even if a prior interaction left it lit.
     if ((await signal.getAttribute('aria-pressed')) === 'true') {
       await signal.click();
       await expect(signal).toHaveAttribute('aria-pressed', 'false');
