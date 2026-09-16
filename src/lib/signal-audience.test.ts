@@ -6,6 +6,7 @@ import {
   mostRecentlyChosenCircle,
   resolveDefaultSignalCircle,
   resolveSignalAudience,
+  signalsCanReachAnyone,
 } from './signal-audience';
 
 const names = {
@@ -76,6 +77,26 @@ describe('audienceIsUnreachable', () => {
     const dead = { circleIds: ['gone'], personIds: [], boardIds: [] };
     expect(describeAudience(dead, names)).toBe('Nobody yet');
     expect(unreachable(dead)).toBe(true);
+  });
+});
+
+/**
+ * Home renders the composer unconditionally and lets it say when it cannot
+ * reach anyone, so this decides whether a person sees "Nobody to tell yet"
+ * instead of a feature that is simply absent.
+ */
+describe('signalsCanReachAnyone', () => {
+  it('is false only with no connections and no boards', () => {
+    expect(signalsCanReachAnyone({ connectionCount: 0, boardCount: 0 })).toBe(false);
+  });
+  it('counts a connection', () => {
+    expect(signalsCanReachAnyone({ connectionCount: 1, boardCount: 0 })).toBe(true);
+  });
+  it('counts a board on its own — a signal reaches members you never friended', () => {
+    // This is the case the old `hasConnections` gate got wrong: it hid the
+    // whole composer from someone on a neighbourhood board with no friends,
+    // for whom the feature works fine.
+    expect(signalsCanReachAnyone({ connectionCount: 0, boardCount: 1 })).toBe(true);
   });
 });
 

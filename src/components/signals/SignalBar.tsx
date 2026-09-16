@@ -7,10 +7,12 @@ import { MultiSelectChips } from '@/components/ui/MultiSelectChips';
 import { useToast } from '@/components/ui/Toast';
 import { activateSignals, clearSignal, removeSignal } from '@/lib/actions/signals';
 import { formatRelative } from '@/lib/format';
+import Link from 'next/link';
 import {
   audienceIsUnreachable,
   describeAudience,
   EMPTY_AUDIENCE,
+  signalsCanReachAnyone,
   type SignalAudience,
 } from '@/lib/signal-audience';
 import { SIGNAL_PRESETS } from '@/lib/types';
@@ -238,8 +240,40 @@ export function SignalBar({ active, circles, people, groups, defaultCircleId }: 
    */
   const audienceNoLongerExists = audienceIsUnreachable(audience, names);
 
+  /**
+   * Nobody to tell yet. Home used to hide this composer entirely until the
+   * first accepted connection, which meant a new account's Home silently
+   * omitted a whole feature: you tapped where you expected it and there was
+   * nothing there, which reads as broken rather than as waiting. It shows
+   * now, explains itself, and refuses out loud.
+   *
+   * Boards count as reach — a signal aimed at one reaches fellow members you
+   * are not connected to — so this is not "has a friend".
+   */
+  const nobodyToTell = !signalsCanReachAnyone({
+    connectionCount: people.length,
+    boardCount: groups.length,
+  });
+
   return (
     <div className="space-y-3" aria-busy={pending}>
+      {nobodyToTell && (
+        <Card tone="cream">
+          <p className="font-display text-lg">🟢 Nobody to tell yet</p>
+          <p className="mt-1 text-sm text-ink-soft leading-relaxed">
+            A status reaches the people you are connected to and the groups you
+            are in, so right now it would reach no one. Add someone and the
+            statuses below start working. Nothing here is sent until you turn it
+            on, and it turns itself off in 3 hours.
+          </p>
+          <Link
+            href="/people"
+            className="mt-3 inline-flex min-h-11 items-center text-sm font-bold text-terracotta-deep"
+          >
+            Add your first friend →
+          </Link>
+        </Card>
+      )}
       {/* ————————————————— what is live ————————————————— */}
       {live.length > 0 && (
         <Card tone="sage" className="animate-rise">
@@ -454,12 +488,22 @@ export function SignalBar({ active, circles, people, groups, defaultCircleId }: 
             </div>
           )}
 
-          {audienceNoLongerExists && (
+          {nobodyToTell ? (
             <p role="alert" className="text-xs font-bold text-terracotta-deep">
-              Whoever this went to is gone: a circle you deleted, a group you
-              left, or someone you are no longer connected to. Pick who can see
-              it now, above.
+              There is no one to tell yet, so this cannot go on.{' '}
+              <Link href="/people" className="underline underline-offset-2">
+                Add someone
+              </Link>{' '}
+              and it will.
             </p>
+          ) : (
+            audienceNoLongerExists && (
+              <p role="alert" className="text-xs font-bold text-terracotta-deep">
+                Whoever this went to is gone: a circle you deleted, a group you
+                left, or someone you are no longer connected to. Pick who can see
+                it now, above.
+              </p>
+            )
           )}
 
           <div className="flex flex-wrap items-center justify-between gap-3 border-t border-line pt-3">
@@ -472,7 +516,7 @@ export function SignalBar({ active, circles, people, groups, defaultCircleId }: 
             <button
               type="button"
               onClick={turnOn}
-              disabled={pending || audienceNoLongerExists}
+              disabled={pending || audienceNoLongerExists || nobodyToTell}
               className="shrink-0 rounded-pill bg-brand-gradient px-5 py-2 text-sm font-bold text-white shadow-lift active:scale-[0.97] disabled:opacity-40"
             >
               {pending ? 'Turning on…' : editingLabel ? 'Save' : 'Turn on'}

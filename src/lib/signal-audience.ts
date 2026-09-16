@@ -85,6 +85,29 @@ export function describeAudience(audience: SignalAudience, names: AudienceNames)
 }
 
 /**
+ * Whether a signal this person turns on could reach anybody at all.
+ *
+ * NOT "do they have a friend". A signal aimed at a board reaches fellow members
+ * whether or not you are connected to them (`signals_visible`), so someone on a
+ * neighbourhood board with no accepted connections can use this feature
+ * perfectly well — Home used to hide the whole composer from them on
+ * `hasConnections` alone.
+ *
+ * Circles are groupings of connections, so they add no reach of their own: with
+ * no connections every circle is empty, and a signal sent to one goes nowhere.
+ * They are deliberately not counted here.
+ */
+export function signalsCanReachAnyone({
+  connectionCount,
+  boardCount,
+}: {
+  connectionCount: number;
+  boardCount: number;
+}): boolean {
+  return connectionCount > 0 || boardCount > 0;
+}
+
+/**
  * True when an audience names somebody but the composer can name none of them
  * — every circle, person, and group in it has since been deleted, ended, or
  * left. Turning a signal on then has to refuse (the server re-validates every

@@ -556,14 +556,10 @@ export const FEATURE_GROUPS: readonly FeatureGroup[] = [
         title: 'Availability signals',
         blurb:
           'Say “coffee?” to exactly who you mean: circles, specific people, or a whole group you belong to. Each signal picks its own audience, nothing goes live until you tap Turn on, and it expires on its own.',
-        // Home hides the composer, and the "I'm free" door to it, until there
-        // is someone to tell — a signal reaches only people you are connected
-        // to, so with nobody there it would be a broadcast to no one. The
-        // condition belongs here too: an index that sends someone to Home to
-        // look for a composer that isn't on it reads as a broken feature, not
-        // as one that is waiting. Same idiom as "Home, after something you
-        // went to" elsewhere in this file.
-        where: 'Home → I’m free, once you’ve added your first friend',
+        // No condition any more: the composer is always on Home, and says so
+        // itself when there is nobody to tell yet. The qualifier that was here
+        // existed only because Home hid it outright.
+        where: 'Home → I’m free',
         href: '/',
       },
       {
