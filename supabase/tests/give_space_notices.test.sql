@@ -136,13 +136,15 @@ select is(
 select throws_ok(
   $$ update public.give_space_notices set warned = false
       where user_id = '00000000-0000-0000-0000-00000000c17a' $$,
-  NULL,
+  '42501',
+  null,
   'the owner cannot rewrite their own notice'
 );
 select throws_ok(
   $$ delete from public.give_space_notices
       where user_id = '00000000-0000-0000-0000-00000000c17a' $$,
-  NULL,
+  '42501',
+  null,
   'nor delete it to start the question over'
 );
 
@@ -152,7 +154,8 @@ select throws_ok(
   $$ select public.note_give_space_overlap_for(
        '00000000-0000-0000-0000-00000000c17a',
        '00000000-0000-0000-0000-0000000ea001') $$,
-  NULL,
+  '42501',
+  null,
   'the service-role variant is not reachable from a session'
 );
 
