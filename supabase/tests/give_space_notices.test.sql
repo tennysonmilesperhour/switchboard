@@ -1,4 +1,4 @@
--- pgTAP tests for the Give Space heads-up (20260916120000_give_space_notices.sql).
+-- pgTAP tests for the Give Space heads-up (20260916210002_give_space_notices.sql).
 --
 -- The feature's whole promise is "help me change my behavior without giving me
 -- information about yours", so what is worth proving is mostly what the surface

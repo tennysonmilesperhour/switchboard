@@ -687,7 +687,7 @@ readable only by their owner, and must never generate a notification or digest,
 widen a query, or appear on a map, zone, moment, or other location surface.
 
 The heads-up on a plan is the one place an avoid entry produces output, and
-`20260916120000_give_space_notices.sql` holds it to five rules. Anything that
+`20260916210002_give_space_notices.sql` holds it to five rules. Anything that
 would break one of them is a change to the privacy model and needs its own
 security review first:
 

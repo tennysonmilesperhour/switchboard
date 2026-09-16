@@ -94,7 +94,7 @@ export interface EventPageData {
    *
    * A stored boolean, read back — never recomputed here. The decision is made
    * once, by `note_give_space_overlap`, at the moment the viewer accepts an
-   * invitation; see `20260916120000_give_space_notices.sql` for why opening a
+   * invitation; see `20260916210002_give_space_notices.sql` for why opening a
    * page may not ask this question and why the answer never withdraws itself.
    */
   giveSpaceNotice: boolean;
