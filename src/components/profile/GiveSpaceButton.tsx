@@ -8,8 +8,6 @@ import { giveSpace, stopGivingSpace } from '@/lib/actions/connections';
 
 interface GiveSpaceButtonProps {
   targetId: string;
-  /** First name or display name, for the explanatory line. */
-  name: string;
   /** Whether the viewer is already giving this person space. */
   avoided: boolean;
 }
@@ -26,21 +24,22 @@ interface GiveSpaceButtonProps {
  * for.
  *
  * Give Space is **warn, never remove** (see the `profile_avoids` migration and
- * `giveSpace`). Nothing here hides anyone from anyone — it turns on the private
- * heads-up on plans the viewer opens, and nothing else.
+ * `giveSpace`). Nothing here hides anyone from anyone, and nothing here watches
+ * them either: it arms a single boolean that is decided once, at the moment the
+ * viewer themselves says yes to a plan, and says only that somebody on this
+ * list may be there. See `20260916120000_give_space_notices.sql`.
  *
  * Wording and styling deliberately match the `/people` control: this is one
  * feature in two places, and a safety control that looks or reads differently
  * depending on where you found it is one people hesitate to use.
  */
-export function GiveSpaceButton({ targetId, name, avoided }: GiveSpaceButtonProps) {
+export function GiveSpaceButton({ targetId, avoided }: GiveSpaceButtonProps) {
   // Local state so the control answers immediately, the same way ConnectButton
   // does; router.refresh() reconciles the server's view behind it.
   const [giving, setGiving] = useState(avoided);
   const [pending, startTransition] = useTransition();
   const router = useRouter();
   const toast = useToast();
-  const firstName = name.split(' ')[0];
 
   function toggle() {
     const next = !giving;
@@ -81,8 +80,8 @@ export function GiveSpaceButton({ targetId, name, avoided }: GiveSpaceButtonProp
       </button>
       <p className="mt-1 max-w-xs text-center text-[11px] leading-snug text-ink-faint">
         {giving
-          ? `We’ll quietly warn you if ${firstName} is somewhere you’re headed. They’re never told.`
-          : 'A private heads-up before plans where they’ll be - no block, and they’re never notified.'}
+          ? 'When you say yes to a plan, we’ll tell you if someone you give space to may be there — never who, and never anything else.'
+          : 'If you say yes to a plan they may also be at, you get a private nudge. No block, they’re never told, and we never say who.'}
       </p>
     </div>
   );

@@ -112,8 +112,8 @@ export function FriendsSection({
                         </button>
                         <p className="mt-1 text-[11px] leading-snug text-ink-faint">
                           {friend.isAvoided
-                            ? `We’ll quietly warn you if ${friend.name.split(' ')[0]} is somewhere you’re headed. They’re never told.`
-                            : 'A private heads-up before plans where they’ll be - no block, and they’re never notified.'}
+                            ? 'When you say yes to a plan, we’ll tell you if someone you give space to may be there — never who, and never anything else.'
+                            : 'If you say yes to a plan they may also be at, you get a private nudge. No block, they’re never told, and we never say who.'}
                         </p>
                       </div>
                       <button

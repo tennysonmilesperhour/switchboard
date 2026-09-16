@@ -681,13 +681,43 @@ triage job into shipping a change that is not words?*
 
 ## Give Space safety invariant
 
-Give Space is a shield, never a tracking surface. An avoid entry may only
-filter or privately annotate information the viewer was already authorized to
-see on a page they opened. It must never generate a notification or digest,
-widen a query, reveal attendance that was hidden, or appear on a map, zone,
-moment, or other location surface. Avoid entries remain readable only by their
-owner. Any future feature that conflicts with this rule must change the privacy
-model explicitly and receive a dedicated security review first.
+Give Space is a shield, never a tracking surface. It exists to change what its
+owner does, not to tell them what anyone else is doing. Avoid entries remain
+readable only by their owner, and must never generate a notification or digest,
+widen a query, or appear on a map, zone, moment, or other location surface.
+
+The heads-up on a plan is the one place an avoid entry produces output, and
+`20260916120000_give_space_notices.sql` holds it to five rules. Anything that
+would break one of them is a change to the privacy model and needs its own
+security review first:
+
+- **Only in response to the viewer's own action.** `note_give_space_overlap`
+  refuses unless the caller already holds an *accepted* invite to that plan.
+  Opening a page, being invited, or asking to join is not an action. A surface
+  that evaluates this because something was viewed is the bug this replaced.
+- **One bit, ever.** The RPC returns a boolean and `give_space_notices` stores a
+  boolean. Never a name, a count, an id, an RSVP status, or a time. Five people
+  on the list and five of them going is the same value as one.
+- **Frozen once true.** "They're no longer expected there" is nearly as
+  revealing as "they're going", so the notice never withdraws and never
+  refreshes. Evaluation is monotonic: it may raise the bit, never lower it, and
+  the row is not writable from a session — an owner who could clear it could
+  re-run the evaluation and read off a departure.
+- **Never says who.** Copy on every surface says "someone you've chosen to give
+  space", says plainly that nothing more is coming, and does not vary with the
+  number of people on the list.
+- **Costly to ask.** One reading per accepted invitation, in front of the plan's
+  host, with the cascade and notification that follow. Probing means actually
+  RSVPing yes.
+
+`note_give_space_overlap_for` is the same decision for the Open Table path,
+where the requester's commitment completes inside the host's approval request.
+It is service-role only, takes the subject explicitly, and applies the identical
+commitment gate — a host cannot use it to learn or plant anything, and gets
+nothing back.
+
+Litmus test: *could someone learn one thing about another person's plans that
+they did not already know, without RSVPing yes to something themselves?*
 
 These are accepted or deferred, documented so they aren't rediscovered as
 surprises:

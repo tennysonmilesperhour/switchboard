@@ -293,6 +293,31 @@ export async function getCalendarStatus(): Promise<CalendarStatus> {
 }
 
 /**
+ * Re-read the calendar and hand back what the availability grid needs, in one
+ * round trip.
+ *
+ * `covered_through` is a window fixed at sync time, and nothing moves it on its
+ * own — no cron re-reads these feeds — so a calendar connected last week covers
+ * a week that has already gone by. The grid's fill button then had nothing to
+ * work with and said "refresh it in Settings", which is how "I still haven't
+ * been able to make this work" happens: the feature was one page away from
+ * working and never said which page, and the person had done nothing wrong.
+ *
+ * So the button refreshes it itself. This returns the fresh bands and window
+ * rather than relying on `revalidatePath`, because the fill has to happen in
+ * the same interaction — a re-render that arrives afterwards is a second thing
+ * to notice, and noticing was the problem.
+ */
+export async function syncCalendarForGrid(): Promise<
+  ActionResult & { busySlots?: string[]; coveredThrough?: string | null }
+> {
+  const result = await syncCalendar();
+  if (!result.ok) return result;
+  const [busySlots, status] = await Promise.all([myBusySlots(), getCalendarStatus()]);
+  return { ok: true, busySlots, coveredThrough: status.coveredThrough };
+}
+
+/**
  * This person's busy bands for the week the grid covers.
  *
  * Read straight from the stored rows rather than re-fetching the feed, so

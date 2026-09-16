@@ -228,7 +228,11 @@ function CustomEditor({
 
   const vars = useMemo(() => customThemeVars(draft), [draft]);
   const share = useMemo(() => wallpaperShare(draft), [draft]);
-  const veil = useMemo(() => plateVeil(draft), [draft]);
+  // What see-through plates would cost this palette, asked of the palette
+  // rather than of the current choice: the question the second option answers
+  // is "can these colors carry it", and reading `veil` off a draft that has
+  // already chosen `solid` would answer "no" every time.
+  const veil = useMemo(() => plateVeil({ ...draft, plateStyle: 'through' }), [draft]);
   const dirty = JSON.stringify(draft) !== savedKey;
 
   const commitPreview = usePreview(vars, hasWallpaper(draft), saved);
@@ -268,21 +272,20 @@ function CustomEditor({
     });
   }
 
-  // The picture now shows at exactly the strength that was asked for, so there
-  // is nothing to apologise for on the slider. What the palette buys instead is
-  // how much of the picture comes through the app's own cards and bars — worth
-  // saying, because it is the difference between a photo you glimpse at the
-  // edges and one the whole app sits on.
+  // Whether letting the picture through is even on the table. A palette with no
+  // contrast to spare gets fully opaque plates whichever option is picked, and
+  // the second option has to say so rather than look like it did nothing.
   const showsThrough = Boolean(draft.wallpaper) && veil > 0.02;
 
   return (
     <div className="mt-4 rounded-card border border-line p-4" aria-busy={pending}>
       <p className="text-sm font-bold text-ink">Make it yours</p>
       <p className="mt-0.5 text-xs leading-snug text-ink-faint">
-        Pick a picture and three colors. Everything else — text, lines, the
+        Pick a picture and your colors. Everything else — text, lines, the
         going/can’t-make-it colors — is worked out from them so it stays
         readable. A very pale button color comes out deeper than you picked it,
-        because button labels are white.
+        because button labels are white, and a box color in the range where
+        nothing reads comes back nudged to the nearest one that does.
       </p>
 
       <div className="mt-3">
@@ -333,21 +336,60 @@ function CustomEditor({
               className="mt-1.5 w-full accent-terracotta"
             />
           </label>
-          <p className="mt-1 text-xs leading-snug text-ink-faint">
-            {showsThrough
-              ? `Cards and bars sit on top at ${Math.round(
-                  (1 - veil) * 100,
-                )}% so text stays readable — the picture still comes through them.`
-              : 'Cards and bars sit on top of it solidly, because this background has no contrast to spare. The picture shows in full everywhere else. A background further from mid-gray lets it through the cards too.'}
-          </p>
+
+          {/* The boxes go solid by default and see-through on request, rather
+              than the other way round. Both options say what they cost, because
+              the second one is genuinely nicer to look at and genuinely harder
+              to read, and that is the trade a person should be making on
+              purpose. */}
+          <fieldset className="mt-4">
+            <legend className="text-xs font-bold text-ink">
+              The boxes over it
+            </legend>
+            <div className="mt-1.5 grid gap-2 sm:grid-cols-2">
+              <PlateOption
+                selected={draft.plateStyle === 'solid'}
+                onSelect={() =>
+                  setDraft((previous) => ({ ...previous, plateStyle: 'solid' }))
+                }
+                title="Solid"
+                blurb="Cards and bars are opaque, so nothing gets behind the words. The picture shows in full everywhere else."
+              />
+              <PlateOption
+                selected={draft.plateStyle === 'through'}
+                onSelect={() =>
+                  setDraft((previous) => ({ ...previous, plateStyle: 'through' }))
+                }
+                title="Let it through"
+                blurb={
+                  showsThrough
+                    ? `The picture comes through the cards too — they sit at ${Math.round(
+                        (1 - veil) * 100,
+                      )}%, as see-through as these colors can carry.`
+                    : 'Not available with these colors — this background has no contrast to spare, so the boxes stay solid either way. A background further from mid-gray buys some.'
+                }
+              />
+            </div>
+          </fieldset>
         </>
       ) : null}
 
-      <div className="mt-4 grid grid-cols-3 gap-2">
+      <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
         <ColorField
           label="Background"
           value={draft.background}
           onChange={(background) => setDraft((previous) => ({ ...previous, background }))}
+        />
+        {/* The boxes, chosen rather than derived. `vars` is what the theme
+            actually renders, so an unset field shows the colour that IS being
+            used rather than an empty swatch — tapping it starts from what is
+            already on screen instead of from black. */}
+        <ColorField
+          label="Boxes"
+          value={draft.surface ?? vars['--color-card']}
+          derived={draft.surface === null}
+          onChange={(surface) => setDraft((previous) => ({ ...previous, surface }))}
+          onClear={() => setDraft((previous) => ({ ...previous, surface: null }))}
         />
         <ColorField
           label="Buttons"
@@ -447,29 +489,89 @@ function usePreview(
   return commit;
 }
 
+/**
+ * One colour in the palette.
+ *
+ * `derived` is for the one field that is allowed not to be a choice: the boxes.
+ * It shows the colour the theme is currently using — so the swatch never lies
+ * about what is on screen — while saying that nobody picked it, and offers the
+ * way back to that state once somebody has.
+ */
 function ColorField({
   label,
   value,
   onChange,
+  derived = false,
+  onClear,
 }: {
   label: string;
   value: string;
   onChange: (value: string) => void;
+  derived?: boolean;
+  onClear?: () => void;
 }) {
   return (
-    <label className="block">
-      <span className="block text-xs font-bold text-ink">{label}</span>
+    <div className="block">
+      <span className="flex items-baseline justify-between gap-1">
+        <label htmlFor={`color-${label}`} className="text-xs font-bold text-ink">
+          {label}
+        </label>
+        {onClear && !derived ? (
+          <button
+            type="button"
+            onClick={onClear}
+            className="text-[11px] font-semibold text-ink-faint underline decoration-line underline-offset-2 hover:text-ink"
+          >
+            Auto
+          </button>
+        ) : null}
+      </span>
       <span className="mt-1 flex items-center gap-1.5 rounded-card border border-line bg-card px-2 py-1.5">
         <input
+          id={`color-${label}`}
           type="color"
           value={value}
           onChange={(event) => onChange(event.target.value.toLowerCase())}
           aria-label={label}
           className="size-7 shrink-0 cursor-pointer rounded border-none bg-transparent p-0"
         />
-        <span className="truncate font-mono text-xs text-ink-soft">{value}</span>
+        <span className="truncate font-mono text-xs text-ink-soft">
+          {derived ? 'auto' : value}
+        </span>
       </span>
-    </label>
+    </div>
+  );
+}
+
+/** One of the two ways the app can sit on a picture. */
+function PlateOption({
+  selected,
+  onSelect,
+  title,
+  blurb,
+}: {
+  selected: boolean;
+  onSelect: () => void;
+  title: string;
+  blurb: string;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onSelect}
+      aria-pressed={selected}
+      className={`rounded-card border p-2.5 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-terracotta ${
+        selected ? 'border-terracotta bg-terracotta-soft' : 'border-line hover:border-terracotta'
+      }`}
+    >
+      <span className="flex items-center gap-1.5 text-xs font-bold text-ink">
+        {title}
+        {selected && <span className="text-terracotta-deep">✓</span>}
+      </span>
+      <span className="mt-0.5 block text-[11px] leading-snug text-ink-faint">
+        {blurb}
+      </span>
+    </button>
   );
 }
 

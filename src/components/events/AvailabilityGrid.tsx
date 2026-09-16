@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState, useTransition } from 'react';
+import { useEffect, useMemo, useRef, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 
 import { Button } from '@/components/ui/Button';
@@ -8,6 +8,7 @@ import { SectionHeader } from '@/components/ui/Card';
 import { useToast } from '@/components/ui/Toast';
 import { useConfirm } from '@/components/ui/ConfirmDialog';
 import { setAvailability, slotsToPollOptions } from '@/lib/actions/availability';
+import { syncCalendarForGrid } from '@/lib/actions/calendar-sync';
 import {
   BANDS,
   GRID_DAYS,
@@ -90,10 +91,32 @@ export function AvailabilityGrid({
     return map;
   }, [counts]);
 
-  const [mine, setMine] = useState<Set<string>>(
-    () => new Set(counts.filter((entry) => entry.mine).map((entry) => entry.slot)),
+  const savedMine = useMemo(
+    () => counts.filter((entry) => entry.mine).map((entry) => entry.slot),
+    [counts],
   );
+  const [mine, setMine] = useState<Set<string>>(() => new Set(savedMine));
   const [dirty, setDirty] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  // The calendar as this component currently understands it. Seeded from the
+  // server and replaced when the fill refreshes the feed itself, so one
+  // interaction can re-read and fill without waiting for a re-render.
+  const [busy, setBusy] = useState<string[]>(busySlots);
+  const [coverEndsAt, setCoverEndsAt] = useState<string | null>(coveredThrough);
+  // Follow the server when it genuinely changes — a sync from Settings, a
+  // refresh — without discarding a read this component just did itself.
+  // Adjusted during render rather than in an effect, so the fill never runs
+  // against a window one paint out of date.
+  const serverKey = `${coveredThrough ?? ''}|${busySlots.length}`;
+  const [lastServerKey, setLastServerKey] = useState(serverKey);
+  if (serverKey !== lastServerKey && !refreshing) {
+    setLastServerKey(serverKey);
+    setCoverEndsAt(coveredThrough);
+    setBusy(busySlots);
+  }
+  // Set when the grid filled itself in, cleared the moment the person edits or
+  // saves. Only ever describes marks that have not been sent anywhere.
+  const [prefilled, setPrefilled] = useState(false);
   const [pending, startTransition] = useTransition();
   const router = useRouter();
   const toast = useToast();
@@ -118,27 +141,85 @@ export function AvailabilityGrid({
   }, [slots]);
 
   /**
+   * The slots the calendar has actually looked at, and the free ones among
+   * them, for a given read window.
+   *
+   * Days past the end of the read are left out rather than counted free,
+   * because "not checked" is not "free" — the distinction that keeps this from
+   * telling a group someone is available on a week nobody read.
+   */
+  function freeWithin(coveredUntil: string | null, busyList: string[]) {
+    const coverEnd = coveredUntil ? new Date(coveredUntil).getTime() : 0;
+    const covered = slots.filter((slot) => new Date(slot).getTime() < coverEnd);
+    const taken = new Set(busyList);
+    return { coverEnd, covered, free: covered.filter((slot) => !taken.has(slot)) };
+  }
+
+  /**
+   * Re-read the feed when the stored window no longer reaches this week.
+   *
+   * `covered_through` is fixed at sync time and nothing moves it on its own, so
+   * a calendar connected a fortnight ago covers a fortnight ago. The button used
+   * to give up here and name a different page; now it does the thing that page
+   * would have done.
+   */
+  async function refreshCoverage(): Promise<{
+    coveredThrough: string | null;
+    busySlots: string[];
+  } | null> {
+    setRefreshing(true);
+    try {
+      const result = await syncCalendarForGrid();
+      if (!result.ok) {
+        toast.error(
+          result.error ?? 'Could not read your calendar just now.',
+          result.code,
+        );
+        return null;
+      }
+      const next = {
+        coveredThrough: result.coveredThrough ?? null,
+        busySlots: result.busySlots ?? [],
+      };
+      setCoverEndsAt(next.coveredThrough);
+      setBusy(next.busySlots);
+      return next;
+    } catch {
+      toast.error('Could not read your calendar just now. Try again.');
+      return null;
+    } finally {
+      setRefreshing(false);
+    }
+  }
+
+  /**
    * Fill the grid from the calendar: everything the week has room for.
    *
-   * Offered rather than applied. A calendar knows when someone is occupied, not
-   * when they want to go out — a free Tuesday morning is not an offer to meet
-   * then — so this fills the board and leaves them to take things off it. Doing
-   * it silently on load would put answers in the group's count that its owner
-   * never gave, which is the one thing this grid has always refused to do.
+   * Offered rather than applied, and still never saved on the person's behalf.
+   * A calendar knows when someone is occupied, not when they want to go out — a
+   * free Tuesday morning is not an offer to meet then — so this fills the board
+   * and leaves them to take things off it. Nothing reaches the group's counts
+   * until they press save, which is the one thing this grid has always refused
+   * to do without being asked.
    *
-   * Two limits keep it from overclaiming. Days the last read never reached are
-   * left untouched rather than ticked, because "not checked" is not "free". And
-   * marks the person already made are theirs, so replacing them asks first.
+   * Marks the person already made are theirs, so replacing them asks first.
    */
   async function fillFromCalendar() {
-    const coverEnd = coveredThrough ? new Date(coveredThrough).getTime() : 0;
-    const covered = slots.filter((slot) => new Date(slot).getTime() < coverEnd);
-    if (covered.length === 0) {
-      toast.error('Your calendar hasn’t been read for this week yet. Refresh it in Settings.');
-      return;
+    let window = freeWithin(coverEndsAt, busy);
+    if (window.covered.length === 0) {
+      const refreshed = await refreshCoverage();
+      if (!refreshed) return;
+      window = freeWithin(refreshed.coveredThrough, refreshed.busySlots);
+      if (window.covered.length === 0) {
+        toast.error(
+          'Your calendar read fine but covers none of the next few days. Check the link in Settings.',
+          'SB-CAL-READ',
+        );
+        return;
+      }
     }
 
-    if (mine.size > 0) {
+    if (mine.size > 0 && !prefilled) {
       const ok = await confirm({
         title: 'Replace what you’ve marked?',
         body: 'Filling from your calendar starts again from what it says you have free. What you’ve ticked here will be replaced.',
@@ -147,19 +228,57 @@ export function AvailabilityGrid({
       if (!ok) return;
     }
 
-    const busy = new Set(busySlots);
-    const free = covered.filter((slot) => !busy.has(slot));
+    applyFill(window, true);
+  }
+
+  /** Put a computed fill on the board. Never saves; only the person does that. */
+  function applyFill(
+    window: ReturnType<typeof freeWithin>,
+    announce: boolean,
+  ) {
     // Only the covered days are decided. Anything past the end of the read
     // stays exactly as the person left it.
-    const kept = [...mine].filter((slot) => new Date(slot).getTime() >= coverEnd);
-    setMine(new Set([...free, ...kept]));
+    const kept = savedMine.filter((slot) => new Date(slot).getTime() >= window.coverEnd);
+    setMine(new Set([...window.free, ...kept]));
     setDirty(true);
+    setPrefilled(true);
+    if (!announce) return;
     toast.info(
-      free.length === 0
+      window.free.length === 0
         ? 'Your calendar has every one of those times taken. Tick anything that still works, then save.'
-        : `Filled in ${free.length} free ${free.length === 1 ? 'time' : 'times'}. Take off any that don’t suit, then save.`,
+        : `Filled in ${window.free.length} free ${
+            window.free.length === 1 ? 'time' : 'times'
+          }. Take off any that don’t suit, then save.`,
     );
   }
+
+  /**
+   * "Is it possible for this to be automatic?" — yes, up to the point where it
+   * would answer for her.
+   *
+   * Someone who has connected a calendar and not yet said anything about this
+   * plan opens the grid already filled in, because the button they were meant
+   * to find was a step they kept not getting past. What it does NOT do is save:
+   * the marks sit there unsaved, labelled as a draft, and the group's counts
+   * are unchanged until the save button is pressed. So the automatic part is
+   * the typing, and the answer is still theirs.
+   *
+   * Runs once, and never over an existing answer — `savedMine.length > 0` means
+   * they have already told the group something, and a calendar does not get to
+   * revise it.
+   */
+  const autoFilled = useRef(false);
+  useEffect(() => {
+    if (autoFilled.current) return;
+    if (!calendarUsable || savedMine.length > 0 || dirty) return;
+    const window = freeWithin(coverEndsAt, busy);
+    if (window.covered.length === 0 || window.free.length === 0) return;
+    autoFilled.current = true;
+    applyFill(window, false);
+    // `applyFill` is recreated on every render and closes over state this effect
+    // already lists; the ref is what makes it run once.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [calendarUsable, savedMine.length, dirty, coverEndsAt, busy]);
 
   function toggle(slot: string) {
     setMine((current) => {
@@ -169,6 +288,9 @@ export function AvailabilityGrid({
       return next;
     });
     setDirty(true);
+    // Once they have touched it, it is their answer rather than a draft the
+    // calendar wrote — so the banner goes and a later fill asks before replacing.
+    setPrefilled(false);
   }
 
   function save() {
@@ -180,6 +302,7 @@ export function AvailabilityGrid({
           return;
         }
         setDirty(false);
+        setPrefilled(false);
         router.refresh();
       } catch {
         toast.error('Could not save when you’re free. Try again.');
@@ -314,6 +437,21 @@ export function AvailabilityGrid({
         <p className="mt-2 text-xs text-ink-soft">{recommendation.message}</p>
       </div>
 
+      {/* The line that keeps the automatic fill honest. Marks put there by the
+          calendar are visibly a draft and visibly unsent, so nobody has to
+          wonder whether the group has already been told something they did not
+          say. */}
+      {prefilled && (
+        <p
+          role="status"
+          className="mt-3 rounded-card bg-gold-soft px-3 py-2 text-xs leading-snug text-ink"
+        >
+          <span className="font-bold">Filled in from your calendar.</span> Nobody
+          can see any of this yet — take off anything that doesn’t suit, then
+          save.
+        </p>
+      )}
+
       <div className="mt-3 flex flex-wrap items-center gap-2">
         <Button size="sm" onClick={save} disabled={pending || !dirty}>
           {dirty ? 'Save when I’m free' : 'Saved'}
@@ -322,8 +460,13 @@ export function AvailabilityGrid({
             otherwise is worse than not offering it: it would fill the week with
             free time nobody checked. */}
         {calendarUsable && (
-          <Button size="sm" variant="secondary" onClick={fillFromCalendar} disabled={pending}>
-            Fill from my calendar
+          <Button
+            size="sm"
+            variant="secondary"
+            onClick={fillFromCalendar}
+            disabled={pending || refreshing}
+          >
+            {refreshing ? 'Reading your calendar…' : 'Fill from my calendar'}
           </Button>
         )}
         {isHost && pollId && (

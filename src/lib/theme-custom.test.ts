@@ -66,12 +66,19 @@ function sampleAppearances(count: number): CustomAppearance[] {
     { ...DEFAULT_CUSTOM, background: '#f6f1e5', button: '#9c2f24', highlight: '#b8860b' },
   ];
   while (samples.length < count) {
+    // A hand-picked box colour is sampled as often as a derived one, because
+    // it feeds the same ink solve and is the input most able to break it — the
+    // whole point of letting somebody choose one is that the guarantee has to
+    // hold for whatever they choose.
+    const picksSurface = next() < 0.5;
     samples.push({
       wallpaper: null,
       background: randomHex(next),
+      surface: picksSurface ? randomHex(next) : null,
       button: randomHex(next),
       highlight: randomHex(next),
       wallpaperStrength: Math.round(next() * 100),
+      plateStyle: next() < 0.5 ? 'through' : 'solid',
     });
   }
   return samples;
@@ -135,9 +142,11 @@ describe('parseCustomAppearance', () => {
       wallpaper:
         'https://xyz.supabase.co/storage/v1/object/public/covers/uid/wallpaper-1.jpg',
       background: '#101820',
+      surface: '#1b2733',
       button: '#3ddc97',
       highlight: '#ffd166',
       wallpaperStrength: 42,
+      plateStyle: 'through',
     };
     expect(parseCustomAppearance(stored)).toEqual(stored);
   });
@@ -497,6 +506,10 @@ describe('the wallpaper scrim', () => {
         wallpaper:
           'https://xyz.supabase.co/storage/v1/object/public/covers/uid/w.jpg',
         wallpaperStrength: 100,
+        // Forced, because this is the case the guarantee is about: `solid`
+        // plates make the composite trivially equal to the surface, so a sweep
+        // that let the sample choose would mostly be checking nothing.
+        plateStyle: 'through' as const,
       };
       const vars = customThemeVars(withImage);
       const veil = plateVeil(withImage);
@@ -546,6 +559,9 @@ describe('the wallpaper scrim', () => {
       background: '#808080',
       wallpaper: 'https://xyz.supabase.co/storage/v1/object/public/covers/uid/w.jpg',
       wallpaperStrength: 100,
+      // Asked for see-through plates and cannot have them. Without this the
+      // assertion would pass on the default and prove nothing.
+      plateStyle: 'through' as const,
     };
     expect(plateVeil(noHeadroom)).toBe(0);
     expect(wallpaperShare(noHeadroom)).toBe(1);
@@ -562,7 +578,12 @@ describe('the wallpaper scrim', () => {
     const wallpaper =
       'https://xyz.supabase.co/storage/v1/object/public/covers/uid/w.jpg';
     for (const background of [DEFAULT_CUSTOM.background, '#12100f', '#fefefe']) {
-      const base = { ...DEFAULT_CUSTOM, background, wallpaper };
+      const base = {
+        ...DEFAULT_CUSTOM,
+        background,
+        wallpaper,
+        plateStyle: 'through' as const,
+      };
       expect(wallpaperShare({ ...base, wallpaperStrength: 100 })).toBe(1);
       // The slider is linear now: what you ask for is what shows.
       for (const strength of [10, 25, 50, 75]) {
@@ -584,13 +605,88 @@ describe('the wallpaper scrim', () => {
     const wallpaper =
       'https://xyz.supabase.co/storage/v1/object/public/covers/uid/w.jpg';
     for (const appearance of sampleAppearances(60)) {
-      const base = { ...appearance, wallpaper };
+      const base = { ...appearance, wallpaper, plateStyle: 'through' as const };
       const atFull = plateVeil({ ...base, wallpaperStrength: 100 });
       for (const strength of [10, 40, 70]) {
         expect(plateVeil({ ...base, wallpaperStrength: strength })).toBe(atFull);
       }
     }
   }, 30_000); // exhaustive palette sweep; ~6s on a slow CI runner
+
+  /**
+   * The default, and the whole of the client's complaint: "much of the text is
+   * hard to see with a photo background". A plate that is as transparent as AA
+   * will just barely allow is legible and tiring; opaque is neither. The
+   * picture is not hidden by it — it shows at full strength everywhere the app
+   * puts no text, which is most of the screen.
+   */
+  it('sits the app opaquely on the picture unless asked otherwise', () => {
+    const wallpaper =
+      'https://xyz.supabase.co/storage/v1/object/public/covers/uid/w.jpg';
+    for (const appearance of sampleAppearances(40)) {
+      const base = { ...appearance, wallpaper, wallpaperStrength: 100 };
+      expect(plateVeil({ ...base, plateStyle: 'solid' })).toBe(0);
+      // …and the image is still at full strength behind it.
+      expect(wallpaperShare({ ...base, plateStyle: 'solid' })).toBe(1);
+    }
+  });
+
+  it('defaults an appearance that never chose to the opaque one', () => {
+    expect(DEFAULT_CUSTOM.plateStyle).toBe('solid');
+    // A row written before the field existed reads back as the fix, not as the
+    // behaviour that prompted it.
+    expect(parseCustomAppearance({ background: '#101820' }).plateStyle).toBe('solid');
+    expect(parseCustomAppearance({ plateStyle: 'nonsense' }).plateStyle).toBe('solid');
+    expect(parseCustomAppearance({ plateStyle: 'through' }).plateStyle).toBe('through');
+  });
+
+  /**
+   * The other half of the same conversation: you may pick the colour of the
+   * boxes, and picking one may not produce a box you cannot read on. The pick
+   * is honoured wherever it is safe and moved in luminance only where it is
+   * not, so it never comes back as a different colour — just, sometimes, a
+   * lighter or darker one.
+   */
+  it('honours a chosen box colour and keeps text readable on it', () => {
+    const next = rng(20260916);
+    for (let i = 0; i < 120; i += 1) {
+      const appearance: CustomAppearance = {
+        ...DEFAULT_CUSTOM,
+        background: randomHex(next),
+        surface: randomHex(next),
+        button: randomHex(next),
+        highlight: randomHex(next),
+      };
+      const vars = customThemeVars(appearance);
+      const card = vars['--color-card'];
+      for (const [text, min] of [
+        [vars['--color-ink'], 4.5],
+        [vars['--color-ink-soft'], 4.5],
+        [vars['--color-ink-faint'], 3],
+      ] as Array<[string, number]>) {
+        const ratio = contrast(text, card);
+        expect(
+          ratio,
+          `${text} on a chosen card ${card} (picked ${appearance.surface}) is ` +
+            `${ratio.toFixed(2)}:1, needs ${min}:1`,
+        ).toBeGreaterThanOrEqual(min);
+      }
+    }
+  });
+
+  it('leaves a safe pick exactly as picked', () => {
+    // Light page, dark-enough ink: a pale card is already inside the band and
+    // must come back untouched, or the picker is lying about what it does.
+    expect(
+      customThemeVars({ ...DEFAULT_CUSTOM, background: '#f9fbfd', surface: '#fff4e8' })[
+        '--color-card'
+      ],
+    ).toBe('#fff4e8');
+    // And no pick still derives one, as it always has.
+    expect(
+      customThemeVars({ ...DEFAULT_CUSTOM, surface: null })['--color-card'],
+    ).toBe(customThemeVars(DEFAULT_CUSTOM)['--color-card']);
+  });
 
   it('treats a zero strength as no wallpaper at all', () => {
     const wallpaper =

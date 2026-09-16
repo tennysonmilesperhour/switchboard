@@ -149,6 +149,48 @@ describe('every link goes somewhere real', () => {
       expect(routeExists(feature.href!), `${feature.id} → ${feature.href}`).toBe(true);
     }
   });
+
+  /**
+   * "I'm feeling silly, but what do I do from here? Is there a link to click
+   * through to?"
+   *
+   * A third of the index used to be cards you could only read: accurate
+   * directions to a screen with no way to get to that screen. A feature reached
+   * through a wizard step or a host control still gets no `href` — guessing one
+   * is the older and worse failure — but it has to name where those directions
+   * begin, and that has to be somewhere you can actually land.
+   */
+  it('gives every entry somewhere to tap', () => {
+    for (const feature of FEATURES) {
+      expect(
+        Boolean(feature.href || feature.start),
+        `${feature.id} is a card you can only read — give it an href, or a ` +
+          `start naming the screen “${feature.where}” begins from`,
+      ).toBe(true);
+    }
+  });
+
+  it('resolves every start against src/app too', () => {
+    for (const feature of FEATURES) {
+      if (!feature.start) continue;
+      const { href, label } = feature.start;
+      expect(href, `${feature.id} must start inside the app`).toMatch(/^\//);
+      expect(href, `${feature.id} starts at an unfilled path`).not.toContain('[');
+      expect(label.length, `${feature.id} needs a name for where it starts`)
+        .toBeGreaterThan(0);
+      expect(routeExists(href), `${feature.id} → ${href}`).toBe(true);
+    }
+  });
+
+  /** A feature that IS a place does not also need directions to itself. */
+  it('never carries both an href and a start', () => {
+    for (const feature of FEATURES) {
+      expect(
+        Boolean(feature.href && feature.start),
+        `${feature.id} has both an href and a start — pick one`,
+      ).toBe(false);
+    }
+  });
 });
 
 describe('coverage', () => {
