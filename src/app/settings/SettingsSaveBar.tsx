@@ -95,6 +95,17 @@ export function SettingsSaveProvider({
 
   const dirtyCount = dirtyIds.size;
 
+  // "Changes saved." used to sit at the bottom of the screen for the rest of
+  // the page's life — nothing cleared it but the next edit. A confirmation that
+  // never leaves stops reading as confirmation, and it is pinned in the same
+  // `bottom-24` band as the save bar and the toasts. Let it go on its own; a
+  // failure stays until the next edit, because that one still needs reading.
+  useEffect(() => {
+    if (notice?.kind !== 'success') return;
+    const timer = setTimeout(() => setNotice(null), 3000);
+    return () => clearTimeout(timer);
+  }, [notice]);
+
   // Guard against losing edits to an accidental reload or tab close.
   useEffect(() => {
     if (dirtyCount === 0) return;
@@ -182,7 +193,9 @@ export function SettingsSaveProvider({
       {dirtyCount === 0 && notice && (
         <div
           role={notice.kind === 'error' ? 'alert' : 'status'}
-          className={`fixed inset-x-0 bottom-24 z-40 mx-auto w-fit max-w-[calc(100%-2rem)] rounded-pill px-4 py-2 text-sm font-semibold shadow-float ${
+          // Pinned over the page, so it must not take the taps meant for what
+          // is underneath it — see the same note on the toast host.
+          className={`pointer-events-none fixed inset-x-0 bottom-24 z-40 mx-auto w-fit max-w-[calc(100%-2rem)] rounded-pill px-4 py-2 text-sm font-semibold shadow-float ${
             notice.kind === 'error'
               ? 'bg-rose-deep text-paper'
               : 'bg-sage-deep text-paper'
