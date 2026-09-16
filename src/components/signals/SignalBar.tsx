@@ -374,7 +374,15 @@ export function SignalBar({ active, circles, people, groups, defaultCircleId }: 
               }))}
               selected={audience.circleIds}
               onChange={(circleIds) => setAudience((current) => ({ ...current, circleIds }))}
-              allOption={{ label: 'Everyone I know' }}
+              allOption={{
+                label: 'Everyone I know',
+                // The whole audience, not just the circle row. Named people and
+                // groups are part of this choice, so picking three of them and
+                // no circle is an audience of three people — and turning the
+                // last circle off has to be able to leave you there.
+                selected: isEveryoneAudience(audience),
+                onSelect: () => setAudience(EMPTY_AUDIENCE),
+              }}
               chipClassName="!px-3 !py-1 text-xs"
             />
           </div>
@@ -449,11 +457,16 @@ export function SignalBar({ active, circles, people, groups, defaultCircleId }: 
           )}
 
           <div className="flex flex-wrap items-center justify-between gap-3 border-t border-line pt-3">
+            {/* Turning off the last circle is now allowed to land you on an
+                empty audience, so the empty audience has to say what to do
+                about it rather than just greying the button out. */}
             <p className="text-xs text-ink-faint">
               <span className="font-bold text-ink-soft">{draft.map((s) => s.label).join(', ')}</span>
               {' → '}
-              {audienceSummary}. Nothing is shared until you turn it on; it turns itself off in 3
-              hours.
+              {audienceSummary}.{' '}
+              {audienceIsEmptyChoice
+                ? 'Pick a circle, add some people, or tap Everyone I know.'
+                : 'Nothing is shared until you turn it on; it turns itself off in 3 hours.'}
             </p>
             <button
               type="button"

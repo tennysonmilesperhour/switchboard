@@ -166,8 +166,12 @@ function FeatureRow({ feature }: { feature: Feature }) {
   );
 
   // Features you reach through a plan, a room, or a wizard step have no page of
-  // their own; they get the same card without a link rather than a guessed URL
-  // that would land somewhere unhelpful.
+  // their own, so the card is not a link — a guessed URL would land somewhere
+  // unhelpful. What it carries instead is the way IN: the screen those
+  // directions start from, named and tappable. Reading "Plan wizard → Review"
+  // with nothing to press is what made a client ask, apologetically, whether
+  // there was a link somewhere; there is one now, and it is honest about only
+  // being the first step.
   return feature.href ? (
     <Link
       href={feature.href}
@@ -179,6 +183,15 @@ function FeatureRow({ feature }: { feature: Feature }) {
   ) : (
     <div id={feature.id} className="rounded-card border border-line bg-card p-4">
       {body}
+      {feature.start && (
+        <Link
+          href={feature.start.href}
+          className="mt-2 inline-flex items-center gap-1 text-xs font-bold text-terracotta-deep hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-terracotta"
+        >
+          Start at {feature.start.label}
+          <Icon name="back" size={14} className="rotate-180" aria-hidden />
+        </Link>
+      )}
     </div>
   );
 }

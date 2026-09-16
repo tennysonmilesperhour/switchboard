@@ -17,6 +17,10 @@
  *   one against `src/app` and fails on a link to a page that isn't there. A
  *   feature you reach *through* something else (a host control, a wizard step,
  *   a room tab) gets `where` and no `href` — never a guessed URL.
+ * - **Every entry is tappable.** One or the other: an `href` when the feature
+ *   is a place, a `start` when it isn't. `start` is not a guessed URL for the
+ *   feature; it is the screen `where` begins from, and the test resolves it the
+ *   same way. Nothing in this index may be a card you can only read.
  * - **`where` is written in the words on the screen**, so it can be followed
  *   with thumbs rather than decoded.
  * - **Blurbs say what it does for you**, not how it works underneath.
@@ -32,6 +36,19 @@ export interface Feature {
   where: string;
   /** A place you can go, when the feature is one. Omitted when it isn't. */
   href?: string;
+  /**
+   * Where the directions in `where` begin, for a feature that has no page of
+   * its own.
+   *
+   * Not a guess at the feature's URL — that rule stands, and guessing is what
+   * it exists to avoid. It is the screen the person has to be standing on
+   * before `where` means anything: "Plan wizard → Review" is unfollowable until
+   * you have opened the plan wizard. A card that said only "Where: Plan wizard
+   * → Review" and offered nothing to tap is what produced "I'm feeling silly,
+   * but what do I do from here? Is there a link to click through to?" — and
+   * feeling silly reading an index of the app is the index's fault.
+   */
+  start?: { href: string; label: string };
 }
 
 export interface FeatureGroup {
@@ -72,6 +89,7 @@ export const FEATURE_GROUPS: readonly FeatureGroup[] = [
         blurb:
           'A simulator shows exactly who gets reached and in what order, before the first invite goes out.',
         where: 'Plan wizard → Review',
+        start: { href: '/create', label: 'Start something' },
       },
       {
         id: 'response-windows',
@@ -79,6 +97,7 @@ export const FEATURE_GROUPS: readonly FeatureGroup[] = [
         blurb:
           'Each person gets a set amount of time to answer before the invite quietly moves on — no chasing, no awkward reminder text.',
         where: 'Plan wizard → Order, and editable after sending',
+        start: { href: '/create', label: 'Start something' },
       },
       {
         id: 'cascade-editing',
@@ -86,6 +105,7 @@ export const FEATURE_GROUPS: readonly FeatureGroup[] = [
         blurb:
           'Reorder who’s up next, resend an invite, or lengthen a window without disturbing anyone who already said yes.',
         where: 'Your plan’s page → host controls',
+        start: { href: '/plans', label: 'Your plans' },
       },
       {
         id: 'host-suggestions',
@@ -93,6 +113,7 @@ export const FEATURE_GROUPS: readonly FeatureGroup[] = [
         blurb:
           'Quiet, dismissible suggestions while you set a plan up — window lengths, ordering, the things hosts learn the hard way.',
         where: 'Plan wizard → Review (turn them off anytime)',
+        start: { href: '/create', label: 'Start something' },
       },
       {
         id: 'guest-links',
@@ -100,6 +121,7 @@ export const FEATURE_GROUPS: readonly FeatureGroup[] = [
         blurb:
           'Send anyone a link and the plan opens for them with no account and no app — signing in is only asked for when they answer.',
         where: 'Your plan’s page → Share, and the Invite link card',
+        start: { href: '/plans', label: 'Your plans' },
       },
       {
         id: 'import-from-link',
@@ -107,6 +129,7 @@ export const FEATURE_GROUPS: readonly FeatureGroup[] = [
         blurb:
           'Paste a Partiful, Luma, Facebook, Apple Invites, or Eventbrite link and the details come across into a Switchboard plan.',
         where: 'Plan wizard → Basics → Import from a link',
+        start: { href: '/create', label: 'Start something' },
       },
       {
         id: 'describe-plan',
@@ -114,6 +137,7 @@ export const FEATURE_GROUPS: readonly FeatureGroup[] = [
         blurb:
           'Describe what you have in mind — typed or spoken — and the wizard fills in the what, when, and where for you to correct.',
         where: 'Plan wizard → Basics, the describe box at the top',
+        start: { href: '/create', label: 'Start something' },
       },
       {
         id: 'rsvp-questions',
@@ -121,6 +145,7 @@ export const FEATURE_GROUPS: readonly FeatureGroup[] = [
         blurb:
           'Collect dietary needs or who’s bringing what as people RSVP. Answers are visible only to you.',
         where: 'Plan wizard → Basics, answers on your plan’s page',
+        start: { href: '/create', label: 'Start something' },
       },
       {
         id: 'announcements',
@@ -128,6 +153,7 @@ export const FEATURE_GROUPS: readonly FeatureGroup[] = [
         blurb:
           'The calm version of the text blast: the door code, running late, bring a jacket — lands on the plan page and in the room.',
         where: 'Your plan’s page → Announcements',
+        start: { href: '/plans', label: 'Your plans' },
       },
       {
         id: 'reminders',
@@ -135,6 +161,7 @@ export const FEATURE_GROUPS: readonly FeatureGroup[] = [
         blurb:
           'A day-before note to people who are in, a nudge to anyone still holding an invite, and a starting-soon ping — all inside quiet hours.',
         where: 'Plan wizard → Privacy (on by default)',
+        start: { href: '/create', label: 'Start something' },
       },
       {
         id: 'parental-approval',
@@ -142,6 +169,7 @@ export const FEATURE_GROUPS: readonly FeatureGroup[] = [
         blurb:
           'Require a parent or guardian to approve before someone can RSVP yes — for plans that need an adult in the loop.',
         where: 'Plan wizard → Privacy',
+        start: { href: '/create', label: 'Start something' },
       },
       {
         id: 'cover-image',
@@ -149,12 +177,14 @@ export const FEATURE_GROUPS: readonly FeatureGroup[] = [
         blurb:
           'Give a plan a picture; it renders on the page and in the preview when the link gets texted around.',
         where: 'Plan wizard → Basics',
+        start: { href: '/create', label: 'Start something' },
       },
       {
         id: 'wishlist-link',
         title: 'Wishlist or registry link',
         blurb: 'Point guests at a list without making the plan about presents.',
         where: 'Plan wizard → Basics',
+        start: { href: '/create', label: 'Start something' },
       },
       {
         id: 'open-table',
@@ -170,6 +200,7 @@ export const FEATURE_GROUPS: readonly FeatureGroup[] = [
         blurb:
           'Change what guests can see about each other — who’s in, the whole invite list, expired invitations — at any point, not just when you set the plan up.',
         where: 'Your plan’s page → Privacy and access',
+        start: { href: '/plans', label: 'Your plans' },
       },
       {
         id: 'co-hosts',
@@ -177,6 +208,7 @@ export const FEATURE_GROUPS: readonly FeatureGroup[] = [
         blurb:
           'Hand someone else the host powers — editing the chain, approving requests, closing polls — because most plans have two organizers.',
         where: 'Your plan’s page → Co-hosts',
+        start: { href: '/plans', label: 'Your plans' },
       },
       {
         id: 'calendar-add',
@@ -184,12 +216,14 @@ export const FEATURE_GROUPS: readonly FeatureGroup[] = [
         blurb:
           'One tap into Google Calendar, or an .ics download for whatever calendar app you actually use.',
         where: 'Any plan page, once you’re in',
+        start: { href: '/plans', label: 'Your plans' },
       },
       {
         id: 'guest-csv',
         title: 'Export the guest list',
         blurb: 'Download who’s coming as a spreadsheet, for name tags and seating.',
         where: 'Your plan’s page → guest list',
+        start: { href: '/plans', label: 'Your plans' },
       },
       {
         id: 'run-it-back',
@@ -197,6 +231,7 @@ export const FEATURE_GROUPS: readonly FeatureGroup[] = [
         blurb:
           'Re-invite the same crew to a fresh plan in one tap, minus anyone who said it wasn’t their thing.',
         where: 'A past plan’s page → Run it back',
+        start: { href: '/plans', label: 'Your plans' },
       },
       {
         id: 'schedule-next',
@@ -204,6 +239,7 @@ export const FEATURE_GROUPS: readonly FeatureGroup[] = [
         blurb:
           'For the things that repeat: clone the plan forward onto its next date with the same people.',
         where: 'A recurring plan’s page',
+        start: { href: '/plans', label: 'Your plans' },
       },
       {
         id: 'coming-up',
@@ -240,9 +276,10 @@ export const FEATURE_GROUPS: readonly FeatureGroup[] = [
         id: 'availability-grid',
         title: 'When is everyone free',
         blurb:
-          'Each person taps the parts of the week that work for them, and the plan shows where those overlap — so the dates that reach the poll are ones people can actually make. Your own marks stay private; the group only ever sees how many are free, never who.',
+          'Each person taps the parts of the week that work for them, and the plan shows where those overlap — so the dates that reach the poll are ones people can actually make. With a calendar connected it opens already filled in from your free time, as a draft you adjust; nothing reaches the group until you save it. Your own marks stay private either way — the group only ever sees how many are free, never who.',
         where:
           'Start something → Help me figure it out (leave the date open), then the plan’s page',
+        start: { href: '/events/new?decide=1', label: 'Help me figure it out' },
       },
       {
         id: 'poll-idea-details',
@@ -250,12 +287,14 @@ export const FEATURE_GROUPS: readonly FeatureGroup[] = [
         blurb:
           'Attach a description, a link, and a photo to any idea on a poll. Whoever suggested it, or the host, can fix its wording or take it off the list while voting is open.',
         where: 'Any plan with a poll open → Add details, or Edit under an idea',
+        start: { href: '/plans', label: 'Your plans' },
       },
       {
         id: 'consensus-meter',
         title: 'Consensus meter',
         blurb: 'Watch where the group is actually leaning, as an aggregate and nothing more.',
         where: 'Any plan with a poll open',
+        start: { href: '/plans', label: 'Your plans' },
       },
       {
         id: 'vote-privacy',
@@ -263,6 +302,7 @@ export const FEATURE_GROUPS: readonly FeatureGroup[] = [
         blurb:
           'Not the host, not anyone. Individual votes are unreadable by design — the group only ever sees totals.',
         where: 'Every poll, always',
+        start: { href: '/plans', label: 'Your plans' },
       },
       {
         id: 'poll-resolution',
@@ -270,6 +310,7 @@ export const FEATURE_GROUPS: readonly FeatureGroup[] = [
         blurb:
           'Set a deadline and let a poll resolve on its own, pick the winner yourself, or run a runoff between the top options.',
         where: 'Plan wizard → Invites, then the plan page',
+        start: { href: '/create', label: 'Start something' },
       },
       {
         id: 'poll-chain',
@@ -277,6 +318,7 @@ export const FEATURE_GROUPS: readonly FeatureGroup[] = [
         blurb:
           'Queue the questions that only make sense later — where, once the date lands; what to eat, once the place does. Each opens by itself when the one before it is settled.',
         where: 'Any plan with a poll → Decide something after this',
+        start: { href: '/plans', label: 'Your plans' },
       },
       {
         id: 'undecided-plans',
@@ -284,6 +326,7 @@ export const FEATURE_GROUPS: readonly FeatureGroup[] = [
         blurb:
           'A plan whose date is still being polled is still shareable and still answerable — the open date shows as a caveat, not a locked door.',
         where: 'Any plan still deciding its date',
+        start: { href: '/plans', label: 'Your plans' },
       },
     ],
   },
@@ -379,6 +422,7 @@ export const FEATURE_GROUPS: readonly FeatureGroup[] = [
         blurb:
           'Blocking is enforced across discovery, matching, and the map — not just hidden. Both are reachable anywhere you’d actually meet someone.',
         where: 'Profiles, room members, moment reveals, and requests',
+        start: { href: '/people', label: 'People' },
       },
       {
         id: 'public-profile',
@@ -521,6 +565,7 @@ export const FEATURE_GROUPS: readonly FeatureGroup[] = [
         blurb:
           'Say it instead of typing it — in a plan’s thread, or as the reason when you have to call something off.',
         where: 'A plan’s page → the comment box, and Cancel this plan',
+        start: { href: '/plans', label: 'Your plans' },
       },
       {
         id: 'live-updates',
@@ -528,6 +573,7 @@ export const FEATURE_GROUPS: readonly FeatureGroup[] = [
         blurb:
           'Messages, filed items, moments, and matches appear for everyone without a refresh.',
         where: 'Rooms, Moments, and Mutual',
+        start: { href: '/rooms', label: 'Rooms' },
       },
       {
         id: 'event-thread',
@@ -535,6 +581,7 @@ export const FEATURE_GROUPS: readonly FeatureGroup[] = [
         blurb:
           'Questions and chatter attached to the plan page itself, for people not in the room. Reply to any message and your answer quotes it, so a busy thread stays readable.',
         where: 'Any plan’s page',
+        start: { href: '/plans', label: 'Your plans' },
       },
       {
         id: 'memory-capsule',
@@ -542,6 +589,7 @@ export const FEATURE_GROUPS: readonly FeatureGroup[] = [
         blurb:
           'After it’s over, everyone adds one line and one photo. It stays as the record of the night.',
         where: 'A past plan’s page → the capsule',
+        start: { href: '/plans', label: 'Your plans' },
       },
     ],
   },
@@ -651,6 +699,7 @@ export const FEATURE_GROUPS: readonly FeatureGroup[] = [
         // follows them finds no such menu item, and someone who can't install
         // the supported way goes looking for an "app" to download instead.
         where: 'Android: Chrome menu ⋮ → Install app. iPhone: Share → Add to Home Screen',
+        start: { href: '/settings', label: 'Settings' },
       },
       {
         // The inbound half of the calendar story. Indexed next to the outbound

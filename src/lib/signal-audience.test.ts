@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
   describeAudience,
@@ -19,6 +21,51 @@ const names = {
   ]),
   groups: new Map([['b1', 'Tantra']]),
 };
+
+/**
+ * "It won't let me not select one of the groups."
+ *
+ * An audience is circles AND named people AND groups, but the circle row's
+ * catch-all chip was deciding for itself: it lit whenever THAT row was empty.
+ * So turning off your last circle lit "Everyone I know" — the broadest possible
+ * audience, in answer to narrowing one — and there was no reachable state
+ * meaning "just the three people I picked". The chip has to describe the whole
+ * choice, which is exactly `isEveryoneAudience`.
+ */
+describe('the everyone catch-all', () => {
+  it('is off when the audience is specific people and no circle', () => {
+    expect(
+      isEveryoneAudience({ circleIds: [], personIds: ['p1', 'p2', 'p3'], boardIds: [] }),
+    ).toBe(false);
+  });
+
+  it('is off when the audience is a group and no circle', () => {
+    expect(isEveryoneAudience({ circleIds: [], personIds: [], boardIds: ['b1'] })).toBe(
+      false,
+    );
+  });
+
+  it('is on only when nothing at all is chosen', () => {
+    expect(isEveryoneAudience({ circleIds: [], personIds: [], boardIds: [] })).toBe(true);
+    expect(isEveryoneAudience({ circleIds: ['c1'], personIds: [], boardIds: [] })).toBe(
+      false,
+    );
+  });
+
+  /**
+   * The composer is a client component, so the wiring is asserted at the source
+   * — the bug was never in the predicate, it was in the chip not being asked.
+   */
+  it('is wired to the whole audience in the composer', () => {
+    const source = readFileSync(
+      join(process.cwd(), 'src/components/signals/SignalBar.tsx'),
+      'utf8',
+    );
+    expect(source).toContain('selected: isEveryoneAudience(audience)');
+    // …and tapping it means everyone, so it clears the other two rows too.
+    expect(source).toContain('onSelect: () => setAudience(EMPTY_AUDIENCE)');
+  });
+});
 
 describe('describeAudience', () => {
   it('says everyone when nothing is chosen', () => {
