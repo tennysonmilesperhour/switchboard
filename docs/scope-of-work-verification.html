@@ -399,6 +399,7 @@
       { id:"I2", name:"Realtime updates", what:"Rooms, moments, matches, and polls all update live — no refresh needed. Poll votes highlight instantly.", verify:"With two accounts, trigger updates on different surfaces and confirm they appear live." },
       { id:"I3", name:"Error messages", what:"When something goes wrong, the message says what happened and includes a diagnostic code (like SB-INVITE-EXPIRED). Server errors don’t blame you or suggest retrying.", verify:"If you encounter an error, confirm it’s specific and has a diagnostic code." },
       { id:"I4", name:"App install, features, and quality of life", what:"Installable on your phone’s home screen with a real icon. A searchable feature catalogue answers ‘what can this do?’ The home page greeting matches your time of day. Family and caregiver activity options are available. Legal pages (privacy, terms, copyright) are in place.", verify:"Install on your home screen. Open the Features page and search for something. Confirm the greeting matches your time zone." },
+    ]},
 
     { id: "J", title: "September 2026 feedback round", blurb: "Editable poll ideas with links and photos, replies in the thread, and a signal composer you finalize before it goes live", items: [
       { id:"J1", name:"Edit or remove a poll idea", what:"The person who suggested an idea, or the host, can fix its wording (Greek, not Geek) or take it off the list while the poll is still open. Votes already cast on an edited idea stay put.", verify:"Suggest an idea, tap Edit under it, change the name, and Save. Then tap Remove on an idea you added and confirm it disappears for everyone." },
@@ -413,10 +414,31 @@
   var TOTAL = 0;
   GROUPS.forEach(function(g) { TOTAL += g.items.length; });
 
-  var KEY = "swb-scope-v5";
-  var state = {};
-  try { state = JSON.parse(localStorage.getItem(KEY)) || {}; } catch {}
+  // The key this checklist has always stored ticks under. NEVER bump it when
+  // items are added: the ids are stable and additive, so a new section costs
+  // nobody their progress, while a bump silently empties the page for the one
+  // person who was part-way through walking it. "swb-scope-v5" was such a
+  // bump; anything left under it is folded back in below rather than stranded.
+  var KEY = "swb-scope-v4";
+  var LEGACY_KEYS = ["swb-scope-v5"];
+
+  function read(key) {
+    try { return JSON.parse(localStorage.getItem(key)) || {}; } catch { return {}; }
+  }
+  var state = read(KEY);
   function save() { try { localStorage.setItem(KEY, JSON.stringify(state)); } catch {} }
+
+  // Fold each retired key in once, then remove it, so a box the reader
+  // unticks afterwards cannot be resurrected by the next page load.
+  var migrated = false;
+  LEGACY_KEYS.forEach(function (key) {
+    var legacy = read(key);
+    Object.keys(legacy).forEach(function (id) {
+      if (legacy[id] && !state[id]) { state[id] = true; migrated = true; }
+    });
+    try { localStorage.removeItem(key); } catch {}
+  });
+  if (migrated) save();
 
   var root = document.getElementById("groups");
 

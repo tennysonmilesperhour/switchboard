@@ -98,4 +98,38 @@ test.describe('public surface', () => {
     await page.goto('/terms');
     await expect(page.getByRole('heading', { name: 'Terms of Use' })).toBeVisible();
   });
+
+  /*
+    The scope checklist the client is given a link to. Its whole list is drawn
+    by one inline script, so the two ways it breaks are both invisible to the
+    server: a parse error in that script, and a CSP that blocks it because the
+    per-request nonce went missing. Either one serves a clean 200 carrying the
+    full text of every item, draws the header, counters and progress bar from
+    the static markup, and renders no list at all. Both have now happened.
+
+    A fetch cannot tell the difference, so this opens it in a browser and
+    counts what a reader would actually see.
+  */
+  test('the scope checklist renders its list, not just its header', async ({ page }) => {
+    const pageErrors: string[] = [];
+    page.on('pageerror', (error) => pageErrors.push(String(error)));
+
+    const response = await page.goto('/scope-verification');
+    expect(response?.status()).toBe(200);
+
+    // Signed out on purpose: the client opens this without an account.
+    await expect(page.getByRole('heading', { name: 'Scope of Work Verification' })).toBeVisible();
+
+    // The list is the page. One section with items in it proves the script
+    // parsed, was allowed to run, and drew something.
+    await expect(page.locator('.group').first()).toBeVisible();
+    expect(await page.locator('.group').count()).toBeGreaterThan(1);
+    expect(await page.locator('.item').count()).toBeGreaterThan(1);
+    await expect(page.locator('.chk').first()).toBeVisible();
+
+    // A blocked or broken script leaves the running total at its static zero.
+    await expect(page.locator('#revTotal')).not.toHaveText('0');
+
+    expect(pageErrors, `the checklist script threw: ${pageErrors.join('; ')}`).toEqual([]);
+  });
 });
