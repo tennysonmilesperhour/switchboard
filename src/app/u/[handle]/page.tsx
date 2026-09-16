@@ -201,11 +201,7 @@ export default async function PublicProfilePage({
 
               {/* Give space: reachable for anyone, not just people you are
                   connected to. Warn, never remove — see GiveSpaceButton. */}
-              <GiveSpaceButton
-                targetId={profile.id}
-                name={displayName}
-                avoided={Boolean(avoid.data)}
-              />
+              <GiveSpaceButton targetId={profile.id} avoided={Boolean(avoid.data)} />
               <BlockReportButtons
                 targetId={profile.id}
                 name={displayName}

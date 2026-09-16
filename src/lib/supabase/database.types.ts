@@ -1012,6 +1012,42 @@ export type Database = {
           },
         ]
       }
+      give_space_notices: {
+        Row: {
+          created_at: string
+          event_id: string
+          user_id: string
+          warned: boolean
+        }
+        Insert: {
+          created_at?: string
+          event_id: string
+          user_id: string
+          warned?: boolean
+        }
+        Update: {
+          created_at?: string
+          event_id?: string
+          user_id?: string
+          warned?: boolean
+        }
+        Relationships: [
+          {
+            foreignKeyName: "give_space_notices_event_id_fkey"
+            columns: ["event_id"]
+            isOneToOne: false
+            referencedRelation: "events"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "give_space_notices_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       guest_sms_consents: {
         Row: {
           consent_at: string
@@ -3518,6 +3554,11 @@ export type Database = {
       }
       my_signal_default_circle: { Args: never; Returns: string }
       normalize_phone_number: { Args: { p_value: string }; Returns: string }
+      note_give_space_overlap: { Args: { p_event: string }; Returns: boolean }
+      note_give_space_overlap_for: {
+        Args: { p_event: string; p_user: string }
+        Returns: boolean
+      }
       operator_sweep_status: {
         Args: { p_sweep: string }
         Returns: {

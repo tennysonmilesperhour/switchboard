@@ -89,7 +89,15 @@ export interface EventPageData {
     avatarUrl: string | null;
   }>;
   attendees: EventPageAttendee[];
-  avoidedGoing: string[];
+  /**
+   * Whether this viewer has a Give Space heads-up on this plan.
+   *
+   * A stored boolean, read back — never recomputed here. The decision is made
+   * once, by `note_give_space_overlap`, at the moment the viewer accepts an
+   * invitation; see `20260916120000_give_space_notices.sql` for why opening a
+   * page may not ask this question and why the answer never withdraws itself.
+   */
+  giveSpaceNotice: boolean;
   poll: Poll | null;
   decidedPolls: Poll[];
   pendingPolls: Poll[];
@@ -319,7 +327,7 @@ export async function loadEventPage(
     commentResult,
     answerResult,
     hiddenAcceptedCountResult,
-    avoidsResult,
+    giveSpaceResult,
     cancelVoiceUrl,
     parentalApprovalResult,
   ] = await Promise.all([
@@ -385,12 +393,16 @@ export async function loadEventPage(
           .eq('event_id', id)
           .eq('status', 'accepted')
       : Promise.resolve({ count: 0 }),
-    canManage || event.show_accepted
-      ? supabase
-          .from('profile_avoids')
-          .select('avoided_id')
-          .eq('avoider_id', user.id)
-      : Promise.resolve({ data: [] }),
+    // The viewer's own frozen notice row. Owner-scoped by RLS, and a plain
+    // read: it carries one boolean and is not gated on `show_accepted`,
+    // because it describes a decision already taken rather than who is here
+    // now.
+    supabase
+      .from('give_space_notices')
+      .select('warned')
+      .eq('user_id', user.id)
+      .eq('event_id', id)
+      .maybeSingle(),
     signMediaRef(event.cancel_voice_url),
     // Host/co-host recovery for a request that is waiting on a guardian. These
     // addresses are private and cross the server/client boundary only inside
@@ -498,12 +510,7 @@ export async function loadEventPage(
       status: row.status as Invite['status'],
     };
   });
-  const avoidedSet = new Set(
-    (avoidsResult.data ?? []).map((row) => row.avoided_id as string),
-  );
-  const avoidedGoing = attendees
-    .filter((attendee) => avoidedSet.has(attendee.id))
-    .map((attendee) => attendee.name);
+  const giveSpaceNotice = Boolean(giveSpaceResult.data?.warned);
 
   const allDecidedWinners: Record<string, string> = {};
   for (const row of winnerResult.data ?? []) {
@@ -700,7 +707,7 @@ export async function loadEventPage(
     myInvite,
     addableConnections,
     attendees,
-    avoidedGoing,
+    giveSpaceNotice,
     poll,
     decidedPolls,
     pendingPolls,

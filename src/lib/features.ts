@@ -369,7 +369,7 @@ export const FEATURE_GROUPS: readonly FeatureGroup[] = [
         id: 'give-space',
         title: 'Give space',
         blurb:
-          'Flag someone you’d rather not run into. You get a private heads-up when they’re visibly going to something — they’re never removed, and never told.',
+          'Name someone you’d rather not run into. When you say yes to a plan they may also be at, you get a private nudge — never who, never their answer, never anything after. They’re never removed and never told.',
         where: 'Anyone’s profile, and People → a person’s controls',
         href: '/people',
       },

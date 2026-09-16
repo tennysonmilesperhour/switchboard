@@ -116,7 +116,7 @@ export default async function EventPage({
     myInvite,
     addableConnections,
     attendees,
-    avoidedGoing,
+    giveSpaceNotice,
     poll,
     decidedPolls,
     pendingPolls,
@@ -198,19 +198,23 @@ export default async function EventPage({
             </p>
           </div>
         )}
-        {avoidedGoing.length > 0 && (
+        {/* The Give Space heads-up. Every word of it is load-bearing:
+            “Someone” never becomes a name or a number, “may also be” never
+            becomes “is”, and the note underneath says plainly that nothing
+            more is coming — so the silence afterwards is understood rather
+            than read as news. It renders a stored boolean, so it says the same
+            thing on every visit no matter what anyone else has done since. */}
+        {giveSpaceNotice && (
           <div className="rounded-card bg-gold-soft px-4 py-3">
             <p className="text-sm text-ink">
               <span aria-hidden className="mr-1">👀</span>
-              <span className="font-bold">Heads up:</span>{' '}
-              {avoidedGoing.length === 1
-                ? `${avoidedGoing[0]} is going, and you’ve asked for space from them.`
-                : `${avoidedGoing.slice(0, -1).join(', ')} and ${
-                    avoidedGoing[avoidedGoing.length - 1]
-                  } are going, and you’ve asked for space from them.`}
+              <span className="font-bold">Heads up:</span> someone you’ve chosen to
+              give space may also be there.
             </p>
             <p className="mt-1 text-xs text-ink-soft">
-              Only you can see this - totally your call whether to go.
+              Only you can see this. We won’t say who, and we won’t tell you
+              anything else about them — including if that changes. It’s
+              entirely your call whether to go.
             </p>
           </div>
         )}

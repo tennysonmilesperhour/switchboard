@@ -221,6 +221,16 @@ const REGISTRY = {
     fix: 'Open your own invitation and try again, or ask the host for help.',
     actor: 'reader',
   },
+  // The Give Space heads-up failing to record itself. Deliberately its own
+  // code rather than SB-RSVP-SAVE: the RSVP saved fine, and nobody is shown
+  // this. It exists so the log line is diagnosable, because the symptom
+  // otherwise is a safety notice that silently never appears — and the person
+  // it was meant to protect has no way to know it is missing.
+  'SB-SPACE-NOTE': {
+    message: 'Switchboard couldn’t record a Give Space heads-up.',
+    fix: null,
+    actor: 'operator',
+  },
 
   // ————————————————————————— identity & permission —————————————————————————
   'SB-AUTH-REQUIRED': {
@@ -857,6 +867,7 @@ const AREA_CODES: Record<string, ErrorCode> = {
   'join.decline': 'SB-RSVP-SAVE',
   'invite-decline.message': 'SB-RSVP-SAVE',
   'invite-claim.token': 'SB-RSVP-SAVE',
+  'give-space.note': 'SB-SPACE-NOTE',
   'parental-approval.create': 'SB-RSVP-SAVE',
   'parental-approval.invite': 'SB-RSVP-SAVE',
   'parental-approval.event': 'SB-RSVP-SAVE',

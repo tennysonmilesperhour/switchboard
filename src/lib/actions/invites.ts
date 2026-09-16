@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import { requireUser } from '@/lib/server/require-user';
 import { createAdminClient } from '@/lib/supabase/admin';
+import type { createClient } from '@/lib/supabase/server';
 import { advanceEventCascade } from '@/lib/server/cascade-runner';
 import { notifyUsers } from '@/lib/server/notify';
 import { reportAndFail, reportOperationalError } from '@/lib/server/observability';
@@ -82,6 +83,54 @@ async function saveInviteAnswers(
     .upsert(rows, { onConflict: 'invite_id,question_id' });
 }
 
+/**
+ * Decide this person's Give Space heads-up for a plan they have just committed
+ * to, and record it.
+ *
+ * Called at exactly one kind of moment: an invitation of the caller's own has
+ * just become `accepted`. That is the whole gate. Opening a plan, being invited
+ * to one, or asking to join one never reaches here, because the heads-up is
+ * meant to change what the person does next and not to tell them where anybody
+ * else is — so it may only ever answer a question they asked by acting.
+ *
+ * The RPC returns a boolean and this throws it away. Nothing about the result
+ * belongs in an action's return value, a toast, or a log: the notice is read
+ * back off the plan page from the row this wrote, so there is exactly one
+ * place it can be seen and exactly one thing it can say. Best-effort for the
+ * same reason a failure must not cost someone their RSVP.
+ */
+async function noteGiveSpaceOverlap(
+  client: Awaited<ReturnType<typeof createClient>>,
+  eventId: string,
+): Promise<void> {
+  try {
+    await client.rpc('note_give_space_overlap', { p_event: eventId });
+  } catch (error) {
+    await reportOperationalError('give-space.note', error, { eventId });
+  }
+}
+
+/**
+ * The same decision, for a person who has no session in this request: the Open
+ * Table requester whose join the host has just approved.
+ *
+ * Service-role, and deliberately narrow — the database function re-checks that
+ * `userId` really does hold an accepted invite to `eventId` before it reads or
+ * writes anything, so a host cannot use this to learn or plant anything about
+ * a guest. Nothing is returned to the caller: the host must not find out what
+ * it decided.
+ */
+async function noteGiveSpaceOverlapFor(userId: string, eventId: string): Promise<void> {
+  try {
+    await createAdminClient().rpc('note_give_space_overlap_for', {
+      p_user: userId,
+      p_event: eventId,
+    });
+  } catch (error) {
+    await reportOperationalError('give-space.note', error, { eventId });
+  }
+}
+
 export async function respondToInvite(
   inviteId: string,
   accept: boolean,
@@ -129,6 +178,7 @@ export async function respondToInvite(
     if (data === 'accepted') {
       // Only persist answers once accepted, and only for this event's questions.
       await saveInviteAnswers(supabase, inviteId, invite.event_id, answers);
+      await noteGiveSpaceOverlap(supabase, invite.event_id);
     }
     await advanceEventCascade(invite.event_id);
 
@@ -239,6 +289,11 @@ export async function approveJoinRequest(
       .single();
     const event = Array.isArray(invite?.event) ? invite?.event[0] : invite?.event;
     if (invite?.invitee_id) {
+      // Their commitment, completed by someone else's approval. The requester
+      // has no session here, so this runs service-role against their id — and
+      // the function still refuses unless that id now holds an accepted invite
+      // to this exact plan.
+      await noteGiveSpaceOverlapFor(invite.invitee_id, eventId);
       await notifyUsers([invite.invitee_id], {
         kind: 'join_approved',
         title: 'You are in 🎉',
@@ -293,6 +348,10 @@ export async function claimGuestInvite(
     return reportAndFail('SB-RSVP-SAVE', 'invite-claim.token', error);
   }
   if (!eventId) return validation();
+
+  // Claiming is the moment a guest RSVP becomes this account's own commitment,
+  // and the first moment there is an avoid list to check it against.
+  await noteGiveSpaceOverlap(supabase, eventId as string);
 
   revalidatePath('/');
   revalidatePath('/plans');
@@ -413,6 +472,9 @@ export async function respondViaShareLink(
   if (eventId) {
     await advanceEventCascade(eventId);
     if (outcome === 'accepted') {
+      // The responder's own session client, not `admin`: the RPC reads
+      // `auth.uid()` and refuses a caller it cannot identify.
+      await noteGiveSpaceOverlap(auth.supabase, eventId);
       const { data: event } = await admin
         .from('events')
         .select('id, title, host_id')
