@@ -111,13 +111,24 @@ describe('the catalogue', () => {
     expect(new Set(titles).size).toBe(titles.length);
   });
 
+  /**
+   * `where` has to open with the label people can actually follow, so renaming
+   * a nav destination fails here until the index agrees.
+   *
+   * It may then go on to name a condition — "Home → I’m free, once you’ve added
+   * your first friend" — because several of these surfaces are gated, and the
+   * index sending someone to look for one that is not on the page yet reads as
+   * a broken feature rather than a waiting one. Other entries already do this
+   * ("Home, after something you went to"). So: starts with the label, not
+   * equals it.
+   */
   it('points the Home pillars and the Around group at the labels people can follow', () => {
     const where = (id: string) => FEATURES.find((feature) => feature.id === id)?.where;
-    expect(where('mutual')).toBe('Home → Mutual');
-    expect(where('availability-signals')).toBe('Home → I’m free');
+    expect(where('mutual')).toMatch(/^Home → Mutual\b/);
+    expect(where('availability-signals')).toMatch(/^Home → I’m free\b/);
     // Zones left the Home row in remediation 18: it is one of the three
     // Around tabs, reached from the More sheet (or the density-gated pillar).
-    expect(where('zones')).toBe('More → Around → Zones');
+    expect(where('zones')).toMatch(/^More → Around → Zones\b/);
   });
 });
 

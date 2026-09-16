@@ -8,9 +8,9 @@ import { useToast } from '@/components/ui/Toast';
 import { activateSignals, clearSignal, removeSignal } from '@/lib/actions/signals';
 import { formatRelative } from '@/lib/format';
 import {
+  audienceIsUnreachable,
   describeAudience,
   EMPTY_AUDIENCE,
-  isEveryoneAudience,
   type SignalAudience,
 } from '@/lib/signal-audience';
 import { SIGNAL_PRESETS } from '@/lib/types';
@@ -229,8 +229,14 @@ export function SignalBar({ active, circles, people, groups, defaultCircleId }: 
       ? live.reduce((soonest, s) => (s.expires_at < soonest ? s.expires_at : soonest), live[0].expires_at)
       : null;
   const audienceSummary = describeAudience(audience, names);
-  const audienceIsEmptyChoice =
-    !isEveryoneAudience(audience) && audienceSummary === 'Nobody yet';
+  /**
+   * Reached by tapping Edit on a live signal whose audience has since gone: the
+   * composer opened with no chip lit and a Save button that did nothing, however
+   * many times it was pressed, because the only thing saying "you have picked
+   * nobody" was a greyed-out button. The route out — tap a chip, right above —
+   * was on screen the whole time and nothing pointed at it.
+   */
+  const audienceNoLongerExists = audienceIsUnreachable(audience, names);
 
   return (
     <div className="space-y-3" aria-busy={pending}>
@@ -448,6 +454,14 @@ export function SignalBar({ active, circles, people, groups, defaultCircleId }: 
             </div>
           )}
 
+          {audienceNoLongerExists && (
+            <p role="alert" className="text-xs font-bold text-terracotta-deep">
+              Whoever this went to is gone: a circle you deleted, a group you
+              left, or someone you are no longer connected to. Pick who can see
+              it now, above.
+            </p>
+          )}
+
           <div className="flex flex-wrap items-center justify-between gap-3 border-t border-line pt-3">
             <p className="text-xs text-ink-faint">
               <span className="font-bold text-ink-soft">{draft.map((s) => s.label).join(', ')}</span>
@@ -458,7 +472,7 @@ export function SignalBar({ active, circles, people, groups, defaultCircleId }: 
             <button
               type="button"
               onClick={turnOn}
-              disabled={pending || audienceIsEmptyChoice}
+              disabled={pending || audienceNoLongerExists}
               className="shrink-0 rounded-pill bg-brand-gradient px-5 py-2 text-sm font-bold text-white shadow-lift active:scale-[0.97] disabled:opacity-40"
             >
               {pending ? 'Turning on…' : editingLabel ? 'Save' : 'Turn on'}
