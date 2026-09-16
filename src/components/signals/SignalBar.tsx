@@ -11,6 +11,7 @@ import {
   audienceIsUnreachable,
   describeAudience,
   EMPTY_AUDIENCE,
+  isEveryoneAudience,
   type SignalAudience,
 } from '@/lib/signal-audience';
 import { SIGNAL_PRESETS } from '@/lib/types';
@@ -471,16 +472,16 @@ export function SignalBar({ active, circles, people, groups, defaultCircleId }: 
           )}
 
           <div className="flex flex-wrap items-center justify-between gap-3 border-t border-line pt-3">
-            {/* Turning off the last circle is now allowed to land you on an
-                empty audience, so the empty audience has to say what to do
-                about it rather than just greying the button out. */}
+            {/* No "you have picked nobody" case to warn about: turning off the
+                last chip is an empty audience, and an empty audience is
+                everyone you know. The one state that still refuses is an
+                audience whose members are all gone, and `audienceNoLongerExists`
+                says so above rather than greying this out in silence. */}
             <p className="text-xs text-ink-faint">
               <span className="font-bold text-ink-soft">{draft.map((s) => s.label).join(', ')}</span>
               {' → '}
-              {audienceSummary}.{' '}
-              {audienceIsEmptyChoice
-                ? 'Pick a circle, add some people, or tap Everyone I know.'
-                : 'Nothing is shared until you turn it on; it turns itself off in 3 hours.'}
+              {audienceSummary}. Nothing is shared until you turn it on; it turns itself off in 3
+              hours.
             </p>
             <button
               type="button"
