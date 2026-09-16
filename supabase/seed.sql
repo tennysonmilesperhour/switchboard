@@ -29,7 +29,7 @@ revoke insert, update, delete on public.sms_opt_outs from anon, authenticated;
 -- owner accepts an invitation — and then frozen. An owner who could rewrite
 -- their own row could set `warned` back to false and re-run the evaluation,
 -- which reads off whether the person they avoid has since dropped out: exactly
--- the departure probe 20260916120000_give_space_notices.sql exists to refuse.
+-- the departure probe 20260916210002_give_space_notices.sql exists to refuse.
 -- RLS already denies it (there is no UPDATE or DELETE policy), but an RLS-denied
 -- UPDATE matches zero rows in silence rather than raising, so preserve the
 -- migration's revoke here too and keep the refusal loud.

@@ -9,12 +9,13 @@ import {
 } from './health';
 
 describe('schema health', () => {
-  it('pins health to the newest committed migration', () => {
+  it('requires unique migration versions and pins health to the newest', () => {
     const versions = readdirSync(join(process.cwd(), 'supabase/migrations'))
       .map((name) => /^(\d{14})_.*\.sql$/.exec(name)?.[1])
       .filter((version): version is string => Boolean(version))
       .sort();
 
+    expect(new Set(versions).size).toBe(versions.length);
     expect(versions.at(-1)).toBe(EXPECTED_SCHEMA_VERSION);
   });
 

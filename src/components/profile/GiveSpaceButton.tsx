@@ -27,7 +27,7 @@ interface GiveSpaceButtonProps {
  * `giveSpace`). Nothing here hides anyone from anyone, and nothing here watches
  * them either: it arms a single boolean that is decided once, at the moment the
  * viewer themselves says yes to a plan, and says only that somebody on this
- * list may be there. See `20260916120000_give_space_notices.sql`.
+ * list may be there. See `20260916210002_give_space_notices.sql`.
  *
  * Wording and styling deliberately match the `/people` control: this is one
  * feature in two places, and a safety control that looks or reads differently

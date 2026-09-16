@@ -374,19 +374,25 @@ export default async function HomePage() {
           showAround={aroundAvailable === true}
         />
 
-        {/* Signals reach only people you know, so the composer waits for the
-            first connection rather than offering a broadcast to nobody. */}
-        {hasConnections && (
-          <div id="signals" className="scroll-mt-20">
-            <SignalBar
-              active={mySignals ?? []}
-              circles={circles ?? []}
-              people={peopleForSignals}
-              groups={signalGroups ?? []}
-              defaultCircleId={defaultSignalCircleId}
-            />
-          </div>
-        )}
+        {/* The composer always renders. It used to wait for the first accepted
+            connection, which meant a new account's Home silently omitted a
+            whole feature — and the feature index still pointed here, so anyone
+            who followed it found nothing and read that as broken rather than as
+            waiting. It now shows its own "nobody to tell yet" state, and
+            refuses out loud instead of being absent. `hasConnections` was also
+            the wrong test: a signal aimed at a board reaches fellow members you
+            are not connected to, so someone on a board with no friends could
+            use this and never saw it. SignalBar decides from the reach it was
+            actually handed. */}
+        <div id="signals" className="scroll-mt-20">
+          <SignalBar
+            active={mySignals ?? []}
+            circles={circles ?? []}
+            people={peopleForSignals}
+            groups={signalGroups ?? []}
+            defaultCircleId={defaultSignalCircleId}
+          />
+        </div>
 
         {/* Matchmaker introductions */}
         {proposals.length > 0 && (

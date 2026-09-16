@@ -76,11 +76,12 @@ export function GettingStarted({
     {
       done: signalDone,
       label: 'Let friends know you’re around',
-      // The composer only appears once there is someone to tell (Home hides
-      // it without a connection), so the hint points at the real next step.
+      // The composer is always on Home now, so both hints point at it. Without
+      // anyone to tell it says so itself rather than being absent, and the
+      // first friend is already the step above.
       hint: friendDone
         ? 'Tap a signal above — it turns off by itself'
-        : 'Once you’ve added a friend, a signal composer appears here',
+        : 'The composer is below — it starts working once you’ve added someone',
     },
     {
       done: findableDone,
