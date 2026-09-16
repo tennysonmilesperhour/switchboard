@@ -30,10 +30,17 @@ export function Button({
   variant = 'primary',
   size = 'md',
   className = '',
+  // HTML's default for a <button> inside a form is `submit`, so an onClick
+  // button dropped into one silently submitted the form as well: the handler
+  // ran, the form posted, the page re-rendered, and the button read as doing
+  // nothing. Every real submit in the app passes `type="submit"` explicitly, so
+  // defaulting to `button` only ever removes an accident.
+  type = 'button',
   ...props
 }: ButtonProps) {
   return (
     <button
+      type={type}
       className={`inline-flex items-center justify-center gap-2 rounded-btn font-bold transition-all duration-150 outline-none focus-visible:ring-2 focus-visible:ring-terracotta focus-visible:ring-offset-2 focus-visible:ring-offset-paper disabled:opacity-40 disabled:pointer-events-none ${VARIANTS[variant]} ${SIZES[size]} ${className}`}
       {...props}
     />

@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
+  audienceIsUnreachable,
   describeAudience,
   isEveryoneAudience,
   mostRecentlyChosenCircle,
@@ -89,6 +90,39 @@ describe('describeAudience', () => {
       'Nobody yet',
     );
     expect(isEveryoneAudience({ circleIds: ['gone'], personIds: [], boardIds: [] })).toBe(false);
+  });
+});
+
+/**
+ * The composer greys out Turn on / Save for an audience it cannot reach. That
+ * is the one state where a live signal's Edit button leads to a button that
+ * does nothing, so it has to be decided here — on the ids — and not by reading
+ * the wording of a sentence meant for a human.
+ */
+describe('audienceIsUnreachable', () => {
+  const unreachable = (audience: Parameters<typeof audienceIsUnreachable>[0]) =>
+    audienceIsUnreachable(audience, names);
+
+  it('is false for everyone (an empty audience reaches everyone you know)', () => {
+    expect(unreachable({ circleIds: [], personIds: [], boardIds: [] })).toBe(false);
+  });
+  it('is false while any one circle, person, or group still resolves', () => {
+    expect(unreachable({ circleIds: ['c1'], personIds: [], boardIds: [] })).toBe(false);
+    expect(unreachable({ circleIds: ['gone'], personIds: ['p1'], boardIds: [] })).toBe(false);
+    expect(unreachable({ circleIds: ['gone'], personIds: [], boardIds: ['b1'] })).toBe(false);
+    // A deleted circle alongside a live one is still reach, not a dead end.
+    expect(unreachable({ circleIds: ['gone', 'c2'], personIds: [], boardIds: [] })).toBe(false);
+  });
+  it('is true only when every id in a non-empty audience has gone', () => {
+    expect(unreachable({ circleIds: ['gone'], personIds: [], boardIds: [] })).toBe(true);
+    expect(unreachable({ circleIds: [], personIds: ['ex'], boardIds: [] })).toBe(true);
+    expect(unreachable({ circleIds: [], personIds: [], boardIds: ['left'] })).toBe(true);
+    expect(unreachable({ circleIds: ['gone'], personIds: ['ex'], boardIds: ['left'] })).toBe(true);
+  });
+  it('agrees with the summary the reader is shown', () => {
+    const dead = { circleIds: ['gone'], personIds: [], boardIds: [] };
+    expect(describeAudience(dead, names)).toBe('Nobody yet');
+    expect(unreachable(dead)).toBe(true);
   });
 });
 

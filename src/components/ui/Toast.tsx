@@ -69,9 +69,18 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
       {children}
       {/* Named, because it isn't the only status region on a page — the event
           page alone has three — and an unlabelled live region is one more
-          anonymous "status" to anyone navigating by landmark. */}
+          anonymous "status" to anyone navigating by landmark.
+
+          `pointer-events-none` on the host, `pointer-events-auto` on each
+          toast: the host is a full-width band pinned at `bottom-24`, above
+          everything at z-50, and while a toast is up it was swallowing every
+          tap that landed in that band. The Settings save bar sits at exactly
+          the same `bottom-24`, one layer down — so the toast raised by a failed
+          save covered the Save button that raised it, and the retry tap hit
+          the toast instead. Only the toasts themselves are meant to be
+          tappable (tapping one dismisses it); the band around them is not. */}
       <div
-        className="fixed inset-x-0 bottom-24 z-50 flex flex-col items-center gap-2 px-4"
+        className="pointer-events-none fixed inset-x-0 bottom-24 z-50 flex flex-col items-center gap-2 px-4"
         aria-live="polite"
         role="status"
         aria-label="Notifications"

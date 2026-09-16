@@ -83,3 +83,26 @@ export function describeAudience(audience: SignalAudience, names: AudienceNames)
   if (parts.length === 1) return parts[0];
   return `${parts.slice(0, -1).join(', ')} and ${parts.at(-1)}`;
 }
+
+/**
+ * True when an audience names somebody but the composer can name none of them
+ * — every circle, person, and group in it has since been deleted, ended, or
+ * left. Turning a signal on then has to refuse (the server re-validates every
+ * id and would refuse anyway), so the composer must SAY so rather than just
+ * greying out its own button: this state is reached by tapping Edit on a live
+ * signal, and a Save that refuses in silence is indistinguishable from one
+ * that is broken.
+ *
+ * An empty audience is never this: empty means everyone the person knows.
+ */
+export function audienceIsUnreachable(
+  audience: SignalAudience,
+  names: AudienceNames,
+): boolean {
+  if (isEveryoneAudience(audience)) return false;
+  return (
+    !audience.circleIds.some((id) => names.circles.has(id)) &&
+    !audience.personIds.some((id) => names.people.has(id)) &&
+    !audience.boardIds.some((id) => names.groups.has(id))
+  );
+}
