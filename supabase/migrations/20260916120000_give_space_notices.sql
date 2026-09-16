@@ -53,6 +53,12 @@ create policy give_space_notices_own on public.give_space_notices
   for select to authenticated
   using (user_id = auth.uid());
 
+-- A hosted project auto-grants ALL on a new public table to anon/authenticated,
+-- so the revoke is what actually withholds the write; RLS having no UPDATE or
+-- DELETE policy is the second lock. `supabase/seed.sql` re-creates that hosted
+-- auto-grant for the local stack, so it carries a matching revoke for this
+-- table — without it, local and CI are looser than production and an
+-- RLS-denied UPDATE quietly matches zero rows instead of refusing.
 revoke all on public.give_space_notices from authenticated, anon;
 grant select on public.give_space_notices to authenticated;
 
