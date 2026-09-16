@@ -8,7 +8,7 @@
 -- accept.
 
 begin;
-select plan(11);
+select plan(12);
 
 select ok(
   (select relrowsecurity from pg_class where oid = 'public.client_feedback'::regclass),
@@ -58,14 +58,21 @@ select is(
   'a signed-in member cannot read feedback either — this is not member-visible data'
 );
 
-select throws_ok(
+-- An UPDATE under RLS-with-no-policies does not raise: the USING clause simply
+-- matches no rows, so it is a silent no-op. That is still the property worth
+-- proving, so prove the outcome rather than an error code.
+select lives_ok(
   $$ update public.client_feedback set status = 'declined' $$,
-  '42501',
-  null,
-  'a signed-in member cannot triage feedback'
+  'a signed-in member''s triage attempt does not error'
 );
 
 reset role;
+
+select is(
+  (select status from public.client_feedback limit 1),
+  'new',
+  '...because RLS matched no rows for it, so nothing was actually changed'
+);
 
 -- Bounds. Each of these is a CHECK so that a future second writer inherits it.
 select throws_ok(
