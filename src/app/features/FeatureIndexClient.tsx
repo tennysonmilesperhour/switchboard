@@ -63,7 +63,10 @@ export function FeatureIndexClient({
             </button>
           )}
         </div>
-        <p role="status" className="mt-2 text-xs text-ink-faint">
+        <p
+          role="status"
+          className="text-plate text-plate-inset mt-2 inline-block text-xs text-ink-faint"
+        >
           {searching
             ? `${shown} of ${FEATURES.length} features match “${query.trim()}”`
             : `${FEATURES.length} things Switchboard can do`}
@@ -95,7 +98,12 @@ export function FeatureIndexClient({
         groups.map((group) => (
           <section key={group.id} id={group.id} className="scroll-mt-20">
             <div className="mb-3 flex items-start justify-between gap-3">
-              <div className="min-w-0">
+              {/* `text-plate` is inert on every ordinary theme and becomes a
+                  plate under a wallpaper. These headings and their hints are
+                  the only text on this page with no surface of its own, which
+                  is exactly the text a client photographed sitting unreadably
+                  on a sky. */}
+              <div className="text-plate text-plate-inset min-w-0">
                 <h2 className="font-display text-xl text-ink">
                   <span aria-hidden className="mr-1.5">
                     {group.emoji}
@@ -158,8 +166,12 @@ function FeatureRow({ feature }: { feature: Feature }) {
   );
 
   // Features you reach through a plan, a room, or a wizard step have no page of
-  // their own; they get the same card without a link rather than a guessed URL
-  // that would land somewhere unhelpful.
+  // their own, so the card is not a link — a guessed URL would land somewhere
+  // unhelpful. What it carries instead is the way IN: the screen those
+  // directions start from, named and tappable. Reading "Plan wizard → Review"
+  // with nothing to press is what made a client ask, apologetically, whether
+  // there was a link somewhere; there is one now, and it is honest about only
+  // being the first step.
   return feature.href ? (
     <Link
       href={feature.href}
@@ -171,6 +183,15 @@ function FeatureRow({ feature }: { feature: Feature }) {
   ) : (
     <div id={feature.id} className="rounded-card border border-line bg-card p-4">
       {body}
+      {feature.start && (
+        <Link
+          href={feature.start.href}
+          className="mt-2 inline-flex items-center gap-1 text-xs font-bold text-terracotta-deep hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-terracotta"
+        >
+          Start at {feature.start.label}
+          <Icon name="back" size={14} className="rotate-180" aria-hidden />
+        </Link>
+      )}
     </div>
   );
 }

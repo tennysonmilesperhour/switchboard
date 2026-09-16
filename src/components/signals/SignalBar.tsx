@@ -13,6 +13,7 @@ import {
   describeAudience,
   EMPTY_AUDIENCE,
   signalsCanReachAnyone,
+  isEveryoneAudience,
   type SignalAudience,
 } from '@/lib/signal-audience';
 import { SIGNAL_PRESETS } from '@/lib/types';
@@ -414,7 +415,15 @@ export function SignalBar({ active, circles, people, groups, defaultCircleId }: 
               }))}
               selected={audience.circleIds}
               onChange={(circleIds) => setAudience((current) => ({ ...current, circleIds }))}
-              allOption={{ label: 'Everyone I know' }}
+              allOption={{
+                label: 'Everyone I know',
+                // The whole audience, not just the circle row. Named people and
+                // groups are part of this choice, so picking three of them and
+                // no circle is an audience of three people — and turning the
+                // last circle off has to be able to leave you there.
+                selected: isEveryoneAudience(audience),
+                onSelect: () => setAudience(EMPTY_AUDIENCE),
+              }}
               chipClassName="!px-3 !py-1 text-xs"
             />
           </div>
@@ -507,6 +516,11 @@ export function SignalBar({ active, circles, people, groups, defaultCircleId }: 
           )}
 
           <div className="flex flex-wrap items-center justify-between gap-3 border-t border-line pt-3">
+            {/* No "you have picked nobody" case to warn about: turning off the
+                last chip is an empty audience, and an empty audience is
+                everyone you know. When there is nobody to tell or the selected
+                audience's members are all gone, the explanation appears above
+                rather than greying this out in silence. */}
             <p className="text-xs text-ink-faint">
               <span className="font-bold text-ink-soft">{draft.map((s) => s.label).join(', ')}</span>
               {' → '}

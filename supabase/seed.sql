@@ -25,6 +25,16 @@ grant usage, select on all sequences in schema public to anon, authenticated;
 -- simulation above.
 revoke insert, update, delete on public.sms_opt_outs from anon, authenticated;
 
+-- A Give Space notice is decided once, by a definer function, at the moment its
+-- owner accepts an invitation — and then frozen. An owner who could rewrite
+-- their own row could set `warned` back to false and re-run the evaluation,
+-- which reads off whether the person they avoid has since dropped out: exactly
+-- the departure probe 20260916120000_give_space_notices.sql exists to refuse.
+-- RLS already denies it (there is no UPDATE or DELETE policy), but an RLS-denied
+-- UPDATE matches zero rows in silence rather than raising, so preserve the
+-- migration's revoke here too and keep the refusal loud.
+revoke insert, update, delete on public.give_space_notices from anon, authenticated;
+
 -- Availability is replaced through one atomic, grid-validating RPC. Re-granting
 -- direct writes here would make local/CI looser than production and let a client
 -- bypass both the response marker and slot validation.

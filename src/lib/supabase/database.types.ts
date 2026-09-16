@@ -472,6 +472,48 @@ export type Database = {
           },
         ]
       }
+      client_feedback: {
+        Row: {
+          body: string
+          created_at: string
+          id: string
+          item_id: string | null
+          item_label: string | null
+          reporter: string | null
+          resolution: string | null
+          resolved_at: string | null
+          resolved_ref: string | null
+          screenshots: string[]
+          status: string
+        }
+        Insert: {
+          body: string
+          created_at?: string
+          id?: string
+          item_id?: string | null
+          item_label?: string | null
+          reporter?: string | null
+          resolution?: string | null
+          resolved_at?: string | null
+          resolved_ref?: string | null
+          screenshots?: string[]
+          status?: string
+        }
+        Update: {
+          body?: string
+          created_at?: string
+          id?: string
+          item_id?: string | null
+          item_label?: string | null
+          reporter?: string | null
+          resolution?: string | null
+          resolved_at?: string | null
+          resolved_ref?: string | null
+          screenshots?: string[]
+          status?: string
+        }
+        Relationships: []
+      }
       connections: {
         Row: {
           addressee_id: string
@@ -1005,6 +1047,42 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "facet_prefs_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      give_space_notices: {
+        Row: {
+          created_at: string
+          event_id: string
+          user_id: string
+          warned: boolean
+        }
+        Insert: {
+          created_at?: string
+          event_id: string
+          user_id: string
+          warned?: boolean
+        }
+        Update: {
+          created_at?: string
+          event_id?: string
+          user_id?: string
+          warned?: boolean
+        }
+        Relationships: [
+          {
+            foreignKeyName: "give_space_notices_event_id_fkey"
+            columns: ["event_id"]
+            isOneToOne: false
+            referencedRelation: "events"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "give_space_notices_user_id_fkey"
             columns: ["user_id"]
             isOneToOne: false
             referencedRelation: "profiles"
@@ -3518,6 +3596,11 @@ export type Database = {
       }
       my_signal_default_circle: { Args: never; Returns: string }
       normalize_phone_number: { Args: { p_value: string }; Returns: string }
+      note_give_space_overlap: { Args: { p_event: string }; Returns: boolean }
+      note_give_space_overlap_for: {
+        Args: { p_event: string; p_user: string }
+        Returns: boolean
+      }
       operator_sweep_status: {
         Args: { p_sweep: string }
         Returns: {

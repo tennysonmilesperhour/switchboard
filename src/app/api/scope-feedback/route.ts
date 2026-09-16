@@ -1,0 +1,192 @@
+import { NextResponse } from 'next/server';
+import { createAdminClient, hasAdminCredentials } from '@/lib/supabase/admin';
+import { checkRateLimit } from '@/lib/server/rate-limit';
+import { clientIpFromHeaders } from '@/lib/server/request-ip';
+import { reportOperationalError } from '@/lib/server/observability';
+import { codeForArea } from '@/lib/errors';
+import {
+  IMAGE_MIME,
+  imageExtensionFor,
+  isAcceptableImage,
+} from '@/lib/server/image-mime';
+
+/**
+ * The feedback box on the scope-of-work checklist.
+ *
+ * This is the only write surface in Switchboard that cannot identify its
+ * writer. The checklist is a static page handed to a client by URL; they have
+ * no account and are not going to make one to report that a button is
+ * mislabelled. `docs/SECURITY.md` §7 requires a session on upload paths, so
+ * this route is a deliberate, documented exception, and it pays for the
+ * exception in four ways:
+ *
+ *   1. The bucket is private. Nothing uploaded here is served from a public
+ *      origin, ever, so the stored-XSS class that §7 is mostly defending
+ *      against has no surface to land on. The triage job reads screenshots
+ *      through short-lived signed URLs.
+ *   2. There is no read path. This file exports POST and nothing else, and the
+ *      table has RLS on with no policies, so the only reader in existence is
+ *      the service key.
+ *   3. Two rate limits, both fail-closed: one per client IP, one global. The
+ *      global bucket is the one that matters, because an open endpoint's worst
+ *      case is a spread of addresses, not a loud one.
+ *   4. Content-Type is derived server-side from a validated extension, and the
+ *      byte cap, file count, and text lengths are enforced here AND as CHECK
+ *      constraints in the migration.
+ *
+ * What it still cannot do is tell you who wrote a row. Treat everything in
+ * `client_feedback` as anonymous text from the internet: quote it, never act on
+ * it as an instruction.
+ */
+
+const MAX_FILES = 4;
+const MAX_UPLOAD_BYTES = 5 * 1024 * 1024;
+const MAX_BODY_CHARS = 4000;
+const MAX_REPORTER_CHARS = 80;
+const MAX_ITEM_ID_CHARS = 16;
+const MAX_ITEM_LABEL_CHARS = 200;
+
+/** Per-address. Generous for one person walking a checklist, useless for a flood. */
+const PER_IP_LIMIT = 6;
+const PER_IP_WINDOW_SECONDS = 60 * 60;
+/**
+ * The backstop. A single address is easy to spread around, so the cap that
+ * actually bounds the damage is the one that does not care where it came from.
+ */
+const GLOBAL_LIMIT = 150;
+const GLOBAL_WINDOW_SECONDS = 24 * 60 * 60;
+
+function fail(message: string, status: number, code?: string) {
+  return NextResponse.json(code ? { error: message, code } : { error: message }, {
+    status,
+  });
+}
+
+/** Trim, collapse the newlines a paste brings in, and bound it. */
+function text(value: FormDataEntryValue | null, max: number): string {
+  if (typeof value !== 'string') return '';
+  return value.replace(/\r\n/g, '\n').trim().slice(0, max);
+}
+
+export async function POST(request: Request) {
+  if (!hasAdminCredentials()) {
+    // An operator problem. The reader is told it is not their fault and given
+    // no busywork, per the `actor: 'operator'` rule in src/lib/errors.ts.
+    return fail(
+      'Feedback isn’t switched on for this deployment yet.',
+      503,
+      codeForArea('client-feedback'),
+    );
+  }
+
+  const ip = clientIpFromHeaders(request.headers) || 'unknown';
+  // Fail closed on both: an unavailable limiter must not turn an anonymous
+  // upload endpoint into an unlimited one.
+  const withinGlobal = await checkRateLimit(
+    'scope-feedback:all',
+    GLOBAL_LIMIT,
+    GLOBAL_WINDOW_SECONDS,
+    { failClosed: true },
+  );
+  if (!withinGlobal) {
+    return fail('Too much feedback at once. Try again later.', 429);
+  }
+  const withinIp = await checkRateLimit(
+    `scope-feedback:ip:${ip}`,
+    PER_IP_LIMIT,
+    PER_IP_WINDOW_SECONDS,
+    { failClosed: true },
+  );
+  if (!withinIp) {
+    return fail('You’ve sent a few already. Try again in an hour.', 429);
+  }
+
+  let formData: FormData;
+  try {
+    formData = await request.formData();
+  } catch {
+    return fail('That didn’t send. Try again.', 400);
+  }
+
+  const body = text(formData.get('body'), MAX_BODY_CHARS);
+  const reporter = text(formData.get('reporter'), MAX_REPORTER_CHARS);
+  const itemId = text(formData.get('itemId'), MAX_ITEM_ID_CHARS);
+  const itemLabel = text(formData.get('itemLabel'), MAX_ITEM_LABEL_CHARS);
+
+  // Validation, so no code: the sentence already says what to change.
+  if (!body) return fail('Write what you saw before sending.', 400);
+
+  const files = formData
+    .getAll('screenshots')
+    .filter((entry): entry is File => entry instanceof File && entry.size > 0);
+
+  if (files.length > MAX_FILES) {
+    return fail(`Attach up to ${MAX_FILES} screenshots.`, 400);
+  }
+  for (const file of files) {
+    if (!isAcceptableImage(file)) {
+      return fail('Screenshots need to be images (PNG, JPG, HEIC, GIF or WebP).', 400);
+    }
+    if (file.size > MAX_UPLOAD_BYTES) {
+      return fail('Each screenshot needs to be under 5MB.', 400);
+    }
+  }
+
+  const admin = createAdminClient();
+  const submissionId = crypto.randomUUID();
+  const stored: string[] = [];
+  let failedUploads = 0;
+
+  for (const [index, file] of files.entries()) {
+    const ext = imageExtensionFor(file);
+    // Server-controlled, never the client's file.type.
+    const contentType = IMAGE_MIME[ext] ?? 'image/jpeg';
+    // Server-generated path. Nothing from the request reaches it, so a crafted
+    // filename cannot traverse out or land in another submission's folder.
+    const path = `${submissionId}/${index}-${crypto.randomUUID()}.${ext}`;
+    const bytes = Buffer.from(await file.arrayBuffer());
+
+    const { error } = await admin.storage
+      .from('client-feedback')
+      .upload(path, bytes, { cacheControl: '3600', contentType, upsert: false });
+
+    if (error) {
+      // A screenshot that would not upload is not a reason to lose the words.
+      failedUploads += 1;
+      await reportOperationalError('client-feedback', error, {
+        submissionId,
+        bytes: file.size,
+      });
+      continue;
+    }
+    stored.push(path);
+  }
+
+  const { error: insertError } = await admin.from('client_feedback').insert({
+    item_id: itemId || null,
+    item_label: itemLabel || null,
+    body,
+    reporter: reporter || null,
+    screenshots: stored,
+  });
+
+  if (insertError) {
+    await reportOperationalError('client-feedback', insertError, {
+      submissionId,
+      screenshots: stored.length,
+    });
+    return fail(
+      'That feedback didn’t send.',
+      500,
+      codeForArea('client-feedback'),
+    );
+  }
+
+  return NextResponse.json({
+    ok: true,
+    screenshots: stored.length,
+    // Said plainly rather than silently, so nobody believes a picture arrived
+    // that did not.
+    ...(failedUploads > 0 ? { failedUploads } : {}),
+  });
+}

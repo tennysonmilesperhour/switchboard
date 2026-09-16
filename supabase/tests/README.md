@@ -57,3 +57,10 @@ plan.
 sees only the signal naming them, a group member sees only the group signal
 (connected or not), a block hides it, a stranger sees nothing, a group the
 owner is not in reaches nobody, and the audience arrays are bounded.
+
+`client_feedback.test.sql` covers the app's only unauthenticated write surface.
+The assertions are almost all negative, because that is what matters here: RLS
+is on with *no policies at all*, so neither `anon` nor a signed-in member can
+read a row or write one — only the service role, from the one route that holds
+it. It also proves the screenshot bucket is private, and that every length and
+count bound is a CHECK rather than only a guard in the route.

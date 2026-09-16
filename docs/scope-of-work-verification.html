@@ -286,6 +286,85 @@
     .group { box-shadow: none; break-inside: avoid; }
     body { background: #fff; }
   }
+
+  /* ——— Feedback: the client's way to say what's wrong, from the page itself ——— */
+  .item-report {
+    margin-top: 8px; font-size: 11px; font-weight: 600; letter-spacing: .01em;
+    color: var(--ink-faint); background: none; border: 1px solid var(--line);
+    border-radius: 7px; padding: 3px 9px; cursor: pointer;
+    transition: color .12s ease, border-color .12s ease, background .12s ease;
+  }
+  .item-report:hover { color: var(--amber); border-color: var(--amber); background: var(--amber-soft); }
+
+  .fb-card {
+    background: var(--surface); border: 1px solid var(--line);
+    border-radius: var(--radius); box-shadow: var(--shadow);
+    padding: 18px 18px 20px; margin: 22px 0 0;
+  }
+  .fb-card h3 { margin: 0 0 6px; font-size: 15px; }
+  .fb-card p { margin: 0 0 14px; font-size: 13px; color: var(--ink-soft); line-height: 1.5; }
+  .fb-open {
+    font-size: 13px; font-weight: 600; color: #fff; background: var(--teal);
+    border: 1px solid var(--teal); border-radius: 9px; padding: 8px 16px; cursor: pointer;
+  }
+  .fb-open:hover { filter: brightness(1.08); }
+
+  .fb-overlay {
+    position: fixed; inset: 0; z-index: 60; display: none;
+    align-items: flex-end; justify-content: center;
+    background: rgba(12,14,20,0.55); padding: 0;
+  }
+  .fb-overlay.open { display: flex; }
+  @media (min-width: 560px) { .fb-overlay { align-items: center; padding: 24px; } }
+
+  .fb-panel {
+    background: var(--surface); width: 100%; max-width: 520px;
+    max-height: 92vh; overflow-y: auto;
+    border: 1px solid var(--line); border-radius: var(--radius) var(--radius) 0 0;
+    box-shadow: 0 -6px 40px rgba(0,0,0,0.3); padding: 18px 18px 20px;
+  }
+  @media (min-width: 560px) { .fb-panel { border-radius: var(--radius); } }
+  .fb-panel h3 { margin: 0 0 4px; font-size: 15px; }
+  .fb-about {
+    font-family: var(--mono); font-size: 11px; color: var(--teal);
+    background: var(--teal-soft); border-radius: 6px;
+    padding: 4px 8px; display: inline-block; margin: 0 0 12px;
+  }
+  /* `display` on the rule above beats the `hidden` attribute's own
+     `display:none`, so without this the general feedback panel opens still
+     showing whichever item was reported last. */
+  .fb-about[hidden] { display: none; }
+  .fb-field { margin-bottom: 12px; }
+  .fb-field label {
+    display: block; font-size: 12px; font-weight: 600;
+    color: var(--ink-soft); margin-bottom: 5px;
+  }
+  .fb-field textarea, .fb-field input[type="text"] {
+    width: 100%; box-sizing: border-box; font: inherit; font-size: 14px;
+    color: var(--ink); background: var(--bg);
+    border: 1px solid var(--line-strong); border-radius: 9px; padding: 9px 11px;
+  }
+  .fb-field textarea { min-height: 110px; resize: vertical; line-height: 1.5; }
+  .fb-field textarea:focus, .fb-field input[type="text"]:focus {
+    outline: 2px solid var(--teal-mid); outline-offset: 1px; border-color: var(--teal);
+  }
+  .fb-hint { font-size: 11px; color: var(--ink-faint); margin-top: 5px; }
+  .fb-shots { font-size: 13px; }
+  .fb-shots input[type="file"] { font-size: 12px; max-width: 100%; }
+  .fb-actions { display: flex; align-items: center; gap: 10px; margin-top: 16px; }
+  .fb-send {
+    font-size: 13px; font-weight: 600; color: #fff; background: var(--teal);
+    border: 1px solid var(--teal); border-radius: 9px; padding: 9px 18px; cursor: pointer;
+  }
+  .fb-send:hover { filter: brightness(1.08); }
+  .fb-send[disabled] { opacity: .55; cursor: progress; }
+  .fb-cancel {
+    font-size: 13px; font-weight: 600; color: var(--ink-soft);
+    background: none; border: none; cursor: pointer; padding: 9px 4px;
+  }
+  .fb-note { font-size: 12px; line-height: 1.45; margin-top: 10px; min-height: 1em; }
+  .fb-note.err { color: var(--amber); }
+  .fb-note.ok { color: var(--green); }
 </style>
 </head>
 <body>
@@ -331,10 +410,41 @@
 
   <div id="groups"></div>
 
+  <section class="fb-card">
+    <h3>Something wrong, confusing, or missing?</h3>
+    <p>Say so here and attach a screenshot. It goes straight to the build queue &mdash; every item above also has its own <strong>Report a problem</strong> button, which tells us which one you meant.</p>
+    <button class="fb-open" id="fbOpenGeneral" type="button">Send feedback</button>
+  </section>
+
   <footer class="foot">
     <div>Covers the full delivered scope: demo MVP, all post-MVP hardening, and the September 2026 client-feedback round.</div>
     <div style="margin-top:8px;font-family:var(--mono);font-size:11px;">Switchboard &middot; scope of work verification &middot; Sep 12, 2026</div>
   </footer>
+</div>
+
+<div class="fb-overlay" id="fbOverlay" role="dialog" aria-modal="true" aria-labelledby="fbTitle">
+  <div class="fb-panel">
+    <h3 id="fbTitle">Send feedback</h3>
+    <div class="fb-about" id="fbAbout" hidden></div>
+    <div class="fb-field">
+      <label for="fbBody">What happened, or what would you rather it did?</label>
+      <textarea id="fbBody" maxlength="4000" placeholder="I tapped Share on a plan and nothing came up."></textarea>
+    </div>
+    <div class="fb-field">
+      <label for="fbName">Your name <span style="font-weight:400">(optional)</span></label>
+      <input type="text" id="fbName" maxlength="80" placeholder="So we know who to write back to">
+    </div>
+    <div class="fb-field fb-shots">
+      <label for="fbFiles">Screenshots <span style="font-weight:400">(optional, up to 4)</span></label>
+      <input type="file" id="fbFiles" accept="image/png,image/jpeg,image/gif,image/webp,image/heic,image/avif" multiple>
+      <div class="fb-hint">Images only, under 5MB each. Screenshots are private &mdash; only the build team sees them.</div>
+    </div>
+    <div class="fb-actions">
+      <button class="fb-send" id="fbSend" type="button">Send</button>
+      <button class="fb-cancel" id="fbCancel" type="button">Cancel</button>
+    </div>
+    <div class="fb-note" id="fbNote" role="status" aria-live="polite"></div>
+  </div>
 </div>
 
 <!-- Served by src/app/scope-verification/route.ts, which stamps the
@@ -480,6 +590,7 @@
             '</div>' +
             '<div class="item-what">' + esc(it.what) + '</div>' +
             '<div class="item-verify"><span class="vl">Try it</span><span>' + esc(it.verify) + '</span></div>' +
+            '<button class="item-report" type="button" data-id="' + it.id + '" data-label="' + esc(it.name) + '">Report a problem</button>' +
           '</div>';
         body.appendChild(el);
       });
@@ -552,6 +663,145 @@
       state = {}; save();
       renderGroups(); updateCounts();
     }
+  });
+
+  /* ————————————————————————— Feedback ————————————————————————— */
+  /*
+    The client walking this list has no account and never will, so the box
+    below is the whole reporting channel: what they typed, optionally who they
+    are, optionally screenshots. It POSTs to /api/scope-feedback, which is
+    unauthenticated by design and rate-limited hard because of it.
+
+    Nothing here is stored locally. A half-typed report that vanished on
+    reload would be worse than no box at all, so the panel keeps its text
+    until it is sent or explicitly cancelled.
+  */
+  var FB_MAX_FILES = 4;
+  var FB_MAX_BYTES = 5 * 1024 * 1024;
+
+  var fbOverlay = document.getElementById("fbOverlay");
+  var fbAbout = document.getElementById("fbAbout");
+  var fbBody = document.getElementById("fbBody");
+  var fbName = document.getElementById("fbName");
+  var fbFiles = document.getElementById("fbFiles");
+  var fbSend = document.getElementById("fbSend");
+  var fbNote = document.getElementById("fbNote");
+  var fbContext = { id: "", label: "" };
+
+  function fbSetNote(text, kind) {
+    fbNote.textContent = text || "";
+    fbNote.className = "fb-note" + (kind ? " " + kind : "");
+  }
+
+  function fbOpen(id, label) {
+    fbContext = { id: id || "", label: label || "" };
+    if (id) {
+      fbAbout.textContent = id + " · " + label;
+      fbAbout.hidden = false;
+    } else {
+      fbAbout.hidden = true;
+    }
+    fbSetNote("");
+    fbOverlay.classList.add("open");
+    fbBody.focus();
+  }
+
+  function fbClose() {
+    fbOverlay.classList.remove("open");
+  }
+
+  function fbReset() {
+    fbBody.value = "";
+    fbName.value = "";
+    fbFiles.value = "";
+    fbContext = { id: "", label: "" };
+  }
+
+  document.getElementById("fbOpenGeneral").addEventListener("click", function () {
+    fbOpen("", "");
+  });
+  document.getElementById("fbCancel").addEventListener("click", function () {
+    fbReset();
+    fbClose();
+  });
+  fbOverlay.addEventListener("click", function (e) {
+    // Only the backdrop closes it. A click inside the panel must not discard
+    // a report someone is halfway through writing.
+    if (e.target === fbOverlay) fbClose();
+  });
+  document.addEventListener("keydown", function (e) {
+    if (e.key === "Escape" && fbOverlay.classList.contains("open")) fbClose();
+  });
+
+  // Delegated once, outside renderGroups, so a re-render never stacks handlers.
+  root.addEventListener("click", function (e) {
+    var btn = e.target.closest(".item-report");
+    if (!btn) return;
+    fbOpen(btn.getAttribute("data-id"), btn.getAttribute("data-label"));
+  });
+
+  fbSend.addEventListener("click", function () {
+    var body = fbBody.value.trim();
+    if (!body) {
+      fbSetNote("Write what you saw before sending.", "err");
+      fbBody.focus();
+      return;
+    }
+
+    var files = Array.prototype.slice.call(fbFiles.files || []);
+    if (files.length > FB_MAX_FILES) {
+      fbSetNote("Attach up to " + FB_MAX_FILES + " screenshots.", "err");
+      return;
+    }
+    for (var i = 0; i < files.length; i++) {
+      if (files[i].size > FB_MAX_BYTES) {
+        fbSetNote("“" + files[i].name + "” is over 5MB. Screenshots are usually well under.", "err");
+        return;
+      }
+    }
+
+    var form = new FormData();
+    form.append("body", body);
+    if (fbName.value.trim()) form.append("reporter", fbName.value.trim());
+    if (fbContext.id) {
+      form.append("itemId", fbContext.id);
+      form.append("itemLabel", fbContext.label);
+    }
+    files.forEach(function (file) { form.append("screenshots", file); });
+
+    fbSend.disabled = true;
+    fbSetNote("Sending…");
+
+    fetch("/api/scope-feedback", { method: "POST", body: form })
+      .then(function (res) {
+        return res.json().catch(function () { return {}; }).then(function (data) {
+          return { ok: res.ok, data: data };
+        });
+      })
+      .then(function (result) {
+        if (!result.ok) {
+          var msg = result.data.error || "That didn’t send. Try again in a moment.";
+          if (result.data.code) msg += " (" + result.data.code + ")";
+          fbSetNote(msg, "err");
+          return;
+        }
+        var sent = "Sent. Thank you — this is read twice a day.";
+        if (result.data.failedUploads) {
+          sent += " " + result.data.failedUploads +
+            " screenshot(s) didn’t attach, but your note did.";
+        }
+        fbSetNote(sent, "ok");
+        fbReset();
+        setTimeout(function () {
+          if (fbNote.classList.contains("ok")) fbClose();
+        }, 1800);
+      })
+      .catch(function () {
+        fbSetNote("That didn’t send — check your connection and try again.", "err");
+      })
+      .then(function () {
+        fbSend.disabled = false;
+      });
   });
 })();
 </script>

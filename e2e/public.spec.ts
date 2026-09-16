@@ -132,4 +132,51 @@ test.describe('public surface', () => {
 
     expect(pageErrors, `the checklist script threw: ${pageErrors.join('; ')}`).toEqual([]);
   });
+
+  /*
+    The feedback box on that same page. It is the client's only way to report
+    anything — they have no account and are not going to make one — so the
+    journey that matters is the whole one: open it from an item, refuse an
+    empty note, send a real one, and get told what happened.
+
+    The smoke job deliberately runs with no Supabase env, so the send lands on
+    the route's "not configured here" answer rather than saving. That is still
+    the round trip worth asserting: form to route and back to a sentence the
+    reader can act on. The assertion accepts either outcome so the test does
+    not depend on how the job it runs in is configured.
+  */
+  test('the checklist feedback box opens, validates, and reports what happened', async ({
+    page,
+  }) => {
+    await page.goto('/scope-verification');
+
+    // Opened from a specific item, so the report knows what it is about.
+    const reportButton = page.getByRole('button', { name: 'Report a problem' }).first();
+    await expect(reportButton).toBeVisible();
+    await reportButton.click();
+
+    const panel = page.getByRole('dialog', { name: 'Send feedback' });
+    await expect(panel).toBeVisible();
+    // The item it came from is named on the panel.
+    await expect(page.locator('#fbAbout')).toBeVisible();
+
+    // An empty note is refused here, not at the server.
+    await page.getByRole('button', { name: 'Send', exact: true }).click();
+    await expect(page.locator('#fbNote')).toHaveText(/write what you saw/i);
+
+    // A real one goes to the route and comes back with an answer either way.
+    await page.locator('#fbBody').fill('The Share button does nothing on my phone.');
+    await page.getByRole('button', { name: 'Send', exact: true }).click();
+    await expect(page.locator('#fbNote')).toHaveText(
+      /sent|didn’t send|isn’t switched on/i,
+      { timeout: 20_000 },
+    );
+
+    // And there is a way to report something that is not about one item.
+    await page.getByRole('button', { name: 'Cancel' }).click();
+    await expect(panel).toBeHidden();
+    await page.getByRole('button', { name: 'Send feedback' }).click();
+    await expect(panel).toBeVisible();
+    await expect(page.locator('#fbAbout')).toBeHidden();
+  });
 });

@@ -34,7 +34,7 @@ export default async function FeaturesPage() {
   return (
     <AppShell title="Everything" back="/">
       <div className="space-y-6">
-        <p className="text-sm leading-relaxed text-ink-soft">
+        <p className="text-plate text-plate-inset text-sm leading-relaxed text-ink-soft">
           Switchboard shows you one thing at a time on purpose. Here’s the whole
           of it — what each part does, and where to find it.
         </p>

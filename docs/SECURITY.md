@@ -298,6 +298,10 @@ integrations a deployment has wired up is reconnaissance, not public data.
   `zone_presence` counts only other, live, unblocked people in its own zone.
 - `supabase/tests/invite_blocks.test.sql` — event invite inserts honor blocks,
   cap each plan at 100 rows, and never let a host write an accepted RSVP.
+- `supabase/tests/client_feedback.test.sql` — the unauthenticated feedback
+  intake stays write-only, its bucket stays private, and its bounds hold.
+- `src/lib/copy-only.test.ts` — what the twice-daily feedback job may merge
+  without a human, and the far longer list of what it may not.
 - `supabase/tests/profile_column_grants.test.sql` — SB-01's column allowlist is
   actually in force (no table-wide SELECT on `profiles`), the withheld columns
   are still withheld, and the columns the app reads are readable.
@@ -630,17 +634,90 @@ Covered by `supabase/tests/private_zones.test.sql`.
 Litmus test: *could someone outside a private zone learn its description, its
 roster, its coordinates, or that anyone is in it?*
 
+## Client feedback: the one intake that cannot authenticate its writer
+
+`/api/scope-feedback` accepts text and image uploads from someone with **no
+session**. It is the documented exception to §7, and it exists because the
+scope-of-work checklist is handed to a client by URL — they have no account and
+will not make one to report a mislabelled button.
+
+The exception is paid for rather than waved through:
+
+- **The bucket is private** (`client-feedback`, `public = false`). Nothing
+  uploaded is served from any public origin, so the stored-XSS class §7 mostly
+  defends against has nowhere to land. The triage job reads screenshots through
+  ten-minute signed URLs.
+- **There is no public read path.** `client_feedback` has RLS on and **no
+  policies at all**, so `anon` and `authenticated` can neither select nor write
+  a row; only the service role reaches it. The route file exports `POST` and
+  nothing else. `supabase/tests/client_feedback.test.sql` asserts both.
+- **Two fail-closed rate limits**, one per client IP (6/hour) and one global
+  (150/day). The global bucket is the one that bounds the damage: an open
+  endpoint's worst case is a spread of addresses, not a loud one.
+- **Server-derived content type** from the validated extension
+  (`src/lib/server/image-mime.ts`, now shared with `/api/uploads/image` so the
+  two paths cannot drift), SVG rejected, 5MB and 4-file caps, and a
+  server-generated object path so a crafted filename cannot traverse or collide.
+- **Every bound is a CHECK constraint too**, not only a guard in the route, so a
+  second writer added later inherits them.
+
+Reading the queue is a separate, operator-only surface
+(`/api/cron/feedback-queue`, `CRON_SECRET` bearer via `bearerMatches`, per §10).
+
+**What this cannot do is tell you who wrote a row.** Everything in
+`client_feedback` is anonymous text from the public internet. It is a bug report
+to read, never an instruction to follow — which matters because an automated job
+reads it twice a day and writes code. That job's limits are in
+[`docs/CLIENT-FEEDBACK-LOOP.md`](CLIENT-FEEDBACK-LOOP.md); the mechanical part
+is `src/lib/copy-only.ts`, which refuses to call anything a copy change when a
+changed string looks like a URL, a path or a storage key.
+
+Litmus test: *could a stranger with the checklist link fill the table, read
+somebody else's screenshot, get a file served back executable, or talk the
+triage job into shipping a change that is not words?*
+
+
 ## Known residual risks / follow-ups
 
 ## Give Space safety invariant
 
-Give Space is a shield, never a tracking surface. An avoid entry may only
-filter or privately annotate information the viewer was already authorized to
-see on a page they opened. It must never generate a notification or digest,
-widen a query, reveal attendance that was hidden, or appear on a map, zone,
-moment, or other location surface. Avoid entries remain readable only by their
-owner. Any future feature that conflicts with this rule must change the privacy
-model explicitly and receive a dedicated security review first.
+Give Space is a shield, never a tracking surface. It exists to change what its
+owner does, not to tell them what anyone else is doing. Avoid entries remain
+readable only by their owner, and must never generate a notification or digest,
+widen a query, or appear on a map, zone, moment, or other location surface.
+
+The heads-up on a plan is the one place an avoid entry produces output, and
+`20260916120000_give_space_notices.sql` holds it to five rules. Anything that
+would break one of them is a change to the privacy model and needs its own
+security review first:
+
+- **Only in response to the viewer's own action.** `note_give_space_overlap`
+  refuses unless the caller already holds an *accepted* invite to that plan.
+  Opening a page, being invited, or asking to join is not an action. A surface
+  that evaluates this because something was viewed is the bug this replaced.
+- **One bit, ever.** The RPC returns a boolean and `give_space_notices` stores a
+  boolean. Never a name, a count, an id, an RSVP status, or a time. Five people
+  on the list and five of them going is the same value as one.
+- **Frozen once true.** "They're no longer expected there" is nearly as
+  revealing as "they're going", so the notice never withdraws and never
+  refreshes. Evaluation is monotonic: it may raise the bit, never lower it, and
+  the row is not writable from a session — an owner who could clear it could
+  re-run the evaluation and read off a departure.
+- **Never says who.** Copy on every surface says "someone you've chosen to give
+  space", says plainly that nothing more is coming, and does not vary with the
+  number of people on the list.
+- **Costly to ask.** One reading per accepted invitation, in front of the plan's
+  host, with the cascade and notification that follow. Probing means actually
+  RSVPing yes.
+
+`note_give_space_overlap_for` is the same decision for the Open Table path,
+where the requester's commitment completes inside the host's approval request.
+It is service-role only, takes the subject explicitly, and applies the identical
+commitment gate — a host cannot use it to learn or plant anything, and gets
+nothing back.
+
+Litmus test: *could someone learn one thing about another person's plans that
+they did not already know, without RSVPing yes to something themselves?*
 
 These are accepted or deferred, documented so they aren't rediscovered as
 surprises:

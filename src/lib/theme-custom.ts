@@ -40,12 +40,39 @@
  * to spare is what buys a bolder wallpaper.
  */
 
-/** The stored shape. Three colors, a wallpaper, and how much of it shows. */
+/**
+ * How the app's own surfaces sit over a wallpaper.
+ *
+ * `solid` is the default and the answer to the complaint that put it here:
+ * "much of the text is hard to see with a photo background". Opaque cards and
+ * bars, so no photograph can ever get behind a word — the picture shows at full
+ * strength everywhere the app puts no text, which is most of the screen.
+ *
+ * `through` is the look that was previously the only one: plates as transparent
+ * as this palette's contrast headroom can pay for, so the image comes through
+ * the app itself. Still bounded by the ink solve, so it cannot be chosen into
+ * illegibility — but it is now something a person asks for, not something they
+ * get by default and have to notice.
+ */
+export type PlateStyle = 'solid' | 'through';
+
+/** The stored shape. Colors, a wallpaper, and how the app sits on top of it. */
 export interface CustomAppearance {
   /** A public URL in one of our own storage buckets, or null for no image. */
   wallpaper: string | null;
   /** The page background. */
   background: string;
+  /**
+   * The colour of the boxes — cards, sheets, the bars — or null to derive one
+   * from the page as this always has.
+   *
+   * A deliberate pick rather than a derivation, because over a photograph the
+   * boxes are what you actually read on, and "lighten the page a bit" is not
+   * always the right answer for a picture someone chose. Whatever is picked is
+   * held to the same luminance band every derived surface obeys, so choosing
+   * one cannot produce a card body text fails on.
+   */
+  surface: string | null;
   /** The accent: buttons, links, the CTA gradient. */
   button: string;
   /** Rewards, stamps, the things worth noticing. */
@@ -55,14 +82,18 @@ export interface CustomAppearance {
    * whatever the palette's contrast headroom actually allows.
    */
   wallpaperStrength: number;
+  /** Whether the app's surfaces are opaque over the picture, or let it through. */
+  plateStyle: PlateStyle;
 }
 
 export const DEFAULT_CUSTOM: CustomAppearance = {
   wallpaper: null,
   background: '#f9fbfd',
+  surface: null,
   button: '#f82a63',
   highlight: '#eeae36',
   wallpaperStrength: 60,
+  plateStyle: 'solid',
 };
 
 /** Buckets a wallpaper may be served from — all public, all ours. */
@@ -223,12 +254,30 @@ function whiteReadable(color: string): string {
  */
 const SURFACE_HEADROOM = 4.6;
 
+/**
+ * What a TINTED surface has to clear, which is more than a plain one.
+ *
+ * A plain surface only carries ink, and the ink is derived to fit whatever it
+ * is given. A tinted chip carries its own `-deep` colour as text — rose-deep on
+ * rose-soft, sage-deep on sage-soft — and that colour is pushed toward the ink
+ * extreme until it reads. A chip sitting exactly on the 4.6 line leaves that
+ * push nowhere to stop short of the extreme itself, so `--color-rose-deep`
+ * comes out `#fefdfe`: legible, and no longer red. "Decline" has stopped
+ * meaning anything at that point, which is the one thing a theme may not do to
+ * a semantic colour.
+ *
+ * 7:1 is the margin that keeps the hue. It changes nothing for a palette that
+ * was already comfortable — a proper dark theme's chips are far inside it — and
+ * only bites on the mid-tone backgrounds where the old limit was producing
+ * white "reds".
+ */
+const TINT_HEADROOM = 7;
+
 /** The luminance a surface must stay above (black text) or below (white text). */
-function surfaceLuminanceLimit(inkExtreme: string): number {
-  // From (L + 0.05) / 0.05 >= 4.6 for black, and 1.05 / (L + 0.05) >= 4.6 for white.
-  return inkExtreme === '#000000'
-    ? SURFACE_HEADROOM * 0.05 - 0.05
-    : 1.05 / SURFACE_HEADROOM - 0.05;
+function surfaceLuminanceLimit(inkExtreme: string, headroom = SURFACE_HEADROOM): number {
+  // From (L + 0.05) / 0.05 >= headroom for black, and 1.05 / (L + 0.05) >= it
+  // for white.
+  return inkExtreme === '#000000' ? headroom * 0.05 - 0.05 : 1.05 / headroom - 0.05;
 }
 
 /**
@@ -253,6 +302,26 @@ function safeSurface(
   const candidate = mix(base, direction, step);
   if (contrast(inkExtreme, candidate) >= SURFACE_HEADROOM) return candidate;
   return mix(base, OPPOSITE[direction], step);
+}
+
+/**
+ * A surface somebody picked by hand, held to the band every derived surface
+ * obeys.
+ *
+ * The pick is honoured in hue and saturation and moved only in luminance, and
+ * only when it sits where the ink extreme cannot reach 4.5:1 — so choosing a
+ * deep teal for the boxes gives you a deep teal, and choosing a mid-gray gives
+ * you the nearest gray body text actually reads on rather than a card that
+ * technically renders and cannot be read. Nothing here can fail closed into the
+ * derived colour: a choice that came back ignored would be worse than one that
+ * came back adjusted, because only one of those is visible.
+ */
+function chosenSurface(pick: string, inkExtreme: string): string {
+  const limit = surfaceLuminanceLimit(inkExtreme);
+  const value = luminance(pick);
+  if (inkExtreme === '#000000' ? value >= limit : value <= limit) return pick;
+  const [hue, saturation] = rgbToHsl(pick);
+  return atLuminance(hue, saturation, limit);
 }
 
 /**
@@ -368,11 +437,20 @@ export function parseCustomAppearance(value: unknown): CustomAppearance {
   return {
     wallpaper: wallpaperReference(raw.wallpaper),
     background: color(raw.background, DEFAULT_CUSTOM.background),
+    // Null and "never picked one" are the same thing, and both mean derive it.
+    surface: typeof raw.surface === 'string' && HEX.test(raw.surface)
+      ? raw.surface.toLowerCase()
+      : null,
     button: color(raw.button, DEFAULT_CUSTOM.button),
     highlight: color(raw.highlight, DEFAULT_CUSTOM.highlight),
     wallpaperStrength: Number.isFinite(strength)
       ? Math.min(100, Math.max(0, Math.round(strength)))
       : DEFAULT_CUSTOM.wallpaperStrength,
+    // Rows written before this field existed were rendered with see-through
+    // plates, but reading them back as `through` would keep the palettes that
+    // prompted the change unreadable. The default is the fix, so it applies to
+    // everyone who has not since said otherwise.
+    plateStyle: raw.plateStyle === 'through' ? 'through' : 'solid',
   };
 }
 
@@ -560,7 +638,7 @@ function atLuminance(hue: number, saturation: number, target: number): string {
 function tintedSurface(card: string, tint: string, inkExtreme: string): string {
   const [hue, saturation] = rgbToHsl(tint);
   const base = luminance(card);
-  const limit = surfaceLuminanceLimit(inkExtreme);
+  const limit = surfaceLuminanceLimit(inkExtreme, TINT_HEADROOM);
   // A step toward the ink, so the surface reads as a tint of the card rather
   // than another card — but a step PROPORTIONAL to the card, not a fixed
   // fraction of the way to the extreme.
@@ -655,7 +733,15 @@ const DERIVED = new Map<string, ReturnType<typeof solve>>();
 const DERIVED_MAX = 64;
 
 function derive(custom: CustomAppearance) {
-  const key = `${custom.background}|${custom.button}|${custom.highlight}|${custom.wallpaperStrength}|${custom.wallpaper ? '1' : '0'}`;
+  const key = [
+    custom.background,
+    custom.surface ?? '-',
+    custom.button,
+    custom.highlight,
+    custom.wallpaperStrength,
+    custom.plateStyle,
+    custom.wallpaper ? '1' : '0',
+  ].join('|');
   const hit = DERIVED.get(key);
   if (hit) return hit;
   const solved = solve(custom);
@@ -675,7 +761,9 @@ function solve(custom: CustomAppearance) {
   // lifting it would put it in the band the ink cannot read on — a mid-tone
   // page, where a slightly lighter card is the difference between 4.6:1 and
   // 4.3:1 and there is nothing else to give.
-  const card = safeSurface(paper, '#ffffff', dark ? 0.09 : 0.62, extreme);
+  const card = custom.surface
+    ? chosenSurface(custom.surface, extreme)
+    : safeSurface(paper, '#ffffff', dark ? 0.09 : 0.62, extreme);
   const cream = safeSurface(paper, dark ? '#ffffff' : '#000000', 0.05, extreme);
 
   // The tinted chips are surfaces too, so they are derived HERE — before the
@@ -699,7 +787,17 @@ function solve(custom: CustomAppearance) {
   // nothing about readability depends on it any more. `veil` is the quantity
   // contrast actually bounds.
   const share = custom.wallpaper ? custom.wallpaperStrength / 100 : 0;
-  const veil = custom.wallpaper ? affordableVeil(surfaces, paper) : 0;
+  // Opaque unless the picture has been asked through. `affordableVeil` answers
+  // "how transparent could these plates be and still clear AA against the worst
+  // pixel an image can contain" — a floor, and a floor is the wrong default for
+  // a thing people read. Text clearing 4.5:1 over an arbitrary photograph is
+  // legible and tiring, which is what "much of the text is hard to see with a
+  // photo background" means. So the answer is now what `through` buys, not what
+  // everyone gets.
+  const veil =
+    custom.wallpaper && custom.plateStyle === 'through'
+      ? affordableVeil(surfaces, paper)
+      : 0;
 
   return {
     paper,
