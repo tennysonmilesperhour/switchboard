@@ -26,6 +26,7 @@ const PUBLIC_PREFIXES = [
   '/join', // shareable plan links; auth returns here via a validated next path
   '/verify-contact',
   '/scope-verification', // client-facing checklist, shared by URL; nothing private on it
+  '/api/scope-feedback', // the checklist's feedback box; the client has no account by design
   '/api/sms/inbound',
   '/api/sms/status', // Twilio signature-authenticated; never redirect to browser login
   '/api/cron',
