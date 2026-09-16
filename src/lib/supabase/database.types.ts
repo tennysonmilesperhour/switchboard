@@ -472,6 +472,48 @@ export type Database = {
           },
         ]
       }
+      client_feedback: {
+        Row: {
+          body: string
+          created_at: string
+          id: string
+          item_id: string | null
+          item_label: string | null
+          reporter: string | null
+          resolution: string | null
+          resolved_at: string | null
+          resolved_ref: string | null
+          screenshots: string[]
+          status: string
+        }
+        Insert: {
+          body: string
+          created_at?: string
+          id?: string
+          item_id?: string | null
+          item_label?: string | null
+          reporter?: string | null
+          resolution?: string | null
+          resolved_at?: string | null
+          resolved_ref?: string | null
+          screenshots?: string[]
+          status?: string
+        }
+        Update: {
+          body?: string
+          created_at?: string
+          id?: string
+          item_id?: string | null
+          item_label?: string | null
+          reporter?: string | null
+          resolution?: string | null
+          resolved_at?: string | null
+          resolved_ref?: string | null
+          screenshots?: string[]
+          status?: string
+        }
+        Relationships: []
+      }
       connections: {
         Row: {
           addressee_id: string

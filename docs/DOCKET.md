@@ -13,6 +13,42 @@ from working sessions. Newest thinking lives here so nothing evaporates.
 
 ---
 
+## ✅ Shipped 2026-09-16 — the client feedback loop
+
+The checklist stopped being a one-way document. It now takes reports, and a
+scheduled job works them twice a day.
+
+- **A feedback box on `/scope-verification`.** Every item carries "Report a
+  problem"; the page carries a general one. Text, an optional name, and up to
+  four screenshots go to `POST /api/scope-feedback`.
+- **The one intake with no session.** The client has no account by design, so
+  the route is unauthenticated and pays for it: a **private** bucket (nothing is
+  ever publicly served), a table with RLS on and **no policies** (service role
+  only, no public read path at all), two fail-closed rate limits (6/hour per
+  address, 150/day overall), server-derived content types from a shared
+  allowlist, SVG refused, and every bound duplicated as a CHECK. Written up as
+  a precedent in `docs/SECURITY.md`; pgTAP in `client_feedback.test.sql`.
+- **`src/lib/server/image-mime.ts`.** The MIME allowlist now has one home
+  instead of two, so the signed-in and anonymous upload paths cannot drift.
+- **Twice daily, the job reads the queue and fixes what it safely can.**
+  12:00 and 19:00 America/Denver. `GET /api/cron/feedback-queue` (CRON_SECRET
+  bearer) returns open rows with ten-minute signed screenshot URLs; `PATCH`
+  closes them out. The run is written down in `docs/CLIENT-FEEDBACK-LOOP.md`.
+- **What it may merge unattended is decided mechanically.**
+  `src/lib/copy-only.ts` compares the two versions' parse trees and allows a
+  merge only when nothing but words moved — and refuses even then if a changed
+  string looks like a destination (URL, path, bare domain, `javascript:`,
+  markup) or a machine key (`swb-scope-v4`, `data-id`, `needs_you`). Protected
+  paths (`src/proxy.ts`, `src/lib/csp.ts`, `src/app/api/**`, `supabase/**`, CI,
+  and the guard itself) are refused outright. Everything else becomes a draft
+  PR. 47 cases in `copy-only.test.ts`, including the storage-key rename that
+  actually shipped here on the 16th.
+- **Feedback is data, not instruction.** Submissions are anonymous text from
+  anyone holding the link. The warning travels in the queue payload itself, not
+  only in the runbook.
+
+---
+
 ## ✅ Shipped 2026-09-12 — client feedback round 4
 
 Six pieces of feedback from Gina's walkthrough, each with a verification line

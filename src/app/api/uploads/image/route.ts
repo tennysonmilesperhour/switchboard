@@ -3,27 +3,13 @@ import { createAdminClient, hasAdminCredentials } from '@/lib/supabase/admin';
 import { createClient } from '@/lib/supabase/server';
 import { checkRateLimit } from '@/lib/server/rate-limit';
 import { reportOperationalError } from '@/lib/server/observability';
+import { IMAGE_MIME, imageExtensionFor } from '@/lib/server/image-mime';
 
 const MAX_UPLOAD_BYTES = 5 * 1024 * 1024;
 // `media-private` is the access-gated bucket (capsule photos); the rest are
 // public (avatars, covers, event covers). Private uploads return a path, not a
 // public URL — the render site signs it.
 const ALLOWED_BUCKETS = new Set(['media', 'avatars', 'covers', 'media-private']);
-// Extension -> the Content-Type we will persist. We serve uploads from a PUBLIC
-// bucket, so the stored Content-Type must come from this server-controlled map
-// and NEVER from the attacker-supplied `file.type`: a file labeled
-// `image/svg+xml` would otherwise be served as an executable SVG (stored XSS on
-// the storage origin). SVG is intentionally absent — it is rejected outright.
-const IMAGE_MIME: Record<string, string> = {
-  avif: 'image/avif',
-  gif: 'image/gif',
-  heic: 'image/heic',
-  jpeg: 'image/jpeg',
-  jpg: 'image/jpeg',
-  png: 'image/png',
-  webp: 'image/webp',
-};
-const IMAGE_EXTENSIONS = new Set(Object.keys(IMAGE_MIME));
 
 function jsonError(message: string, status = 400) {
   return NextResponse.json({ error: message }, { status });
@@ -38,16 +24,6 @@ function cleanPathPart(value: string, fallback: string) {
     .replace(/^-|-$/g, '')
     .slice(0, 48);
   return cleaned || fallback;
-}
-
-function extensionFor(file: File) {
-  const fromName = file.name.split('.').pop()?.toLowerCase() ?? '';
-  const cleaned = fromName.replace(/[^a-z0-9]/g, '');
-  if (IMAGE_EXTENSIONS.has(cleaned)) return cleaned;
-
-  const fromType = file.type.split('/')[1]?.toLowerCase() ?? '';
-  if (IMAGE_EXTENSIONS.has(fromType)) return fromType;
-  return 'jpg';
 }
 
 export async function POST(request: Request) {
@@ -82,7 +58,7 @@ export async function POST(request: Request) {
   if (file.size > MAX_UPLOAD_BYTES) return jsonError('Image must be under 5MB.');
 
   const admin = createAdminClient();
-  const ext = extensionFor(file);
+  const ext = imageExtensionFor(file);
   // Content-Type comes from our extension map, never from the client's file.type.
   const contentType = IMAGE_MIME[ext] ?? 'image/jpeg';
   const isPrivate = bucket === 'media-private';

@@ -12,6 +12,7 @@ files are historical evidence, never a source of current product truth.
 | [`README.md`](README.md) | This complete index of the `docs/` tree. |
 | [`SECURITY.md`](SECURITY.md) | Security precedents. Read before touching auth, RLS, `createAdminClient()`, uploads, redirects, or untrusted text. |
 | [`AUTH.md`](AUTH.md) | Account-access invariants for sign-in, sign-up, recovery, and onboarding. |
+| [`CLIENT-FEEDBACK-LOOP.md`](CLIENT-FEEDBACK-LOOP.md) | The checklist's feedback box and the twice-daily job that works it: what may merge unattended, and what always waits for a person. |
 | [`DEPLOYMENT.md`](DEPLOYMENT.md) | How the app and database ship; env vars, cron, and moderators. |
 | [`DESIGN-SYSTEM.md`](DESIGN-SYSTEM.md) | The shipped visual system: tokens, type, and component conventions. |
 | [`NAMING.md`](NAMING.md) | Canonical user-facing names and the decisions behind them. |

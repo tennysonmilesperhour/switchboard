@@ -470,6 +470,11 @@ const REGISTRY = {
     fix: 'Check the file is an image or audio clip under the size limit, then try again.',
     actor: 'reader',
   },
+  'SB-FEEDBACK-SAVE': {
+    message: 'That feedback didn’t send.',
+    fix: 'Try again in a moment. If it keeps failing, text the screenshot over instead.',
+    actor: 'reader',
+  },
   'SB-LOCATION-DENIED': {
     message: 'Switchboard couldn’t read a location from your device.',
     fix: 'Allow location access in your browser settings, or type the address instead.',
@@ -952,6 +957,10 @@ const AREA_CODES: Record<string, ErrorCode> = {
   // Uploads
   'audio-upload': 'SB-UPLOAD-FAILED',
   'image-upload': 'SB-UPLOAD-FAILED',
+
+  // The scope checklist's feedback box. The writer has no account, so the only
+  // thing they can be told is whether it landed.
+  'client-feedback': 'SB-FEEDBACK-SAVE',
 };
 
 /** Areas with a registered code — the set the completeness test checks against. */

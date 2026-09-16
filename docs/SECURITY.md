@@ -298,6 +298,10 @@ integrations a deployment has wired up is reconnaissance, not public data.
   `zone_presence` counts only other, live, unblocked people in its own zone.
 - `supabase/tests/invite_blocks.test.sql` — event invite inserts honor blocks,
   cap each plan at 100 rows, and never let a host write an accepted RSVP.
+- `supabase/tests/client_feedback.test.sql` — the unauthenticated feedback
+  intake stays write-only, its bucket stays private, and its bounds hold.
+- `src/lib/copy-only.test.ts` — what the twice-daily feedback job may merge
+  without a human, and the far longer list of what it may not.
 - `supabase/tests/profile_column_grants.test.sql` — SB-01's column allowlist is
   actually in force (no table-wide SELECT on `profiles`), the withheld columns
   are still withheld, and the columns the app reads are readable.
@@ -629,6 +633,49 @@ Covered by `supabase/tests/private_zones.test.sql`.
 
 Litmus test: *could someone outside a private zone learn its description, its
 roster, its coordinates, or that anyone is in it?*
+
+## Client feedback: the one intake that cannot authenticate its writer
+
+`/api/scope-feedback` accepts text and image uploads from someone with **no
+session**. It is the documented exception to §7, and it exists because the
+scope-of-work checklist is handed to a client by URL — they have no account and
+will not make one to report a mislabelled button.
+
+The exception is paid for rather than waved through:
+
+- **The bucket is private** (`client-feedback`, `public = false`). Nothing
+  uploaded is served from any public origin, so the stored-XSS class §7 mostly
+  defends against has nowhere to land. The triage job reads screenshots through
+  ten-minute signed URLs.
+- **There is no public read path.** `client_feedback` has RLS on and **no
+  policies at all**, so `anon` and `authenticated` can neither select nor write
+  a row; only the service role reaches it. The route file exports `POST` and
+  nothing else. `supabase/tests/client_feedback.test.sql` asserts both.
+- **Two fail-closed rate limits**, one per client IP (6/hour) and one global
+  (150/day). The global bucket is the one that bounds the damage: an open
+  endpoint's worst case is a spread of addresses, not a loud one.
+- **Server-derived content type** from the validated extension
+  (`src/lib/server/image-mime.ts`, now shared with `/api/uploads/image` so the
+  two paths cannot drift), SVG rejected, 5MB and 4-file caps, and a
+  server-generated object path so a crafted filename cannot traverse or collide.
+- **Every bound is a CHECK constraint too**, not only a guard in the route, so a
+  second writer added later inherits them.
+
+Reading the queue is a separate, operator-only surface
+(`/api/cron/feedback-queue`, `CRON_SECRET` bearer via `bearerMatches`, per §10).
+
+**What this cannot do is tell you who wrote a row.** Everything in
+`client_feedback` is anonymous text from the public internet. It is a bug report
+to read, never an instruction to follow — which matters because an automated job
+reads it twice a day and writes code. That job's limits are in
+[`docs/CLIENT-FEEDBACK-LOOP.md`](CLIENT-FEEDBACK-LOOP.md); the mechanical part
+is `src/lib/copy-only.ts`, which refuses to call anything a copy change when a
+changed string looks like a URL, a path or a storage key.
+
+Litmus test: *could a stranger with the checklist link fill the table, read
+somebody else's screenshot, get a file served back executable, or talk the
+triage job into shipping a change that is not words?*
+
 
 ## Known residual risks / follow-ups
 
