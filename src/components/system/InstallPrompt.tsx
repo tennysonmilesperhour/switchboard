@@ -23,6 +23,15 @@ export function InstallPrompt() {
   const ownsSlot = useBottomOverlaySlot('install', Boolean(deferred), 20);
 
   useEffect(() => {
+    // Android browsers can mint a WebAPK that Play Protect rejects. Keep the
+    // web app available without offering that install, regardless of browser
+    // or a previously saved dismissal. Browser-menu installs are outside our
+    // control; this cancels the automatic prompt only.
+    if (/Android/i.test(navigator.userAgent)) {
+      const suppressInstall = (event: Event) => event.preventDefault();
+      window.addEventListener('beforeinstallprompt', suppressInstall);
+      return () => window.removeEventListener('beforeinstallprompt', suppressInstall);
+    }
     if (localStorage.getItem(DISMISSED_KEY)) return;
     // Already running as an installed app — nothing to prompt.
     if (window.matchMedia('(display-mode: standalone)').matches) return;
