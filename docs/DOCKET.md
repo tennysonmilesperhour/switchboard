@@ -13,6 +13,48 @@ from working sessions. Newest thinking lives here so nothing evaporates.
 
 ---
 
+## ✅ Shipped 2026-09-21 — the rest of the checklist
+
+The other twenty-four items: the wizard, cascading invites, polls, share links
+and previews, announcements, moments, mutual signals, circles, safety, sign-in
+and recovery, onboarding, settings, deletion, notifications, realtime, error
+codes, install, and the five remaining September feedback items. Most held up.
+Three did not, and all three are the same shape as the four from the earlier
+pass: a rule kept on one surface and dropped on a second that reaches the same
+person.
+
+- **A plan could be edited back to a bare title.** `createEvent` refuses a plan
+  with neither a place nor a detail — a recipient cannot answer a name — and
+  `updateEventDetails` never applied the same floor. By the time anyone edits,
+  the invitations are already out, so this left every link the host had sent
+  showing a title and nothing else. The server now refuses it and the edit form
+  says so on the field.
+- **The two links people actually paste unfurled with no description.** Next
+  merges metadata *shallowly*: a route that exports `openGraph` replaces the
+  root layout's object outright rather than extending it (the shipped docs use
+  exactly this case as their example — "Note the absence of
+  `openGraph.description`"). `/i/<token>` and `/rsvp/<token>` each listed a
+  title and an image, so the two links built for iMessage, WhatsApp and Slack
+  were the two whose cards lost the description, `og:type` and the site name
+  that every other page keeps. Both now build the card through
+  `inviteOpenGraph`, with the plan's own summary where the link is already
+  allowed to reveal it, and a test that fails if either route hand-rolls
+  `openGraph` again.
+- **A new idea on a poll reached nobody watching the list.**
+  `bump_poll_tally` fired only for votes, and `poll_options` is not published
+  for realtime, so the one live channel a poll has never carried a suggestion,
+  an edit, or a removal. What stood in for it was the notification path, by
+  accident, and it covered the wrong people at the wrong time: the host,
+  co-hosts and prior voters — never the person mid-brainstorm who has not
+  ranked anything yet — and a burst folds into the standing notification with
+  an UPDATE, which `LiveNotifications` does not listen for, so in the
+  five-ideas-in-two-minutes case only the first idea refreshed anyone at all.
+  The trigger now covers `poll_options` too. Reusing the counter rather than
+  publishing the table keeps the exposure where it was: a bare integer on a row
+  every viewer of the poll can already read.
+
+---
+
 ## ✅ Shipped 2026-09-21 — a pass over ten checklist sections
 
 A walk through RSVP, Registry, Living rooms, Run it back, AI-powered discovery,

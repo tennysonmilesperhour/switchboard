@@ -17,6 +17,7 @@ import {
   hasWallpaper,
   parseCustomAppearance,
 } from '@/lib/theme-custom';
+import { APP_UNFURL_DESCRIPTION } from '@/lib/invite-links';
 import { reportOperationalError } from '@/lib/server/observability';
 import { BottomOverlayProvider } from '@/components/system/BottomOverlaySlot';
 
@@ -37,21 +38,20 @@ export const metadata: Metadata = {
     default: 'Switchboard - plans without pressure',
     template: '%s · Switchboard',
   },
-  description:
-    'Cascading invites, anonymous group decisions, and mutual-interest matching. Switchboard removes the social friction from making plans.',
+  description: APP_UNFURL_DESCRIPTION,
   // Emit `og:type` (and siteName/title/description) as a default on every page.
   // Auth and app pages that don't set their own Open Graph metadata previously
   // shipped with no `og:*` tags at all, so in-app browsers (Facebook, Instagram,
   // etc.) that read `meta[property="og:type"]` on open hit `null` and threw
   // "null is not an object (evaluating '...og:type...').content" — which showed
-  // up in error tracking as a TypeError on /login. Pages with their own
-  // openGraph (event/invite unfurls) still override this.
+  // up in error tracking as a TypeError on /login. A page that sets its own
+  // openGraph replaces this whole object rather than extending it, so the
+  // invite unfurls restate these fields through `inviteOpenGraph`.
   openGraph: {
     type: 'website',
     siteName: 'Switchboard',
     title: 'Switchboard - plans without pressure',
-    description:
-      'Cascading invites, anonymous group decisions, and mutual-interest matching. Switchboard removes the social friction from making plans.',
+    description: APP_UNFURL_DESCRIPTION,
   },
   applicationName: 'Switchboard',
   manifest: '/manifest.webmanifest',

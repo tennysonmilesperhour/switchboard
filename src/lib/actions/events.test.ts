@@ -51,6 +51,7 @@ import {
   addPeopleToEvent,
   cancelEvent,
   deleteEventPermanently,
+  updateEventDetails,
 } from './events';
 
 beforeEach(() => {
@@ -97,6 +98,55 @@ describe('event management actions', () => {
     expect(result).toMatchObject({ ok: false, code: 'SB-PLAN-AUTHZ' });
     expect(result.error).not.toBe('Only the host can add people.');
     expect(mocks.createAdminClient).not.toHaveBeenCalled();
+  });
+
+  /**
+   * `createEvent` refuses a plan with neither a place nor a detail, because a
+   * recipient cannot answer a bare title. The edit that can undo it has to
+   * refuse the same thing: by the time anyone edits, the invitations are out,
+   * so a plan saved back to a title alone leaves every link the host has
+   * already sent showing a name and nothing else.
+   */
+  it('refuses an edit that strips a published plan back to a bare title', async () => {
+    const result = await updateEventDetails('event-1', {
+      title: 'Dinner',
+      description: '   ',
+      locationName: null,
+      locationAddress: null,
+      startsAt: null,
+      endsAt: null,
+      timeZone: null,
+      capacity: null,
+      wishlistUrl: null,
+    });
+
+    expect(result.ok).toBe(false);
+    expect(result.error).toContain('Add a location or a short detail');
+    // Refused before the service-role client is touched, like every other
+    // guard in this file.
+    expect(mocks.createAdminClient).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['a place and no words', 'Mei Wei', null],
+    ['words and no place', null, 'Dumplings, then a walk.'],
+  ])('lets an edit through with %s', async (_label, locationName, description) => {
+    // Either one is enough, so the guard must not stand in the way. The write
+    // itself is out of scope here: this suite gives `createAdminClient` a
+    // throwing stub, so reaching it is what "got past the guard" looks like.
+    await expect(
+      updateEventDetails('event-1', {
+        title: 'Dinner',
+        description,
+        locationName,
+        locationAddress: null,
+        startsAt: null,
+        endsAt: null,
+        timeZone: null,
+        capacity: null,
+        wishlistUrl: null,
+      }),
+    ).rejects.toThrow('Admin client should not be reached');
   });
 
   it('refuses cancellation before any privileged read for a non-manager', async () => {
