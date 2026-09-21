@@ -107,18 +107,56 @@ describe('the checklist itself', () => {
   });
 
   it('keeps storing progress under the key readers already have', () => {
-    // The ticks live in the reader's own browser under this key and nowhere
-    // else, so renaming it wipes the progress of whoever was part-way through
-    // the list. Item ids are stable and additive: a new section never needs a
-    // new key. Any key retired in the past must stay listed as legacy so its
-    // ticks are folded back in instead of stranded.
+    // The ticks are mirrored in the reader's own browser under this key, and
+    // renaming it is how the list once came up empty for the one person who was
+    // part-way through. Item ids are stable and additive: a new section never
+    // needs a new key. Any key retired in the past must stay listed as legacy so
+    // its ticks are folded back in instead of stranded.
     const script = inlineScript();
     expect(script).toContain('var KEY = "swb-scope-v4"');
+
+    // Keys with their own job, which are not retired progress keys. Each one is
+    // listed deliberately so that an *unexplained* new key still fails here.
+    const purposeful = new Set([
+      // Which local ticks have been pushed up to the shared board already.
+      'swb-scope-pushed-v1',
+      // Whatever name the reader typed, so the board can attribute a tick.
+      'swb-scope-name',
+    ]);
+
     const mentioned = [...script.matchAll(/"(swb-scope-[\w.-]+)"/g)].map((m) => m[1]);
     const legacy = /var LEGACY_KEYS = \[([^\]]*)\]/.exec(script)?.[1] ?? '';
     for (const key of new Set(mentioned)) {
-      if (key === 'swb-scope-v4') continue;
-      expect(legacy, `${key} is referenced but not recovered as a legacy key`).toContain(key);
+      if (key === 'swb-scope-v4' || purposeful.has(key)) continue;
+      expect(
+        legacy,
+        `${key} is referenced but neither recovered as a legacy key nor listed as purposeful`,
+      ).toContain(key);
     }
+  });
+
+  it('reads and writes the shared board, not just this browser', () => {
+    // The complaint that prompted this: progress lived in localStorage and so
+    // never reached the person who sent the link. A page that only stores
+    // locally would look identical to a working one from the server's side, so
+    // assert the calls are actually there.
+    const script = inlineScript();
+    expect(script).toContain('/api/scope-progress');
+    expect(script, 'ticks must be pushed, not just stored').toContain('function postTick');
+    expect(script, 'the board must be read on load').toContain('function loadBoard');
+    expect(script, 'notes must be rendered for anyone with the link').toContain(
+      'function renderNotes',
+    );
+    // Whatever was already ticked in this browser has to reach the server once,
+    // or the client silently loses the walk she already did.
+    expect(script).toContain('function pushLocalBacklog');
+  });
+
+  it('does not promise privacy it no longer provides', () => {
+    // The feedback box used to say screenshots were private. The board now
+    // publishes them to anyone holding the link, so that sentence would be a
+    // false assurance to the person typing into it.
+    expect(HTML).not.toContain('Screenshots are private');
+    expect(HTML).toContain('Anyone with this link can see what you post here');
   });
 });

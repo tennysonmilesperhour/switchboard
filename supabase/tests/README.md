@@ -58,6 +58,13 @@ sees only the signal naming them, a group member sees only the group signal
 (connected or not), a block hides it, a stranger sees nothing, a group the
 owner is not in reaches nobody, and the audience arrays are bounded.
 
+`scope_progress.test.sql` covers the shared checklist board. The board is served
+publicly on purpose, so what this file proves is the layer underneath: `anon`
+still cannot read or write the table directly, so the route's rate limiter cannot
+be side-stepped, and `item_id` must look like a real checklist id — the
+constraint that keeps an open write endpoint from growing the table without
+bound.
+
 `client_feedback.test.sql` covers the app's only unauthenticated write surface.
 The assertions are almost all negative, because that is what matters here: RLS
 is on with *no policies at all*, so neither `anon` nor a signed-in member can

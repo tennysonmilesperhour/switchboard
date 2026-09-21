@@ -365,6 +365,78 @@
   .fb-note { font-size: 12px; line-height: 1.45; margin-top: 10px; min-height: 1em; }
   .fb-note.err { color: var(--amber); }
   .fb-note.ok { color: var(--green); }
+
+  /* ——— Shared board: who ticked what, and the notes everyone can read ——— */
+  .who-row {
+    display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+    margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--line);
+  }
+  .who-row label { font-size: 12px; font-weight: 600; color: var(--ink-soft); }
+  .who-row input {
+    font: inherit; font-size: 13px; color: var(--ink); background: var(--bg);
+    border: 1px solid var(--line-strong); border-radius: 8px; padding: 5px 9px;
+    min-width: 0; flex: 0 1 220px;
+  }
+  .who-row input:focus { outline: 2px solid var(--teal-mid); outline-offset: 1px; }
+  .who-hint { font-size: 11px; color: var(--ink-faint); }
+
+  .board-note {
+    font-size: 12px; color: var(--amber); background: var(--amber-soft);
+    border: 1px solid var(--amber); border-radius: 9px;
+    padding: 8px 12px; margin: 0 0 14px;
+  }
+
+  .item-mark {
+    margin-top: 6px; font-family: var(--mono); font-size: 11px;
+    color: var(--green); background: var(--green-soft);
+    border-radius: 6px; padding: 3px 7px; display: inline-block;
+  }
+
+  .notes-card {
+    background: var(--surface); border: 1px solid var(--line);
+    border-radius: var(--radius); box-shadow: var(--shadow);
+    padding: 18px; margin: 22px 0 0;
+  }
+  .notes-head h3 { margin: 0 0 6px; font-size: 15px; display: flex; align-items: center; gap: 8px; }
+  .notes-pill {
+    font-family: var(--mono); font-size: 11px; font-weight: 600;
+    color: var(--teal); background: var(--teal-soft);
+    border-radius: 999px; padding: 2px 9px;
+  }
+  .notes-head p { margin: 0 0 14px; font-size: 13px; color: var(--ink-soft); line-height: 1.5; }
+  .notes-empty { font-size: 13px; color: var(--ink-faint); padding: 6px 0; }
+
+  .note {
+    border-top: 1px solid var(--line); padding: 14px 0 4px;
+  }
+  .note-top {
+    display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap;
+    font-size: 13px; margin-bottom: 6px;
+  }
+  .note-about {
+    font-family: var(--mono); font-size: 11px; color: var(--teal);
+    background: var(--teal-soft); border-radius: 6px; padding: 2px 7px;
+  }
+  .note-when { font-size: 11px; color: var(--ink-faint); }
+  .note-status {
+    font-family: var(--mono); font-size: 10px; text-transform: uppercase;
+    letter-spacing: .04em; border-radius: 6px; padding: 2px 7px;
+    background: var(--slate-soft); color: var(--slate);
+  }
+  .note-status.s-shipped { background: var(--green-soft); color: var(--green); }
+  .note-status.s-needs_you { background: var(--amber-soft); color: var(--amber); }
+  .note-body { font-size: 14px; line-height: 1.55; white-space: pre-wrap; }
+  .note-shots { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+  .note-shot {
+    display: block; border: 1px solid var(--line-strong); border-radius: 9px;
+    overflow: hidden; line-height: 0;
+  }
+  .note-shot img { width: 92px; height: 92px; object-fit: cover; }
+  .note-done {
+    margin-top: 10px; font-size: 13px; line-height: 1.5;
+    color: var(--green); background: var(--green-soft);
+    border-radius: 9px; padding: 8px 11px;
+  }
 </style>
 </head>
 <body>
@@ -400,6 +472,11 @@
         <span class="spacer"></span>
         <button class="toolbtn" id="resetBtn">Reset all</button>
       </div>
+      <div class="who-row">
+        <label for="whoField">Your name</label>
+        <input type="text" id="whoField" maxlength="80" placeholder="So ticks and notes say who">
+        <span class="who-hint">Optional. Kept on this device; shown beside what you check off.</span>
+      </div>
     </div>
   </header>
 
@@ -408,7 +485,17 @@
     <div class="sticky-count" id="stickyCount"><span>0</span><span class="muted"> / 0</span></div>
   </div>
 
+  <div class="board-note" id="boardNote" role="status" aria-live="polite" hidden></div>
+
   <div id="groups"></div>
+
+  <section class="notes-card">
+    <div class="notes-head">
+      <h3>Notes on this build <span class="notes-pill" id="notesCount">0</span></h3>
+      <p>Everything anyone has reported through this page, newest first. Visible to anyone with this link.</p>
+    </div>
+    <div id="notesList"><div class="notes-empty">Loading&hellip;</div></div>
+  </section>
 
   <section class="fb-card">
     <h3>Something wrong, confusing, or missing?</h3>
@@ -431,13 +518,13 @@
       <textarea id="fbBody" maxlength="4000" placeholder="I tapped Share on a plan and nothing came up."></textarea>
     </div>
     <div class="fb-field">
-      <label for="fbName">Your name <span style="font-weight:400">(optional)</span></label>
+      <label for="fbName">Name on this note <span style="font-weight:400">(optional)</span></label>
       <input type="text" id="fbName" maxlength="80" placeholder="So we know who to write back to">
     </div>
     <div class="fb-field fb-shots">
       <label for="fbFiles">Screenshots <span style="font-weight:400">(optional, up to 4)</span></label>
       <input type="file" id="fbFiles" accept="image/png,image/jpeg,image/gif,image/webp,image/heic,image/avif" multiple>
-      <div class="fb-hint">Images only, under 5MB each. Screenshots are private &mdash; only the build team sees them.</div>
+      <div class="fb-hint">Images only, under 5MB each. <strong>Anyone with this link can see what you post here</strong> &mdash; your note, your name and your screenshots all appear on this page.</div>
     </div>
     <div class="fb-actions">
       <button class="fb-send" id="fbSend" type="button">Send</button>
@@ -529,8 +616,24 @@
   // nobody their progress, while a bump silently empties the page for the one
   // person who was part-way through walking it. "swb-scope-v5" was such a
   // bump; anything left under it is folded back in below rather than stranded.
+  /*
+    Progress is SHARED now, not per-browser.
+
+    It used to live only in localStorage, which meant a tick never left the
+    device that made it: the client could walk the entire list and the person
+    who sent her the link had no way to see any of it — not hidden, just never
+    sent anywhere. So the board is server-side, at /api/scope-progress, readable
+    and writable by anyone holding this URL with no account.
+
+    localStorage stays, in a smaller role: it is the offline copy. It renders
+    the list instantly before the fetch lands, it holds a tick made on a bad
+    connection until it can be pushed, and it is what gets folded up to the
+    server the first time this page loads after the change — so nobody who was
+    part-way through the list loses their work.
+  */
   var KEY = "swb-scope-v4";
   var LEGACY_KEYS = ["swb-scope-v5"];
+  var PUSHED_KEY = "swb-scope-pushed-v1";
 
   function read(key) {
     try { return JSON.parse(localStorage.getItem(key)) || {}; } catch { return {}; }
@@ -549,6 +652,94 @@
     try { localStorage.removeItem(key); } catch {}
   });
   if (migrated) save();
+
+  // Who is ticking. Remembered locally only, so the board can say "checked by
+  // Gina" without anybody signing in. Optional throughout.
+  var NAME_KEY = "swb-scope-name";
+  function myName() {
+    try { return localStorage.getItem(NAME_KEY) || ""; } catch { return ""; }
+  }
+  function setMyName(value) {
+    try { localStorage.setItem(NAME_KEY, value); } catch {}
+  }
+
+  // Server-side detail per item: when it was ticked and by whom.
+  var marks = {};
+  var boardLive = false;
+
+  function postTick(id, checked) {
+    return fetch("/api/scope-progress", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        itemId: id,
+        checked: checked,
+        name: myName(),
+        total: TOTAL
+      })
+    });
+  }
+
+  /*
+    First load after the change: anything ticked in this browser that the server
+    has not got yet is pushed up once, then recorded as pushed so a later untick
+    is not undone by a repeat. Done one at a time rather than in parallel — a
+    burst of thirty-five writes from one address is exactly what the endpoint's
+    rate limit is there to stop.
+  */
+  function pushLocalBacklog(serverChecked) {
+    var alreadyPushed = read(PUSHED_KEY);
+    var pending = Object.keys(state).filter(function (id) {
+      return state[id] && !serverChecked[id] && !alreadyPushed[id];
+    });
+    if (!pending.length) return Promise.resolve();
+
+    return pending.reduce(function (chain, id) {
+      return chain.then(function () {
+        return postTick(id, true).then(function () {
+          alreadyPushed[id] = true;
+          try { localStorage.setItem(PUSHED_KEY, JSON.stringify(alreadyPushed)); } catch {}
+        }).catch(function () {});
+      });
+    }, Promise.resolve());
+  }
+
+  function loadBoard() {
+    return fetch("/api/scope-progress", { headers: { Accept: "application/json" } })
+      .then(function (res) { return res.ok ? res.json() : null; })
+      .then(function (data) {
+        if (!data || !data.ok) return;
+        boardLive = true;
+        marks = data.checked || {};
+        // The server is the truth for what is ticked. The local copy becomes a
+        // mirror of it rather than a competing opinion.
+        state = {};
+        Object.keys(marks).forEach(function (id) { state[id] = true; });
+        save();
+        renderGroups();
+        updateCounts();
+        renderNotes(data.notes || []);
+        return pushLocalBacklog(marks).then(function () {
+          // A backlog push changes the totals, so read the board back once.
+          return fetch("/api/scope-progress").then(function (r) {
+            return r.ok ? r.json() : null;
+          }).then(function (fresh) {
+            if (!fresh || !fresh.ok) return;
+            marks = fresh.checked || {};
+            state = {};
+            Object.keys(marks).forEach(function (id) { state[id] = true; });
+            save();
+            renderGroups();
+            updateCounts();
+            renderNotes(fresh.notes || []);
+          }).catch(function () {});
+        });
+      })
+      .catch(function () {
+        // Offline or the board is not configured. The local copy already
+        // rendered, so the page still works; it just is not shared.
+      });
+  }
 
   var root = document.getElementById("groups");
 
@@ -590,6 +781,7 @@
             '</div>' +
             '<div class="item-what">' + esc(it.what) + '</div>' +
             '<div class="item-verify"><span class="vl">Try it</span><span>' + esc(it.verify) + '</span></div>' +
+            markLine(it.id) +
             '<button class="item-report" type="button" data-id="' + it.id + '" data-label="' + esc(it.name) + '">Report a problem</button>' +
           '</div>';
         body.appendChild(el);
@@ -602,24 +794,120 @@
       root.appendChild(card);
     });
 
-    root.addEventListener("change", function(e) {
-      if (e.target.classList.contains("chk")) {
-        var id = e.target.getAttribute("data-id");
-        if (e.target.checked) { state[id] = true; } else { delete state[id]; }
-        save();
-        updateCounts();
-        var item = e.target.closest(".item");
-        if (item) item.classList.toggle("done", e.target.checked);
-        var group = e.target.closest(".group");
-        if (group) updateGroupCount(group);
-      }
-    });
   }
+
+  /*
+    Bound ONCE, outside renderGroups. It used to be registered inside it, which
+    was harmless while the list rendered a single time — but the board now
+    re-renders when the server's state arrives, and a stacked listener would
+    send one write per past render for every tick.
+  */
+  root.addEventListener("change", function (e) {
+    if (!e.target.classList.contains("chk")) return;
+    var id = e.target.getAttribute("data-id");
+    var checked = e.target.checked;
+
+    // Optimistic: the tick is already drawn, so record it locally and correct
+    // course only if the write fails.
+    if (checked) { state[id] = true; } else { delete state[id]; }
+    save();
+    updateCounts();
+    var item = e.target.closest(".item");
+    if (item) item.classList.toggle("done", checked);
+    var group = e.target.closest(".group");
+    if (group) updateGroupCount(group);
+
+    postTick(id, checked)
+      .then(function (res) {
+        if (!res.ok) throw new Error(String(res.status));
+        boardLive = true;
+        setBoardNote("");
+      })
+      .catch(function () {
+        // Kept locally, not shared. Say so rather than letting someone believe
+        // the other side can see it.
+        setBoardNote(
+          "That tick is saved on this device but hasn\u2019t reached the shared board \u2014 check your connection."
+        );
+      });
+  });
 
   function esc(s) {
     var d = document.createElement("div");
     d.textContent = s;
     return d.innerHTML;
+  }
+
+  /** "3 hours ago" beats a timestamp nobody converts in their head. */
+  function when(iso) {
+    var then = new Date(iso).getTime();
+    if (!then) return "";
+    var mins = Math.round((Date.now() - then) / 60000);
+    if (mins < 1) return "just now";
+    if (mins < 60) return mins + (mins === 1 ? " minute ago" : " minutes ago");
+    var hrs = Math.round(mins / 60);
+    if (hrs < 24) return hrs + (hrs === 1 ? " hour ago" : " hours ago");
+    var days = Math.round(hrs / 24);
+    if (days < 30) return days + (days === 1 ? " day ago" : " days ago");
+    return new Date(iso).toLocaleDateString();
+  }
+
+  /** Who ticked this, if the shared board knows. */
+  function markLine(id) {
+    var mark = marks[id];
+    if (!mark) return "";
+    var who = mark.by ? esc(mark.by) : "Someone";
+    return '<div class="item-mark">Checked by ' + who + " \u00b7 " + esc(when(mark.at)) + "</div>";
+  }
+
+  function setBoardNote(text) {
+    var el = document.getElementById("boardNote");
+    if (!el) return;
+    el.textContent = text || "";
+    el.hidden = !text;
+  }
+
+  /** The notes anyone has left, newest first, with their screenshots. */
+  function renderNotes(notes) {
+    var wrap = document.getElementById("notesList");
+    var count = document.getElementById("notesCount");
+    if (!wrap) return;
+    if (count) count.textContent = notes.length ? String(notes.length) : "0";
+
+    if (!notes.length) {
+      wrap.innerHTML =
+        '<div class="notes-empty">No notes yet. Anything reported below shows up here, for everyone with this link.</div>';
+      return;
+    }
+
+    wrap.innerHTML = notes.map(function (note) {
+      var head = note.reporter ? esc(note.reporter) : "Anonymous";
+      var about = note.itemId
+        ? '<span class="note-about">' + esc(note.itemId) +
+          (note.itemLabel ? " \u00b7 " + esc(note.itemLabel) : "") + "</span>"
+        : '<span class="note-about">The checklist in general</span>';
+      var shots = (note.screenshots || []).map(function (url) {
+        // The URL is a signed link this server minted; the alt text is generic
+        // because nobody has described the image.
+        return '<a class="note-shot" href="' + esc(url) + '" target="_blank" rel="noopener noreferrer">' +
+          '<img src="' + esc(url) + '" alt="Screenshot attached to this note" loading="lazy">' +
+          "</a>";
+      }).join("");
+      var status = note.status && note.status !== "new"
+        ? '<span class="note-status s-' + esc(note.status) + '">' + esc(note.status.replace(/_/g, " ")) + "</span>"
+        : "";
+      var done = note.resolution
+        ? '<div class="note-done">' + esc(note.resolution) + "</div>"
+        : "";
+
+      return '<article class="note">' +
+        '<div class="note-top"><strong>' + head + "</strong>" + about +
+          '<span class="note-when">' + esc(when(note.at)) + "</span>" + status + "</div>" +
+        '<div class="note-body">' + esc(note.body) + "</div>" +
+        (shots ? '<div class="note-shots">' + shots + "</div>" : "") +
+        done +
+        "</article>";
+    }).join("");
   }
 
   function updateCounts() {
@@ -651,6 +939,15 @@
 
   renderGroups();
   updateCounts();
+  loadBoard();
+
+  var nameField = document.getElementById("whoField");
+  if (nameField) {
+    nameField.value = myName();
+    nameField.addEventListener("change", function () {
+      setMyName(nameField.value.trim());
+    });
+  }
 
   document.getElementById("expandAll").addEventListener("click", function() {
     document.querySelectorAll(".group").forEach(function(g) { g.classList.remove("collapsed"); });
@@ -702,6 +999,9 @@
       fbAbout.hidden = true;
     }
     fbSetNote("");
+    // One name, asked once. If they already told the board who they are, don't
+    // make them type it again here.
+    if (!fbName.value) fbName.value = myName();
     fbOverlay.classList.add("open");
     fbBody.focus();
   }
@@ -762,7 +1062,14 @@
 
     var form = new FormData();
     form.append("body", body);
-    if (fbName.value.trim()) form.append("reporter", fbName.value.trim());
+    if (fbName.value.trim()) {
+      form.append("reporter", fbName.value.trim());
+      // Remember it, so later ticks are attributed to the same person and the
+      // board's own field is already filled in.
+      setMyName(fbName.value.trim());
+      var who = document.getElementById("whoField");
+      if (who && !who.value) who.value = fbName.value.trim();
+    }
     if (fbContext.id) {
       form.append("itemId", fbContext.id);
       form.append("itemLabel", fbContext.label);

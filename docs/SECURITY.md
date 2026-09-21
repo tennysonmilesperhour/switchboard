@@ -300,6 +300,9 @@ integrations a deployment has wired up is reconnaissance, not public data.
   cap each plan at 100 rows, and never let a host write an accepted RSVP.
 - `supabase/tests/client_feedback.test.sql` — the unauthenticated feedback
   intake stays write-only, its bucket stays private, and its bounds hold.
+- `supabase/tests/scope_progress.test.sql` — the shared checklist board is
+  unreachable from `anon` at the database level, and only real item ids are
+  accepted, which is what bounds an open write surface.
 - `src/lib/copy-only.test.ts` — what the twice-daily feedback job may merge
   without a human, and the far longer list of what it may not.
 - `supabase/tests/profile_column_grants.test.sql` — SB-01's column allowlist is
@@ -661,8 +664,34 @@ The exception is paid for rather than waved through:
 - **Every bound is a CHECK constraint too**, not only a guard in the route, so a
   second writer added later inherits them.
 
-Reading the queue is a separate, operator-only surface
+Reading the queue for triage is a separate, operator-only surface
 (`/api/cron/feedback-queue`, `CRON_SECRET` bearer via `bearerMatches`, per §10).
+
+**The board itself, however, is public — deliberately.** `/api/scope-progress`
+serves the shared tick state *and the notes* (body, reporter name, and
+screenshots as per-request signed URLs) to anyone who requests it, with no
+session. The owner's requirement was that the checklist not be account-gated:
+they send a client a link, and both of them see the same board. A
+token-in-the-URL variant and a "notes public, screenshots private" variant were
+both put to them explicitly; the fully open version was chosen.
+
+So the honest statement of exposure: **`/scope-verification` is a guessable path
+on the production domain, and everything on that board is readable by anyone,
+including crawlers.** The page says so at the point where people type into it,
+because the alternative is misleading the person whose screenshots those are.
+What the openness does *not* include:
+
+- the bucket is still not public and never listable — objects are reached only
+  through signed URLs this server mints per request;
+- both tables still keep RLS on with no policies, so nothing reaches Postgres
+  except through a route that rate-limits it;
+- the write side is still bounded and fail-closed, and `scope_progress.item_id`
+  must match a real checklist id, which is what stops an open write endpoint
+  from growing the table without limit.
+
+If this ever needs to stop being public, the change is small and local: gate
+`GET /api/scope-progress` on a token and add that token to the link. Nothing
+else in the app reads these tables.
 
 **What this cannot do is tell you who wrote a row.** Everything in
 `client_feedback` is anonymous text from the public internet. It is a bug report

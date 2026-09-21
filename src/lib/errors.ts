@@ -480,6 +480,11 @@ const REGISTRY = {
     fix: 'Check the file is an image or audio clip under the size limit, then try again.',
     actor: 'reader',
   },
+  'SB-SCOPE-BOARD': {
+    message: 'The shared checklist didn’t load.',
+    fix: 'Reload the page. Your ticks are saved as you make them.',
+    actor: 'reader',
+  },
   'SB-FEEDBACK-SAVE': {
     message: 'That feedback didn’t send.',
     fix: 'Try again in a moment. If it keeps failing, text the screenshot over instead.',
@@ -972,6 +977,10 @@ const AREA_CODES: Record<string, ErrorCode> = {
   // The scope checklist's feedback box. The writer has no account, so the only
   // thing they can be told is whether it landed.
   'client-feedback': 'SB-FEEDBACK-SAVE',
+  'scope-progress': 'SB-SCOPE-BOARD',
+  // The notifier is best-effort; a failure there is an operator trace, not
+  // something the reader can act on, so it shares the board's code.
+  'scope-watch': 'SB-SCOPE-BOARD',
 };
 
 /** Areas with a registered code — the set the completeness test checks against. */

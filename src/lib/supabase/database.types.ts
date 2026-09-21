@@ -2704,6 +2704,27 @@ export type Database = {
           },
         ]
       }
+      scope_progress: {
+        Row: {
+          checked: boolean
+          item_id: string
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          checked?: boolean
+          item_id: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          checked?: boolean
+          item_id?: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: []
+      }
       sms_consent_events: {
         Row: {
           enabled: boolean

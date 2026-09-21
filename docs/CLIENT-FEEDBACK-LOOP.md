@@ -5,6 +5,23 @@ day an automated session reads what came in, fixes what it safely can, and
 emails a report. This file is the runbook that session follows. It is also the
 explanation for anyone wondering why a commit on `main` has no human author.
 
+## Two halves
+
+**The board** is the page itself: a shared checklist anyone with the link can
+tick, plus every note anyone has left. It is public for reading and writing, by
+the owner's explicit choice — see `docs/SECURITY.md` for exactly what that
+exposes. Progress used to live in `localStorage`, which meant a tick never left
+the device that made it; that is why nobody could see the client's walk through
+the list, and why nobody was told about it.
+
+**The job** is what this runbook is mostly about: twice a day, read what came in
+and fix what is safe to fix.
+
+Notifications come from the app, not the job, so they do not depend on this
+schedule: a note emails the owner immediately and in full, and progress is
+batched to at most one summary an hour. Set `SCOPE_WATCH_EMAIL` to switch that
+on; unset, it is simply off.
+
 ## The shape of it
 
 ```
@@ -128,6 +145,9 @@ which side of noon the run lands on.
 | Piece | Path |
 | --- | --- |
 | Intake route | `src/app/api/scope-feedback/route.ts` |
+| The shared board (public read + write) | `src/app/api/scope-progress/route.ts` |
+| Telling the owner something changed | `src/lib/server/scope-watch.ts` |
+| Shared tick state | `supabase/migrations/20260921120000_scope_progress.sql` |
 | Queue read / close-out | `src/app/api/cron/feedback-queue/route.ts` |
 | The copy-only decision | `src/lib/copy-only.ts` |
 | Its runner | `scripts/copy-only-check.mjs` |
