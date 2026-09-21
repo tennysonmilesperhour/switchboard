@@ -51,8 +51,6 @@ interface ReorderableListProps<T extends ReorderableItem> {
   onReorder?: (from: number, to: number) => void;
   /** Drop the row entirely. Omit for a list nothing can leave. */
   onRemove?: (item: T, index: number) => void;
-  /** Per-row override: false leaves that row in place and hides its grip. */
-  canReorder?: (item: T, index: number) => boolean;
   /** Per-row override for the remove control. */
   canRemove?: (item: T, index: number) => boolean;
   removeLabel?: (item: T) => string;
@@ -80,7 +78,6 @@ export function ReorderableList<T extends ReorderableItem>({
   children,
   onReorder,
   onRemove,
-  canReorder,
   canRemove,
   removeLabel,
   rowClassName = 'bg-cream',
@@ -88,22 +85,40 @@ export function ReorderableList<T extends ReorderableItem>({
   'aria-label': ariaLabel,
 }: ReorderableListProps<T>) {
   const listRef = useRef<HTMLOListElement>(null);
+  /**
+   * The drag in flight, held in a ref AND in state.
+   *
+   * The ref is the source of truth and the state is only what the rows are
+   * drawn from. Two reasons, and both of them are bugs this had:
+   *
+   * - `pointerup` can arrive before React has flushed the render for the last
+   *   `pointermove`, so a handler reading the state variable out of its
+   *   closure can drop the final few pixels of travel — and with them the last
+   *   slot the row crossed.
+   * - Deciding the drop inside a `setState` updater put a call to `onReorder`
+   *   in a function React is allowed to run twice, which in development moved
+   *   the row two places for one drag.
+   */
+  const dragRef = useRef<DragState | null>(null);
   const [drag, setDrag] = useState<DragState | null>(null);
+
   /** Row heights as they were when the grip went down — see `dropIndexFor`. */
   const heights = useRef<number[]>([]);
   const startY = useRef(0);
-  /** What a screen reader is told after a move; also the visible hint's text. */
+  /** What a screen reader is told after a move. */
   const [announcement, setAnnouncement] = useState('');
   const announceId = useId();
+
+  function updateDrag(next: DragState | null) {
+    dragRef.current = next;
+    setDrag(next);
+  }
 
   // A drag that outlives its list — the row lifted out from under the finger
   // by a removal elsewhere — would otherwise leave every row frozen mid-slide.
   // Ignored during render rather than cleared in an effect, so there is no
   // frame where the stale offsets are still on screen.
   const live = drag && drag.from < items.length ? drag : null;
-
-  const rowReorderable = (item: T, index: number) =>
-    Boolean(onReorder) && (canReorder ? canReorder(item, index) : true);
 
   const measure = useCallback(() => {
     const rows = listRef.current?.querySelectorAll<HTMLLIElement>(':scope > li');
@@ -117,32 +132,44 @@ export function ReorderableList<T extends ReorderableItem>({
     measure();
     startY.current = event.clientY;
     event.currentTarget.setPointerCapture(event.pointerId);
-    setDrag({ from: index, to: index, offset: 0, height: heights.current[index] ?? 0, pointerId: event.pointerId });
+    updateDrag({
+      from: index,
+      to: index,
+      offset: 0,
+      height: heights.current[index] ?? 0,
+      pointerId: event.pointerId,
+    });
   }
 
   function continueDrag(event: React.PointerEvent<HTMLButtonElement>) {
-    setDrag((current) => {
-      if (!current || current.pointerId !== event.pointerId) return current;
-      const offset = event.clientY - startY.current;
-      return {
-        ...current,
-        offset,
-        to: dropIndexFor(heights.current, current.from, offset),
-      };
+    const current = dragRef.current;
+    if (!current || current.pointerId !== event.pointerId) return;
+    const offset = event.clientY - startY.current;
+    updateDrag({
+      ...current,
+      offset,
+      to: dropIndexFor(heights.current, current.from, offset),
     });
   }
 
+  /** The gesture was taken away from us (a system gesture, a lost pointer). */
+  function cancelDrag(event: React.PointerEvent<HTMLButtonElement>) {
+    if (dragRef.current?.pointerId === event.pointerId) updateDrag(null);
+  }
+
   function endDrag(event: React.PointerEvent<HTMLButtonElement>) {
-    setDrag((current) => {
-      if (!current || current.pointerId !== event.pointerId) return current;
-      if (current.to !== current.from && onReorder) {
-        onReorder(current.from, current.to);
-        setAnnouncement(
-          `${items[current.from]?.label ?? 'Row'} moved to position ${current.to + 1} of ${items.length}.`,
-        );
-      }
-      return null;
-    });
+    const current = dragRef.current;
+    if (!current || current.pointerId !== event.pointerId) return;
+    updateDrag(null);
+    // The row can be taken out from under the finger by a change elsewhere in
+    // the list; committing a move for a row that is no longer there would
+    // reorder whoever inherited its index.
+    if (current.from >= items.length || current.to >= items.length) return;
+    if (current.to === current.from || !onReorder) return;
+    onReorder(current.from, current.to);
+    setAnnouncement(
+      `${items[current.from]?.label ?? 'Row'} moved to position ${current.to + 1} of ${items.length}.`,
+    );
   }
 
   function moveByKey(event: React.KeyboardEvent<HTMLButtonElement>, index: number) {
@@ -163,7 +190,7 @@ export function ReorderableList<T extends ReorderableItem>({
     <div className={className}>
       <ol ref={listRef} aria-label={ariaLabel} className="space-y-2">
         {items.map((item, index) => {
-          const reorderable = rowReorderable(item, index);
+          const reorderable = Boolean(onReorder);
           const dragging = live?.from === index;
           const offset = live
             ? dragging
@@ -195,7 +222,7 @@ export function ReorderableList<T extends ReorderableItem>({
                   onPointerDown={(event) => beginDrag(event, index)}
                   onPointerMove={continueDrag}
                   onPointerUp={endDrag}
-                  onPointerCancel={endDrag}
+                  onPointerCancel={cancelDrag}
                   onKeyDown={(event) => moveByKey(event, index)}
                   // The one place touch scrolling is given up, so the rest of
                   // the row keeps it.
