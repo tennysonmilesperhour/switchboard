@@ -1,34 +1,19 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import {
-  sharedWindow,
-  suggestWindow,
-  windowForNewInvitee,
-  type WindowPace,
-} from '@/lib/engine/windows';
-import { isEmail } from '@/lib/auth-identity';
+import { suggestWindow, type WindowPace } from '@/lib/engine/windows';
 import type { RecurrenceKind } from '@/lib/engine/recurrence';
 import { simulateCascade } from '@/lib/engine/cascade';
 import { previousStep } from '@/lib/wizard-steps';
 import { hostSuggestions } from '@/lib/engine/suggestions';
-import {
-  createEvent,
-  lookupInviteeByHandle,
-  type CreateEventInput,
-} from '@/lib/actions/events';
-import { normalizePhoneNumber } from '@/lib/phone';
+import { createEvent, type CreateEventInput } from '@/lib/actions/events';
 import type { PlanDraft } from '@/lib/actions/plan';
 import type { ImportResult } from '@/lib/actions/import';
 import type { InviteMode, EventTheme } from '@/lib/types';
 import { resolveTimeZone } from '@/lib/client/time-zone';
 import { hasInviteDetails } from '@/lib/event-details';
-import {
-  resolveContactMatches,
-  type ContactCandidate,
-  type ContactMatch,
-} from '@/lib/actions/connections';
 
+import { useInviteeDraft } from './use-invitee-draft';
 import { BasicsStep } from './steps/BasicsStep';
 import { StyleStep } from './steps/StyleStep';
 import { PeopleStep } from './steps/PeopleStep';
@@ -39,13 +24,10 @@ import { WizardFrame } from './steps/WizardFrame';
 import {
   DEFAULT_START_TIME,
   OUTDOOR_HINTS,
-  contactMatchSelected,
-  inviteTargetFor,
   localDateTimeToIso,
   normalizeWizardQuestions,
   orderStepNeeded,
   wizardSteps,
-  type DraftInvitee,
   type WizardCircle,
   type WizardFriend,
   type WizardHousehold,
@@ -130,31 +112,6 @@ export function EventWizard({
   const [suggestDeadline, setSuggestDeadline] = useState('');
   const [voteDeadline, setVoteDeadline] = useState('');
 
-  // People & order
-  const [invitees, setInvitees] = useState<DraftInvitee[]>(() => {
-    const preselected = friends.find((f) => f.id === initialInviteeId);
-    if (!preselected) return [];
-    return [
-      {
-        key: preselected.id,
-        profileId: preselected.id,
-        name: preselected.name,
-        groupStage: 0,
-        windowMinutes: 24 * 60,
-      },
-    ];
-  });
-  const [guestName, setGuestName] = useState('');
-  const [guestContact, setGuestContact] = useState('');
-  const [guestError, setGuestError] = useState<string | null>(null);
-  const [resolvingGuest, setResolvingGuest] = useState(false);
-  const [contactsBusy, setContactsBusy] = useState(false);
-  const [contactMatches, setContactMatches] = useState<ContactMatch[]>([]);
-  const [contactsNote, setContactsNote] = useState<string | null>(null);
-  // Long friend lists get long; collapse by default so the group chips and
-  // guest box below stay reachable without a marathon scroll.
-  const [friendsOpen, setFriendsOpen] = useState(friends.length <= 12);
-
   // Privacy
   const [showInviteList, setShowInviteList] = useState(false);
   const [showAccepted, setShowAccepted] = useState(true);
@@ -182,6 +139,20 @@ export function EventWizard({
       ),
     [startsAt, defaultPace],
   );
+
+  /**
+   * Who is coming, and every way that list can change. The rules there are
+   * involved enough to have their own home — see `use-invitee-draft`.
+   */
+  const people = useInviteeDraft({
+    userId,
+    friends,
+    initialInviteeId,
+    suggestedWindowMinutes: suggested.windowMinutes,
+    onError: setSubmitError,
+  });
+  const { invitees, duplicates } = people;
+
 
   // Block scheduling a plan in the past. `minDate` (today, in the visitor's
   // local zone) is set on the client so the native date picker greys out prior
@@ -218,23 +189,6 @@ export function EventWizard({
     return OUTDOOR_HINTS.some((word) => haystack.includes(word));
   }, [title, locationName, description]);
 
-  function toggleFriend(friend: WizardFriend) {
-    setInvitees((current) => {
-      const existing = current.find((i) => i.profileId === friend.id);
-      if (existing) return current.filter((i) => i.profileId !== friend.id);
-      return [
-        ...current,
-        {
-          key: friend.id,
-          profileId: friend.id,
-          name: friend.name,
-          groupStage: 0,
-          windowMinutes: newInviteeWindow(current),
-        },
-      ];
-    });
-  }
-
   function applyDraft(draft: PlanDraft) {
     setTitle(draft.title);
     if (draft.date) setDate(draft.date);
@@ -246,8 +200,8 @@ export function EventWizard({
     if (draft.capacity) setCapacity(String(draft.capacity));
     setInviteMode(draft.mode);
     if (draft.invitees.length > 0) {
-      setInvitees(
-        draft.invitees.map((friend) => ({
+      people.setInvitees(
+        draft.invitees.map((friend: { id: string; name: string }) => ({
           key: friend.id,
           profileId: friend.id,
           name: friend.name,
@@ -267,232 +221,6 @@ export function EventWizard({
       setLocationName(result.locationName);
       setLocationPoint(null);
     }
-  }
-
-  function toggleGroup(memberIds: string[]) {
-    setInvitees((current) => {
-      const members = memberIds
-        .map((id) => friends.find((f) => f.id === id))
-        .filter((f): f is WizardFriend => Boolean(f));
-      const allIn =
-        members.length > 0 &&
-        members.every((m) => current.some((i) => i.profileId === m.id));
-      if (allIn) {
-        return current.filter(
-          (i) => !members.some((m) => m.id === i.profileId),
-        );
-      }
-      const additions = members
-        .filter((m) => !current.some((i) => i.profileId === m.id))
-        .map((m) => ({
-          key: m.id,
-          profileId: m.id,
-          name: m.name,
-          groupStage: 0,
-          windowMinutes: newInviteeWindow(current),
-        }));
-      return [...current, ...additions];
-    });
-  }
-
-  function toggleHousehold(household: WizardHousehold) {
-    toggleGroup(household.memberIds);
-  }
-
-  function toggleCircle(circle: WizardCircle) {
-    toggleGroup(circle.memberIds);
-  }
-
-  function addGuestInvite(name: string, contact: string) {
-    const label = name || contact.replace(/^@/, '');
-    setInvitees((current) => [
-      ...current,
-      {
-        key: `guest-${label}-${current.length}`,
-        profileId: null,
-        name: label,
-        guestContact: contact || undefined,
-        groupStage: 0,
-        windowMinutes: newInviteeWindow(current),
-      },
-    ]);
-    setGuestName('');
-    setGuestContact('');
-  }
-
-  async function addGuest() {
-    const name = guestName.trim();
-    const contact = guestContact.trim();
-    if (!name && !contact) return;
-    setGuestError(null);
-
-    const emailLike = isEmail(contact);
-    const isPhone = normalizePhoneNumber(contact) !== null;
-
-    // A username (anything in the contact box that isn't an email or phone)
-    // must map to a real account. We never silently invite a typo'd handle as
-    // an off-platform guest — email and phone are the guest paths.
-    if (contact && !emailLike && !isPhone) {
-      const handle = contact.replace(/^@/, '').toLowerCase();
-      if (!/^[a-z0-9_]{3,24}$/.test(handle)) {
-        setGuestError('Enter a valid username, email, or phone number.');
-        return;
-      }
-      setResolvingGuest(true);
-      try {
-        const found = await lookupInviteeByHandle(handle);
-        if (!found) {
-          setGuestError(`No account with the username @${handle}. Invite them by email or phone instead.`);
-          return;
-        }
-        if (found.id === userId) {
-          setGuestError('That’s you - you’re already the host.');
-          return;
-        }
-        setInvitees((current) =>
-          current.some((i) => i.profileId === found.id)
-            ? current
-            : [
-                ...current,
-                {
-                  key: `member-${found.id}`,
-                  profileId: found.id,
-                  name: found.name,
-                  groupStage: 0,
-                  windowMinutes: newInviteeWindow(current),
-                },
-              ],
-        );
-        setGuestName('');
-        setGuestContact('');
-      } finally {
-        setResolvingGuest(false);
-      }
-      return;
-    }
-
-    // Email / phone / name-only → off-platform guest (link, email, or text).
-    addGuestInvite(name, contact);
-  }
-
-  function isMatchSelected(match: ContactMatch) {
-    return contactMatchSelected(match, invitees);
-  }
-
-  function toggleContactMatch(match: ContactMatch) {
-    const target = inviteTargetFor(match);
-    if (!target) return;
-    setInvitees((current) => {
-      if (target.profileId) {
-        if (current.some((i) => i.profileId === target.profileId)) {
-          return current.filter((i) => i.profileId !== target.profileId);
-        }
-        return [
-          ...current,
-          {
-            key: target.profileId,
-            profileId: target.profileId,
-            name: match.profile?.name ?? match.name,
-            groupStage: 0,
-            windowMinutes: newInviteeWindow(current),
-          },
-        ];
-      }
-      const existing = current.find(
-        (i) => i.profileId === null && i.guestContact === target.contact,
-      );
-      if (existing) {
-        return current.filter((i) => i.key !== existing.key);
-      }
-      return [
-        ...current,
-        {
-          key: `contact-${target.contact}`,
-          profileId: null,
-          name: match.name || target.contact!,
-          guestContact: target.contact!,
-          groupStage: 0,
-          windowMinutes: newInviteeWindow(current),
-        },
-      ];
-    });
-  }
-
-  async function matchContactsFromDevice(contacts: ContactCandidate[]) {
-    setContactsBusy(true);
-    setSubmitError(null);
-    setContactsNote(null);
-    try {
-      const matches = await resolveContactMatches(contacts);
-      // Drop yourself and anyone with no way to be invited (no account and no
-      // textable number); on-Switchboard matches float to the top.
-      const invitable = matches
-        .filter((match) => match.connectionStatus !== 'self')
-        .filter((match) => Boolean(inviteTargetFor(match)))
-        .sort((a, b) => Number(Boolean(b.profile)) - Number(Boolean(a.profile)));
-      setContactMatches(invitable);
-      const onApp = invitable.filter((match) => match.profile).length;
-      setContactsNote(
-        invitable.length === 0
-          ? 'None of those contacts can be invited yet - no matching accounts or numbers.'
-          : onApp === 0
-            ? `${invitable.length} ${invitable.length === 1 ? 'contact' : 'contacts'} can be invited by text.`
-            : `${onApp} on Switchboard${
-                invitable.length - onApp > 0 ? `, ${invitable.length - onApp} by text` : ''
-              }. Tap to add them.`,
-      );
-    } catch (error) {
-      setSubmitError(
-        error instanceof Error
-          ? error.message
-          : 'Could not open contacts on this device.',
-      );
-    } finally {
-      setContactsBusy(false);
-    }
-  }
-
-  function move(index: number, delta: -1 | 1) {
-    setInvitees((current) => {
-      const target = index + delta;
-      if (target < 0 || target >= current.length) return current;
-      const next = [...current];
-      [next[index], next[target]] = [next[target], next[index]];
-      return next;
-    });
-  }
-
-  /** The window everyone shares, or null when the rows disagree ("Mixed"). */
-  const commonWindow = useMemo(
-    () => sharedWindow(invitees.map((i) => i.windowMinutes)),
-    [invitees],
-  );
-
-  /**
-   * The window to give someone just added. Reads `current` from inside the
-   * `setInvitees` updater rather than the closed-over `invitees`, which may be
-   * a render behind when several people are added in one go.
-   */
-  function newInviteeWindow(current: DraftInvitee[]): number {
-    return windowForNewInvitee(
-      current.map((i) => i.windowMinutes),
-      suggested.windowMinutes,
-    );
-  }
-
-  /** The "select all" from the feedback: one window, everybody. */
-  function setWindowForEveryone(minutes: number) {
-    setInvitees((current) =>
-      current.map((invitee) => ({ ...invitee, windowMinutes: minutes })),
-    );
-  }
-
-  function updateInvitee(index: number, patch: Partial<DraftInvitee>) {
-    setInvitees((current) =>
-      current.map((invitee, i) =>
-        i === index ? { ...invitee, ...patch } : invitee,
-      ),
-    );
   }
 
   const preview = useMemo(() => {
@@ -542,8 +270,6 @@ export function EventWizard({
     ],
   );
 
-  const selectedFriendCount = invitees.filter((i) => i.profileId).length;
-
   // The steps this plan goes through. "Set the order" only appears when there
   // is an order to set; the response window it would have asked for moves to
   // the invites step. Both inputs are decided on earlier steps, so the current
@@ -557,6 +283,26 @@ export function EventWizard({
   // its own entry; the progress bar reads the whole array to decide which steps
   // can be jumped to. One source, so the two can never disagree about whether
   // Basics is finished.
+  /**
+   * Change the rhythm, and stay on the step you were reading.
+   *
+   * The step list itself depends on the mode: "Set the order" exists for a
+   * chain and not for everyone-at-once, so switching from the Review screen
+   * slides a whole step in ahead of it. Holding the index still would land the
+   * host on Privacy, a screen she had already passed, with no explanation. The
+   * step is therefore re-found BY KEY rather than by number.
+   */
+  const chooseInviteMode = useCallback(
+    (mode: InviteMode) => {
+      const here = steps[Math.min(step, steps.length - 1)];
+      const after = wizardSteps(mode, invitees.length);
+      setInviteMode(mode);
+      const landing = after.indexOf(here);
+      if (landing !== -1) setStep(landing);
+    },
+    [steps, step, invitees.length],
+  );
+
   const stepComplete = useMemo(
     () =>
       steps.map((key) => {
@@ -672,7 +418,17 @@ export function EventWizard({
     }
   }
 
-  const current = steps[Math.min(step, steps.length - 1)];
+  /**
+   * The step actually on screen.
+   *
+   * `step` can sit past the end of the list for a render: removing the last
+   * invitee from Review drops "Set the order" out of `steps` underneath it.
+   * Clamping here rather than correcting the state in an effect means there is
+   * never a frame with nothing rendered, and the back-gesture bookkeeping —
+   * which counts steps, not list lengths — is left alone.
+   */
+  const activeStep = Math.min(step, steps.length - 1);
+  const current = steps[activeStep];
   const stageCount =
     inviteMode === 'group'
       ? Math.max(1, ...invitees.map((i) => i.groupStage + 1))
@@ -681,7 +437,7 @@ export function EventWizard({
   return (
     <WizardFrame
       steps={steps}
-      step={step} stepComplete={stepComplete} goToStep={goToStep}
+      step={activeStep} stepComplete={stepComplete} goToStep={goToStep}
       submitError={submitError} submitting={submitting} enablePoll={enablePoll}
       submit={submit}
     >
@@ -711,7 +467,7 @@ export function EventWizard({
 
       {current === 'style' && (
         <StyleStep
-          inviteMode={inviteMode} setInviteMode={setInviteMode}
+          inviteMode={inviteMode} setInviteMode={chooseInviteMode}
           enablePoll={enablePoll} setEnablePoll={setEnablePoll}
           pollResolution={pollResolution} setPollResolution={setPollResolution}
           suggestDeadline={suggestDeadline} setSuggestDeadline={setSuggestDeadline}
@@ -721,8 +477,8 @@ export function EventWizard({
           theme={theme} setTheme={setTheme}
           inviteeCount={invitees.length}
           showWindow={!orderStepNeeded(inviteMode, invitees.length)}
-          commonWindow={commonWindow}
-          setWindowForEveryone={setWindowForEveryone}
+          commonWindow={people.commonWindow}
+          setWindowForEveryone={people.setWindowForEveryone}
           suggested={suggested}
         />
       )}
@@ -733,23 +489,23 @@ export function EventWizard({
           circles={circles}
           friends={friends}
           invitees={invitees}
-          toggleHousehold={toggleHousehold}
-          toggleCircle={toggleCircle}
-          toggleFriend={toggleFriend}
-          friendsOpen={friendsOpen}
-          setFriendsOpen={setFriendsOpen}
-          selectedFriendCount={selectedFriendCount}
-          guestName={guestName} setGuestName={setGuestName}
-          guestContact={guestContact} setGuestContact={setGuestContact}
-          guestError={guestError} setGuestError={setGuestError}
-          resolvingGuest={resolvingGuest}
-          addGuest={addGuest}
-          matchContactsFromDevice={matchContactsFromDevice}
-          contactsBusy={contactsBusy}
-          contactsNote={contactsNote}
-          contactMatches={contactMatches}
-          isMatchSelected={isMatchSelected}
-          toggleContactMatch={toggleContactMatch}
+          toggleHousehold={people.toggleHousehold}
+          toggleCircle={people.toggleCircle}
+          toggleFriend={people.toggleFriend}
+          friendsOpen={people.friendsOpen}
+          setFriendsOpen={people.setFriendsOpen}
+          selectedFriendCount={people.selectedFriendCount}
+          guestName={people.guestName} setGuestName={people.setGuestName}
+          guestContact={people.guestContact} setGuestContact={people.setGuestContact}
+          guestError={people.guestError} setGuestError={people.setGuestError}
+          resolvingGuest={people.resolvingGuest}
+          addGuest={people.addGuest}
+          matchContactsFromDevice={people.matchContactsFromDevice}
+          contactsBusy={people.contactsBusy}
+          contactsNote={people.contactsNote}
+          contactMatches={people.contactMatches}
+          isMatchSelected={people.isMatchSelected}
+          toggleContactMatch={people.toggleContactMatch}
         />
       )}
 
@@ -757,11 +513,12 @@ export function EventWizard({
         <OrderStep
           inviteMode={inviteMode}
           invitees={invitees}
-          commonWindow={commonWindow}
-          setWindowForEveryone={setWindowForEveryone}
+          commonWindow={people.commonWindow}
+          setWindowForEveryone={people.setWindowForEveryone}
           suggested={suggested}
-          move={move}
-          updateInvitee={updateInvitee}
+          moveInvitee={people.moveInvitee}
+          removeInvitee={people.removeInvitee}
+          updateInvitee={people.updateInvitee}
           stageCount={stageCount}
         />
       )}
@@ -786,6 +543,11 @@ export function EventWizard({
           recurrence={recurrence} customDays={customDays}
           suggestions={suggestions} looksOutdoor={looksOutdoor}
           preview={preview}
+          moveInvitee={people.moveInvitee}
+          removeInvitee={people.removeInvitee}
+          setInviteMode={chooseInviteMode}
+          duplicates={duplicates}
+          keepBothDuplicates={people.keepBothDuplicates}
         />
       )}
     </WizardFrame>

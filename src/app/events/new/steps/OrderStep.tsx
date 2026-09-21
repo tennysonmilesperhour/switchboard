@@ -2,7 +2,9 @@
 
 import { Avatar } from '@/components/ui/Avatar';
 import { Card } from '@/components/ui/Card';
+import { ReorderableList } from '@/components/ui/ReorderableList';
 import { WINDOW_CHOICES } from '@/lib/engine/windows';
+import { orderMatters, rhythmLine } from '@/lib/invite-rhythm';
 import { ResponseWindowPicker } from './ResponseWindowPicker';
 import type { InviteMode } from '@/lib/types';
 import {
@@ -18,7 +20,10 @@ interface OrderStepProps {
   commonWindow: number | null;
   setWindowForEveryone: (minutes: number) => void;
   suggested: { windowMinutes: number; label: string };
-  move: (index: number, delta: -1 | 1) => void;
+  /** Drag, or the arrow keys on a row's grip. */
+  moveInvitee: (from: number, to: number) => void;
+  /** Take somebody off the plan from here. */
+  removeInvitee: (key: string) => void;
   updateInvitee: (index: number, patch: Partial<DraftInvitee>) => void;
   stageCount: number;
 }
@@ -29,25 +34,27 @@ export function OrderStep({
   commonWindow,
   setWindowForEveryone,
   suggested,
-  move,
+  moveInvitee,
+  removeInvitee,
   updateInvitee,
   stageCount,
 }: OrderStepProps) {
+  // Waves are assigned by the dropdown on each row, so dragging rows around
+  // would move a number that nothing reads. `orderMatters` is the one place
+  // that knows which modes those are.
+  const ordered = orderMatters(inviteMode);
   return (
         <div className="space-y-4 animate-rise">
           <Card tone="cream">
             <p className="text-sm leading-relaxed text-ink-soft">
-              {inviteMode === 'individual' ? (
-                <>Order matters: <strong>#1 gets asked first</strong>. If they
-                can’t make it, Switchboard quietly moves on. No one ever sees
-                their place in line.</>
-              ) : inviteMode === 'group' ? (
-                <>Assign each person a <strong>wave</strong>. Wave 1 goes out
-                immediately; later waves only go out if spots remain.</>
-              ) : (
-                <>Everyone is invited at the same time, each with a response window.</>
-              )}
+              {rhythmLine(inviteMode, invitees.length)}
             </p>
+            {ordered && (
+              <p className="mt-1.5 text-sm leading-relaxed text-ink-soft">
+                Drag anyone by the handle to move them, and no one ever sees
+                their place in line.
+              </p>
+            )}
           </Card>
           {/* Shown from two people up, since with one there is no "everyone".
               It sits above the list because it is a decision about the whole
@@ -61,51 +68,33 @@ export function OrderStep({
               suggested={suggested}
             />
           )}
-          <ol className="space-y-2">
-            {invitees.map((invitee, index) => (
-              <li
-                key={invitee.key}
-                className="rounded-card border-2 border-line bg-card p-3"
-              >
+          <ReorderableList
+            aria-label="Invitees, in order"
+            items={invitees.map((invitee) => ({ ...invitee, label: invitee.name }))}
+            onReorder={ordered ? moveInvitee : undefined}
+            onRemove={(item) => removeInvitee(item.key)}
+            removeLabel={(item) => `Take ${item.name} off this plan`}
+            rowClassName="bg-card border-2 border-line"
+          >
+            {(invitee, index) => (
+              <>
                 <div className="flex items-center gap-3">
-                  {inviteMode === 'individual' && (
+                  {ordered && (
                     <span className="grid size-7 shrink-0 place-items-center rounded-pill bg-terracotta text-sm font-extrabold text-white">
                       {index + 1}
                     </span>
                   )}
                   <Avatar name={invitee.name} seed={invitee.key} size="sm" />
-                  <span className="flex-1 min-w-0">
-                    <span className="font-bold block truncate">
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate font-bold">
                       {invitee.name}
                       {!invitee.profileId && (
-                        <span className="ml-1.5 text-xs font-semibold text-gold-deep rounded-pill bg-gold-soft px-1.5 py-0.5">guest</span>
+                        <span className="ml-1.5 rounded-pill bg-gold-soft px-1.5 py-0.5 text-xs font-semibold text-gold-deep">guest</span>
                       )}
                     </span>
                   </span>
-                  {inviteMode === 'individual' && (
-                    <span className="flex flex-col">
-                      <button
-                        type="button"
-                        onClick={() => move(index, -1)}
-                        disabled={index === 0}
-                        aria-label={`Move ${invitee.name} up`}
-                        className="text-ink-faint hover:text-ink disabled:opacity-25 px-1"
-                      >
-                        ▲
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => move(index, 1)}
-                        disabled={index === invitees.length - 1}
-                        aria-label={`Move ${invitee.name} down`}
-                        className="text-ink-faint hover:text-ink disabled:opacity-25 px-1"
-                      >
-                        ▼
-                      </button>
-                    </span>
-                  )}
                 </div>
-                <div className="mt-2.5 flex items-center gap-2 flex-wrap pl-9">
+                <div className="mt-2.5 flex flex-wrap items-center gap-2">
                   {inviteMode === 'group' && (
                     <select
                       value={invitee.groupStage}
@@ -185,10 +174,10 @@ export function OrderStep({
                     );
                   })()}
                 </div>
-              </li>
-            ))}
-          </ol>
-          <p className="text-xs text-ink-faint">
+              </>
+            )}
+          </ReorderableList>
+          <p className="text-plate text-plate-inset inline-block text-xs text-ink-faint">
             💡 Suggested window for this plan: <strong>{suggested.label}</strong> -
             based on how soon it starts.
           </p>
