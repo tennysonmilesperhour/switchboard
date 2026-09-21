@@ -209,17 +209,23 @@ export async function addBoardPost(
     expiresAt = parsed.toISOString();
   }
 
-  const { error } = await supabase.from('board_posts').insert({
-    board_id: boardId,
-    author_id: user.id,
-    kind: input.kind,
-    title,
-    body: input.body.trim() || null,
-    location: input.location.trim() || null,
-    cadence: input.cadence.trim() || null,
-    starts_at: input.startsAt,
-    expires_at: expiresAt,
-  });
+  const { data: post, error } = await supabase
+    .from('board_posts')
+    .insert({
+      board_id: boardId,
+      author_id: user.id,
+      kind: input.kind,
+      title,
+      body: input.body.trim() || null,
+      location: input.location.trim() || null,
+      cadence: input.cadence.trim() || null,
+      starts_at: input.startsAt,
+      expires_at: expiresAt,
+    })
+    // The id is what lets the notification below land on this post rather than
+    // on the board's whole list, where a busy board buries it immediately.
+    .select('id')
+    .single();
   if (error) return reportAndFail('SB-BOARD-SAVE', 'board.post-create', error, { boardId });
 
   // A post is the way to reach the whole group, so the whole group hears
@@ -240,7 +246,9 @@ export async function addBoardPost(
         kind: 'board_post',
         title: `New on ${board.name} · ${title}`,
         body: input.body.trim().slice(0, 140) || 'Open the board to read it.',
-        url: `/boards/${board.slug}`,
+        // Anchored at the post itself: `/boards/<slug>` alone drops the reader
+        // at the top of a list the post may already be several entries down.
+        url: `/boards/${board.slug}#post-${post.id}`,
       });
     }
   } catch (notifyError) {

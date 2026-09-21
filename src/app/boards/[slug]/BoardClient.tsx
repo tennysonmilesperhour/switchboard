@@ -443,7 +443,9 @@ export function BoardClient({
             {initialPosts.map((post) => {
               const canRemove = post.author_id === currentUserId || isModerator;
               return (
-                <li key={post.id}>
+                // The id a board-post notification links to. `scroll-mt` keeps
+                // the anchored post clear of the sticky header it lands under.
+                <li key={post.id} id={`post-${post.id}`} className="scroll-mt-24">
                   <Card>
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">

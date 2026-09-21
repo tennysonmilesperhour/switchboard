@@ -1,12 +1,28 @@
 import { aiEnabled, getClaude, MODELS } from './claude';
 import { sanitizeUrl } from '@/lib/url';
-import type { RoomItemKind } from '@/lib/types';
+import { ROOM_ITEM_KINDS, type RoomItemKind } from '@/lib/types';
 
 export interface ExtractedItem {
   kind: RoomItemKind;
   title: string;
   detail: string | null;
   url: string | null;
+}
+
+/**
+ * A model can return a value outside a tool schema's enum, so the enum below is
+ * not the guard — this is. `room_items.kind` has a CHECK on ROOM_ITEM_KINDS and
+ * a message's rows are inserted as one array, so a single unknown kind rejects
+ * the whole batch; the caller files these inside a best-effort `catch`, so
+ * everything the message contained would disappear without a word.
+ *
+ * Returns the model's kind when the column would accept it, and 'note'
+ * otherwise — a filing in the wrong tab beats a message that files nothing.
+ */
+function safeKind(value: unknown): RoomItemKind {
+  return ROOM_ITEM_KINDS.includes(value as RoomItemKind)
+    ? (value as RoomItemKind)
+    : 'note';
 }
 
 const EXTRACT_TOOL = {
@@ -97,13 +113,13 @@ export async function extractItems(body: string): Promise<ExtractedItem[]> {
     if (!toolUse || toolUse.type !== 'tool_use') return extractWithRules(body);
     const parsed = toolUse.input as { items?: ExtractedItem[] };
     return (parsed.items ?? [])
-      .filter((item) => item.title?.trim())
+      .filter((item) => typeof item.title === 'string' && item.title.trim())
       .slice(0, 5)
       .map((item) => ({
-        kind: item.kind ?? 'note',
-        title: item.title.slice(0, 120),
-        detail: item.detail?.slice(0, 500) ?? null,
-        url: item.url ? sanitizeUrl(item.url) : null,
+        kind: safeKind(item.kind),
+        title: String(item.title).slice(0, 120),
+        detail: typeof item.detail === 'string' ? item.detail.slice(0, 500) : null,
+        url: typeof item.url === 'string' ? sanitizeUrl(item.url) : null,
       }));
   } catch {
     return extractWithRules(body);
