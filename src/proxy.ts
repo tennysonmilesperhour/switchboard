@@ -27,6 +27,7 @@ const PUBLIC_PREFIXES = [
   '/verify-contact',
   '/scope-verification', // client-facing checklist, shared by URL; nothing private on it
   '/api/scope-feedback', // the checklist's feedback box; the client has no account by design
+  '/api/scope-progress', // the checklist's shared board, readable by anyone with the link
   '/api/sms/inbound',
   '/api/sms/status', // Twilio signature-authenticated; never redirect to browser login
   '/api/cron',

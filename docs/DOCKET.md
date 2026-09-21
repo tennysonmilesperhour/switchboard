@@ -13,6 +13,46 @@ from working sessions. Newest thinking lives here so nothing evaporates.
 
 ---
 
+## ✅ Shipped 2026-09-21 — the checklist became a shared board
+
+The checklist was still a private document pretending to be a shared one. The
+client walked the list and nobody could see it; she wrote notes and nobody was
+told. Two different causes, both fixed here.
+
+- **Progress is shared, not per-browser.** Ticks lived in `localStorage` and so
+  never left the device that made them — nothing was hidden, it had simply never
+  been sent anywhere. `public.scope_progress` is now the board: one row per item,
+  written and read by anyone holding the link, showing who ticked what and when.
+- **Nobody loses the walk they already did.** On the first load after this, any
+  tick still sitting in a browser is pushed up once (one at a time, so a
+  thirty-five item backlog does not trip the rate limit) and recorded as pushed,
+  so a later untick is not resurrected.
+- **The notes are readable on the page.** `GET /api/scope-progress` serves the
+  board and every note — text, name, and screenshots as per-request signed URLs —
+  with no account, plus the triage status beside each one so the page reads as
+  "you said / we did".
+- **The owner gets told.** `src/lib/server/scope-watch.ts`, via the app's
+  existing Resend sender rather than the scheduled job, so it does not depend on
+  that schedule or its connectors. A note emails immediately and in full; progress
+  is debounced to one summary an hour, because a walk through the list is a burst
+  of thirty-five ticks and an address that gets thirty-five emails stops being
+  read. Set `SCOPE_WATCH_EMAIL` to switch it on.
+- **This is public, and the page says so.** Fully open was chosen over a
+  token-in-the-URL variant after both were put to the owner. The feedback box used
+  to promise "screenshots are private — only the build team sees them"; that
+  became false, so it now says anyone with the link can see what you post.
+  `docs/SECURITY.md` states the exposure and how to close it in one place if that
+  ever changes.
+- **Degrades rather than breaks.** With the board unreachable the list still
+  renders from the local copy and still ticks; it just says so instead of
+  pretending to be shared. Both that case and the working one are walked in a real
+  browser in `e2e/public.spec.ts`.
+- One bug found on the way: the checkbox listener was registered *inside*
+  `renderGroups`, which was harmless while the list drew once but would have sent
+  a duplicate write per past render now that the board re-renders on load.
+
+---
+
 ## ✅ Shipped 2026-09-16 — the client feedback loop
 
 The checklist stopped being a one-way document. It now takes reports, and a

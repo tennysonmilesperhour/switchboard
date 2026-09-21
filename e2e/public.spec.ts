@@ -134,6 +134,116 @@ test.describe('public surface', () => {
   });
 
   /*
+    The shared board. Progress used to live in localStorage and nowhere else,
+    so the person who sent the link could never see what the client had ticked.
+    It is server-side now, which introduces a failure mode worth pinning: when
+    the board is unreachable the page must still render and still be usable,
+    just not shared.
+
+    The smoke job runs with no Supabase env, so /api/scope-progress answers 503
+    here. That is exactly the degraded case — assert the list survives it.
+  */
+  test('the checklist survives an unreachable shared board', async ({ page }) => {
+    const pageErrors: string[] = [];
+    page.on('pageerror', (error) => pageErrors.push(String(error)));
+
+    await page.goto('/scope-verification');
+
+    // The list still draws from the local copy.
+    expect(await page.locator('.item').count()).toBeGreaterThan(1);
+    await expect(page.locator('#revTotal')).not.toHaveText('0');
+
+    // The board's own furniture is present either way.
+    await expect(page.getByLabel('Your name')).toBeVisible();
+    await expect(page.getByRole('heading', { name: /Notes on this build/ })).toBeVisible();
+
+    // Ticking still works locally and must not throw when the write fails.
+    const first = page.locator('.chk').first();
+    await first.check();
+    await expect(first).toBeChecked();
+
+    expect(
+      pageErrors,
+      `the board script threw with no server: ${pageErrors.join('; ')}`,
+    ).toEqual([]);
+  });
+
+  /*
+    The board doing its job. This is the whole complaint, so it gets a test that
+    does not depend on a database: the endpoint is stubbed, and what is asserted
+    is that the page actually renders someone else's progress and someone else's
+    notes. Before this change the page could not have shown either, because a
+    tick never left the browser that made it.
+  */
+  test('the checklist shows progress and notes made by someone else', async ({ page }) => {
+    const pageErrors: string[] = [];
+    page.on('pageerror', (error) => pageErrors.push(String(error)));
+
+    const writes: unknown[] = [];
+    await page.route('**/api/scope-progress', async (route) => {
+      if (route.request().method() === 'POST') {
+        writes.push(route.request().postDataJSON());
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({ ok: true }),
+        });
+        return;
+      }
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          ok: true,
+          checked: {
+            A1: { at: new Date(Date.now() - 3 * 3600_000).toISOString(), by: 'Gina' },
+            A2: { at: new Date(Date.now() - 2 * 3600_000).toISOString(), by: null },
+          },
+          notes: [
+            {
+              id: 'n1',
+              at: new Date(Date.now() - 90 * 60_000).toISOString(),
+              itemId: 'J4',
+              itemLabel: 'Signals reach a group',
+              body: 'The group picker is empty for me.',
+              reporter: 'Gina',
+              status: 'needs_you',
+              resolution: null,
+              screenshots: [],
+            },
+          ],
+        }),
+      });
+    });
+
+    await page.goto('/scope-verification');
+
+    // Her ticks, in his browser. This is the thing that was impossible before.
+    await expect(page.locator('.item-mark').first()).toBeVisible();
+    await expect(page.locator('.item-mark').first()).toContainText('Checked by Gina');
+    await expect(page.locator('.item-mark').first()).toContainText('hours ago');
+    expect(await page.locator('.item-mark').count()).toBe(2);
+    // The anonymous one still shows, just without a name.
+    await expect(page.locator('.item-mark').nth(1)).toContainText('Checked by Someone');
+
+    // The counters reflect the shared board, not this device.
+    await expect(page.locator('#revDone')).toHaveText('2');
+
+    // And her note is readable here, with no account.
+    await expect(page.getByText('The group picker is empty for me.')).toBeVisible();
+    await expect(page.locator('.note-about').first()).toContainText('J4');
+    await expect(page.locator('#notesCount')).toHaveText('1');
+    await expect(page.locator('.note-status').first()).toContainText('needs you');
+
+    // A tick here is pushed up rather than kept to itself.
+    await page.locator('.chk').nth(5).check();
+    await expect.poll(() => writes.length).toBeGreaterThan(0);
+    expect(writes[0]).toMatchObject({ checked: true });
+
+    expect(pageErrors, `the board script threw: ${pageErrors.join('; ')}`).toEqual([]);
+  });
+
+  /*
     The feedback box on that same page. It is the client's only way to report
     anything — they have no account and are not going to make one — so the
     journey that matters is the whole one: open it from an item, refuse an

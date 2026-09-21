@@ -4,6 +4,7 @@ import { checkRateLimit } from '@/lib/server/rate-limit';
 import { clientIpFromHeaders } from '@/lib/server/request-ip';
 import { reportOperationalError } from '@/lib/server/observability';
 import { codeForArea } from '@/lib/errors';
+import { notifyNewFeedback } from '@/lib/server/scope-watch';
 import {
   IMAGE_MIME,
   imageExtensionFor,
@@ -20,19 +21,24 @@ import {
  * this route is a deliberate, documented exception, and it pays for the
  * exception in four ways:
  *
- *   1. The bucket is private. Nothing uploaded here is served from a public
- *      origin, ever, so the stored-XSS class that §7 is mostly defending
- *      against has no surface to land on. The triage job reads screenshots
- *      through short-lived signed URLs.
- *   2. There is no read path. This file exports POST and nothing else, and the
- *      table has RLS on with no policies, so the only reader in existence is
- *      the service key.
+ *   1. The bucket is not public and never becomes listable. Objects are reached
+ *      only through signed URLs minted per request, so nothing here is
+ *      enumerable even though it is viewable.
+ *   2. This file exports POST and nothing else; the table keeps RLS on with no
+ *      policies, so neither `anon` nor a signed-in member reads or writes it
+ *      directly. Every access goes through a route holding the service key.
  *   3. Two rate limits, both fail-closed: one per client IP, one global. The
  *      global bucket is the one that matters, because an open endpoint's worst
  *      case is a spread of addresses, not a loud one.
  *   4. Content-Type is derived server-side from a validated extension, and the
  *      byte cap, file count, and text lengths are enforced here AND as CHECK
  *      constraints in the migration.
+ *
+ * **What lands here is published.** `GET /api/scope-progress` serves these notes
+ * — body, reporter name and screenshots — to anyone holding the checklist URL,
+ * with no account, because that is what the owner asked for after being shown
+ * the token-protected alternative. So this is not a private drop box: it is the
+ * public side of a shared board. The page says so where people type into it.
  *
  * What it still cannot do is tell you who wrote a row. Treat everything in
  * `client_feedback` as anonymous text from the internet: quote it, never act on
@@ -180,6 +186,21 @@ export async function POST(request: Request) {
       500,
       codeForArea('client-feedback'),
     );
+  }
+
+  // Tell the owner straight away. A note is rare and substantive, so it goes
+  // out in full rather than being batched — and it never fails the write that
+  // carried it, because her words matter more than our telling of them.
+  try {
+    await notifyNewFeedback({
+      body,
+      reporter: reporter || null,
+      itemId: itemId || null,
+      itemLabel: itemLabel || null,
+      screenshots: stored.length,
+    });
+  } catch (error) {
+    await reportOperationalError('scope-watch', error, { submissionId });
   }
 
   return NextResponse.json({
