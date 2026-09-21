@@ -13,6 +13,57 @@ from working sessions. Newest thinking lives here so nothing evaporates.
 
 ---
 
+## ✅ Shipped 2026-09-21 — the queue can actually be reordered
+
+From the checklist board, item A2 (Cascading invites): *"Unable to reorder
+people in the queue."* The control existed. Every reason it could not be used
+was a condition spread across the view that drew it, and in each case its
+absence read as a broken feature.
+
+- **The order now lives in one module.** `src/lib/engine/line-edit.ts` decides
+  what a host may change about the line and what to say when the answer is
+  nothing. The cascade view and the section hint above it both ask; neither
+  re-derives `status === 'queued' && mode === 'individual' && ...` on its own.
+- **The control is a control.** The reorder arrows were two bare triangles about
+  fourteen pixels tall, stacked on each other, at the end of a row that already
+  held a dropdown and a Remove button — well under the design system's own ~44px
+  tap target, and adjacent enough that a miss moved somebody the wrong way. Every
+  per-row control is now a labelled pill (↑ Earlier / ↓ Later) on its own line
+  under the person. Same fix in the wizard's Order step, where reordering a plan
+  before it goes out had the same glyphs.
+- **It no longer disappears when there is one person left.** With two invitees
+  (one asked, one waiting) the pair was not rendered at all. It is now drawn and
+  disabled, with a line saying there is nobody to swap them with.
+- **Wave and everyone-at-once plans say what is true.** They have no one-by-one
+  line, and the hint used to promise "reorder or re-time anyone still in line"
+  in all three modes. Each mode now gets its own sentence, and a settled plan
+  says the flow is a record rather than offering edits it will refuse.
+- **A plan still polling for its date can be put in order.** `hostCanEditLine`
+  is `hostCanEditInvitees` plus `deciding`: nothing has been sent, every invite
+  is queued, and `move_queued_invite` / `set_invite_window` already accepted the
+  edit — only the UI was hiding it. Adding people stays narrower, because a
+  guest list that grows mid-poll changes what the answerers agreed to.
+- **The place in line is visible.** A queued row said "Waiting in line" and
+  nothing about which line; it now reads `#2 in line`. An order you cannot read
+  is one you cannot correct.
+
+`src/lib/engine/line-edit.test.ts` walks the cases a host actually hits, and
+`share-link.test.ts` holds the new status rule to exactly one extra status.
+
+### 🛠️ Follow-up: moving someone between waves
+
+Reordering in a wave plan means changing someone's wave, and there is still no
+way to do it once invitations are in motion — the wave is set in the wizard and
+frozen. The shape is settled: a `set_invite_stage(p_invite, p_stage)`
+security-definer function mirroring `set_invite_window` (host-only, queued-only,
+atomic status guard in the `WHERE`), a `setInviteStage` action, a wave select in
+the row's control strip, and pgTAP beside the other cascade-editing tests. It
+was left out of the round above because it needs a migration applied to
+production, and shipping the control ahead of the function would hand the client
+a button that errors.
+
+---
+
 ## ✅ Shipped 2026-09-21 — the checklist became a shared board
 
 The checklist was still a private document pretending to be a shared one. The

@@ -82,25 +82,29 @@ export function OrderStep({
                       )}
                     </span>
                   </span>
+                  {/* Full tap targets, not stacked glyphs. Two ~14px triangles
+                      touching each other is how "I can't reorder people" starts:
+                      the miss rate is high and the wrong one moves them the
+                      wrong way. */}
                   {inviteMode === 'individual' && (
-                    <span className="flex flex-col">
+                    <span className="-my-1 flex items-center gap-0.5">
                       <button
                         type="button"
                         onClick={() => move(index, -1)}
                         disabled={index === 0}
                         aria-label={`Move ${invitee.name} up`}
-                        className="text-ink-faint hover:text-ink disabled:opacity-25 px-1"
+                        className="inline-flex size-11 shrink-0 items-center justify-center rounded-full text-ink-faint transition-colors hover:bg-cream hover:text-ink disabled:opacity-25 disabled:hover:bg-transparent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-terracotta"
                       >
-                        ▲
+                        <span aria-hidden>↑</span>
                       </button>
                       <button
                         type="button"
                         onClick={() => move(index, 1)}
                         disabled={index === invitees.length - 1}
                         aria-label={`Move ${invitee.name} down`}
-                        className="text-ink-faint hover:text-ink disabled:opacity-25 px-1"
+                        className="inline-flex size-11 shrink-0 items-center justify-center rounded-full text-ink-faint transition-colors hover:bg-cream hover:text-ink disabled:opacity-25 disabled:hover:bg-transparent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-terracotta"
                       >
-                        ▼
+                        <span aria-hidden>↓</span>
                       </button>
                     </span>
                   )}

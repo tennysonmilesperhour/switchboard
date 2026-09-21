@@ -38,7 +38,12 @@ import { formatDateTime, formatDateTimeRange } from '@/lib/format';
 import { resolveEventZone } from '@/lib/server/event-zone';
 import { googleCalendarUrl } from '@/lib/calendar-links';
 import { eventShareUrl } from '@/lib/links';
-import { hostCanEditInvitees, hostCanShare } from '@/lib/share-link';
+import {
+  hostCanEditInvitees,
+  hostCanEditLine,
+  hostCanShare,
+} from '@/lib/share-link';
+import { invitationFlowHint } from '@/lib/engine/line-edit';
 import type { SwitchboardEvent } from '@/lib/types';
 import { normalizePollTopic, pollQuestion } from '@/lib/types';
 import { loadEventPage } from '@/lib/server/event-page';
@@ -143,6 +148,11 @@ export default async function EventPage({
     cancelVoiceUrl,
     pendingParentalApprovals,
   } = loaded;
+
+  // What the host may still change about the invitation line. Wider than
+  // editing the guest list: while a date poll runs nothing has gone out, so the
+  // order is still a draft and the database already accepts the edit.
+  const lineEditable = canManage && hostCanEditLine(event.status);
 
   const statusLabel: Record<SwitchboardEvent['status'], string> = {
     draft: 'Draft',
@@ -575,17 +585,16 @@ export default async function EventPage({
           <section>
             <SectionHeader
               title={event.status === 'deciding' ? 'Who is invited' : 'Invitation flow'}
-              hint={
-                event.status === 'deciding'
-                  ? 'Only you see this - invitations go out once the group has decided'
-                  : 'Only you see this - reorder or re-time anyone still in line'
-              }
+              hint={invitationFlowHint(event.invite_mode, {
+                editable: lineEditable,
+                deciding: event.status === 'deciding',
+              })}
             />
             <CascadeProgress
               invites={hostInvites.filter((invite) => invite.status !== 'requested')}
               mode={event.invite_mode}
               eventId={event.id}
-              editable={canManage && hostCanEditInvitees(event.status)}
+              editable={lineEditable}
               people={inviteeCards}
             />
           </section>

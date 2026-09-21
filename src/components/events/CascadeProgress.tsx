@@ -19,6 +19,7 @@ import {
 import { formatRelative, formatWindow } from '@/lib/format';
 import { INVITE_STATUS_LABEL } from '@/lib/invite-status';
 import { inviteExpiresAt } from '@/lib/engine/cascade';
+import { hasRowControls, lineOrderNotice, rowEdits } from '@/lib/engine/line-edit';
 import { WINDOW_CHOICES } from '@/lib/engine/windows';
 import type { Invite } from '@/lib/types';
 import type { InviteStatus } from '@/lib/engine/cascade';
@@ -59,11 +60,17 @@ const STATUS_STYLE: Record<InviteStatus, { className: string; dot: string }> = {
   requested: { className: 'text-terracotta-deep', dot: 'bg-terracotta' },
 };
 
-const REOPENABLE: ReadonlySet<string> = new Set([
-  'expired',
-  'declined',
-  'cancelled',
-]);
+/**
+ * Every per-row control is a pill on its own line under the person, not a glyph
+ * squeezed in beside their name. The reorder arrows used to be two bare
+ * triangles about fourteen pixels tall, stacked on each other, at the end of a
+ * row that already held a dropdown and a Remove button — under the design
+ * system's own ~44px tap target, and adjacent enough that a miss moved somebody
+ * the wrong way. "Unable to reorder people in the queue" is what that feels
+ * like on a phone.
+ */
+const CONTROL_PILL =
+  'inline-flex min-h-11 items-center gap-1 rounded-pill border border-line bg-paper px-3 text-xs font-semibold text-ink transition-colors hover:border-terracotta hover:text-terracotta-deep disabled:opacity-40 disabled:hover:border-line disabled:hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-terracotta';
 
 /** Host-only live view of how the cascade is flowing, with manage controls. */
 export function CascadeProgress({
@@ -144,8 +151,11 @@ export function CascadeProgress({
   }
 
   const ordered = [...invites].sort((a, b) => a.position - b.position);
-  // Queued invites, in line order — used to know who can move up/down.
-  const queuedIds = ordered.filter((i) => i.status === 'queued').map((i) => i.id);
+  // One decision about what is editable, shared by every row and the notice
+  // under the list. Without an event id there is nothing to send the edit to,
+  // so that is part of being editable rather than a separate silent check.
+  const editOptions = { mode, editable: Boolean(editable && eventId) };
+  const orderNotice = lineOrderNotice(ordered, editOptions);
   const stages = mode === 'group'
     ? [...new Set(ordered.map((i) => i.group_stage))].sort((a, b) => a - b)
     : [null];
@@ -178,14 +188,7 @@ export function CascadeProgress({
                         sentAt: invite.sent_at,
                       })
                     : null;
-                const canResend = editable && REOPENABLE.has(invite.status);
-                const canRemove = editable && invite.status !== 'accepted';
-                const isQueued = invite.status === 'queued';
-                const queuedIndex = queuedIds.indexOf(invite.id);
-                // Order only matters when we ask one at a time.
-                const canMove =
-                  editable && isQueued && mode === 'individual' && queuedIds.length > 1;
-                const canReWindow = editable && isQueued;
+                const edits = rowEdits(invite, ordered, editOptions);
                 const deliveryText = invite.deliveries
                   ?.map((delivery) => {
                     const channel = delivery.channel === 'in_app'
@@ -226,6 +229,7 @@ export function CascadeProgress({
                         {invite.status === 'sent' && expiresAt
                           ? ` · moves on ${formatRelative(expiresAt.toISOString())}`
                           : ''}
+                        {edits.queuePlace !== null ? ` · #${edits.queuePlace} in line` : ''}
                         {invite.status === 'queued'
                           ? ` · ${formatWindow(invite.window_minutes)} window`
                           : ''}
@@ -255,7 +259,7 @@ export function CascadeProgress({
                 return (
                   <li
                     key={invite.id}
-                    className={`flex items-center gap-3 rounded-card px-3.5 py-3 ${
+                    className={`rounded-card px-3.5 py-3 ${
                       invite.status === 'sent'
                         ? 'bg-gold-soft shadow-lift'
                         : invite.status === 'accepted'
@@ -263,83 +267,93 @@ export function CascadeProgress({
                           : 'bg-cream'
                     }`}
                   >
-                    <span className={`size-2.5 rounded-full shrink-0 ${style.dot}`} aria-hidden />
-                    {tappable ? (
-                      <button
-                        type="button"
-                        onClick={() => setOpenPerson(person)}
-                        aria-label={`Contact ${invite.invitee_name}`}
-                        className="flex min-w-0 flex-1 items-center gap-3 rounded-card text-left transition-opacity hover:opacity-80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-terracotta"
-                      >
-                        {identity}
-                      </button>
-                    ) : (
-                      <span className="flex min-w-0 flex-1 items-center gap-3">{identity}</span>
-                    )}
-                    {canReWindow && (
-                      <select
-                        value={invite.window_minutes}
-                        disabled={pending}
-                        onChange={(e) => doWindow(invite, Number(e.target.value))}
-                        aria-label={`Response window for ${invite.invitee_name}`}
-                        className="rounded-pill border border-line bg-paper px-2 py-1 text-xs font-medium text-ink outline-none focus:border-terracotta"
-                      >
-                        {!WINDOW_CHOICES.some(
-                          (c) => c.windowMinutes === invite.window_minutes,
-                        ) && (
-                          <option value={invite.window_minutes}>
-                            {formatWindow(invite.window_minutes)}
-                          </option>
+                    <div className="flex items-center gap-3">
+                      <span className={`size-2.5 rounded-full shrink-0 ${style.dot}`} aria-hidden />
+                      {tappable ? (
+                        <button
+                          type="button"
+                          onClick={() => setOpenPerson(person)}
+                          aria-label={`Contact ${invite.invitee_name}`}
+                          className="flex min-w-0 flex-1 items-center gap-3 rounded-card text-left transition-opacity hover:opacity-80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-terracotta"
+                        >
+                          {identity}
+                        </button>
+                      ) : (
+                        <span className="flex min-w-0 flex-1 items-center gap-3">{identity}</span>
+                      )}
+                    </div>
+                    {/* The manage controls sit on their own line, indented past
+                        the status dot. Beside the name they had to shrink to
+                        glyphs to fit a phone, which is how a reorder control
+                        ends up unusable. */}
+                    {hasRowControls(edits) && (
+                      <div className="mt-2.5 flex flex-wrap items-center gap-2 pl-[22px]">
+                        {edits.reorderable && (
+                          <>
+                            <button
+                              type="button"
+                              disabled={pending || !edits.moveEarlier}
+                              onClick={() => doMove(invite, true)}
+                              aria-label={`Move ${invite.invitee_name} earlier`}
+                              className={CONTROL_PILL}
+                            >
+                              <span aria-hidden>↑</span> Earlier
+                            </button>
+                            <button
+                              type="button"
+                              disabled={pending || !edits.moveLater}
+                              onClick={() => doMove(invite, false)}
+                              aria-label={`Move ${invite.invitee_name} later`}
+                              className={CONTROL_PILL}
+                            >
+                              <span aria-hidden>↓</span> Later
+                            </button>
+                          </>
                         )}
-                        {WINDOW_CHOICES.map((c) => (
-                          <option key={c.windowMinutes} value={c.windowMinutes}>
-                            {c.label}
-                          </option>
-                        ))}
-                      </select>
-                    )}
-                    {canMove && (
-                      <span className="flex flex-col leading-none">
-                        <button
-                          type="button"
-                          disabled={pending || queuedIndex === 0}
-                          onClick={() => doMove(invite, true)}
-                          aria-label={`Move ${invite.invitee_name} earlier`}
-                          className="px-1 text-ink-faint hover:text-ink disabled:opacity-25"
-                        >
-                          ▲
-                        </button>
-                        <button
-                          type="button"
-                          disabled={pending || queuedIndex === queuedIds.length - 1}
-                          onClick={() => doMove(invite, false)}
-                          aria-label={`Move ${invite.invitee_name} later`}
-                          className="px-1 text-ink-faint hover:text-ink disabled:opacity-25"
-                        >
-                          ▼
-                        </button>
-                      </span>
-                    )}
-                    {canResend && (
-                      <button
-                        type="button"
-                        disabled={pending}
-                        onClick={() => doResend(invite)}
-                        className="rounded-pill px-2 py-1 text-xs font-semibold text-terracotta-deep hover:bg-terracotta-soft focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-terracotta"
-                      >
-                        Resend
-                      </button>
-                    )}
-                    {canRemove && (
-                      <button
-                        type="button"
-                        disabled={pending}
-                        onClick={() => doRemove(invite)}
-                        aria-label={`Remove ${invite.invitee_name}`}
-                        className="rounded-pill px-2 py-1 text-xs font-semibold text-ink-faint hover:text-rose-deep focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-terracotta"
-                      >
-                        Remove
-                      </button>
+                        {edits.window && (
+                          <select
+                            value={invite.window_minutes}
+                            disabled={pending}
+                            onChange={(e) => doWindow(invite, Number(e.target.value))}
+                            aria-label={`Response window for ${invite.invitee_name}`}
+                            className="min-h-11 rounded-pill border border-line bg-paper px-3 text-xs font-medium text-ink outline-none focus:border-terracotta"
+                          >
+                            {!WINDOW_CHOICES.some(
+                              (c) => c.windowMinutes === invite.window_minutes,
+                            ) && (
+                              <option value={invite.window_minutes}>
+                                {formatWindow(invite.window_minutes)}
+                              </option>
+                            )}
+                            {WINDOW_CHOICES.map((c) => (
+                              <option key={c.windowMinutes} value={c.windowMinutes}>
+                                {c.label}
+                              </option>
+                            ))}
+                          </select>
+                        )}
+                        {edits.resend && (
+                          <button
+                            type="button"
+                            disabled={pending}
+                            onClick={() => doResend(invite)}
+                            className={`${CONTROL_PILL} text-terracotta-deep`}
+                          >
+                            Resend
+                          </button>
+                        )}
+                        {edits.remove && (
+                          <button
+                            type="button"
+                            disabled={pending}
+                            onClick={() => doRemove(invite)}
+                            aria-label={`Remove ${invite.invitee_name}`}
+                            className={`${CONTROL_PILL} text-ink-faint hover:text-rose-deep`}
+                          >
+                            Remove
+                          </button>
+                        )}
+                      </div>
                     )}
                   </li>
                 );
@@ -348,6 +362,11 @@ export function CascadeProgress({
           </div>
         );
       })}
+      {/* Why the order cannot move, when it cannot. An absent control reads as
+          a broken one, which is exactly how this was reported. */}
+      {orderNotice && (
+        <p className="text-xs text-ink-soft leading-relaxed">{orderNotice}</p>
+      )}
       <p className="text-xs text-ink-faint leading-relaxed">
         {people
           ? 'Tap anyone to text or email them. Invitees never see this view - or their place in line.'
