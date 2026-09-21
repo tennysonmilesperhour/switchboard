@@ -139,6 +139,27 @@ export default async function SharedInvitePage({
   const answerable = canAnswer(state);
   const notice = shareLinkNotice(state, host?.display_name);
 
+  // The host's RSVP questions, exactly as `/rsvp/<guest_token>` loads them.
+  // Both links reach the same host, so a required question must not depend on
+  // which one a guest was sent — this link used to take an answer without ever
+  // asking, which left a host with questions nobody they texted had seen. Only
+  // fetched where they can be shown: a link that is read but not answerable,
+  // and an unfurl, have nothing to ask.
+  const { data: questionRows } = answerable && event && user && admin
+    ? await admin
+        .from('event_questions')
+        .select('id, prompt, required, kind, options')
+        .eq('event_id', event.id)
+        .order('position')
+    : { data: null };
+  const questions = (questionRows ?? []).map((q) => ({
+    id: q.id,
+    prompt: q.prompt,
+    required: q.required,
+    kind: q.kind === 'choice' ? ('choice' as const) : ('text' as const),
+    options: q.options,
+  }));
+
   const jsonLd = event && readable
     ? {
         '@context': 'https://schema.org',
@@ -237,6 +258,7 @@ export default async function SharedInvitePage({
                 <ShareLinkRsvp
                   shareToken={token}
                   defaultName={viewerProfile?.display_name ?? ''}
+                  questions={questions}
                 />
               ) : (
                 <RsvpSignInGate

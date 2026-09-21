@@ -13,6 +13,49 @@ from working sessions. Newest thinking lives here so nothing evaporates.
 
 ---
 
+## ✅ Shipped 2026-09-21 — a pass over ten checklist sections
+
+A walk through RSVP, Registry, Living rooms, Run it back, AI-powered discovery,
+Zones, Live location sharing, Map, Invite-only boards, and Board posts. Seven
+were already sound end to end. Four things were not, and each was the same
+shape: a rule honoured on one surface and skipped on a second that reaches the
+same person.
+
+- **The share link answered without ever asking the host's questions.** RSVP
+  questions were collected on `/rsvp/<guest_token>` and in the event page's RSVP
+  card, and not on `/i/<share_token>` — the one link a host texts to anyone. A
+  share-link guest accepted and was handed to their own RSVP page, which shows
+  the questions only while the invite is still `sent`, so by then there was
+  nothing to answer. A host who made a question *required* got no answer from
+  anybody they texted, and nothing anywhere said so. The share link now asks
+  before it accepts, gated by the same `requiredAnswered` as the per-invite
+  flow, and `respondViaShareLink` persists through the same `saveInviteAnswers`
+  — accepted answers only, this event's question ids only.
+- **The plan page trusted two host-typed URLs the rest of the app validates.**
+  `wishlist_url` went into an `href` and `cover_url` into an `img src` raw, while
+  `InvitePlanDetails` and both invite pages' JSON-LD run the same two fields
+  through `safeHttpUrl`. Create and edit clean them on save, but a row predating
+  that guard — or one Run It Back carried forward verbatim — arrives unchecked,
+  and this is the page the plan's own guests open. Now validated at the sink,
+  like everywhere else.
+- **One odd `kind` from the model lost a whole message's filings.**
+  `room_items.kind` has a CHECK on six values and a message's rows are inserted
+  as one array, so a single value outside the set rejected the batch — inside a
+  best-effort `catch`, which meant the room was never told. A tool schema's enum
+  is a request, not a guarantee, so `ROOM_ITEM_KINDS` is now a runtime list that
+  `RoomItemKind` derives from, and anything else files as a note. `extract.ts`
+  had no tests at all; it has twelve.
+- **A board post notified the whole board and then lost it.** The notification
+  linked to `/boards/<slug>`, which on a busy board is the top of a list the
+  post is already several entries down. It now anchors at the post.
+
+Checklist copy: D1 described the intent launchpad with the three labels from the
+Start something screen, while sending the reader to Explore, where the launchpad
+deliberately says something else (#191). The item now names both, so walking it
+matches what is on screen.
+
+---
+
 ## ✅ Shipped 2026-09-21 — the checklist became a shared board
 
 The checklist was still a private document pretending to be a shared one. The

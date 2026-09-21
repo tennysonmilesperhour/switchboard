@@ -38,7 +38,25 @@ export type DeclineNote = 'keep_asking' | 'not_my_thing' | null;
 export type PollSource = 'guests' | 'host' | 'ai';
 export type PollTopic = 'date' | 'place' | 'food' | 'activity' | 'custom';
 export type IntentKind = 'down_to_connect' | 'open_to_reschedule' | 'discover_connect';
-export type RoomItemKind = 'event' | 'address' | 'task' | 'link' | 'photo' | 'note';
+/**
+ * The tabs a Living Room files things into, and the exact set
+ * `room_items.kind` accepts (CHECK, 20260703120000_init.sql).
+ *
+ * A runtime list rather than a bare union because the auto-filer has to
+ * validate a model's answer against it: `room_items` rows for one message are
+ * inserted as a single array, so one unknown kind rejects the batch and the
+ * message's filings are lost in silence. Deriving the type from the list keeps
+ * the two from drifting.
+ */
+export const ROOM_ITEM_KINDS = [
+  'event',
+  'address',
+  'task',
+  'link',
+  'photo',
+  'note',
+] as const;
+export type RoomItemKind = (typeof ROOM_ITEM_KINDS)[number];
 export type LocationVisibility = 'sharers' | 'connections';
 
 export const POLL_TOPICS: Array<{
