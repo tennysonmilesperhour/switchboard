@@ -385,12 +385,20 @@ export interface ShareLinkRsvpResult extends RespondResult {
  *
  * The caller id is resolved here from the session and passed explicitly — never
  * taken from the client — because auth.uid() is null under the service role.
+ *
+ * `answers` carries the host's RSVP questions, the same as the per-invite path.
+ * Both flows reach the same host, so the host's questions cannot depend on which
+ * link a guest happened to be sent: a required question that the share link
+ * skipped is a question the host never gets an answer to from anyone they
+ * texted. Persisted on the same terms as everywhere else — only once the answer
+ * is `accepted`, and only for question ids that belong to this event.
  */
 export async function respondViaShareLink(
   shareToken: string,
   accept: boolean,
   name = '',
   contact: string | null = null,
+  answers: Record<string, string> = {},
 ): Promise<ShareLinkRsvpResult> {
   // Viewing the plan never needs an account; answering it does. Checked first,
   // and before the service-role client is touched: the page shows the sign-in
@@ -469,6 +477,28 @@ export async function respondViaShareLink(
   }
 
   const eventId = await eventIdForShareToken(admin, shareToken);
+
+  // The invite the RPC just answered. `rsvp_via_share_token` returns only
+  // (outcome, token), and nothing enforces one invite per (event, invitee), so
+  // take the most recently answered row rather than letting a stray duplicate
+  // turn this into a read error. Resolved once: the answers below and the
+  // guardian step further down both need the same row.
+  let acceptedInviteId: string | null = null;
+  if (outcome === 'accepted' && eventId) {
+    const { data: acceptedInvite } = await admin
+      .from('invites')
+      .select('id')
+      .eq('event_id', eventId)
+      .eq('invitee_id', user.id)
+      .order('responded_at', { ascending: false, nullsFirst: false })
+      .limit(1)
+      .maybeSingle();
+    acceptedInviteId = acceptedInvite?.id ?? null;
+    if (acceptedInviteId) {
+      await saveInviteAnswers(admin, acceptedInviteId, eventId, answers);
+    }
+  }
+
   if (eventId) {
     await advanceEventCascade(eventId);
     if (outcome === 'accepted') {
@@ -501,24 +531,12 @@ export async function respondViaShareLink(
       .eq('id', eventId)
       .maybeSingle();
     if (evt?.parental_approval) {
-      // `rsvp_via_share_token` returns only (outcome, token), so the invite the
-      // guardian step must bind to is resolved here. Nothing enforces one
-      // invite per (event, invitee), so take the row the RPC just answered
-      // rather than letting a stray duplicate turn this into a read error.
-      const { data: acceptedInvite } = await admin
-        .from('invites')
-        .select('id')
-        .eq('event_id', eventId)
-        .eq('invitee_id', user.id)
-        .order('responded_at', { ascending: false, nullsFirst: false })
-        .limit(1)
-        .maybeSingle();
       return {
         ok: true,
         outcome: 'accepted',
         token: typeof row?.token === 'string' ? row.token : undefined,
         needsApproval: true,
-        inviteId: acceptedInvite?.id,
+        inviteId: acceptedInviteId ?? undefined,
         eventId,
       };
     }

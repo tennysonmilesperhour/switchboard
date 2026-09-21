@@ -4,7 +4,7 @@ import { redirect } from 'next/navigation';
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient, hasAdminCredentials } from '@/lib/supabase/admin';
-import { serializeJsonLd } from '@/lib/security';
+import { safeHttpUrl, serializeJsonLd } from '@/lib/security';
 import { advanceEventCascade } from '@/lib/server/cascade-runner';
 import { AppShell } from '@/components/shell/AppShell';
 import { Card, SectionHeader } from '@/components/ui/Card';
@@ -158,6 +158,14 @@ export default async function EventPage({
   // surface that describes the timing takes it from here.
   const inviteMode = asInviteMode(event.invite_mode);
 
+  // Host-typed outbound URLs, validated at the sink like every other surface
+  // that renders them (InvitePlanDetails, the two invite pages' JSON-LD). Both
+  // write paths clean these on save, but a row predating that guard — or one
+  // carried forward verbatim by Run It Back — reaches this page unchecked, and
+  // this page is the one the plan's own guests open. See docs/SECURITY.md §6.
+  const coverUrl = safeHttpUrl(event.cover_url);
+  const wishlistUrl = safeHttpUrl(event.wishlist_url);
+
   // Stable hero color derived from the event id.
   const heroIndex = Array.from(event.id).reduce(
     (sum, ch) => sum + ch.charCodeAt(0),
@@ -224,10 +232,10 @@ export default async function EventPage({
           </div>
         )}
         <div className="space-y-4">
-          {event.cover_url && (
+          {coverUrl && (
             // eslint-disable-next-line @next/next/no-img-element
             <img
-              src={event.cover_url}
+              src={coverUrl}
               alt=""
               className="w-full max-h-64 rounded-card object-cover shadow-lift"
             />
@@ -310,9 +318,9 @@ export default async function EventPage({
                 📅 Google Calendar
               </a>
             )}
-            {event.wishlist_url && (
+            {wishlistUrl && (
               <a
-                href={event.wishlist_url}
+                href={wishlistUrl}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="inline-flex items-center gap-1.5 rounded-pill border border-line bg-card px-3.5 py-2 text-xs font-bold text-ink-soft shadow-lift hover:border-terracotta hover:text-terracotta-deep active:scale-[0.98] transition-all"
