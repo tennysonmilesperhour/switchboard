@@ -71,7 +71,7 @@ export default async function CapsulePage({
         </div>
 
         {rows.length === 0 ? (
-          <p className="text-sm text-ink-faint text-center py-4">
+          <p className="text-plate text-plate-inset text-sm text-ink-faint text-center py-4">
             Nothing in the capsule yet. Start it below.
           </p>
         ) : (

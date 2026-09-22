@@ -179,9 +179,9 @@ export function EventEditForm({ event }: { event: SwitchboardEvent }) {
         </div>
       </div>
 
-      {error && <p className="text-sm text-rose-deep" role="alert">{error}</p>}
+      {error && <p className="text-plate text-plate-inset text-sm text-rose-deep" role="alert">{error}</p>}
 
-      <p className="text-xs text-ink-faint">
+      <p className="text-plate text-plate-inset text-xs text-ink-faint">
         Changing the time or place quietly notifies everyone who’s already accepted.
       </p>
 

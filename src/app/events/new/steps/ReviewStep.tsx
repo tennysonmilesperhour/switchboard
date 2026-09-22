@@ -1,10 +1,13 @@
 'use client';
 
 import { Card } from '@/components/ui/Card';
+import { ReorderableList } from '@/components/ui/ReorderableList';
 import { HostSuggestions } from '@/components/events/HostSuggestions';
 import { recurrenceLabel, type RecurrenceKind } from '@/lib/engine/recurrence';
 import type { CascadePreviewEntry } from '@/lib/engine/cascade';
 import type { HostSuggestion } from '@/lib/engine/suggestions';
+import { isStaggered, orderMatters, rhythmLine } from '@/lib/invite-rhythm';
+import type { DuplicateWarning } from '@/lib/invitee-dedupe';
 import type { InviteMode } from '@/lib/types';
 import { MODE_OPTIONS, type DraftInvitee } from './wizard-types';
 
@@ -22,7 +25,24 @@ interface ReviewStepProps {
   suggestions: HostSuggestion[];
   looksOutdoor: boolean;
   preview: CascadePreviewEntry[];
+  /** Move an invitee up or down the line. */
+  moveInvitee: (from: number, to: number) => void;
+  /** Take someone off the plan before it goes out. */
+  removeInvitee: (key: string) => void;
+  /** Switch the rhythm from here, without walking back three steps. */
+  setInviteMode: (mode: InviteMode) => void;
+  /** Rows that may be one person twice, still unanswered by the host. */
+  duplicates: DuplicateWarning[];
+  /** "Not a repeat" — stop asking about this pair. */
+  keepBothDuplicates: (warning: DuplicateWarning) => void;
 }
+
+const TIME = new Intl.DateTimeFormat('en-US', {
+  month: 'short',
+  day: 'numeric',
+  hour: 'numeric',
+  minute: '2-digit',
+});
 
 export function ReviewStep({
   title,
@@ -38,7 +58,22 @@ export function ReviewStep({
   suggestions,
   looksOutdoor,
   preview,
+  moveInvitee,
+  removeInvitee,
+  setInviteMode,
+  duplicates,
+  keepBothDuplicates,
 }: ReviewStepProps) {
+  // Two different questions, both answered by `invite-rhythm` so this screen
+  // and the plan page can never describe the same plan differently. A grip
+  // only appears where a row's position decides something; a send time only
+  // appears where the invitations actually leave at different moments.
+  const ordered = orderMatters(inviteMode);
+  const staggered = isStaggered(inviteMode);
+  const sendAt = new Map(preview.map((entry) => [entry.id, entry.wouldSendAt]));
+  const duplicateFor = new Map(duplicates.map((warning) => [warning.dropKey, warning]));
+  const nameOf = (key: string) => invitees.find((i) => i.key === key)?.name ?? 'someone';
+
   return (
         <div className="space-y-4 animate-rise">
           <Card lifted>
@@ -82,35 +117,108 @@ export function ReviewStep({
             </Card>
           )}
 
-          {!enablePoll && preview.length > 0 && (
+          {invitees.length > 0 && (
             <div>
-              <h4 className="text-sm font-bold text-ink mb-2">
-                If nobody responds, here’s how invitations will flow:
-              </h4>
-              <ol className="space-y-1.5">
-                {preview.map((entry) => {
-                  const invitee = invitees.find((i) => i.key === entry.id);
-                  return (
-                    <li
-                      key={entry.id}
-                      className="flex items-center gap-3 text-sm rounded-card bg-cream px-3.5 py-2.5"
+              {/* `text-plate` is inert on every ordinary theme; under a photo
+                  wallpaper it puts this heading on a surface instead of on the
+                  picture. */}
+              <div className="text-plate text-plate-inset mb-2">
+                <h4 className="text-sm font-bold text-ink">
+                  {enablePoll
+                    ? 'Who is in on the decision'
+                    : ordered
+                      ? 'The order invitations go out in'
+                      : staggered
+                        ? 'When invitations go out'
+                        : 'Who this goes to'}
+                </h4>
+                <p className="mt-0.5 text-xs text-ink-faint">
+                  {ordered
+                    ? 'Drag anyone by the handle to change the order, or tap ✕ to take them off.'
+                    : 'Tap ✕ to take anyone off before it goes out.'}
+                </p>
+              </div>
+
+              {!enablePoll && !staggered && (
+                <Card tone="cream" className="mb-2">
+                  <p className="text-sm leading-relaxed text-ink-soft">
+                    📣 <strong>Everyone hears at the same moment.</strong>{' '}
+                    {rhythmLine(inviteMode, invitees.length)}
+                  </p>
+                  {invitees.length > 1 && (
+                    <button
+                      type="button"
+                      onClick={() => setInviteMode('individual')}
+                      className="mt-2 rounded-pill bg-terracotta-soft px-3 py-1.5 text-xs font-bold text-terracotta-deep transition-colors hover:bg-terracotta hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-terracotta"
                     >
-                      <span className="text-terracotta-deep" aria-hidden>→</span>
-                      <span className="font-bold flex-1">{invitee?.name}</span>
-                      <span className="text-ink-faint text-xs">
-                        {new Intl.DateTimeFormat('en-US', {
-                          month: 'short', day: 'numeric',
-                          hour: 'numeric', minute: '2-digit',
-                        }).format(entry.wouldSendAt)}
+                      Ask them one at a time instead
+                    </button>
+                  )}
+                </Card>
+              )}
+
+              <ReorderableList
+                aria-label="Invitees"
+                items={invitees.map((invitee) => ({ ...invitee, label: invitee.name }))}
+                onReorder={ordered ? moveInvitee : undefined}
+                onRemove={(item) => removeInvitee(item.key)}
+                removeLabel={(item) => `Take ${item.name} off this plan`}
+                rowClassName={(item) =>
+                  duplicateFor.has(item.key) ? 'bg-gold-soft' : 'bg-cream'
+                }
+              >
+                {(item, index) => {
+                  const warning = duplicateFor.get(item.key);
+                  const when = sendAt.get(item.key);
+                  return (
+                    <>
+                      <span className="flex items-center gap-2">
+                        {ordered && (
+                          <span className="grid size-5 shrink-0 place-items-center rounded-pill bg-terracotta text-[11px] font-extrabold text-white">
+                            {index + 1}
+                          </span>
+                        )}
+                        <span className="min-w-0 flex-1 truncate text-sm font-bold text-ink">
+                          {item.name}
+                        </span>
+                        {!item.profileId && (
+                          <span className="shrink-0 rounded-pill bg-gold-soft px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-gold-deep">
+                            guest
+                          </span>
+                        )}
+                        {!enablePoll && (
+                          <span className="shrink-0 text-xs text-ink-faint">
+                            {staggered && when ? TIME.format(when) : 'right away'}
+                          </span>
+                        )}
                       </span>
-                    </li>
+                      {warning && (
+                        <span className="mt-1 flex flex-wrap items-center gap-2 text-xs text-gold-deep">
+                          <span>
+                            {warning.reason === 'target'
+                              ? `Same contact as ${nameOf(warning.keepKey)}.`
+                              : `Could this be ${nameOf(warning.keepKey)} again?`}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => keepBothDuplicates(warning)}
+                            className="rounded-pill bg-card px-2 py-0.5 font-bold text-ink-soft transition-colors hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-terracotta"
+                          >
+                            Two different people
+                          </button>
+                        </span>
+                      )}
+                    </>
                   );
-                })}
-              </ol>
-              <p className="text-xs text-ink-faint mt-2">
-                In reality it usually goes much faster - the moment someone
-                accepts, the flow stops.
-              </p>
+                }}
+              </ReorderableList>
+
+              {!enablePoll && staggered && (
+                <p className="text-plate text-plate-inset mt-2 inline-block text-xs text-ink-faint">
+                  In reality it usually goes much faster - the moment someone
+                  accepts, the flow stops.
+                </p>
+              )}
             </div>
           )}
 

@@ -431,13 +431,21 @@ body {
 }
 
 /* For text that carries no padding of its own, and so would otherwise get a
- * plate skin-tight to the glyphs. The negative margin cancels the padding
- * exactly, so the plate grows OUTWARD around the text rather than displacing
- * it: turning a wallpaper on never reflows the page. Only for elements with no
- * padding — on one that has its own, this would override it. */
+ * plate skin-tight to the glyphs.
+ *
+ * This is a spread `box-shadow` in the plate colour rather than padding, and
+ * the reason is composition. Padding plus a cancelling negative margin also
+ * grows the plate outward without reflowing — but it does it by WRITING
+ * `margin`, so putting it on the many paragraphs that already carry an
+ * `mt-0.5` or an `mb-3` replaced their spacing with -0.5rem and shoved them
+ * into their neighbours. That made the plate something you had to check each
+ * element for before using, which is how most of the app's loose text ended up
+ * without one. A shadow paints outside the border box and touches no box
+ * model at all, so it can go on anything.
+ *
+ * Inert without a wallpaper, like `.text-plate` itself. */
 [data-wallpaper="on"] .text-plate-inset {
-  padding: 0.5rem 0.75rem;
-  margin: -0.5rem -0.75rem;
+  box-shadow: 0 0 0 0.5rem var(--plate-paper);
 }
 
 /*

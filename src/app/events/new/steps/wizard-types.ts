@@ -60,7 +60,7 @@ export const STEP_META: Record<
   people: {
     label: 'People',
     heading: 'Who is coming?',
-    sub: 'Tap friends, pull matches from your contacts, or invite by username, email, or phone.',
+    sub: 'Pull people in from your contacts, tap a friend, or invite by username, email, or phone.',
   },
   style: {
     label: 'Invites',
@@ -80,7 +80,7 @@ export const STEP_META: Record<
   review: {
     label: 'Review',
     heading: 'Ready to send',
-    sub: 'Give it one last look before it goes out.',
+    sub: 'Check the list, drop anyone who shouldn’t be on it, then send.',
   },
 };
 

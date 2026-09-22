@@ -34,6 +34,7 @@ import { AddInvitees } from './AddInvitees';
 import { InviteLink } from './InviteLink';
 import { PrivacyAccess } from './PrivacyAccess';
 import { inviteExpiresAt } from '@/lib/engine/cascade';
+import { asInviteMode, inviteListHint, inviteListTitle } from '@/lib/invite-rhythm';
 import { formatDateTime, formatDateTimeRange } from '@/lib/format';
 import { resolveEventZone } from '@/lib/server/event-zone';
 import { googleCalendarUrl } from '@/lib/calendar-links';
@@ -153,6 +154,10 @@ export default async function EventPage({
     past: 'Past',
   };
 
+  // The rhythm this plan was created with, read once and fail-closed. Every
+  // surface that describes the timing takes it from here.
+  const inviteMode = asInviteMode(event.invite_mode);
+
   // Host-typed outbound URLs, validated at the sink like every other surface
   // that renders them (InvitePlanDetails, the two invite pages' JSON-LD). Both
   // write paths clean these on save, but a row predating that guard — or one
@@ -253,7 +258,7 @@ export default async function EventPage({
             }
           />
           {event.description && (
-            <p className="text-ink-soft text-[15px] leading-relaxed">{event.description}</p>
+            <p className="text-plate text-plate-inset text-ink-soft text-[15px] leading-relaxed">{event.description}</p>
           )}
           {event.status === 'cancelled' && (event.cancel_reason || event.cancel_voice_url) && (
             <Card tone="terracotta">
@@ -582,16 +587,26 @@ export default async function EventPage({
         {canManage && hostInvites.length > 0 && (
           <section>
             <SectionHeader
-              title={event.status === 'deciding' ? 'Who is invited' : 'Invitation flow'}
+              // The heading used to say "Invitation flow" and promise
+              // reordering on every plan, including the ones that have no line
+              // to reorder. A host reading "anyone still in line" over five
+              // rows that all say "Invited" has been told her stagger is
+              // running when it never was one. `invite-rhythm` owns both
+              // strings now, so this page and the wizard cannot disagree.
+              title={
+                event.status === 'deciding'
+                  ? 'Who is invited'
+                  : inviteListTitle(inviteMode)
+              }
               hint={
                 event.status === 'deciding'
                   ? 'Only you see this - invitations go out once the group has decided'
-                  : 'Only you see this - reorder or re-time anyone still in line'
+                  : inviteListHint(inviteMode)
               }
             />
             <CascadeProgress
               invites={hostInvites.filter((invite) => invite.status !== 'requested')}
-              mode={event.invite_mode}
+              mode={inviteMode}
               eventId={event.id}
               editable={canManage && hostCanEditInvitees(event.status)}
               people={inviteeCards}
@@ -603,7 +618,7 @@ export default async function EventPage({
         {guestLinks.length > 0 && (
           <section>
             <SectionHeader title="Invite links" hint="For people you invited who aren’t on Switchboard" />
-            <p className="text-sm text-ink-soft mb-2.5 leading-relaxed">
+            <p className="text-plate text-plate-inset text-sm text-ink-soft mb-2.5 leading-relaxed">
               Each link opens a private invitation page for that person - the
               plan shows up with no account or app. Copy it and send it however
               you like (text, email, DM); they sign in once to reply, which is
@@ -668,7 +683,7 @@ export default async function EventPage({
         {/* Standing plan: a recurring host always has a one-tap "next one". */}
         {isHost && event.recurrence && event.recurrence !== 'none' && (
           <section className="border-t border-line pt-6">
-            <p className="text-sm text-ink-soft mb-2.5">
+            <p className="text-plate text-plate-inset text-sm text-ink-soft mb-2.5">
               This is a standing plan ({recurrenceLabel(event.recurrence, event.recurrence_interval_days)?.toLowerCase()}).
               Ready for the next one with the same crew?
             </p>
@@ -683,7 +698,7 @@ export default async function EventPage({
             event.status === 'cancelled' ||
             (event.starts_at && new Date(event.starts_at) < new Date())) && (
             <section className="border-t border-line pt-6">
-              <p className="text-sm text-ink-soft mb-2.5">
+              <p className="text-plate text-plate-inset text-sm text-ink-soft mb-2.5">
                 Loved it? Gather the same crew for a fresh plan.
               </p>
               <RunItBackButton eventId={event.id} />

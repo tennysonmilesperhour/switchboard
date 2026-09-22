@@ -54,9 +54,14 @@ export type IconName =
   | 'pause'
   | 'stop'
   | 'eye'
-  | 'eyeOff';
+  | 'eyeOff'
+  | 'drag';
 
 const PATHS: Record<IconName, string> = {
+  // Six dots in two columns - the grip the whole web uses for "pick this row
+  // up and move it". Recognising it is the only thing standing between a host
+  // and discovering that the list reorders at all.
+  drag: 'M9 4h2v2H9V4zm4 0h2v2h-2V4zM9 11h2v2H9v-2zm4 0h2v2h-2v-2zM9 18h2v2H9v-2zm4 0h2v2h-2v-2z',
   home: 'M19 21H5a1 1 0 0 1-1-1v-9H1l10.327-9.388a1 1 0 0 1 1.346 0L23 11h-3v9a1 1 0 0 1-1 1zm-9-2h4v-6h-4v6z',
   search:
     'M18.031 16.617l4.283 4.282-1.415 1.415-4.282-4.283A8.96 8.96 0 0 1 11 20c-4.968 0-9-4.032-9-9s4.032-9 9-9 9 4.032 9 9a8.96 8.96 0 0 1-1.969 5.617zm-2.006-.742A6.977 6.977 0 0 0 18 11c0-3.867-3.133-7-7-7-3.868 0-7 3.133-7 7 0 3.868 3.132 7 7 7a6.977 6.977 0 0 0 4.875-1.975l.15-.15z',

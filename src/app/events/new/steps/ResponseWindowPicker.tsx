@@ -78,7 +78,7 @@ export function ResponseWindowPicker({
           </button>
         )}
       </div>
-      <p className="mt-2 text-xs text-ink-faint">
+      <p className="text-plate text-plate-inset mt-2 text-xs text-ink-faint">
         {hint ??
           (commonWindow === null
             ? 'Right now people have different windows. Pick one to give everybody the same.'
