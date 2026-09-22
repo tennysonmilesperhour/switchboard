@@ -638,6 +638,40 @@ export async function moveQueuedInvite(
   return { ok: true };
 }
 
+/**
+ * Move a not-yet-sent invite into another wave (host/co-host).
+ *
+ * The wave plan's version of reordering. `move_queued_invite` swaps two people
+ * in a one-at-a-time line; a wave plan asks a whole stage together, so the only
+ * order it has is which stage somebody is in — and until now that was frozen
+ * after the wizard. The bounds (an existing wave or the one after it, five at
+ * most) and the queued-only guard live in the function, so a wave that has
+ * already gone out cannot be rewritten.
+ */
+export async function setInviteStage(
+  eventId: string,
+  inviteId: string,
+  stage: number,
+): Promise<ActionResult> {
+  const auth = await requireUser();
+  if (!auth.ok) return auth;
+  const { supabase, user } = auth;
+  const manager = await checkEventManager(user.id, eventId);
+  if (!manager.ok) return failure('SB-PLAN-AUTHZ');
+  if (!manager.isManager) {
+    return failure('SB-PERM-HOST', 'Only the host can manage invites.');
+  }
+  const { error } = await supabase.rpc('set_invite_stage', {
+    p_invite: inviteId,
+    p_stage: stage,
+  });
+  if (error) {
+    return reportAndFail('SB-INVITE-SEND', 'invite.stage', error, { eventId, inviteId });
+  }
+  revalidatePath(`/events/${eventId}`);
+  return { ok: true };
+}
+
 /** Change the response window on a not-yet-sent invite (host/co-host). */
 export async function setInviteWindow(
   eventId: string,

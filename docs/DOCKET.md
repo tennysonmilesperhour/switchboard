@@ -13,6 +13,54 @@ from working sessions. Newest thinking lives here so nothing evaporates.
 
 ---
 
+## ✅ Shipped 2026-09-22 — the wave plan's order, and a line editable while the date is still open
+
+From the checklist board, item A2 (Cascading invites): *"Unable to reorder
+people in the queue."* Round 6 answered most of it, with `ReorderableList` and
+`invite-rhythm.ts`: the chain can be dragged, and no surface promises a stagger
+that is not running. Two parts of the same report were still open afterwards,
+and both were "the order exists but nothing can change it".
+
+- **A wave plan had no editable order at all.** Its order is which wave somebody
+  is in, and that was set in the wizard and frozen from then on - `orderMatters`
+  is false for waves, so there is no line to drag, and there was no control in
+  its place. `set_invite_stage(p_invite, p_stage)`
+  (`supabase/migrations/20260922020000_invite_stage_editing.sql`) is built to
+  `set_invite_window`'s rules: security definer, host or co-host, and the
+  queued-only guard inside the UPDATE's own `WHERE`, so a wave that has already
+  gone out cannot be rewritten even if the sweep lands between the check and the
+  write. No advisory lock - unlike the position swap there is no unique
+  constraint to dodge. The control is a wave select on the row, beside the
+  response window.
+- **The range is a wave the plan has, or the one after the last, five at most.**
+  Moving somebody into a wave that already went out is allowed and asks them on
+  the next sweep, which is the point. Skipping to wave 5 of a two-wave plan is
+  refused: the cascade engine reads a stage with nobody queued as one that
+  resolved, so a gap would be stepped over rather than waited for. `MAX_WAVES`
+  and `wavesOffered` live in `invite-rhythm.ts` beside `orderMatters`, and the
+  wizard's dropdown, the plan page's select and the SQL now share one ceiling
+  (the wizard had its own `Math.min(stageCount + 1, 5)`).
+- **A plan still polling for its date could not be put in order.**
+  `hostCanEditLine` is `hostCanEditInvitees` plus `deciding`: nothing has been
+  sent, every invite is queued, and `move_queued_invite` / `set_invite_window` /
+  `set_invite_stage` already accepted the edit - only the UI was hiding it.
+  Adding people stays narrower, because a guest list that grows mid-poll changes
+  what the people already answering agreed to.
+- **The hint stopped promising one capability to every staggered plan.**
+  `inviteListHint` now takes what the plan is doing, so a wave plan is pointed at
+  its wave select, a settled plan says it is a record, and a plan mid-poll is
+  invited to set the order now. Where reordering is genuinely impossible the list
+  says so - "only one person is still in line, so there is nobody to swap them
+  with" - because an absent control reads as a broken one, which is how this was
+  reported in the first place.
+- `supabase/tests/invite_stage_editing.test.sql` walks host, co-host, guest, a
+  sent invite, both out-of-range refusals and the anonymous grant;
+  `invite-rhythm.test.ts` covers the waves offered and the hint in every mode
+  crossed with editable and deciding; `docs/SECURITY.md` records the invariant
+  beside the other invitation rules.
+
+---
+
 ## ✅ Shipped 2026-09-21 — the rest of the checklist
 
 The other twenty-four items: the wizard, cascading invites, polls, share links

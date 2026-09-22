@@ -166,6 +166,24 @@ export function hostCanEditInvitees(status: string | null | undefined): boolean 
 }
 
 /**
+ * Can a host reorder, re-time, or take out someone who has not answered yet?
+ *
+ * Wider than `hostCanEditInvitees` on purpose, and only by `deciding`. While a
+ * date poll runs, no invitation has gone out: every invite is queued and the
+ * order is still a draft. `move_queued_invite` and `set_invite_window` already
+ * accept those edits — they gate on the invite being queued, not on the plan's
+ * status — so hiding the controls there did not protect anything. It only left
+ * a host looking at a list of people with the hint "reorder or re-time anyone
+ * still in line" and no way to do either, which is what the client reported.
+ *
+ * Adding people is a different question and stays narrower: a guest list that
+ * grows mid-poll changes what the people already answering agreed to.
+ */
+export function hostCanEditLine(status: string | null | undefined): boolean {
+  return hostCanEditInvitees(status) || status === 'deciding';
+}
+
+/**
  * Can a visitor request a seat through the open-table join page?
  *
  * Both predicates take the generated `string` (see `ShareLinkSubject`) rather

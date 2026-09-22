@@ -53,6 +53,12 @@ is decided, and an idea can never be re-attributed (`author_id` is frozen).
 `thread_replies.test.sql` proves a reply can only answer a comment on the same
 plan.
 
+`invite_stage_editing.test.sql` covers `set_invite_stage`, the wave plan's
+version of reordering: the host and a co-host can move somebody who has not been
+asked yet, an invited guest cannot, an invitation that has already gone out
+cannot be moved at all, and the wave has to be one the plan already has (or the
+one after it, five at most) rather than any integer a caller sends.
+
 `signal_audiences.test.sql` walks the per-signal audience rule: a named person
 sees only the signal naming them, a group member sees only the group signal
 (connected or not), a block hides it, a stranger sees nothing, a group the

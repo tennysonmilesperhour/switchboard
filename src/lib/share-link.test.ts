@@ -7,6 +7,7 @@ import {
   canReadPlan,
   canRequestOpenTable,
   hostCanEditInvitees,
+  hostCanEditLine,
   hostCanShare,
   shareLinkNotice,
   shareLinkState,
@@ -98,6 +99,10 @@ describe('shareLinkState', () => {
 describe('the invariants that keep links working', () => {
   it('keeps invite-list editing in one status rule', () => {
     expect(ALL_STATUSES.filter(hostCanEditInvitees)).toEqual(['inviting']);
+    // Editing the line is wider by exactly one status: while a date poll runs
+    // nothing has been sent, so the order is still a draft. Anything wider than
+    // this would let a host rewrite invitations that have already gone out.
+    expect(ALL_STATUSES.filter(hostCanEditLine)).toEqual(['deciding', 'inviting']);
     expect(ALL_STATUSES.filter(canRequestOpenTable)).toEqual(['inviting', 'confirmed']);
 
     const sourceFiles: string[] = [];
@@ -120,6 +125,17 @@ describe('the invariants that keep links working', () => {
       .filter((file) => !localModules.has(file))
       .filter((file) => repeatedRule.test(readFileSync(file, 'utf8')));
     expect(offenders.map((file) => file.replace(`${process.cwd()}/`, ''))).toEqual([]);
+  });
+
+  it('lets anyone who may change the guest list change the line too', () => {
+    // The narrower permission has to imply the wider one. If adding people were
+    // ever allowed somewhere reordering them is not, a host could build a line
+    // she cannot then put in order.
+    for (const status of ALL_STATUSES) {
+      if (hostCanEditInvitees(status)) {
+        expect(hostCanEditLine(status), status).toBe(true);
+      }
+    }
   });
 
   it('never offers a share affordance for a link the recipient cannot read', () => {

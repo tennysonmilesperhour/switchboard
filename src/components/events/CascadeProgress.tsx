@@ -15,10 +15,16 @@ import {
   moveQueuedInvite,
   removeInvite,
   resendInvite,
+  setInviteStage,
   setInviteWindow,
 } from '@/lib/actions/events';
 import { formatRelative, formatWindow } from '@/lib/format';
-import { isStaggered, orderMatters } from '@/lib/invite-rhythm';
+import {
+  isStaggered,
+  orderMatters,
+  wavesMatter,
+  wavesOffered,
+} from '@/lib/invite-rhythm';
 import { INVITE_STATUS_LABEL } from '@/lib/invite-status';
 import { inviteExpiresAt } from '@/lib/engine/cascade';
 import { WINDOW_CHOICES } from '@/lib/engine/windows';
@@ -157,6 +163,28 @@ export function CascadeProgress({
     });
   }
 
+  /**
+   * Move somebody into another wave.
+   *
+   * A wave plan's order is which wave, so this is its reorder control: there is
+   * no line to drag anybody up, because a whole stage is asked together. Moving
+   * someone into a wave that has already gone out asks them on the next sweep,
+   * which is the point of it. `set_invite_stage` only touches invites that have
+   * not been sent, and bounds the wave to one the plan has (or the one after),
+   * so the select cannot offer what the database would refuse.
+   */
+  function doStage(invite: HostInvite, stage: number) {
+    if (!eventId) return;
+    startTransition(async () => {
+      const result = await setInviteStage(eventId, invite.id, stage);
+      if (!result.ok) {
+        toast.error(result.error ?? 'Could not change their wave.', result.code);
+        return;
+      }
+      router.refresh();
+    });
+  }
+
   function doWindow(invite: HostInvite, minutes: number) {
     if (!eventId) return;
     startTransition(async () => {
@@ -168,6 +196,10 @@ export function CascadeProgress({
       router.refresh();
     });
   }
+
+  // Which waves this plan has, plus the one after the last. One rule, shared
+  // with the wizard's wave dropdown and with `set_invite_stage`.
+  const waveChoices = wavesOffered(invites.map((invite) => invite.group_stage));
 
   /** One row's contents: who it is, where their invitation got to, what is left to do. */
   function row(invite: HostInvite): ReactNode {
@@ -187,6 +219,7 @@ export function CascadeProgress({
         : null;
     const canResend = editable && REOPENABLE.has(invite.status);
     const canReWindow = editable && invite.status === 'queued';
+    const canRestage = canReWindow && wavesMatter(mode);
     const deliveryText = invite.deliveries
       ?.map((delivery) => {
         const channel = delivery.channel === 'in_app'
@@ -267,6 +300,28 @@ export function CascadeProgress({
           </button>
         ) : (
           <span className="flex min-w-0 flex-1 items-center gap-3">{identity}</span>
+        )}
+        {canRestage && (
+          <select
+            value={invite.group_stage}
+            disabled={pending}
+            onChange={(e) => doStage(invite, Number(e.target.value))}
+            aria-label={`Wave for ${invite.invitee_name}`}
+            className="rounded-pill border border-line bg-paper px-2 py-1 text-xs font-medium text-ink outline-none focus:border-terracotta"
+          >
+            {/* A row outside the offered range (a plan from before the cap)
+                still shows where it is, as the window select does. */}
+            {!waveChoices.includes(invite.group_stage) && (
+              <option value={invite.group_stage}>
+                Wave {invite.group_stage + 1}
+              </option>
+            )}
+            {waveChoices.map((stage) => (
+              <option key={stage} value={stage}>
+                Wave {stage + 1}
+              </option>
+            ))}
+          </select>
         )}
         {canReWindow && (
           <select
@@ -352,6 +407,15 @@ export function CascadeProgress({
                     Still in line - drag anyone by the handle to change who is asked next.
                   </p>
                 )}
+                {/* The one case where there is a line and nothing to do with
+                    it. Saying so beats a row with no handle on it, which is
+                    what "unable to reorder people in the queue" looks like. */}
+                {editable && queued.length === 1 && (
+                  <p className="text-plate text-plate-inset inline-block text-xs font-bold text-ink-soft">
+                    Only one person is still in line, so there is nobody to swap
+                    them with.
+                  </p>
+                )}
                 <ReorderableList
                   aria-label="Invitations still in line"
                   items={queued.map((invite) => ({
@@ -371,6 +435,15 @@ export function CascadeProgress({
           </div>
         );
       })}
+      {/* A wave plan's order is which wave, and the control for it is on the
+          row. Without this the section reads as a list you cannot change. */}
+      {editable && wavesMatter(mode) && invites.some((i) => i.status === 'queued') && (
+        <p className="text-plate text-plate-inset text-xs leading-relaxed text-ink-soft">
+          Waves go out in order, so the order here is which wave. Move anyone
+          still waiting into an earlier wave to ask them sooner - a wave that has
+          already gone out asks them within the minute.
+        </p>
+      )}
       <p className="text-plate text-plate-inset text-xs leading-relaxed text-ink-faint">
         {isStaggered(mode)
           ? ''

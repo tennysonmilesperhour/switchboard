@@ -347,6 +347,18 @@ invites, open-table requests, and share-link RSVP rows:
   durable per-host daily allowances before a provider is called. Email and SMS
   share the same allowance; in-app notifications are not part of that external
   recipient limit.
+- **Editing a live line touches only invitations that have not gone out.**
+  `move_queued_invite`, `set_invite_stage` and `set_invite_window` are
+  security-definer, host-or-co-host only, and every one of them guards on
+  `status = 'queued'` — the swap under a row lock, the other two in the UPDATE's
+  own `WHERE` so the check and the write cannot come apart. An invitation that
+  has already reached somebody is history: it cannot be reordered, re-waved, or
+  re-timed, and the caller is told so rather than silently changing nothing.
+  `set_invite_stage` additionally bounds the wave to one the plan already has
+  (or the one after it, five at most), because a gap reads to the cascade engine
+  as a stage that has resolved. This is why no broad UPDATE policy on
+  `public.invites` exists. Covered by
+  `supabase/tests/invite_stage_editing.test.sql`.
 
 Litmus test: *can a host name an arbitrary profile/contact and either bypass a
 block, manufacture attendance, or turn one plan into an unbounded message

@@ -429,10 +429,6 @@ export function EventWizard({
    */
   const activeStep = Math.min(step, steps.length - 1);
   const current = steps[activeStep];
-  const stageCount =
-    inviteMode === 'group'
-      ? Math.max(1, ...invitees.map((i) => i.groupStage + 1))
-      : 1;
 
   return (
     <WizardFrame
@@ -519,7 +515,6 @@ export function EventWizard({
           moveInvitee={people.moveInvitee}
           removeInvitee={people.removeInvitee}
           updateInvitee={people.updateInvitee}
-          stageCount={stageCount}
         />
       )}
 

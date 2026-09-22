@@ -52,6 +52,43 @@ export function isStaggered(mode: InviteMode): boolean {
 }
 
 /**
+ * Does this plan go out in waves, so its order is *which wave* rather than
+ * where somebody sits in a list?
+ *
+ * The third question, and the one that had no control behind it. A wave plan's
+ * order was set in the wizard and frozen from then on, while the plan page
+ * offered "edit it while live: reorder, resend, change response windows" — the
+ * promise a client tested and reported: "Unable to reorder people in the queue."
+ * `set_invite_stage` is the edit; this is what decides where to offer it.
+ */
+export function wavesMatter(mode: InviteMode): boolean {
+  return mode === 'group';
+}
+
+/**
+ * How many waves a plan may have. Five is what the wizard has always offered,
+ * and `set_invite_stage` enforces the same ceiling, so a select can never offer
+ * a wave the running plan would refuse.
+ */
+export const MAX_WAVES = 5;
+
+/**
+ * The waves a host may put somebody in, 0-based: every wave the plan already
+ * has, plus the one after the last so a person can be pushed to the back —
+ * capped at `MAX_WAVES`.
+ *
+ * Further out than that would leave a gap, and the cascade engine reads a stage
+ * with nobody queued in it as one that has resolved, so a wave beyond the next
+ * would be skipped rather than waited for. The database function refuses the
+ * same values.
+ */
+export function wavesOffered(stages: readonly number[]): number[] {
+  const highest = stages.reduce((max, stage) => Math.max(max, stage || 0), 0);
+  const count = Math.min(highest + 2, MAX_WAVES);
+  return Array.from({ length: count }, (_, stage) => stage);
+}
+
+/**
  * What to tell the host about the timing, in her own plan's terms.
  *
  * Plain and unhedged in the simultaneous case especially, because that is the
@@ -79,9 +116,43 @@ export function inviteListTitle(mode: InviteMode): string {
   return isStaggered(mode) ? 'Invitation flow' : 'Who this went to';
 }
 
-/** The line under that heading. */
-export function inviteListHint(mode: InviteMode): string {
-  return isStaggered(mode)
-    ? 'Only you see this - reorder or re-time anyone still in line'
+/** What the host can do to this list right now, if anything. */
+export interface ListHintOptions {
+  /** False once the guest list is settled: the list is a record, not a control. */
+  editable?: boolean;
+  /** The date is still being polled, so nothing has gone out yet. */
+  deciding?: boolean;
+}
+
+/**
+ * The line under that heading.
+ *
+ * It named one capability for every staggered plan, which promised reordering
+ * to wave plans that have none of it and to settled plans that refuse every
+ * edit. Each combination gets its own sentence, because a hint that offers a
+ * control the reader cannot find is the same defect as a missing control.
+ */
+export function inviteListHint(
+  mode: InviteMode,
+  options: ListHintOptions = {},
+): string {
+  const { editable = true, deciding = false } = options;
+  if (deciding) {
+    // Nothing has been sent, so the whole order is still a draft - and the
+    // database accepts the edit, which is why it is worth saying so.
+    return editable && isStaggered(mode)
+      ? 'Only you see this - set the order now; invitations go out once the group has decided'
+      : 'Only you see this - invitations go out once the group has decided';
+  }
+  if (!editable) {
+    return isStaggered(mode)
+      ? 'Only you see this - the guest list is settled, so this is a record now'
+      : 'Only you see this - everyone was invited at the same moment';
+  }
+  if (orderMatters(mode)) {
+    return 'Only you see this - reorder or re-time anyone still in line';
+  }
+  return wavesMatter(mode)
+    ? 'Only you see this - change the wave or the response window for anyone still in line'
     : 'Only you see this - everyone was invited at the same moment';
 }

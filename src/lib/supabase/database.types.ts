@@ -3714,6 +3714,10 @@ export type Database = {
           token: string
         }[]
       }
+      set_invite_stage: {
+        Args: { p_invite: string; p_stage: number }
+        Returns: undefined
+      }
       set_invite_window: {
         Args: { p_invite: string; p_minutes: number }
         Returns: undefined

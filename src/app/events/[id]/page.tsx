@@ -39,7 +39,11 @@ import { formatDateTime, formatDateTimeRange } from '@/lib/format';
 import { resolveEventZone } from '@/lib/server/event-zone';
 import { googleCalendarUrl } from '@/lib/calendar-links';
 import { eventShareUrl } from '@/lib/links';
-import { hostCanEditInvitees, hostCanShare } from '@/lib/share-link';
+import {
+  hostCanEditInvitees,
+  hostCanEditLine,
+  hostCanShare,
+} from '@/lib/share-link';
 import type { SwitchboardEvent } from '@/lib/types';
 import { normalizePollTopic, pollQuestion } from '@/lib/types';
 import { loadEventPage } from '@/lib/server/event-page';
@@ -144,6 +148,11 @@ export default async function EventPage({
     cancelVoiceUrl,
     pendingParentalApprovals,
   } = loaded;
+
+  // What the host may still change about the invitation line. Wider than
+  // editing the guest list: while a date poll runs nothing has gone out, so the
+  // order is still a draft and the database already accepts the edit.
+  const lineEditable = canManage && hostCanEditLine(event.status);
 
   const statusLabel: Record<SwitchboardEvent['status'], string> = {
     draft: 'Draft',
@@ -589,26 +598,24 @@ export default async function EventPage({
             <SectionHeader
               // The heading used to say "Invitation flow" and promise
               // reordering on every plan, including the ones that have no line
-              // to reorder. A host reading "anyone still in line" over five
-              // rows that all say "Invited" has been told her stagger is
-              // running when it never was one. `invite-rhythm` owns both
-              // strings now, so this page and the wizard cannot disagree.
+              // to reorder. `invite-rhythm` owns both strings, so this page and
+              // the wizard cannot disagree — and the hint is given what it needs
+              // to stop promising an edit this plan's state will refuse.
               title={
                 event.status === 'deciding'
                   ? 'Who is invited'
                   : inviteListTitle(inviteMode)
               }
-              hint={
-                event.status === 'deciding'
-                  ? 'Only you see this - invitations go out once the group has decided'
-                  : inviteListHint(inviteMode)
-              }
+              hint={inviteListHint(inviteMode, {
+                editable: lineEditable,
+                deciding: event.status === 'deciding',
+              })}
             />
             <CascadeProgress
               invites={hostInvites.filter((invite) => invite.status !== 'requested')}
               mode={inviteMode}
               eventId={event.id}
-              editable={canManage && hostCanEditInvitees(event.status)}
+              editable={lineEditable}
               people={inviteeCards}
             />
           </section>

@@ -4,7 +4,7 @@ import { Avatar } from '@/components/ui/Avatar';
 import { Card } from '@/components/ui/Card';
 import { ReorderableList } from '@/components/ui/ReorderableList';
 import { WINDOW_CHOICES } from '@/lib/engine/windows';
-import { orderMatters, rhythmLine } from '@/lib/invite-rhythm';
+import { orderMatters, rhythmLine, wavesOffered } from '@/lib/invite-rhythm';
 import { ResponseWindowPicker } from './ResponseWindowPicker';
 import type { InviteMode } from '@/lib/types';
 import {
@@ -25,7 +25,6 @@ interface OrderStepProps {
   /** Take somebody off the plan from here. */
   removeInvitee: (key: string) => void;
   updateInvitee: (index: number, patch: Partial<DraftInvitee>) => void;
-  stageCount: number;
 }
 
 export function OrderStep({
@@ -37,12 +36,15 @@ export function OrderStep({
   moveInvitee,
   removeInvitee,
   updateInvitee,
-  stageCount,
 }: OrderStepProps) {
   // Waves are assigned by the dropdown on each row, so dragging rows around
   // would move a number that nothing reads. `orderMatters` is the one place
   // that knows which modes those are.
   const ordered = orderMatters(inviteMode);
+  // The waves this plan has plus the one after the last, from the same rule the
+  // plan page and `set_invite_stage` use - so a wave offered here is a wave the
+  // running plan will still accept.
+  const waveChoices = wavesOffered(invitees.map((invitee) => invitee.groupStage));
   return (
         <div className="space-y-4 animate-rise">
           <Card tone="cream">
@@ -104,8 +106,8 @@ export function OrderStep({
                       aria-label={`Wave for ${invitee.name}`}
                       className="rounded-pill border border-line bg-paper px-3 py-1.5 text-sm font-medium text-ink outline-none transition-colors focus:border-terracotta"
                     >
-                      {Array.from({ length: Math.min(stageCount + 1, 5) }, (_, s) => (
-                        <option key={s} value={s}>Wave {s + 1}</option>
+                      {waveChoices.map((stage) => (
+                        <option key={stage} value={stage}>Wave {stage + 1}</option>
                       ))}
                     </select>
                   )}

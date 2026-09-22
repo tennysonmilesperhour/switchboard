@@ -2,11 +2,14 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
+  MAX_WAVES,
   inviteListHint,
   inviteListTitle,
   isStaggered,
   orderMatters,
   rhythmLine,
+  wavesMatter,
+  wavesOffered,
 } from './invite-rhythm';
 import type { InviteMode } from './types';
 
@@ -31,6 +34,39 @@ describe('isStaggered', () => {
 
   it('is false only when everybody is asked at the same instant', () => {
     expect(MODES.map(isStaggered)).toEqual([false, true, true]);
+  });
+});
+
+describe('wavesMatter', () => {
+  it('is true only for a wave plan', () => {
+    // MODES is [all_at_once, individual, group].
+    expect(MODES.map(wavesMatter)).toEqual([false, false, true]);
+  });
+
+  it('is the other half of the order question', () => {
+    // A plan has one kind of order or the other, never both: a chain orders
+    // people, waves order groups of them.
+    for (const mode of MODES) {
+      expect(orderMatters(mode) && wavesMatter(mode), mode).toBe(false);
+    }
+  });
+});
+
+describe('wavesOffered', () => {
+  it('offers every wave the plan has, plus one to push somebody back', () => {
+    expect(wavesOffered([0, 1, 1])).toEqual([0, 1, 2]);
+  });
+
+  it('offers a second wave to a plan that only has one', () => {
+    expect(wavesOffered([0, 0, 0])).toEqual([0, 1]);
+    expect(wavesOffered([])).toEqual([0, 1]);
+  });
+
+  it('stops at the cap rather than growing forever', () => {
+    // Five waves exist, so there is no sixth to offer - and set_invite_stage
+    // refuses the same value, so a select can never offer what it would reject.
+    expect(wavesOffered([MAX_WAVES - 1])).toEqual([0, 1, 2, 3, 4]);
+    expect(wavesOffered([MAX_WAVES - 1]).length).toBe(MAX_WAVES);
   });
 });
 
@@ -69,6 +105,57 @@ describe('the host’s own list of invitations', () => {
     expect(inviteListHint('all_at_once')).not.toContain('line');
     expect(inviteListTitle('individual')).toBe('Invitation flow');
   });
+
+  /**
+   * The hint named one capability for every staggered plan, so a wave plan was
+   * promised reordering it has no control for. That is the same defect as a
+   * missing control: the client's report was "Unable to reorder people in the
+   * queue."
+   */
+  it('points a wave plan at the control it actually has', () => {
+    const waves = inviteListHint('group');
+    expect(waves).toContain('wave');
+    expect(waves).not.toContain('reorder');
+    expect(inviteListHint('individual')).toContain('reorder');
+  });
+
+  it('offers nothing once the guest list is settled', () => {
+    for (const mode of MODES) {
+      const settled = inviteListHint(mode, { editable: false });
+      expect(settled, mode).not.toMatch(/reorder|re-time|change the wave/);
+    }
+  });
+
+  it('invites a plan still picking its date to set the order now', () => {
+    // Nothing has been sent, every invite is queued, and the database accepts
+    // the edit - so the controls are offered rather than hidden.
+    expect(inviteListHint('individual', { deciding: true })).toContain(
+      'set the order now',
+    );
+    expect(inviteListHint('group', { deciding: true })).toContain(
+      'set the order now',
+    );
+    // Everyone-at-once has no order to set, so it only says what happens next.
+    expect(inviteListHint('all_at_once', { deciding: true })).toBe(
+      'Only you see this - invitations go out once the group has decided',
+    );
+    expect(
+      inviteListHint('individual', { deciding: true, editable: false }),
+    ).toBe('Only you see this - invitations go out once the group has decided');
+  });
+
+  it('always says the view is private, whatever the plan is doing', () => {
+    for (const mode of MODES) {
+      for (const editable of [true, false]) {
+        for (const deciding of [true, false]) {
+          expect(
+            inviteListHint(mode, { editable, deciding }),
+            `${mode} ${editable} ${deciding}`,
+          ).toMatch(/^Only you see this - /);
+        }
+      }
+    }
+  });
 });
 
 /**
@@ -98,7 +185,9 @@ describe('nothing re-derives the rhythm at a call site', () => {
       'utf8',
     );
     expect(page).toContain('inviteListTitle(inviteMode)');
-    expect(page).toContain('inviteListHint(inviteMode)');
+    // Called with what it needs to tell the truth about this plan's state, so
+    // the assertion stops at the argument list.
+    expect(page).toContain('inviteListHint(inviteMode');
     // And reads the stored column through the fail-closed normaliser rather
     // than asserting it into the union.
     expect(page).toContain('asInviteMode(event.invite_mode)');
