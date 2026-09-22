@@ -17,6 +17,7 @@ export {
   removeInvite,
   resendInvite,
   moveQueuedInvite,
+  setInviteStage,
   setInviteWindow,
 } from '@/lib/actions/event-invitees';
 export {

@@ -14,12 +14,18 @@ import {
   moveQueuedInvite,
   removeInvite,
   resendInvite,
+  setInviteStage,
   setInviteWindow,
 } from '@/lib/actions/events';
 import { formatRelative, formatWindow } from '@/lib/format';
 import { INVITE_STATUS_LABEL } from '@/lib/invite-status';
 import { inviteExpiresAt } from '@/lib/engine/cascade';
-import { hasRowControls, lineOrderNotice, rowEdits } from '@/lib/engine/line-edit';
+import {
+  hasRowControls,
+  lineOrderNotice,
+  rowEdits,
+  wavesOffered,
+} from '@/lib/engine/line-edit';
 import { WINDOW_CHOICES } from '@/lib/engine/windows';
 import type { Invite } from '@/lib/types';
 import type { InviteStatus } from '@/lib/engine/cascade';
@@ -150,12 +156,33 @@ export function CascadeProgress({
     });
   }
 
+  function doStage(invite: Invite & { invitee_name: string }, stage: number) {
+    if (!eventId) return;
+    startTransition(async () => {
+      const result = await setInviteStage(eventId, invite.id, stage);
+      if (!result.ok) {
+        toast.error(result.error ?? 'Could not change their wave.', result.code);
+        return;
+      }
+      router.refresh();
+    });
+  }
+
   const ordered = [...invites].sort((a, b) => a.position - b.position);
   // One decision about what is editable, shared by every row and the notice
   // under the list. Without an event id there is nothing to send the edit to,
   // so that is part of being editable rather than a separate silent check.
   const editOptions = { mode, editable: Boolean(editable && eventId) };
-  const orderNotice = lineOrderNotice(ordered, editOptions);
+  // The line as the edit rules see it: ids, status, order, wave. Mapping it once
+  // keeps the column names of the row out of the module that decides.
+  const line = ordered.map((invite) => ({
+    id: invite.id,
+    status: invite.status,
+    position: invite.position,
+    groupStage: invite.group_stage,
+  }));
+  const orderNotice = lineOrderNotice(line, editOptions);
+  const waveChoices = wavesOffered(line);
   const stages = mode === 'group'
     ? [...new Set(ordered.map((i) => i.group_stage))].sort((a, b) => a - b)
     : [null];
@@ -188,7 +215,16 @@ export function CascadeProgress({
                         sentAt: invite.sent_at,
                       })
                     : null;
-                const edits = rowEdits(invite, ordered, editOptions);
+                const edits = rowEdits(
+                  {
+                    id: invite.id,
+                    status: invite.status,
+                    position: invite.position,
+                    groupStage: invite.group_stage,
+                  },
+                  line,
+                  editOptions,
+                );
                 const deliveryText = invite.deliveries
                   ?.map((delivery) => {
                     const channel = delivery.channel === 'in_app'
@@ -309,6 +345,33 @@ export function CascadeProgress({
                               <span aria-hidden>↓</span> Later
                             </button>
                           </>
+                        )}
+                        {/* A wave plan's order is which wave, so this is its
+                            reorder control. Moving somebody into a wave that has
+                            already gone out asks them on the next sweep, which
+                            is the point. */}
+                        {edits.restage && (
+                          <select
+                            value={invite.group_stage}
+                            disabled={pending}
+                            onChange={(e) => doStage(invite, Number(e.target.value))}
+                            aria-label={`Wave for ${invite.invitee_name}`}
+                            className="min-h-11 rounded-pill border border-line bg-paper px-3 text-xs font-medium text-ink outline-none focus:border-terracotta"
+                          >
+                            {/* A row sitting outside the offered range (a plan
+                                from before the five-wave cap) still shows where
+                                it is, exactly as the window select does. */}
+                            {!waveChoices.includes(invite.group_stage) && (
+                              <option value={invite.group_stage}>
+                                Wave {invite.group_stage + 1}
+                              </option>
+                            )}
+                            {waveChoices.map((stage) => (
+                              <option key={stage} value={stage}>
+                                Wave {stage + 1}
+                              </option>
+                            ))}
+                          </select>
                         )}
                         {edits.window && (
                           <select

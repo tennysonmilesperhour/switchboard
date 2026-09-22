@@ -26,7 +26,16 @@ export interface LineInvite {
   id: string;
   status: string;
   position: number;
+  /** Which wave they are in. Ignored outside `group` plans. */
+  groupStage?: number;
 }
+
+/**
+ * How many waves a plan may have. Five, because that is what the wizard has
+ * always offered; `set_invite_stage` enforces the same ceiling, so the select
+ * and the function cannot disagree about what exists.
+ */
+export const MAX_WAVES = 5;
 
 /** Statuses a lapsed invite can be brought back from. */
 const REOPENABLE: ReadonlySet<string> = new Set([
@@ -53,6 +62,11 @@ export interface RowEdits {
    * cannot read, and "Waiting in line" said nothing about which line.
    */
   queuePlace: number | null;
+  /**
+   * Move them to another wave. The wave equivalent of reordering, and the only
+   * order a `group` plan has: which stage goes out when.
+   */
+  restage: boolean;
   /** Change how long they get to answer (only before their invite goes out). */
   window: boolean;
   /** Put a lapsed invite back in the flow. */
@@ -80,6 +94,26 @@ export function lineHasOrder(mode: InviteMode | string): boolean {
   return mode === 'individual';
 }
 
+/** Does this plan go out in waves, so the order is "which wave"? */
+export function lineHasWaves(mode: InviteMode | string): boolean {
+  return mode === 'group';
+}
+
+/**
+ * The waves a host may move somebody into, 0-based: every wave the plan already
+ * has, plus the one after the last so a person can be pushed to the back —
+ * capped at `MAX_WAVES`. Beyond that would leave a gap the cascade engine reads
+ * as a stage that has resolved, so `set_invite_stage` refuses it too.
+ */
+export function wavesOffered(invites: readonly LineInvite[]): number[] {
+  const highest = invites.reduce(
+    (max, invite) => Math.max(max, invite.groupStage ?? 0),
+    0,
+  );
+  const count = Math.min(highest + 2, MAX_WAVES);
+  return Array.from({ length: count }, (_, stage) => stage);
+}
+
 /** The queued invites, in the order they will be asked. */
 function queuedInOrder(invites: readonly LineInvite[]): LineInvite[] {
   return invites
@@ -102,6 +136,7 @@ export function rowEdits(
     moveEarlier: reorderable && index > 0,
     moveLater: reorderable && index < queued.length - 1,
     queuePlace: isQueued && lineHasOrder(options.mode) ? index + 1 : null,
+    restage: options.editable && isQueued && lineHasWaves(options.mode),
     window: options.editable && isQueued,
     resend: options.editable && REOPENABLE.has(invite.status),
     remove: options.editable && invite.status !== 'accepted',
@@ -110,7 +145,13 @@ export function rowEdits(
 
 /** Does this row have any control to show? Decides whether to draw the strip. */
 export function hasRowControls(edits: RowEdits): boolean {
-  return edits.reorderable || edits.window || edits.resend || edits.remove;
+  return (
+    edits.reorderable ||
+    edits.restage ||
+    edits.window ||
+    edits.resend ||
+    edits.remove
+  );
 }
 
 /**
@@ -126,8 +167,8 @@ export function lineOrderNotice(
 ): string | null {
   if (!options.editable) return null;
   if (!lineHasOrder(options.mode)) {
-    return options.mode === 'group'
-      ? 'Waves go out in order, so there is no one-by-one line to reorder. You can still change how long anyone still waiting gets, or take them out.'
+    return lineHasWaves(options.mode)
+      ? 'Waves go out in order, so the order here is which wave. Move anyone still waiting into an earlier wave to ask them sooner - a wave that has already gone out asks them within the minute.'
       : // Present tense on purpose: this same line is shown before the
         // invitations go out, while a date poll is still running.
         'Everyone is asked at the same time, so there is no order to change. You can still change how long anyone still waiting gets, or take them out.';
@@ -157,7 +198,9 @@ export function invitationFlowHint(
   options: FlowHintOptions,
 ): string {
   if (options.deciding) {
-    return lineHasOrder(mode) && options.editable
+    // Waves are an order too, so a wave plan gets the same invitation to sort
+    // the line out now, while nothing has been sent.
+    return options.editable && (lineHasOrder(mode) || lineHasWaves(mode))
       ? 'Only you see this - set the order now; invitations go out once the group has decided'
       : 'Only you see this - invitations go out once the group has decided';
   }
@@ -167,7 +210,7 @@ export function invitationFlowHint(
   if (lineHasOrder(mode)) {
     return 'Only you see this - reorder or re-time anyone still in line';
   }
-  return mode === 'group'
-    ? 'Only you see this - waves go out in order; re-time or take out anyone still in line'
+  return lineHasWaves(mode)
+    ? 'Only you see this - change the wave or the response window for anyone still in line'
     : 'Only you see this - everyone was asked at once; re-time or take out anyone still waiting';
 }

@@ -1,10 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import {
+  MAX_WAVES,
   hasRowControls,
   invitationFlowHint,
   lineHasOrder,
+  lineHasWaves,
   lineOrderNotice,
   rowEdits,
+  wavesOffered,
   type LineInvite,
 } from './line-edit';
 
@@ -21,8 +24,9 @@ function invite(
   id: string,
   status: string,
   position: number,
+  groupStage = 0,
 ): LineInvite {
-  return { id, status, position };
+  return { id, status, position, groupStage };
 }
 
 const EDITABLE = { mode: 'individual', editable: true };
@@ -117,6 +121,12 @@ describe('who can move in the line', () => {
 });
 
 describe('modes without a line to reorder', () => {
+  it('knows which plans go out in waves', () => {
+    expect(lineHasWaves('group')).toBe(true);
+    expect(lineHasWaves('individual')).toBe(false);
+    expect(lineHasWaves('all_at_once')).toBe(false);
+  });
+
   it('has an order only when people are asked one at a time', () => {
     expect(lineHasOrder('individual')).toBe(true);
     expect(lineHasOrder('group')).toBe(false);
@@ -125,17 +135,41 @@ describe('modes without a line to reorder', () => {
     expect(lineHasOrder('carrier_pigeon')).toBe(false);
   });
 
-  it('offers no reorder in a wave plan, and says so', () => {
+  it('offers a wave change instead of a reorder in a wave plan', () => {
+    // A wave plan has no one-by-one line: its order is which wave goes when, so
+    // that is the control it gets. Nothing about it used to be editable once the
+    // invitations were in motion, which is the other half of the report.
     const line = [invite('a', 'queued', 0), invite('b', 'queued', 1)];
     const options = { mode: 'group', editable: true };
     expect(rowEdits(line[0], line, options)).toMatchObject({
       reorderable: false,
       queuePlace: null,
-      // Re-timing and removal still work, so the row keeps a control strip.
+      restage: true,
       window: true,
       remove: true,
     });
-    expect(lineOrderNotice(line, options)).toContain('Waves go out in order');
+    expect(lineOrderNotice(line, options)).toContain('which wave');
+  });
+
+  it('never offers a wave change where there are no waves', () => {
+    const line = [invite('a', 'sent', 0), invite('b', 'queued', 1)];
+    for (const mode of ['individual', 'all_at_once', 'carrier_pigeon']) {
+      expect(rowEdits(line[1], line, { mode, editable: true }).restage, mode).toBe(
+        false,
+      );
+    }
+  });
+
+  it('only lets a queued invite change wave', () => {
+    const line = [
+      invite('a', 'sent', 0),
+      invite('b', 'accepted', 1),
+      invite('c', 'queued', 2),
+    ];
+    const options = { mode: 'group', editable: true };
+    expect(rowEdits(line[0], line, options).restage).toBe(false);
+    expect(rowEdits(line[1], line, options).restage).toBe(false);
+    expect(rowEdits(line[2], line, options).restage).toBe(true);
   });
 
   it('offers no reorder when everyone was asked at once, and says so', () => {
@@ -143,6 +177,37 @@ describe('modes without a line to reorder', () => {
     const options = { mode: 'all_at_once', editable: true };
     expect(rowEdits(line[1], line, options).reorderable).toBe(false);
     expect(lineOrderNotice(line, options)).toContain('no order to change');
+  });
+});
+
+describe('the waves a host may move somebody into', () => {
+  it('offers every wave the plan has, plus one to push somebody back', () => {
+    const line = [
+      invite('a', 'queued', 0, 0),
+      invite('b', 'queued', 1, 1),
+      invite('c', 'queued', 2, 1),
+    ];
+    expect(wavesOffered(line)).toEqual([0, 1, 2]);
+  });
+
+  it('offers a second wave to a plan that only has one', () => {
+    expect(wavesOffered([invite('a', 'queued', 0, 0)])).toEqual([0, 1]);
+  });
+
+  it('stops at the cap rather than growing forever', () => {
+    const line = [invite('a', 'queued', 0, MAX_WAVES - 1)];
+    // Five waves exist, so there is no sixth to offer. The SQL function refuses
+    // the same value, so the select can never offer a wave the plan would reject.
+    expect(wavesOffered(line)).toEqual([0, 1, 2, 3, 4]);
+    expect(wavesOffered(line).length).toBe(MAX_WAVES);
+  });
+
+  it('reads a missing wave as the first one', () => {
+    // `groupStage` is optional on LineInvite: an individual-mode caller does not
+    // have to invent one.
+    expect(wavesOffered([{ id: 'a', status: 'queued', position: 0 }])).toEqual([
+      0, 1,
+    ]);
   });
 });
 
@@ -215,9 +280,17 @@ describe('the hint above the flow', () => {
     expect(invitationFlowHint('all_at_once', live)).not.toContain('reorder');
   });
 
+  it('points a wave plan at the control it actually has', () => {
+    expect(
+      invitationFlowHint('group', { editable: true, deciding: false }),
+    ).toContain('wave');
+  });
+
   it('tells a plan still picking its date what happens next', () => {
     const deciding = { editable: true, deciding: true };
     expect(invitationFlowHint('individual', deciding)).toContain('set the order now');
+    // Waves are an order too, and nothing has gone out yet either.
+    expect(invitationFlowHint('group', deciding)).toContain('set the order now');
     expect(invitationFlowHint('all_at_once', deciding)).toContain(
       'once the group has decided',
     );

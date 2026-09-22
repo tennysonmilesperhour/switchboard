@@ -50,17 +50,29 @@ absence read as a broken feature.
 `src/lib/engine/line-edit.test.ts` walks the cases a host actually hits, and
 `share-link.test.ts` holds the new status rule to exactly one extra status.
 
-### 🛠️ Follow-up: moving someone between waves
+### ✅ Also shipped: moving someone between waves
 
-Reordering in a wave plan means changing someone's wave, and there is still no
-way to do it once invitations are in motion — the wave is set in the wizard and
-frozen. The shape is settled: a `set_invite_stage(p_invite, p_stage)`
-security-definer function mirroring `set_invite_window` (host-only, queued-only,
-atomic status guard in the `WHERE`), a `setInviteStage` action, a wave select in
-the row's control strip, and pgTAP beside the other cascade-editing tests. It
-was left out of the round above because it needs a migration applied to
-production, and shipping the control ahead of the function would hand the client
-a button that errors.
+A wave plan has no one-by-one line, so its order is which wave somebody is in -
+and that was set in the wizard and frozen from then on, while the page offered
+"edit it while live". The same report covers it.
+
+- **`set_invite_stage(p_invite, p_stage)`**
+  (`supabase/migrations/20260922020000_invite_stage_editing.sql`), built to
+  `set_invite_window`'s rules: security definer, host or co-host, and the
+  queued-only guard inside the UPDATE's `WHERE` so a sent invitation cannot be
+  re-waved even if the sweep landed between the check and the write. No advisory
+  lock, because unlike the position swap there is no unique constraint to dodge.
+- **The range is an existing wave, or the one after the last, five at most.**
+  Moving somebody into a wave that has already gone out is allowed and asks them
+  on the next sweep, which is the point of the control. Skipping to wave 5 of a
+  two-wave plan is not: the engine reads a gap as a stage that resolved.
+  `MAX_WAVES` in `line-edit.ts` is the same ceiling the wizard's select uses, so
+  the two cannot drift.
+- **The control is the row's wave select**, in the same strip as the window and
+  Remove, offered only for someone still waiting.
+- `supabase/tests/invite_stage_editing.test.sql` walks host, co-host, guest, a
+  sent invite, both out-of-range refusals, and the anonymous grant;
+  `docs/SECURITY.md` records the invariant next to the other invitation rules.
 
 ---
 

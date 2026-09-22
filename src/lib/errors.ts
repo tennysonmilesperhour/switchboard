@@ -840,6 +840,7 @@ const AREA_CODES: Record<string, ErrorCode> = {
   'resend-invite': 'SB-INVITE-SEND',
   'resend-invite-cascade': 'SB-INVITE-SEND',
   'invite.move': 'SB-INVITE-SEND',
+  'invite.stage': 'SB-INVITE-SEND',
   'invite.window': 'SB-INVITE-SEND',
   'invite-connection-now': 'SB-INVITE-SEND',
   'invite-connection-deliver': 'SB-INVITE-SEND',

@@ -3,6 +3,7 @@
 import { Avatar } from '@/components/ui/Avatar';
 import { Card } from '@/components/ui/Card';
 import { WINDOW_CHOICES } from '@/lib/engine/windows';
+import { MAX_WAVES } from '@/lib/engine/line-edit';
 import { ResponseWindowPicker } from './ResponseWindowPicker';
 import type { InviteMode } from '@/lib/types';
 import {
@@ -119,7 +120,11 @@ export function OrderStep({
                       aria-label={`Wave for ${invitee.name}`}
                       className="rounded-pill border border-line bg-paper px-3 py-1.5 text-sm font-medium text-ink outline-none transition-colors focus:border-terracotta"
                     >
-                      {Array.from({ length: Math.min(stageCount + 1, 5) }, (_, s) => (
+                      {/* One more wave than the plan uses, capped at MAX_WAVES —
+                          the same rule the live view and `set_invite_stage`
+                          apply, so the wizard cannot offer a wave the running
+                          plan would refuse. */}
+                      {Array.from({ length: Math.min(stageCount + 1, MAX_WAVES) }, (_, s) => (
                         <option key={s} value={s}>Wave {s + 1}</option>
                       ))}
                     </select>
