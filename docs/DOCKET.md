@@ -13,66 +13,93 @@ from working sessions. Newest thinking lives here so nothing evaporates.
 
 ---
 
-## ✅ Shipped 2026-09-21 — the queue can actually be reordered
+## ✅ Shipped 2026-09-22 — the wave plan's order, and a line editable while the date is still open
 
 From the checklist board, item A2 (Cascading invites): *"Unable to reorder
-people in the queue."* The control existed. Every reason it could not be used
-was a condition spread across the view that drew it, and in each case its
-absence read as a broken feature.
+people in the queue."* Round 6 answered most of it, with `ReorderableList` and
+`invite-rhythm.ts`: the chain can be dragged, and no surface promises a stagger
+that is not running. Two parts of the same report were still open afterwards,
+and both were "the order exists but nothing can change it".
 
-- **The order now lives in one module.** `src/lib/engine/line-edit.ts` decides
-  what a host may change about the line and what to say when the answer is
-  nothing. The cascade view and the section hint above it both ask; neither
-  re-derives `status === 'queued' && mode === 'individual' && ...` on its own.
-- **The control is a control.** The reorder arrows were two bare triangles about
-  fourteen pixels tall, stacked on each other, at the end of a row that already
-  held a dropdown and a Remove button — well under the design system's own ~44px
-  tap target, and adjacent enough that a miss moved somebody the wrong way. Every
-  per-row control is now a labelled pill (↑ Earlier / ↓ Later) on its own line
-  under the person. Same fix in the wizard's Order step, where reordering a plan
-  before it goes out had the same glyphs.
-- **It no longer disappears when there is one person left.** With two invitees
-  (one asked, one waiting) the pair was not rendered at all. It is now drawn and
-  disabled, with a line saying there is nobody to swap them with.
-- **Wave and everyone-at-once plans say what is true.** They have no one-by-one
-  line, and the hint used to promise "reorder or re-time anyone still in line"
-  in all three modes. Each mode now gets its own sentence, and a settled plan
-  says the flow is a record rather than offering edits it will refuse.
-- **A plan still polling for its date can be put in order.** `hostCanEditLine`
-  is `hostCanEditInvitees` plus `deciding`: nothing has been sent, every invite
-  is queued, and `move_queued_invite` / `set_invite_window` already accepted the
-  edit — only the UI was hiding it. Adding people stays narrower, because a
-  guest list that grows mid-poll changes what the answerers agreed to.
-- **The place in line is visible.** A queued row said "Waiting in line" and
-  nothing about which line; it now reads `#2 in line`. An order you cannot read
-  is one you cannot correct.
-
-`src/lib/engine/line-edit.test.ts` walks the cases a host actually hits, and
-`share-link.test.ts` holds the new status rule to exactly one extra status.
-
-### ✅ Also shipped: moving someone between waves
-
-A wave plan has no one-by-one line, so its order is which wave somebody is in -
-and that was set in the wizard and frozen from then on, while the page offered
-"edit it while live". The same report covers it.
-
-- **`set_invite_stage(p_invite, p_stage)`**
-  (`supabase/migrations/20260922020000_invite_stage_editing.sql`), built to
+- **A wave plan had no editable order at all.** Its order is which wave somebody
+  is in, and that was set in the wizard and frozen from then on - `orderMatters`
+  is false for waves, so there is no line to drag, and there was no control in
+  its place. `set_invite_stage(p_invite, p_stage)`
+  (`supabase/migrations/20260922020000_invite_stage_editing.sql`) is built to
   `set_invite_window`'s rules: security definer, host or co-host, and the
-  queued-only guard inside the UPDATE's `WHERE` so a sent invitation cannot be
-  re-waved even if the sweep landed between the check and the write. No advisory
-  lock, because unlike the position swap there is no unique constraint to dodge.
-- **The range is an existing wave, or the one after the last, five at most.**
-  Moving somebody into a wave that has already gone out is allowed and asks them
-  on the next sweep, which is the point of the control. Skipping to wave 5 of a
-  two-wave plan is not: the engine reads a gap as a stage that resolved.
-  `MAX_WAVES` in `line-edit.ts` is the same ceiling the wizard's select uses, so
-  the two cannot drift.
-- **The control is the row's wave select**, in the same strip as the window and
-  Remove, offered only for someone still waiting.
+  queued-only guard inside the UPDATE's own `WHERE`, so a wave that has already
+  gone out cannot be rewritten even if the sweep lands between the check and the
+  write. No advisory lock - unlike the position swap there is no unique
+  constraint to dodge. The control is a wave select on the row, beside the
+  response window.
+- **The range is a wave the plan has, or the one after the last, five at most.**
+  Moving somebody into a wave that already went out is allowed and asks them on
+  the next sweep, which is the point. Skipping to wave 5 of a two-wave plan is
+  refused: the cascade engine reads a stage with nobody queued as one that
+  resolved, so a gap would be stepped over rather than waited for. `MAX_WAVES`
+  and `wavesOffered` live in `invite-rhythm.ts` beside `orderMatters`, and the
+  wizard's dropdown, the plan page's select and the SQL now share one ceiling
+  (the wizard had its own `Math.min(stageCount + 1, 5)`).
+- **A plan still polling for its date could not be put in order.**
+  `hostCanEditLine` is `hostCanEditInvitees` plus `deciding`: nothing has been
+  sent, every invite is queued, and `move_queued_invite` / `set_invite_window` /
+  `set_invite_stage` already accepted the edit - only the UI was hiding it.
+  Adding people stays narrower, because a guest list that grows mid-poll changes
+  what the people already answering agreed to.
+- **The hint stopped promising one capability to every staggered plan.**
+  `inviteListHint` now takes what the plan is doing, so a wave plan is pointed at
+  its wave select, a settled plan says it is a record, and a plan mid-poll is
+  invited to set the order now. Where reordering is genuinely impossible the list
+  says so - "only one person is still in line, so there is nobody to swap them
+  with" - because an absent control reads as a broken one, which is how this was
+  reported in the first place.
 - `supabase/tests/invite_stage_editing.test.sql` walks host, co-host, guest, a
-  sent invite, both out-of-range refusals, and the anonymous grant;
-  `docs/SECURITY.md` records the invariant next to the other invitation rules.
+  sent invite, both out-of-range refusals and the anonymous grant;
+  `invite-rhythm.test.ts` covers the waves offered and the hint in every mode
+  crossed with editable and deciding; `docs/SECURITY.md` records the invariant
+  beside the other invitation rules.
+
+---
+
+## ✅ Shipped 2026-09-21 — the rest of the checklist
+
+The other twenty-four items: the wizard, cascading invites, polls, share links
+and previews, announcements, moments, mutual signals, circles, safety, sign-in
+and recovery, onboarding, settings, deletion, notifications, realtime, error
+codes, install, and the five remaining September feedback items. Most held up.
+Three did not, and all three are the same shape as the four from the earlier
+pass: a rule kept on one surface and dropped on a second that reaches the same
+person.
+
+- **A plan could be edited back to a bare title.** `createEvent` refuses a plan
+  with neither a place nor a detail — a recipient cannot answer a name — and
+  `updateEventDetails` never applied the same floor. By the time anyone edits,
+  the invitations are already out, so this left every link the host had sent
+  showing a title and nothing else. The server now refuses it and the edit form
+  says so on the field.
+- **The two links people actually paste unfurled with no description.** Next
+  merges metadata *shallowly*: a route that exports `openGraph` replaces the
+  root layout's object outright rather than extending it (the shipped docs use
+  exactly this case as their example — "Note the absence of
+  `openGraph.description`"). `/i/<token>` and `/rsvp/<token>` each listed a
+  title and an image, so the two links built for iMessage, WhatsApp and Slack
+  were the two whose cards lost the description, `og:type` and the site name
+  that every other page keeps. Both now build the card through
+  `inviteOpenGraph`, with the plan's own summary where the link is already
+  allowed to reveal it, and a test that fails if either route hand-rolls
+  `openGraph` again.
+- **A new idea on a poll reached nobody watching the list.**
+  `bump_poll_tally` fired only for votes, and `poll_options` is not published
+  for realtime, so the one live channel a poll has never carried a suggestion,
+  an edit, or a removal. What stood in for it was the notification path, by
+  accident, and it covered the wrong people at the wrong time: the host,
+  co-hosts and prior voters — never the person mid-brainstorm who has not
+  ranked anything yet — and a burst folds into the standing notification with
+  an UPDATE, which `LiveNotifications` does not listen for, so in the
+  five-ideas-in-two-minutes case only the first idea refreshed anyone at all.
+  The trigger now covers `poll_options` too. Reusing the counter rather than
+  publishing the table keeps the exposure where it was: a bare integer on a row
+  every viewer of the poll can already read.
 
 ---
 

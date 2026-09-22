@@ -12,7 +12,9 @@ import { ResponseWindowPicker } from './ResponseWindowPicker';
 
 interface StyleStepProps {
   inviteMode: InviteMode;
-  setInviteMode: Dispatch<SetStateAction<InviteMode>>;
+  /** Picking a rhythm can add or drop the "Set the order" step, so the
+   *  wizard's own handler is what sets it — never a bare state setter. */
+  setInviteMode: (mode: InviteMode) => void;
   enablePoll: boolean;
   setEnablePoll: Dispatch<SetStateAction<boolean>>;
   pollResolution: CreateEventInput['pollResolution'];

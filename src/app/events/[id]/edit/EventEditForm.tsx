@@ -4,6 +4,7 @@ import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/Button';
 import { useToast } from '@/components/ui/Toast';
+import { hasInviteDetails } from '@/lib/event-details';
 import { updateEventDetails } from '@/lib/actions/events';
 import { resolveTimeZone } from '@/lib/client/time-zone';
 import type { SwitchboardEvent } from '@/lib/types';
@@ -50,6 +51,12 @@ export function EventEditForm({ event }: { event: SwitchboardEvent }) {
     e.preventDefault();
     if (!title.trim()) {
       setError('Give your plan a name.');
+      return;
+    }
+    // Mirrors the server's floor so the message lands on the field rather than
+    // after a round trip. The server check is the real one.
+    if (!hasInviteDetails(locationName, description)) {
+      setError('Add a location or a short detail so invitees know what they’re answering.');
       return;
     }
     setError(null);
@@ -172,9 +179,9 @@ export function EventEditForm({ event }: { event: SwitchboardEvent }) {
         </div>
       </div>
 
-      {error && <p className="text-sm text-rose-deep" role="alert">{error}</p>}
+      {error && <p className="text-plate text-plate-inset text-sm text-rose-deep" role="alert">{error}</p>}
 
-      <p className="text-xs text-ink-faint">
+      <p className="text-plate text-plate-inset text-xs text-ink-faint">
         Changing the time or place quietly notifies everyone who’s already accepted.
       </p>
 

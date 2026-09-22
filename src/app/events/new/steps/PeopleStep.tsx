@@ -75,7 +75,7 @@ export function PeopleStep({
         <div className="space-y-4 animate-rise">
           {(households.length > 0 || circles.length > 0) && (
             <div>
-              <p className="text-sm font-bold text-ink mb-2">
+              <p className="text-plate text-plate-inset text-sm font-bold text-ink mb-2">
                 Tap a group to add everyone
               </p>
               <div className="flex flex-wrap gap-2">
@@ -102,7 +102,7 @@ export function PeopleStep({
                   );
                 })}
               </div>
-              <p className="mt-1.5 text-xs text-ink-faint">
+              <p className="text-plate text-plate-inset mt-1.5 text-xs text-ink-faint">
                 Adds the whole group - then tap anyone below to drop them.
               </p>
             </div>
@@ -178,52 +178,32 @@ export function PeopleStep({
             </div>
           )}
 
-          <Card>
-            <p className="text-sm font-bold text-ink mb-2">Invite by username, email, or phone</p>
-            <div className="space-y-2">
-              <input
-                value={guestName}
-                onChange={(e) => setGuestName(e.target.value)}
-                placeholder="Name (optional)"
-                className="w-full rounded-card border border-line bg-paper px-3.5 py-2.5 text-sm outline-none transition-colors focus:border-terracotta focus:ring-2 focus:ring-terracotta-soft"
-              />
-              <div className="flex gap-2">
-                <input
-                  value={guestContact}
-                  onChange={(e) => {
-                    setGuestContact(e.target.value);
-                    if (guestError) setGuestError(null);
-                  }}
-                  placeholder="@username, email, or phone"
-                  className="flex-1 rounded-card border border-line bg-paper px-3.5 py-2.5 text-sm outline-none transition-colors focus:border-terracotta focus:ring-2 focus:ring-terracotta-soft"
-                />
-                <Button
-                  type="button"
-                  variant="secondary"
-                  size="sm"
-                  disabled={resolvingGuest}
-                  onClick={addGuest}
-                >
-                  {resolvingGuest ? 'Checking…' : 'Add'}
-                </Button>
-              </div>
-              {guestError && (
-                <p role="alert" className="text-xs text-rose-deep">
-                  {guestError}
-                </p>
-              )}
-              <ContactImportControls
-                onContacts={matchContactsFromDevice}
-                busy={contactsBusy}
-                pickLabel="From my contacts"
-              />
-              {contactsNote && (
-                <p role="status" className="text-xs text-ink-soft">
-                  {contactsNote}
-                </p>
-              )}
-            </div>
-
+          {/* Contacts, first and on their own.
+              It used to be the last control inside the "invite by username,
+              email, or phone" card, below two text fields, and the host who
+              asked for this found it by accident: "I was able to touch my
+              contacts to make them pop up, but it wasn't obvious." Bringing
+              the whole phone book in is the fastest way to fill this screen
+              and now looks like it. */}
+          <Card tone="terracotta">
+            <p className="text-sm font-bold text-ink">
+              📇 Bring in your contacts
+            </p>
+            <p className="mt-0.5 mb-2.5 text-xs leading-relaxed text-ink-soft">
+              The quickest way to fill this list. We’ll show who is already on
+              Switchboard and who can be invited by text - nothing is sent, and
+              nothing is saved, until you tap someone.
+            </p>
+            <ContactImportControls
+              onContacts={matchContactsFromDevice}
+              busy={contactsBusy}
+              pickLabel="Choose from my contacts"
+            />
+            {contactsNote && (
+              <p role="status" className="mt-2 text-xs font-semibold text-ink-soft">
+                {contactsNote}
+              </p>
+            )}
             {contactMatches.length > 0 && (
               <ul className="mt-3 space-y-2">
                 {contactMatches.map((match) => {
@@ -238,7 +218,7 @@ export function PeopleStep({
                         className={`w-full flex items-center gap-3 rounded-card border-2 p-3 transition-all active:scale-[0.99] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-terracotta ${
                           selected
                             ? 'border-terracotta bg-terracotta-soft'
-                            : 'border-line bg-paper hover:border-terracotta/50'
+                            : 'border-line bg-card hover:border-terracotta/50'
                         }`}
                       >
                         <Avatar
@@ -279,6 +259,43 @@ export function PeopleStep({
                 })}
               </ul>
             )}
+          </Card>
+
+          <Card>
+            <p className="text-sm font-bold text-ink mb-2">Or invite by username, email, or phone</p>
+            <div className="space-y-2">
+              <input
+                value={guestName}
+                onChange={(e) => setGuestName(e.target.value)}
+                placeholder="Name (optional)"
+                className="w-full rounded-card border border-line bg-paper px-3.5 py-2.5 text-sm outline-none transition-colors focus:border-terracotta focus:ring-2 focus:ring-terracotta-soft"
+              />
+              <div className="flex gap-2">
+                <input
+                  value={guestContact}
+                  onChange={(e) => {
+                    setGuestContact(e.target.value);
+                    if (guestError) setGuestError(null);
+                  }}
+                  placeholder="@username, email, or phone"
+                  className="flex-1 rounded-card border border-line bg-paper px-3.5 py-2.5 text-sm outline-none transition-colors focus:border-terracotta focus:ring-2 focus:ring-terracotta-soft"
+                />
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  disabled={resolvingGuest}
+                  onClick={addGuest}
+                >
+                  {resolvingGuest ? 'Checking…' : 'Add'}
+                </Button>
+              </div>
+              {guestError && (
+                <p role="alert" className="text-xs text-rose-deep">
+                  {guestError}
+                </p>
+              )}
+            </div>
           </Card>
 
           {invitees.length > 0 && (

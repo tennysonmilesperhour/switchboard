@@ -5,6 +5,7 @@ import { createAdminClient, hasAdminCredentials } from '@/lib/supabase/admin';
 import { getUser } from '@/lib/supabase/server';
 import { reportOperationalError } from '@/lib/server/observability';
 import { safeHttpUrl, serializeJsonLd } from '@/lib/security';
+import { inviteOpenGraph, unfurlSummary } from '@/lib/invite-links';
 import { errorFor, errorRef } from '@/lib/errors';
 import { resolveEventZone } from '@/lib/server/event-zone';
 import { InvitePlanDetails } from '@/components/events/InvitePlanDetails';
@@ -31,17 +32,22 @@ export async function generateMetadata({
   const { data: event } = invite
     ? await admin
         .from('events')
-        .select('title')
+        .select('title, description, location_name')
         .eq('id', invite.event_id)
         .maybeSingle()
     : { data: null };
   const title = event?.title ? `You’re invited: ${event.title}` : 'You’re invited';
   return {
     title,
-    openGraph: {
+    // Shared with `/i/<share_token>`: Next replaces the layout's whole
+    // `openGraph` object here rather than extending it, so a route that lists
+    // only a title and an image unfurls without the description, `og:type` and
+    // site name every other page keeps. See `inviteOpenGraph`.
+    openGraph: inviteOpenGraph({
       title,
-      images: invite ? [`/api/og/event/${invite.event_id}`] : [],
-    },
+      description: event ? unfurlSummary(event) : null,
+      image: invite ? `/api/og/event/${invite.event_id}` : null,
+    }),
   };
 }
 

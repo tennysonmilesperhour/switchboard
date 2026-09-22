@@ -132,12 +132,12 @@ export function BasicsStep({
             </div>
           </div>
           {startsInPast && (
-            <p role="alert" className="text-sm font-medium text-rose-deep">
+            <p role="alert" className="text-plate text-plate-inset text-sm font-medium text-rose-deep">
               That date and time have already passed. Pick a moment in the future.
             </p>
           )}
           {endsBeforeStart && (
-            <p role="alert" className="text-sm font-medium text-rose-deep">
+            <p role="alert" className="text-plate text-plate-inset text-sm font-medium text-rose-deep">
               End time should be after the start time.
             </p>
           )}
@@ -175,7 +175,7 @@ export function BasicsStep({
               )}
             </div>
             {recurrence !== 'none' && (
-              <p className="text-xs text-ink-faint">
+              <p className="text-plate text-plate-inset text-xs text-ink-faint">
                 🔁 We’ll tag this as a standing plan. When it’s behind you, one
                 tap gathers the same crew for the next one.
               </p>
@@ -206,7 +206,7 @@ export function BasicsStep({
             />
           </div>
           <p
-            className={`text-xs ${
+            className={`text-plate text-plate-inset text-xs ${
               hasInviteDetails(locationName, description)
                 ? 'text-ink-faint'
                 : 'font-semibold text-terracotta-deep'
@@ -227,7 +227,7 @@ export function BasicsStep({
             />
           </div>
           <div className="space-y-1.5">
-            <p className={FIELD_LABEL}>
+            <p className={`text-plate text-plate-inset ${FIELD_LABEL}`}>
               Cover image <span className="font-normal text-ink-faint">(optional)</span>
             </p>
             <ImageInput
@@ -251,10 +251,10 @@ export function BasicsStep({
             />
           </div>
           <div className="space-y-2">
-            <p className={FIELD_LABEL}>
+            <p className={`text-plate text-plate-inset ${FIELD_LABEL}`}>
               Questions for guests <span className="font-normal text-ink-faint">(optional)</span>
             </p>
-            <p className="text-xs text-ink-faint -mt-0.5">
+            <p className="text-plate text-plate-inset text-xs text-ink-faint -mt-0.5">
               Asked when someone accepts. Only you see the answers.
             </p>
             {questions.map((question, index) => {

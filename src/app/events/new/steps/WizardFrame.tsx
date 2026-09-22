@@ -64,7 +64,13 @@ export function WizardFrame({
         })}
       </ol>
 
-      <header key={step} className="animate-rise">
+      {/* `text-plate` is inert on every ordinary theme; under a photo
+          wallpaper it puts this whole header on a surface instead of on the
+          picture. It is the largest type in the wizard and it had none — which
+          is what "I'm still having a hard time seeing this text" was circling.
+          The block wraps the step label, the back link, the heading and the
+          sub, so the plate is one shape rather than four. */}
+      <header key={step} className="text-plate text-plate-inset animate-rise">
         <div className="flex items-center gap-3">
           <p className="text-xs font-bold uppercase tracking-[0.16em] text-terracotta-deep">
             Step {step + 1} of {steps.length}

@@ -200,8 +200,8 @@ export function AddInvitees({
 
   return (
     <section className="border-t border-line pt-5">
-      <h2 className="font-display text-xl text-ink">Add people</h2>
-      <p className="text-sm text-ink-faint mt-0.5 mb-3">
+      <h2 className="text-plate text-plate-inset font-display text-xl text-ink">Add people</h2>
+      <p className="text-plate text-plate-inset text-sm text-ink-faint mt-0.5 mb-3">
         Add anyone by <strong>@handle</strong>, email, phone, or name - they
         join the back of the line and go out when it’s their turn. Friends
         already on Switchboard are below: tap one to ask them straight away.
@@ -244,10 +244,10 @@ export function AddInvitees({
 
       {availableConnections.length > 0 && (
         <div className="mt-4">
-          <p className="text-xs font-bold uppercase tracking-wide text-ink-faint mb-1">
+          <p className="text-plate text-plate-inset text-xs font-bold uppercase tracking-wide text-ink-faint mb-1">
             From your people
           </p>
-          <p className="mb-2 text-xs text-ink-faint leading-relaxed">
+          <p className="text-plate text-plate-inset mb-2 text-xs text-ink-faint leading-relaxed">
             Tap someone to ask them right now - the invitation lands in their
             notifications. Or queue them for their turn in the line.
           </p>
@@ -310,7 +310,7 @@ export function AddInvitees({
           pickLabel="From my contacts"
         />
         {contactsNote && (
-          <p role="status" className="text-xs text-ink-soft mt-2">
+          <p role="status" className="text-plate text-plate-inset text-xs text-ink-soft mt-2">
             {contactsNote}
           </p>
         )}
@@ -331,7 +331,7 @@ export function AddInvitees({
         )}
       </div>
 
-      {error && <p className="text-xs text-rose-deep mt-2.5">{error}</p>}
+      {error && <p className="text-plate text-plate-inset text-xs text-rose-deep mt-2.5">{error}</p>}
 
       {openConnection && (
         <InviteeSheet

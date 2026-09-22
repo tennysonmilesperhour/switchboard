@@ -5,6 +5,7 @@ import { reportOperationalError } from '@/lib/server/observability';
 import { safeHttpUrl, serializeJsonLd } from '@/lib/security';
 import { resolveEventZone } from '@/lib/server/event-zone';
 import { eventSharePath } from '@/lib/links';
+import { inviteOpenGraph, unfurlSummary } from '@/lib/invite-links';
 import {
   canAnswer,
   canReadPlan,
@@ -51,7 +52,7 @@ export async function generateMetadata({
   const admin = createAdminClient();
   const { data: event } = await admin
     .from('events')
-    .select('id, title, status, share_link_active')
+    .select('id, title, status, share_link_active, description, location_name, starts_at')
     .eq('share_token', token)
     .maybeSingle();
 
@@ -61,10 +62,13 @@ export async function generateMetadata({
   const title = event && unfurl ? `You’re invited: ${event.title}` : 'You’re invited';
   return {
     title,
-    openGraph: {
+    openGraph: inviteOpenGraph({
       title,
-      images: event && unfurl ? [`/api/og/event/${event.id}`] : [],
-    },
+      // Only what this link is already allowed to reveal: `unfurl` false means
+      // the card falls back to the app's own line and says nothing of the plan.
+      description: event && unfurl ? unfurlSummary(event) : null,
+      image: event && unfurl ? `/api/og/event/${event.id}` : null,
+    }),
   };
 }
 

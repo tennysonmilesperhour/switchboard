@@ -104,7 +104,7 @@ export function VisibilityStep({
               </label>
             </Card>
           )}
-          <p className="text-xs text-ink-faint leading-relaxed px-1">
+          <p className="text-plate text-plate-inset text-xs text-ink-faint leading-relaxed px-1">
             Defaults are tuned so a one-on-one coffee feels private and a party
             feels social. Invitees never see their place in the invite order.
           </p>

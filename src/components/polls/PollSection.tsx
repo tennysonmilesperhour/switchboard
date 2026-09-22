@@ -227,9 +227,11 @@ export function PollSection({
     }),
   );
 
-  // Live consensus: a DB trigger bumps polls.tally_version on every vote change.
-  // Subscribe to this poll's row and re-fetch aggregates so the meter moves as
-  // others vote, without ever exposing an individual vote.
+  // Live poll: DB triggers bump polls.tally_version on every vote change and
+  // on every change to the ideas themselves (20260921180000). Subscribe to this
+  // poll's row and re-fetch so the meter moves as others vote and the list
+  // grows as others suggest — without ever exposing an individual vote, or
+  // putting an idea's text and author on a channel of their own.
   //
   // Coalesced, because that trigger is noisier than it looks: it fires for this
   // device's own votes too, each of which already brought a freshly rendered

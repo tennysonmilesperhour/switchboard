@@ -54,6 +54,11 @@ describe('source architecture boundaries', () => {
       'app/events/new/steps/OrderStep.tsx',
       'app/events/new/steps/VisibilityStep.tsx',
       'app/events/new/steps/ReviewStep.tsx',
+      // Who is coming, and the rules for changing that list — refusing an
+      // address already invited, resolving a handle, pairing up the same
+      // person arriving by two doors. Lifted out of `EventWizard`, which
+      // keeps the plan's own fields and the step machinery.
+      'app/events/new/use-invitee-draft.ts',
       'app/people/sections/AddSomeoneSection.tsx',
       'app/people/sections/IncomingRequestsSection.tsx',
       'app/people/sections/FriendsSection.tsx',
