@@ -165,6 +165,17 @@ export async function updateEventDetails(
 
   const title = input.title.trim();
   if (!title) return validation('Give your plan a name.');
+  // The same floor `createEvent` sets, applied to the edit that can undo it.
+  // Invitations are already out by the time anyone edits, so a plan saved back
+  // to a bare title leaves every link the host has sent — /i/<token>,
+  // /rsvp/<token>, the event page — showing a name and nothing a recipient
+  // could answer from. Refusing on create and permitting on edit is the same
+  // rule holding on one surface and not the other.
+  if (!hasInviteDetails(input.locationName, input.description)) {
+    return validation(
+      'Add a location or a short detail so invitees know what they’re answering.',
+    );
+  }
   if (input.capacity !== null && (!Number.isInteger(input.capacity) || input.capacity < 1)) {
     return validation('Capacity must be a whole number of at least 1.');
   }
