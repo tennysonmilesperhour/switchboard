@@ -5,6 +5,11 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/Button';
 import { Icon } from '@/components/ui/Icon';
+import {
+  RsvpQuestions,
+  requiredAnswered,
+  type RsvpQuestion,
+} from '@/components/events/RsvpQuestions';
 import { respondViaShareLink } from '@/lib/actions/invites';
 import { requestParentalApproval } from '@/lib/actions/parental-approval';
 import { errorRef, type ErrorCode } from '@/lib/errors';
@@ -13,6 +18,8 @@ interface ShareLinkRsvpProps {
   shareToken: string;
   /** The signed-in viewer's profile name, when they have one. */
   defaultName: string;
+  /** The host's RSVP questions, asked here as they are on `/rsvp/<token>`. */
+  questions?: RsvpQuestion[];
 }
 
 /**
@@ -28,8 +35,13 @@ interface ShareLinkRsvpProps {
  * durable per-person link they can reopen to add the plan to a calendar or
  * change their answer, and the same surface a directly-invited guest gets.
  */
-export function ShareLinkRsvp({ shareToken, defaultName }: ShareLinkRsvpProps) {
+export function ShareLinkRsvp({
+  shareToken,
+  defaultName,
+  questions = [],
+}: ShareLinkRsvpProps) {
   const [name, setName] = useState(defaultName);
+  const [answers, setAnswers] = useState<Record<string, string>>({});
   const [error, setError] = useState('');
   // Shown beside the message when the answer fails. A recipient who says "it
   // won't let me RSVP" is describing five different causes; SB-RSVP-CLOSED and
@@ -55,10 +67,23 @@ export function ShareLinkRsvp({ shareToken, defaultName }: ShareLinkRsvpProps) {
       setCode(null);
       return;
     }
+    // Same gate as the per-invite flow: a host's required question is required
+    // whichever link the guest opened. Declining never has to answer anything.
+    if (accept && !requiredAnswered(questions, answers)) {
+      setError('Please answer the required questions');
+      setCode(null);
+      return;
+    }
     setError('');
     setCode(null);
     startTransition(async () => {
-      const result = await respondViaShareLink(shareToken, accept, trimmed);
+      const result = await respondViaShareLink(
+        shareToken,
+        accept,
+        trimmed,
+        null,
+        accept ? answers : {},
+      );
       if (!result.ok) {
         // A session can lapse while an invitation sits open in a tab. Say so and
         // offer the way back, rather than a dead-end "something went wrong".
@@ -178,6 +203,18 @@ export function ShareLinkRsvp({ shareToken, defaultName }: ShareLinkRsvpProps) {
             className="w-full rounded-card border border-line bg-paper px-3.5 py-2.5 text-base text-ink placeholder:text-ink-faint focus:border-terracotta focus:outline-none focus:ring-2 focus:ring-terracotta/30"
           />
         </label>
+      )}
+      {questions.length > 0 && (
+        <div className="mb-4 rounded-card bg-cream p-4">
+          <RsvpQuestions
+            questions={questions}
+            values={answers}
+            disabled={pending}
+            onChange={(id, value) =>
+              setAnswers((current) => ({ ...current, [id]: value }))
+            }
+          />
+        </div>
       )}
       {error && (
         <p role="alert" className="text-sm text-rose-deep mb-3">
