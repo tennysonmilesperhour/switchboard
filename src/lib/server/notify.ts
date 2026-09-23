@@ -58,7 +58,14 @@ export async function notifyUsers(
     })),
   );
   // In-app recording is best-effort — never block the domain action on it.
-  if (error) console.error('[notify:record]', error.message);
+  if (error) {
+    await reportOperationalError(
+      'notify.record',
+      error,
+      { kind: payload.kind, recipients: ids.length },
+      'SB-NOTIFY-RECORD',
+    );
+  }
 
   // The push honors the recipient's per-category preference; the in-app row
   // above is always written regardless, so muting a category loses the buzz,
