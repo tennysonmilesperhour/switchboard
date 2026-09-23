@@ -10,40 +10,43 @@ import { revalidatePath } from 'next/cache';
 import { requireUser, requireUserOrRedirect } from '@/lib/server/require-user';
 import { normalizeUsername } from '@/lib/auth-identity';
 import { boardJoinUrl } from '@/lib/links';
+import { slugBase, slugCandidate } from '@/lib/url-slug';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { notifyUsers } from '@/lib/server/notify';
 import { createEvent } from '@/lib/actions/events';
 import { capture } from '@/lib/analytics/server';
 import { ANALYTICS_EVENTS } from '@/lib/analytics/events';
 
-function slugify(name: string): string {
-  return name
-    .toLowerCase()
-    .replace(/[^a-z0-9\s-]/g, '')
-    .trim()
-    .replace(/\s+/g, '-')
-    .slice(0, 40);
-}
-
 export async function createBoard(formData: FormData): Promise<void> {
   const { supabase } = await requireUserOrRedirect();
 
   const name = String(formData.get('name') ?? '').trim();
   const description = String(formData.get('description') ?? '').trim();
-  const slug = slugify(name);
-  if (!name || slug.length < 3) redirect('/boards?error=name');
+  if (name.length < 3) redirect('/boards?error=name');
+  const base = slugBase(name, 'board');
 
-  const { data, error } = await supabase.rpc('create_board', {
-    p_name: name,
-    p_slug: slug,
-    p_description: description,
-  });
-  if (error) {
-    if (error.code === '23505') redirect('/boards?error=taken');
-    await reportOperationalError('board.create', error, {}, 'SB-BOARD-SAVE');
-    redirect('/boards?error=save&reason=SB-BOARD-SAVE');
+  // Two boards may share a name (every town has a Maple Street); only their
+  // addresses have to differ. A taken slug is retried with a short suffix.
+  for (let attempt = 0; attempt < 4; attempt += 1) {
+    const slug = slugCandidate(base, attempt, 'board');
+    const { data, error } = await supabase.rpc('create_board', {
+      p_name: name.slice(0, 80),
+      p_slug: slug,
+      p_description: description,
+    });
+    if (!error) redirect(`/boards/${data ?? slug}`);
+    if (error.code !== '23505') {
+      await reportOperationalError('board.create', error, {}, 'SB-BOARD-SAVE');
+      redirect('/boards?error=save&reason=SB-BOARD-SAVE');
+    }
   }
-  redirect(`/boards/${data ?? slug}`);
+  await reportOperationalError(
+    'board.create',
+    new Error('No free slug after 4 attempts'),
+    { base },
+    'SB-BOARD-SAVE',
+  );
+  redirect('/boards?error=save&reason=SB-BOARD-SAVE');
 }
 
 export async function inviteToBoard(
@@ -82,6 +85,22 @@ export async function inviteToBoard(
     const already = error.code === '23505';
     if (already) return validation('They’re already on this board.');
     return reportAndFail('SB-BOARD-SAVE', 'board.member-add', error, { boardId });
+  }
+
+  // Being added used to be silent: the board simply appeared in their list
+  // whenever they next looked, with nothing saying who put them there.
+  const { data: board } = await supabase
+    .from('boards')
+    .select('name, slug')
+    .eq('id', boardId)
+    .maybeSingle();
+  if (board) {
+    await notifyUsers([profile.id], {
+      kind: 'board_added',
+      title: `You’re on ${board.name}`,
+      body: 'An organizer added you to this board. Posts from the group will show up here.',
+      url: `/boards/${board.slug}`,
+    });
   }
 
   revalidatePath(`/boards`);
@@ -166,13 +185,19 @@ export async function removeFromBoard(
   const auth = await requireUser();
   if (!auth.ok) return auth;
   const { supabase } = auth;
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from('board_members')
     .delete()
     .eq('board_id', boardId)
-    .eq('member_id', memberId);
+    .eq('member_id', memberId)
+    .select('member_id');
   if (error) {
     return reportAndFail('SB-BOARD-SAVE', 'board.member-remove', error, { boardId, memberId });
+  }
+  // RLS filters a delete the caller may not make down to zero rows rather than
+  // raising, which used to come back as success.
+  if (!data || data.length === 0) {
+    return failure('SB-PERM-DENIED', 'Only a board organizer can remove people.');
   }
   revalidatePath('/boards');
   return { ok: true };
@@ -194,8 +219,11 @@ export async function addBoardPost(
   if (!auth.ok) return auth;
   const { supabase, user } = auth;
 
-  const title = input.title.trim();
+  const title = input.title.trim().slice(0, 120);
   if (!title) return validation('Give it a title.');
+  if (input.startsAt && Number.isNaN(Date.parse(input.startsAt))) {
+    return validation('That date didn’t make sense. Pick it again.');
+  }
 
   // "Listed until" applies only to offers/requests, and stays within a
   // sensible window so a typo can't pin a stale ask to the board for years.
@@ -256,7 +284,7 @@ export async function addBoardPost(
   }
 
   await capture(user.id, ANALYTICS_EVENTS.boardPostCreated, { kind: input.kind });
-  revalidatePath('/boards');
+  revalidatePath('/boards', 'layout');
   return { ok: true };
 }
 
@@ -322,6 +350,9 @@ export async function updateBoardPost(
 
   const title = input.title.trim().slice(0, 120);
   if (!title) return validation('Give it a title.');
+  if (input.startsAt && Number.isNaN(Date.parse(input.startsAt))) {
+    return validation('That date didn’t make sense. Pick it again.');
+  }
 
   // The author predicate is repeated here even though RLS enforces it. A
   // successful request that updated zero rows must not be presented as saved.
@@ -352,8 +383,15 @@ export async function deleteBoardPost(
 ): Promise<ActionResult> {
   const auth = await requireUser();
   if (!auth.ok) return auth;
-  const { error } = await auth.supabase.from('board_posts').delete().eq('id', postId);
+  const { data, error } = await auth.supabase
+    .from('board_posts')
+    .delete()
+    .eq('id', postId)
+    .select('id');
   if (error) return reportAndFail('SB-BOARD-SAVE', 'board.post-delete', error, { postId });
+  if (!data || data.length === 0) {
+    return failure('SB-PERM-DENIED', 'Only the author or a board organizer can remove this post.');
+  }
   revalidatePath(`/boards/${slug}`);
   return { ok: true };
 }
