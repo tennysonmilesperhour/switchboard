@@ -41,7 +41,23 @@ jobs:
           [ -f supabase/config.toml ] || printf 'project_id = "switchboard"\n' > supabase/config.toml
 
       - name: Start local stack (applies all migrations)
-        run: supabase start
+        # ghcr.io rate-limits image pulls (toomanyrequests) when several runs
+        # start at once, and one refused pull fails the whole start. Images
+        # that did land stay cached, so each retry has less to fetch. The
+        # excluded services (dashboard, log pipeline, image resizer, edge
+        # functions) are never touched by these tests: five fewer pulls to lose.
+        run: |
+          for attempt in 1 2 3 4; do
+            if supabase start -x studio,logflare,vector,imgproxy,edge-runtime; then
+              exit 0
+            fi
+            supabase stop --no-backup || true
+            [ "$attempt" = 4 ] && break
+            delay=$(( attempt * 45 + RANDOM % 30 ))
+            echo "::warning::supabase start failed (attempt $attempt); retrying in ${delay}s"
+            sleep "$delay"
+          done
+          exit 1
 
       - name: Run pgTAP security tests
         run: supabase test db
