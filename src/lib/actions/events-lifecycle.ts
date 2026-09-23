@@ -31,6 +31,7 @@ import { consumeEventOutboundSlot } from '@/lib/server/invite-delivery-limit';
 import { safeHttpUrl } from '@/lib/security';
 import { toJson } from '@/lib/supabase/json';
 import { hasInviteDetails } from '@/lib/event-details';
+import { runItBackCrew } from '@/lib/run-it-back';
 import {
   createEventError,
   deliveryWarning,
@@ -570,13 +571,11 @@ async function cloneEventForReuse(
 
   const { data: priorInvites } = await supabase
     .from('invites')
-    .select('invitee_id, guest_name, guest_contact, position, group_stage, window_minutes, decline_note')
+    .select('invitee_id, guest_name, guest_contact, position, group_stage, window_minutes, decline_note, status')
     .eq('event_id', sourceId)
     .order('position');
 
-  const carryOver = (priorInvites ?? []).filter(
-    (i) => i.decline_note !== 'not_my_thing',
-  );
+  const carryOver = runItBackCrew(priorInvites ?? [], userId);
   if (carryOver.length > 0) {
     await admin.from('invites').insert(
       carryOver.map((i, index) => ({
@@ -613,7 +612,9 @@ async function cloneEventForReuse(
 /**
  * Run It Back: clone a past plan into a fresh one - same people, same place,
  * new date TBD. Anyone who said "not my thing" is quietly left off; everyone
- * else keeps their place in the order. The host lands on the new draft.
+ * else keeps their place in the order (see `runItBackCrew` for who counts as
+ * crew). The new plan is live - invitations go out as it is created - and the
+ * host lands on it.
  */
 export async function runItBack(eventId: string): Promise<never> {
   const { user } = await requireUserOrRedirect();

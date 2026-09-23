@@ -955,6 +955,7 @@ const AREA_CODES: Record<string, ErrorCode> = {
   'mutual.respond': 'SB-MUTUAL-SAVE',
   'ritual.create': 'SB-RITUAL-SAVE',
   'room.message': 'SB-ROOM-SAVE',
+  'room.task': 'SB-ROOM-SAVE',
   'room.image': 'SB-ROOM-SAVE',
   'signal.activate': 'SB-SIGNAL-SAVE',
   'signal.remove': 'SB-SIGNAL-SAVE',

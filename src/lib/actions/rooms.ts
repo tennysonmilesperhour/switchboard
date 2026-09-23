@@ -1,13 +1,12 @@
 'use server';
 
-import { validation, type ActionResult } from '@/lib/errors';
+import { failure, validation, type ActionResult } from '@/lib/errors';
 
 import { revalidatePath } from 'next/cache';
 import { after } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { requireUser } from '@/lib/server/require-user';
-import { extractItems } from '@/lib/ai/extract';
+import { extractItems, extractWithRules } from '@/lib/ai/extract';
 import { isOwnPublicStorageUrl } from '@/lib/server/media';
 import { notifyRoomActivity } from '@/lib/server/notify';
 import { reportAndFail } from '@/lib/server/observability';
@@ -50,8 +49,12 @@ export async function sendMessage(
   // for a model call. Organization remains best-effort.
   after(async () => {
     try {
+      // The limit protects the model budget, not the filing: past it, the free
+      // pattern rules still file links, addresses and tasks. It used to file
+      // nothing at all, so the busiest member of a room during the event itself
+      // - the moment it matters - stopped getting anything sorted.
       const canExtract = await checkRateLimit(`ai:extract:${user.id}`, 60, 60 * 60);
-      const items = canExtract ? await extractItems(trimmed) : [];
+      const items = canExtract ? await extractItems(trimmed) : extractWithRules(trimmed);
       if (items.length > 0) {
         const admin = createAdminClient();
         await admin.from('room_items').insert(
@@ -127,14 +130,31 @@ export async function sendPhotoMessage(
   return { ok: true };
 }
 
+/**
+ * Tick a task off, or back on.
+ *
+ * Returned nothing, and the room wrapped the call in a `catch` for an error
+ * that could never arrive: a refused update comes back as `{ error }` or as
+ * zero rows, never as a throw, so a failed tick left the box checked on one
+ * phone and unchecked for everyone else with no word said.
+ */
 export async function toggleTask(
   itemId: string,
   roomId: string,
   done: boolean,
-): Promise<void> {
-  const supabase = await createClient();
-  await supabase.from('room_items').update({ done }).eq('id', itemId);
+): Promise<ActionResult> {
+  const auth = await requireUser();
+  if (!auth.ok) return auth;
+  const { data, error } = await auth.supabase
+    .from('room_items')
+    .update({ done })
+    .eq('id', itemId)
+    .eq('room_id', roomId)
+    .select('id');
+  if (error) return reportAndFail('SB-ROOM-SAVE', 'room.task', error, { roomId, itemId });
+  if (!data || data.length === 0) return failure('SB-ROOM-SAVE');
   revalidatePath(`/rooms/${roomId}`);
+  return { ok: true };
 }
 
 export async function markRoomRead(roomId: string): Promise<void> {

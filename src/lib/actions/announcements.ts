@@ -56,16 +56,25 @@ export async function postAnnouncement(
 
 async function fanOutAnnouncement(
   eventId: string,
-  hostId: string,
+  /** Whoever posted it: the host or a co-host. */
+  authorId: string,
   body: string,
 ): Promise<void> {
   const admin = createAdminClient();
   const { data: event } = await admin
     .from('events')
-    .select('id, title, room_id, location_name')
+    .select('id, title, room_id, location_name, host_id')
     .eq('id', eventId)
     .single();
   if (!event) return;
+  // Co-hosts can post too, and the people running the plan with them are not
+  // invitees, so an update a co-host sent never reached the host (or the other
+  // co-hosts). Everyone running the plan hears it, except whoever wrote it.
+  const { data: cohosts } = await admin
+    .from('event_cohosts')
+    .select('cohost_id')
+    .eq('event_id', eventId);
+  const organisers = [event.host_id, ...(cohosts ?? []).map((row) => row.cohost_id)];
 
   const { data: invites } = await admin
     .from('invites')
@@ -74,9 +83,13 @@ async function fanOutAnnouncement(
     .eq('status', 'accepted');
   const accepted = invites ?? [];
 
-  const users = accepted
-    .map((i) => i.invitee_id)
-    .filter((id): id is string => Boolean(id) && id !== hostId);
+  const users = [
+    ...new Set(
+      [...accepted.map((i) => i.invitee_id), ...organisers].filter(
+        (id): id is string => Boolean(id) && id !== authorId,
+      ),
+    ),
+  ];
   if (users.length > 0) {
     await notifyUsers(users, {
         kind: 'announcement',
@@ -104,7 +117,7 @@ async function fanOutAnnouncement(
   if (event.room_id) {
     await admin.from('messages').insert({
       room_id: event.room_id,
-      sender_id: hostId,
+      sender_id: authorId,
       body: `📣 ${body}`,
     });
   }
