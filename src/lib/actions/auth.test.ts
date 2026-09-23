@@ -158,6 +158,7 @@ const mocks = vi.hoisted(() => {
     generateLink,
     sendEmailWithResult,
     signInWithPassword,
+    updateUser: vi.fn(async () => ({ error: null as { code: string } | null })),
     checkRateLimit,
     guardAuthAttempt,
     hasAdminCredentials,
@@ -182,6 +183,7 @@ vi.mock('@/lib/supabase/server', () => ({
   createClient: async () => ({
     auth: {
       signInWithPassword: mocks.signInWithPassword,
+      updateUser: mocks.updateUser,
     },
   }),
 }));
@@ -214,6 +216,7 @@ import {
   requestPasswordReset,
   resendEmailConfirmation,
   signInWithPasswordIdentifier,
+  updatePassword,
 } from './auth';
 
 function seed(state: {
@@ -632,5 +635,29 @@ describe('requestPasswordReset', () => {
     const result = await requestPasswordReset('alice@example.com');
     expect(result.ok).toBe(true);
     expect(mocks.sendEmailWithResult).not.toHaveBeenCalled();
+  });
+});
+
+describe('updatePassword', () => {
+  it('names a reused password instead of sending the reader for a reset link', async () => {
+    mocks.updateUser.mockResolvedValueOnce({ error: { code: 'same_password' } });
+    const result = await updatePassword('correct horse battery');
+    expect(result).toEqual({
+      ok: false,
+      error: 'That’s already your password. Choose a different one.',
+    });
+  });
+
+  it('names a weak password as a validation problem', async () => {
+    mocks.updateUser.mockResolvedValueOnce({ error: { code: 'weak_password' } });
+    const result = await updatePassword('correct horse battery');
+    expect(result.ok).toBe(false);
+    expect(result).not.toHaveProperty('code');
+  });
+
+  it('keeps the coded failure for anything else', async () => {
+    mocks.updateUser.mockResolvedValueOnce({ error: { code: 'session_not_found' } });
+    const result = await updatePassword('correct horse battery');
+    expect(result).toMatchObject({ ok: false, code: 'SB-AUTH-RESET' });
   });
 });

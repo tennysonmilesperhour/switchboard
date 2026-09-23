@@ -15,6 +15,7 @@ import { ShowTipsAgain } from '@/components/settings/ShowTipsAgain';
 import { InterestPicker } from '@/components/profile/InterestPicker';
 import { SettingsForm, SettingsSaveProvider } from './SettingsSaveBar';
 import { AccountControls } from './AccountControls';
+import { upcomingHostedPlans } from '@/lib/server/hosted-plans';
 import { CalendarSubscribe } from './CalendarSubscribe';
 import { CalendarConnect } from './CalendarConnect';
 import { ContactVerification } from './ContactVerification';
@@ -62,6 +63,11 @@ export default async function SettingsPage({
     isModerator,
   } = await loadSettingsPage(user);
   const { data: smsPreferences } = await supabase.from('sms_preferences').select('enabled, plans, reminders, phone, urgent_changes').eq('user_id', user.id).maybeSingle();
+  // Shown in the delete-account confirmation, so nobody deletes an account
+  // without knowing which of their plans go with it.
+  const hostedPlanCount = await upcomingHostedPlans(supabase, user.id)
+    .then((plans) => plans.length)
+    .catch(() => 0);
   const { data: notificationRoutes } = await supabase.from('notification_routes').select('plans, reminders').eq('user_id', user.id).maybeSingle();
   const currentSmsPreferences = smsPreferences && smsPreferences.phone === privateProfile?.contact_phone ? smsPreferences : null;
   const calendarToken = privateProfile?.calendar_token ?? null;
@@ -423,7 +429,7 @@ export default async function SettingsPage({
           <section>
             <SectionHeader title="Account" hint="Password and account controls" />
             <Card>
-              <AccountControls />
+              <AccountControls hostedPlanCount={hostedPlanCount} />
             </Card>
           </section>
 
