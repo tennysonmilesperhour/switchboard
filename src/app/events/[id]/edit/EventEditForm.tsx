@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/Button';
 import { useToast } from '@/components/ui/Toast';
 import { hasInviteDetails } from '@/lib/event-details';
+import { capacityProblem } from '@/lib/plan-capacity';
 import { updateEventDetails } from '@/lib/actions/events';
 import { resolveTimeZone } from '@/lib/client/time-zone';
 import type { SwitchboardEvent } from '@/lib/types';
@@ -57,6 +58,19 @@ export function EventEditForm({ event }: { event: SwitchboardEvent }) {
     // after a round trip. The server check is the real one.
     if (!hasInviteDetails(locationName, description)) {
       setError('Add a location or a short detail so invitees know what they’re answering.');
+      return;
+    }
+    // The server refuses both of these too; checking here puts the sentence on
+    // the form instead of after a round trip.
+    const start = toIso(startsAt);
+    const end = toIso(endsAt);
+    if (start && end && new Date(end) <= new Date(start)) {
+      setError('End time should be after the start time.');
+      return;
+    }
+    const capacityError = capacityProblem(capacity);
+    if (capacityError) {
+      setError(capacityError);
       return;
     }
     setError(null);

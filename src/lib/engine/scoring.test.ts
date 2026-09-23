@@ -1,9 +1,12 @@
-import { describe, expect, test } from 'vitest';
+import { describe, expect, it, test } from 'vitest';
 import {
+  closesIntoRunoff,
+  decidePoll,
   finalists,
   groupConsensus,
   nextWeight,
   scoreOptions,
+  type OptionScore,
   type Vote,
   type Weight,
 } from './scoring';
@@ -128,5 +131,114 @@ describe('finalists', () => {
     ];
     const top = finalists(['a', 'b', 'c', 'd'], votes, 3);
     expect(top.map((s) => s.optionId)).toEqual(['a', 'b', 'c']);
+  });
+});
+
+describe('decidePoll', () => {
+  const score = (
+    optionId: string,
+    s: number,
+    loves = 0,
+    objections = 0,
+  ): OptionScore => ({ optionId, score: s, loves, objections, voters: 1, consensus: 0 });
+
+  /**
+   * With no votes, `scoreOptions` still returns every idea, ordered by id.
+   * "Close voting & pick winner" used to crown the first one.
+   */
+  it('hands a poll nobody voted on to the host instead of crowning an id', () => {
+    const ranked = [score('a', 0), score('b', 0)];
+    for (const resolution of ['auto', 'runoff', 'host_pick']) {
+      expect(decidePoll({ resolution, phase: 'voting', ranked, voteCount: 0 })).toEqual({
+        kind: 'host_pick',
+      });
+    }
+  });
+
+  it('never narrows a runoff on no votes, which deleted suggestions at random', () => {
+    const ranked = ['a', 'b', 'c', 'd', 'e'].map((id) => score(id, 0));
+    expect(
+      decidePoll({ resolution: 'runoff', phase: 'voting', ranked, voteCount: 0 }),
+    ).toEqual({ kind: 'host_pick' });
+  });
+
+  it('picks a clear leader automatically', () => {
+    expect(
+      decidePoll({
+        resolution: 'auto',
+        phase: 'voting',
+        ranked: [score('b', 4, 2), score('a', 1)],
+        voteCount: 3,
+      }),
+    ).toEqual({ kind: 'winner', optionId: 'b' });
+  });
+
+  it('hands an exact tie to the host rather than to the id order', () => {
+    expect(
+      decidePoll({
+        resolution: 'auto',
+        phase: 'voting',
+        ranked: [score('a', 2, 1), score('b', 2, 1)],
+        voteCount: 2,
+      }),
+    ).toEqual({ kind: 'host_pick' });
+  });
+
+  it('still separates a tie on score by objections, as the ranking does', () => {
+    expect(
+      decidePoll({
+        resolution: 'auto',
+        phase: 'voting',
+        ranked: [score('a', 2, 1, 0), score('b', 2, 2, 1)],
+        voteCount: 4,
+      }),
+    ).toEqual({ kind: 'winner', optionId: 'a' });
+  });
+
+  it('narrows a runoff to the top three, keeping anything level with third', () => {
+    const ranked = [score('a', 5), score('b', 4), score('c', 2), score('d', 2), score('e', 0)];
+    expect(
+      decidePoll({ resolution: 'runoff', phase: 'voting', ranked, voteCount: 6 }),
+    ).toEqual({ kind: 'runoff', finalistIds: ['a', 'b', 'c', 'd'] });
+  });
+
+  it('decides a runoff with nothing to narrow instead of handing it back', () => {
+    // Three ideas: they already are the finalists, so this vote was the final
+    // round. The host asked the group to decide, so the group's leader wins.
+    const ranked = [score('a', 3), score('b', 1), score('c', 0)];
+    expect(
+      decidePoll({ resolution: 'runoff', phase: 'voting', ranked, voteCount: 3 }),
+    ).toEqual({ kind: 'winner', optionId: 'a' });
+  });
+
+  it('decides the runoff round itself by its leader', () => {
+    expect(
+      decidePoll({
+        resolution: 'runoff',
+        phase: 'runoff',
+        ranked: [score('c', 3), score('a', 1), score('b', 0)],
+        voteCount: 3,
+      }),
+    ).toEqual({ kind: 'winner', optionId: 'c' });
+  });
+
+  it('leaves a host-pick poll to the host however the votes fell', () => {
+    expect(
+      decidePoll({
+        resolution: 'host_pick',
+        phase: 'voting',
+        ranked: [score('a', 9), score('b', 0)],
+        voteCount: 5,
+      }),
+    ).toEqual({ kind: 'host_pick' });
+  });
+});
+
+describe('closesIntoRunoff', () => {
+  it('only promises a runoff when there is something to narrow', () => {
+    expect(closesIntoRunoff('runoff', 'voting', 5)).toBe(true);
+    expect(closesIntoRunoff('runoff', 'voting', 3)).toBe(false);
+    expect(closesIntoRunoff('runoff', 'runoff', 5)).toBe(false);
+    expect(closesIntoRunoff('auto', 'voting', 5)).toBe(false);
   });
 });

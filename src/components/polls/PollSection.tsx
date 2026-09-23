@@ -17,7 +17,7 @@ import {
   type SuggestionInput,
 } from '@/lib/actions/polls';
 import { linkHostname, OPTION_DETAIL_MAX } from '@/lib/poll-option-input';
-import { nextWeight, type Weight } from '@/lib/engine/scoring';
+import { closesIntoRunoff, nextWeight, type Weight } from '@/lib/engine/scoring';
 import { errorFor, errorRef, type ErrorCode } from '@/lib/errors';
 import type { Poll, PollOption } from '@/lib/types';
 
@@ -461,7 +461,11 @@ export function PollSection({
         title="What should we do?"
         hint={
           poll.phase === 'decided'
-            ? 'The group has decided.'
+            ? winner
+              ? 'The group has decided.'
+              : isHost
+                ? 'Voting is closed - choose the winner below.'
+                : 'Voting is closed - the host is choosing.'
             : poll.phase === 'runoff'
               ? 'Final runoff - pick between the finalists.'
               : 'Rank ideas privately. Nobody sees your individual votes.'
@@ -654,7 +658,11 @@ export function PollSection({
                     disabled={pending}
                     onClick={() =>
                       startTransition(async () => {
-                        await pickWinner(poll.id, eventId, option.id);
+                        const result = await pickWinner(poll.id, eventId, option.id);
+                        if (!result.ok) {
+                          setError(result.error ?? 'That decision didn’t move forward.');
+                          setErrorCode(result.code ?? null);
+                        }
                       })
                     }
                   >
@@ -712,7 +720,11 @@ export function PollSection({
               disabled={pending}
               onClick={() =>
                 startTransition(async () => {
-                  await openVoting(poll.id, eventId);
+                  const result = await openVoting(poll.id, eventId);
+                        if (!result.ok) {
+                          setError(result.error ?? 'That decision didn’t move forward.');
+                          setErrorCode(result.code ?? null);
+                        }
                 })
               }
             >
@@ -724,15 +736,21 @@ export function PollSection({
             disabled={pending || options.length === 0}
             onClick={() =>
               startTransition(async () => {
-                await closeVoting(poll.id, eventId);
+                const result = await closeVoting(poll.id, eventId);
+                        if (!result.ok) {
+                          setError(result.error ?? 'That decision didn’t move forward.');
+                          setErrorCode(result.code ?? null);
+                        }
               })
             }
           >
             {poll.resolution === 'auto'
               ? 'Close voting & pick winner'
-              : poll.resolution === 'runoff' && poll.phase !== 'runoff'
+              : closesIntoRunoff(poll.resolution, poll.phase, options.length)
                 ? 'Close voting → runoff'
-                : 'Close voting'}
+                : poll.resolution === 'runoff'
+                  ? 'Close voting & pick winner'
+                  : 'Close voting'}
           </Button>
         </div>
       )}

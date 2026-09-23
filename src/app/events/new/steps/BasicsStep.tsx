@@ -35,7 +35,12 @@ interface BasicsStepProps {
   endTime: string;
   setEndTime: Dispatch<SetStateAction<string>>;
   startsInPast: boolean;
+  /** The end time equals the start: zero hours or twenty-four, so refused. */
   endsBeforeStart: boolean;
+  /** The end is earlier on the clock than the start, so it is the next day. */
+  endsNextDay: boolean;
+  /** Why the spots field cannot be used, or null. */
+  capacityError: string | null;
   recurrence: RecurrenceKind;
   setRecurrence: Dispatch<SetStateAction<RecurrenceKind>>;
   customDays: string;
@@ -71,6 +76,8 @@ export function BasicsStep({
   setEndTime,
   startsInPast,
   endsBeforeStart,
+  endsNextDay,
+  capacityError,
   recurrence,
   setRecurrence,
   customDays,
@@ -138,7 +145,15 @@ export function BasicsStep({
           )}
           {endsBeforeStart && (
             <p role="alert" className="text-plate text-plate-inset text-sm font-medium text-rose-deep">
-              End time should be after the start time.
+              The end time is the same as the start. Pick when it wraps up, or
+              leave it as &ldquo;No end time&rdquo;.
+            </p>
+          )}
+          {/* An end earlier on the clock than the start is a late night, not a
+              mistake: said out loud so the host can see which day it lands on. */}
+          {endsNextDay && (
+            <p className="text-plate text-plate-inset text-sm text-ink-soft">
+              🌙 Ends the next day, after midnight.
             </p>
           )}
           <div className="space-y-1.5">
@@ -220,11 +235,22 @@ export function BasicsStep({
               How many spots? <span className="font-normal text-ink-faint">(leave blank for one-on-one)</span>
             </label>
             <input
-              id="capacity" type="number" min={1} value={capacity}
+              id="capacity" type="number" min={1} step={1} value={capacity}
               onChange={(e) => setCapacity(e.target.value)}
               placeholder="1"
+              aria-invalid={capacityError !== null}
+              aria-describedby={capacityError ? 'capacity-error' : undefined}
               className={`${FIELD} w-36`}
             />
+            {capacityError && (
+              <p
+                id="capacity-error"
+                role="alert"
+                className="text-plate text-plate-inset text-sm font-medium text-rose-deep"
+              >
+                {capacityError}
+              </p>
+            )}
           </div>
           <div className="space-y-1.5">
             <p className={`text-plate text-plate-inset ${FIELD_LABEL}`}>
