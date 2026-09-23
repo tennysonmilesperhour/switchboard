@@ -570,7 +570,7 @@
     { id: "E", title: "Map and zones", blurb: "Zones, live location, and map layers", items: [
       { id:"E1", name:"Zones and presence", what:"Named places you check into — a conference, a campus, a festival. Zone presence counts show how many people are currently there. Give a zone a location and it appears on the map.", verify:"Create a zone, check in from two accounts, and confirm each sees the other in the count. Confirm the zone shows on the map." },
       { id:"E2", name:"Live location sharing", what:"Opt in and appear live on the map. It’s mutual (you only see people who can see you), respects blocks, is blurred to roughly 110 meters, and turns itself off automatically.", verify:"Two accounts opt in. Confirm they see each other, confirm the blurring, and confirm auto-off." },
-      { id:"E3", name:"Map navigation", what:"Plans, zones, and shared places are independent toggleable layers. Tapping a layer count opens a sorted directory with links to each item. The map stays where you pan it — GPS updates don’t snap it back.", verify:"Toggle each layer. Tap a layer count and confirm a directory opens. Pan the map and confirm it stays put." },
+      { id:"E3", name:"Map navigation", what:"Plans, zones, and shared places are independent layers you can show or hide. Under the map, a directory lists everything showing, grouped by layer, and tapping an entry flies the map to it. The map stays where you pan it — GPS updates don’t snap it back.", verify:"Tap each layer button and confirm its pins and list entries hide and return. Tap an entry in the list under the map and confirm the map moves to it. Pan the map and confirm it stays put." },
     ]},
 
     { id: "F", title: "People and safety", blurb: "Circles, connections, blocking, give-space, and onboarding", items: [
@@ -634,6 +634,14 @@
   var KEY = "swb-scope-v4";
   var LEGACY_KEYS = ["swb-scope-v5"];
   var PUSHED_KEY = "swb-scope-pushed-v1";
+  // Writes that did not reach the board: { id: true | false }, replayed on the
+  // next load. Only failed writes go here. The local copy of the whole list is
+  // a mirror of the server, so pushing it back would re-tick anything someone
+  // else unticked in the meantime.
+  var PENDING_KEY = "swb-scope-pending-v1";
+  function savePending(pending) {
+    try { localStorage.setItem(PENDING_KEY, JSON.stringify(pending)); } catch {}
+  }
 
   function read(key) {
     try { return JSON.parse(localStorage.getItem(key)) || {}; } catch { return {}; }
@@ -681,27 +689,37 @@
   }
 
   /*
-    First load after the change: anything ticked in this browser that the server
-    has not got yet is pushed up once, then recorded as pushed so a later untick
-    is not undone by a repeat. Done one at a time rather than in parallel — a
-    burst of thirty-five writes from one address is exactly what the endpoint's
-    rate limit is there to stop.
-  */
-  function pushLocalBacklog(serverChecked) {
-    var alreadyPushed = read(PUSHED_KEY);
-    var pending = Object.keys(state).filter(function (id) {
-      return state[id] && !serverChecked[id] && !alreadyPushed[id];
-    });
-    if (!pending.length) return Promise.resolve();
+    Replay the writes this browser could not send. The old version compared the
+    local list with the server's, but only after the server's copy had replaced
+    it, so there was never anything to send and an offline tick was simply
+    erased on the next load. Done one at a time: a burst of writes from one
+    address is exactly what the endpoint's rate limit is there to stop.
 
-    return pending.reduce(function (chain, id) {
+    The one-time fold-up of ticks made before the board was shared still runs
+    once per browser (PUSHED_KEY), from the list as it stood before this load.
+  */
+  function pushLocalBacklog(localChecked, serverChecked) {
+    var pending = read(PENDING_KEY);
+    var alreadyPushed = read(PUSHED_KEY);
+    if (!alreadyPushed.__folded) {
+      Object.keys(localChecked).forEach(function (id) {
+        if (localChecked[id] && !serverChecked[id] && !(id in pending)) pending[id] = true;
+      });
+      alreadyPushed.__folded = true;
+      try { localStorage.setItem(PUSHED_KEY, JSON.stringify(alreadyPushed)); } catch {}
+    }
+    var ids = Object.keys(pending);
+    if (!ids.length) return Promise.resolve(false);
+
+    return ids.reduce(function (chain, id) {
       return chain.then(function () {
-        return postTick(id, true).then(function () {
-          alreadyPushed[id] = true;
-          try { localStorage.setItem(PUSHED_KEY, JSON.stringify(alreadyPushed)); } catch {}
+        return postTick(id, pending[id]).then(function (res) {
+          if (!res.ok) return;
+          delete pending[id];
+          savePending(pending);
         }).catch(function () {});
       });
-    }, Promise.resolve());
+    }, Promise.resolve()).then(function () { return true; });
   }
 
   function loadBoard() {
@@ -710,6 +728,8 @@
       .then(function (data) {
         if (!data || !data.ok) return;
         boardLive = true;
+        // Taken before the server copy replaces it, for the one-time fold-up.
+        var localChecked = state;
         marks = data.checked || {};
         // The server is the truth for what is ticked. The local copy becomes a
         // mirror of it rather than a competing opinion.
@@ -719,7 +739,8 @@
         renderGroups();
         updateCounts();
         renderNotes(data.notes || []);
-        return pushLocalBacklog(marks).then(function () {
+        return pushLocalBacklog(localChecked, marks).then(function (sent) {
+          if (!sent) return;
           // A backlog push changes the totals, so read the board back once.
           return fetch("/api/scope-progress").then(function (r) {
             return r.ok ? r.json() : null;
@@ -817,17 +838,22 @@
     var group = e.target.closest(".group");
     if (group) updateGroupCount(group);
 
+    var pending = read(PENDING_KEY);
     postTick(id, checked)
       .then(function (res) {
         if (!res.ok) throw new Error(String(res.status));
         boardLive = true;
+        delete pending[id];
+        savePending(pending);
         setBoardNote("");
       })
       .catch(function () {
+        pending[id] = checked;
+        savePending(pending);
         // Kept locally, not shared. Say so rather than letting someone believe
         // the other side can see it.
         setBoardNote(
-          "That tick is saved on this device but hasn\u2019t reached the shared board \u2014 check your connection."
+          "That tick is saved on this device but hasn\u2019t reached the shared board yet. It will be sent the next time this page opens with a connection."
         );
       });
   });

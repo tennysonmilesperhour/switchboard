@@ -118,8 +118,10 @@ describe('the checklist itself', () => {
     // Keys with their own job, which are not retired progress keys. Each one is
     // listed deliberately so that an *unexplained* new key still fails here.
     const purposeful = new Set([
-      // Which local ticks have been pushed up to the shared board already.
+      // Whether this browser's pre-board ticks were folded up once already.
       'swb-scope-pushed-v1',
+      // Writes that failed to reach the board, replayed on the next load.
+      'swb-scope-pending-v1',
       // Whatever name the reader typed, so the board can attribute a tick.
       'swb-scope-name',
     ]);
