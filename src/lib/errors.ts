@@ -931,7 +931,7 @@ const AREA_CODES: Record<string, ErrorCode> = {
   'discovery.run': 'SB-DISCOVERY-RUN',
   'energy.save': 'SB-ENERGY-SAVE',
   'event-thread.send': 'SB-THREAD-SAVE',
-  'event-thread.react': 'SB-THREAD-SAVE',
+  'event-thread.delete': 'SB-THREAD-SAVE',
   'expense.save': 'SB-EXPENSE-SAVE',
   'household.save': 'SB-HOUSEHOLD-SAVE',
   'identity.preference': 'SB-IDENTITY-SAVE',

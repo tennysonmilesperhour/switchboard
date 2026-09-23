@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  duplicateIdea,
   linkHostname,
   normalizeLinkUrl,
   prepareOptionFields,
@@ -80,5 +81,27 @@ describe('prepareOptionFields', () => {
 describe('linkHostname', () => {
   it('shows the site, not the path', () => {
     expect(linkHostname('https://www.wiseguyscomedy.com/shows/123')).toBe('wiseguyscomedy.com');
+  });
+});
+
+describe('duplicateIdea', () => {
+  const list = [
+    { id: 'a', label: 'Pizza' },
+    { id: 'b', label: 'Greek place on 5th' },
+  ];
+
+  it('treats case, spacing, and trailing punctuation as the same idea', () => {
+    expect(duplicateIdea('pizza ', list)?.id).toBe('a');
+    expect(duplicateIdea('PIZZA!', list)?.id).toBe('a');
+    expect(duplicateIdea('greek  place on 5th.', list)?.id).toBe('b');
+  });
+
+  it('lets different ideas through', () => {
+    expect(duplicateIdea('Pizza place', list)).toBeNull();
+    expect(duplicateIdea('Tacos', list)).toBeNull();
+  });
+
+  it('ignores the idea being edited', () => {
+    expect(duplicateIdea('Pizza', list, 'a')).toBeNull();
   });
 });
