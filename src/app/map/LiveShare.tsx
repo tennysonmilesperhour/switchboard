@@ -18,6 +18,14 @@ import type { LiveLocation, LocationVisibility, NearbyPerson } from '@/lib/types
 // without hammering the rate-limited RPC.
 const POLL_MS = 20_000;
 
+// The fewest seconds between position updates sent while the viewer stays in
+// the same coarse (~110 m) cell. `watchPosition` fires every few seconds on a
+// moving phone, and every tick used to be sent: the 300-an-hour budget was gone
+// in minutes, after which the pin silently stopped following its owner. The
+// server only ever stores the coarse cell, so a tick inside the same cell
+// carries nothing new; a new cell is sent at once.
+const REFRESH_MIN_MS = 30_000;
+
 const RADIUS_CHOICES: { label: string; meters: number }[] = [
   { label: 'This spot', meters: 1_000 },
   { label: 'Nearby', meters: 5_000 },
@@ -108,6 +116,8 @@ export function LiveShare({
   const lastPoint = useRef<MapPoint | null>(
     mySharing ? { lat: mySharing.latitude, lng: mySharing.longitude } : null,
   );
+  /** The last position actually sent, and when: see REFRESH_MIN_MS. */
+  const lastSent = useRef<{ cell: string; at: number } | null>(null);
   // The radius the active poll loop should use; a ref so changing it doesn't
   // need to tear down and rebuild the interval. Synced in an effect (refs must
   // not be written during render).
@@ -135,6 +145,26 @@ export function LiveShare({
     onNearbyChange(peopleToMarkers(people));
   }, [onNearbyChange]);
 
+  /**
+   * The share is over: stop the GPS watch and the polling, and show it as off.
+   *
+   * Sharing turns itself off after its window, and the server stops returning
+   * the viewer to anyone, but this screen used to keep saying "You're live on
+   * the map" - and keep the GPS watch running - for as long as it stayed open.
+   */
+  const endShareLocally = useCallback(
+    (announce: boolean) => {
+      clearTimers();
+      lastSent.current = null;
+      setSharing(false);
+      setNearbyCount(null);
+      setExpiresAt(null);
+      onSelfChange(null);
+      onNearbyChange([]);
+      if (announce) toast.info('Your live location turned off on schedule.');
+    },
+    [clearTimers, onNearbyChange, onSelfChange, toast],
+  );
   const startWatch = useCallback(() => {
     if (watchId.current !== null || typeof navigator === 'undefined') return;
     watchId.current = navigator.geolocation.watchPosition(
@@ -143,7 +173,19 @@ export function LiveShare({
         lastPoint.current = point;
         setApproxPoint(point);
         onSelfChange(point);
-        void refreshLocationPoint(point.lat, point.lng, pos.coords.accuracy ?? null);
+        const cell = `${coarsenCoordinate(point.lat)},${coarsenCoordinate(point.lng)}`;
+        const now = Date.now();
+        const previous = lastSent.current;
+        if (previous && previous.cell === cell && now - previous.at < REFRESH_MIN_MS) return;
+        lastSent.current = { cell, at: now };
+        void refreshLocationPoint(point.lat, point.lng, pos.coords.accuracy ?? null).then(
+          (result) => {
+            // The share ended on the server (it ran out, or was stopped from
+            // another tab). Stop following and say so, instead of sending a
+            // position every tick that nothing will ever store.
+            if (!result.ok && result.error === 'not_sharing') endShareLocally(true);
+          },
+        );
       },
       () => {
         // A single failed watch tick isn't worth interrupting the user; the
@@ -151,7 +193,7 @@ export function LiveShare({
       },
       GEO_OPTIONS,
     );
-  }, [onSelfChange]);
+  }, [onSelfChange, endShareLocally]);
 
   const startPoll = useCallback(() => {
     if (pollTimer.current !== null) return;
@@ -182,6 +224,16 @@ export function LiveShare({
     // Run once on mount; the callbacks are stable for the lifetime we care about.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    if (!sharing || !expiresAt) return;
+    const remaining = Date.parse(expiresAt) - Date.now();
+    const timeout = window.setTimeout(
+      () => endShareLocally(true),
+      Math.max(0, Math.min(remaining, 2_147_000_000)),
+    );
+    return () => window.clearTimeout(timeout);
+  }, [sharing, expiresAt, endShareLocally]);
 
   async function start(nextVisibility: LocationVisibility = visibility) {
     if (!supported) return;
@@ -225,11 +277,7 @@ export function LiveShare({
     clearTimers();
     const result = await stopSharingLocation();
     setBusy(false);
-    setSharing(false);
-    setNearbyCount(null);
-    setExpiresAt(null);
-    onSelfChange(null);
-    onNearbyChange([]);
+    endShareLocally(false);
     if (!result.ok) toast.error(result.error ?? 'Could not stop sharing.', result.code);
   }
 

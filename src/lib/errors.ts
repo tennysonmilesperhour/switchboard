@@ -859,6 +859,7 @@ const AREA_CODES: Record<string, ErrorCode> = {
   'zone.resolve-request': 'SB-ZONE-SAVE',
   'zone.membership': 'SB-ZONE-SAVE',
   'zone.visibility': 'SB-ZONE-SAVE',
+  'zone.location': 'SB-ZONE-SAVE',
   'zone.join': 'SB-ZONE-SAVE',
 
   // Poll input
