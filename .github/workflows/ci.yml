@@ -107,7 +107,18 @@ jobs:
         # functions) are never touched by these tests: five fewer pulls to lose.
         run: |
           for attempt in 1 2 3 4; do
+            # Alternate mirrors: when ghcr.io is refusing pulls outright, the
+            # same images are on AWS's public registry (the CLI's own default).
+            if [ $((attempt % 2)) = 0 ]; then
+              export SUPABASE_INTERNAL_IMAGE_REGISTRY=public.ecr.aws
+            else
+              export SUPABASE_INTERNAL_IMAGE_REGISTRY=ghcr.io
+            fi
+            echo "Pulling from $SUPABASE_INTERNAL_IMAGE_REGISTRY (attempt $attempt)"
             if supabase start -x studio,logflare,vector,imgproxy,edge-runtime; then
+              # Later steps (gen types, status) pull too; keep them on the
+              # registry that just worked.
+              echo "SUPABASE_INTERNAL_IMAGE_REGISTRY=$SUPABASE_INTERNAL_IMAGE_REGISTRY" >> "$GITHUB_ENV"
               exit 0
             fi
             supabase stop --no-backup || true
