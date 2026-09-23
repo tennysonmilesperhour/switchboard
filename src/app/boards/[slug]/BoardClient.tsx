@@ -9,7 +9,7 @@ import { Card, SectionHeader } from '@/components/ui/Card';
 import { CopyButton } from '@/components/ui/CopyButton';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { useToast } from '@/components/ui/Toast';
-import { useConfirm } from '@/components/ui/ConfirmDialog';
+import { useConfirm, usePrompt } from '@/components/ui/ConfirmDialog';
 import { formatRelative, formatDate } from '@/lib/format';
 import {
   addBoardPost,
@@ -70,6 +70,7 @@ export function BoardClient({
   const router = useRouter();
   const toast = useToast();
   const confirm = useConfirm();
+  const askReason = usePrompt();
 
   /**
    * Flag one post.
@@ -81,15 +82,13 @@ export function BoardClient({
    * sentence in the reporter's own words is what a human moderator can actually
    * act on, and a category list invites people to pick the closest wrong one.
    */
-  function flagPost(postId: string) {
-    const reason = window.prompt(
-      'What’s wrong with this post? A sentence is plenty — a moderator reads it.',
-    );
-    if (reason === null) return;
-    if (!reason.trim()) {
-      toast.error('Add a short reason so a moderator knows what to look at.');
-      return;
-    }
+  async function flagPost(postId: string) {
+    const reason = await askReason({
+      title: 'What’s wrong with this post?',
+      body: 'A sentence is plenty. A moderator reads it, and the author is never told who flagged it.',
+      confirmLabel: 'Send to moderators',
+    });
+    if (!reason) return;
     startTransition(async () => {
       try {
         const result = await reportBoardPost(postId, reason);

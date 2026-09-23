@@ -7,7 +7,7 @@ import { Avatar } from '@/components/ui/Avatar';
 import { Button } from '@/components/ui/Button';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { useToast } from '@/components/ui/Toast';
-import { useConfirm } from '@/components/ui/ConfirmDialog';
+import { useConfirm, usePrompt } from '@/components/ui/ConfirmDialog';
 import {
   markRoomRead,
   sendMessage,
@@ -119,6 +119,7 @@ export function RoomClient({
   const router = useRouter();
   const toast = useToast();
   const confirm = useConfirm();
+  const askReason = usePrompt();
 
   useEffect(() => {
     markRoomRead(roomId).catch(() => undefined);
@@ -393,9 +394,11 @@ export function RoomClient({
                             className="w-full rounded-btn px-3 py-1.5 text-left text-xs font-semibold text-ink-faint hover:bg-cream"
                             onClick={async () => {
                               setMemberMenu(null);
-                              const reason = window.prompt(
-                                `Briefly describe why you are reporting ${memberNames[message.sender_id] ?? 'this person'}.`,
-                              );
+                              const reason = await askReason({
+                                title: `Report ${memberNames[message.sender_id] ?? 'this person'}?`,
+                                body: 'A sentence is plenty. A moderator reads it, and they won’t be told who sent it.',
+                                confirmLabel: 'Send report',
+                              });
                               if (!reason) return;
                               startTransition(async () => {
                                 const result = await reportProfile(message.sender_id, reason);
@@ -418,7 +421,7 @@ export function RoomClient({
                               setMemberMenu(null);
                               const ok = await confirm({
                                 title: `Block ${memberNames[message.sender_id] ?? 'this person'}?`,
-                                body: 'They will be removed and will not be able to reconnect with you.',
+                                body: 'You’ll stop being connected, and they won’t find you in discovery or on the map or be able to reconnect. They won’t be told.',
                                 confirmLabel: 'Block',
                                 danger: true,
                               });
@@ -430,6 +433,9 @@ export function RoomClient({
                                     result.error ?? 'Could not block that person.',
                                     result.code,
                                   );
+                                toast.success(
+                                  `${memberNames[message.sender_id] ?? 'They'} ${memberNames[message.sender_id] ? 'is' : 'are'} blocked.`,
+                                );
                                 router.refresh();
                               });
                             }}

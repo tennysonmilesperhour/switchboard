@@ -2,7 +2,7 @@
 
 import { useTransition } from 'react';
 import { useRouter } from 'next/navigation';
-import { useConfirm } from '@/components/ui/ConfirmDialog';
+import { useConfirm, usePrompt } from '@/components/ui/ConfirmDialog';
 import { useToast } from '@/components/ui/Toast';
 import {
   blockMomentCandidate,
@@ -25,6 +25,7 @@ export function AnonymousMomentSafetyButtons({
   const router = useRouter();
   const toast = useToast();
   const confirm = useConfirm();
+  const askReason = usePrompt();
 
   function handleBlock() {
     void (async () => {
@@ -46,8 +47,12 @@ export function AnonymousMomentSafetyButtons({
     })();
   }
 
-  function handleReport() {
-    const reason = window.prompt('Briefly describe why you are reporting this person.');
+  async function handleReport() {
+    const reason = await askReason({
+      title: 'Report this person?',
+      body: 'A sentence is plenty. A moderator reads it, and they won’t be told who sent it.',
+      confirmLabel: 'Send report',
+    });
     if (!reason) return;
     startTransition(async () => {
       const result = await reportMomentCandidate(

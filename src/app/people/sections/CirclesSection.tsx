@@ -163,7 +163,7 @@ export function CirclesSection({
                           value={expanded ? editEmoji : circle.emoji}
                           onChange={(e) => setEditEmoji(e.target.value)}
                           aria-label={`Emoji for ${circle.name}`}
-                          maxLength={4}
+                          maxLength={16}
                           className="w-12 rounded-card border border-line bg-paper px-2 py-2 text-center text-base outline-none focus:border-terracotta"
                         />
                         <input
@@ -211,7 +211,7 @@ export function CirclesSection({
             value={circleEmoji}
             onChange={(e) => setCircleEmoji(e.target.value)}
             aria-label="New circle emoji"
-            maxLength={4}
+            maxLength={16}
             className="w-12 rounded-pill border border-line bg-card px-2 py-2.5 text-center text-base outline-none focus:border-terracotta"
           />
           <input
@@ -219,6 +219,7 @@ export function CirclesSection({
             onChange={(e) => setNewCircle(e.target.value)}
             placeholder="New circle (e.g. Book Club)"
             aria-label="New circle name"
+            maxLength={40}
             className="flex-1 min-w-0 rounded-pill border border-line bg-card px-4 py-2.5 text-sm outline-none focus:border-terracotta"
           />
           <Button type="submit" size="sm" variant="secondary" disabled={pending || !newCircle.trim()}>
