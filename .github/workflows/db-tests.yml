@@ -40,6 +40,13 @@ jobs:
         run: |
           [ -f supabase/config.toml ] || printf 'project_id = "switchboard"\n' > supabase/config.toml
 
+      - name: Log in to ghcr.io
+        # Anonymous pulls from ghcr.io share a rate limit with every other
+        # anonymous runner, and that limit refused postgres and realtime for
+        # seven minutes straight. The job token's packages:read is enough to
+        # pull Supabase's public images as an authenticated client.
+        run: echo "${{ github.token }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+
       - name: Start local stack (applies all migrations)
         # ghcr.io rate-limits image pulls (toomanyrequests) when several runs
         # start at once, and one refused pull fails the whole start. Images
