@@ -7,7 +7,7 @@ import { deleteAccount, exportMyData } from '@/lib/actions/account';
 import { PASSWORD_MIN_LENGTH } from '@/lib/auth-identity';
 import { useConfirm } from '@/components/ui/ConfirmDialog';
 
-export function AccountControls() {
+export function AccountControls({ hostedPlanCount = 0 }: { hostedPlanCount?: number }) {
   const confirm = useConfirm();
   const [password, setPassword] = useState('');
   const [confirmation, setConfirmation] = useState('');
@@ -19,7 +19,11 @@ export function AccountControls() {
     setPending('password');
     const result = await updatePassword(password);
     setPending(null);
-    setMessage(result.ok ? 'Password updated.' : result.error ?? 'Could not update password.');
+    setMessage(
+      result.ok
+        ? 'Password updated.'
+        : [result.error ?? 'Could not update password.', result.code].filter(Boolean).join(' · '),
+    );
     if (result.ok) setPassword('');
   }
 
@@ -27,7 +31,10 @@ export function AccountControls() {
     event.preventDefault();
     if (!await confirm({
       title: 'Permanently delete your account?',
-      body: 'Your profile and associated personal data will be removed. This cannot be undone.',
+      body:
+        hostedPlanCount > 0
+          ? `Your profile and personal data will be removed. The ${hostedPlanCount === 1 ? 'upcoming plan you host goes' : `${hostedPlanCount} upcoming plans you host go`} with it, and everyone who said yes will be told it’s off. This cannot be undone.`
+          : 'Your profile and personal data will be removed. This cannot be undone.',
       confirmLabel: 'Delete account',
       danger: true,
     })) return;

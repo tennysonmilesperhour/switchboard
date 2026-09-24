@@ -13,6 +13,7 @@ import {
   deleteAccountAndData,
   serializeMyDataExport,
 } from '@/lib/server/account-data';
+import { noticeHostedPlansEnding } from '@/lib/server/hosted-plans';
 
 export type ExportMyDataResult =
   | { ok: true; filename: string; json: string }
@@ -84,8 +85,18 @@ export async function deleteAccount(
     return failure('SB-AUTH-EXPIRED', 'Sign in again before deleting your account.');
   }
 
+  const admin = createAdminClient();
+  // Before the cascade removes them: the people counting on this person's
+  // upcoming plans hear that they're off. Best-effort, so a notification
+  // outage cannot trap someone in an account they asked to delete.
   try {
-    await deleteAccountAndData(createAdminClient(), auth.user.id);
+    await noticeHostedPlansEnding(admin, auth.user.id);
+  } catch (noticeError) {
+    console.error('Hosted-plan notice before account deletion failed', noticeError);
+  }
+
+  try {
+    await deleteAccountAndData(admin, auth.user.id);
   } catch (error) {
     return reportAndFail(
       'SB-AUTH-DELETE',

@@ -684,6 +684,17 @@ export async function updatePassword(password: string): Promise<AuthActionResult
   try {
     const supabase = await createClient();
     const { error } = await supabase.auth.updateUser({ password });
+    // GoTrue refuses these two for what the new password is, not for anything
+    // wrong with the session, so "request a fresh reset link" sent people to
+    // fetch a link they did not need, for a password that would fail again.
+    if (error?.code === 'same_password') {
+      return validation('That’s already your password. Choose a different one.');
+    }
+    if (error?.code === 'weak_password') {
+      return validation(
+        'That password is too easy to guess. Try a longer one, or mix in numbers and symbols.',
+      );
+    }
     if (error) {
       return failure(
         'SB-AUTH-RESET',
