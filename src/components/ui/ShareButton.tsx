@@ -40,8 +40,11 @@ export function ShareButton({
       try {
         await nav.share({ title, text, url });
         return;
-      } catch {
-        // User dismissed the sheet, or share failed - fall through to copy.
+      } catch (error) {
+        // Closing the share sheet is a choice, not a failure: it used to fall
+        // through to copying the link and announcing "Link copied." to someone
+        // who had just said no. Only a real failure falls back to the clipboard.
+        if (error instanceof DOMException && error.name === 'AbortError') return;
       }
     }
     try {

@@ -7,6 +7,7 @@ import { Card, SectionHeader } from '@/components/ui/Card';
 import { CopyButton } from '@/components/ui/CopyButton';
 import { ShareButton } from '@/components/ui/ShareButton';
 import { useToast } from '@/components/ui/Toast';
+import { useConfirm } from '@/components/ui/ConfirmDialog';
 import { rotateEventShareLink, setEventShareLink } from '@/lib/actions/events';
 import { hostCanShare, hostShareGuidance, type ShareLinkState } from '@/lib/share-link';
 
@@ -38,6 +39,7 @@ export function InviteLink({ eventId, shareUrl, state, eventTitle }: InviteLinkP
   const [pending, startTransition] = useTransition();
   const router = useRouter();
   const toast = useToast();
+  const confirm = useConfirm();
 
   function toggle(next: boolean) {
     startTransition(async () => {
@@ -53,6 +55,15 @@ export function InviteLink({ eventId, shareUrl, state, eventTitle }: InviteLinkP
 
   function rotate() {
     startTransition(async () => {
+      // One tap used to kill the link everyone already has, with no way back:
+      // anyone who hadn't opened it yet would find it dead. Worth one question.
+      const ok = await confirm({
+        title: 'Replace this invite link?',
+        body: 'The link you’ve already sent will stop working. Anyone who hasn’t opened it yet will need the new one.',
+        confirmLabel: 'Get a new link',
+        danger: true,
+      });
+      if (!ok) return;
       const result = await rotateEventShareLink(eventId);
       if (!result.ok) {
         toast.error(result.error ?? 'Could not refresh the invite link.', result.code);
