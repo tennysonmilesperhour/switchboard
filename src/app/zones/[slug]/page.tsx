@@ -6,6 +6,7 @@ import { toMapPoint } from '@/lib/geo';
 import { mapFocusHref } from '@/lib/map-directory';
 import { ZoneCheckIn } from './ZoneCheckIn';
 import { ZoneAccess } from './ZoneAccess';
+import { ZoneLocationEditor } from './ZoneLocationEditor';
 import { ZoneJoinRequest } from './ZoneJoinRequest';
 
 export default async function ZonePage({
@@ -137,6 +138,7 @@ export default async function ZonePage({
             </p>
           )}
         </div>
+        {canManage && <ZoneLocationEditor zoneId={zone.id} pinned={point !== null} />}
         <ZoneCheckIn
           zoneId={zone.id}
           zoneName={zone.name}

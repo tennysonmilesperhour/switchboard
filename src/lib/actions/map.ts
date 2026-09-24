@@ -12,6 +12,7 @@ import { reportAndFail } from '@/lib/server/observability';
 export interface LocateResult {
   ok: boolean;
   located?: number; // rows given a coordinate this run
+  unmatched?: number; // rows tried this run whose address matched nothing
   remaining?: number; // rows still lacking one afterward
   error?: string;
   /** Stable failure code from `@/lib/errors`, shown beside the message. */
@@ -62,14 +63,38 @@ export async function searchPlaces(query: string): Promise<PlaceSearchResult> {
 const MAX_PER_RUN = 6;
 const SPACING_MS = 1100;
 
-type Pending = { table: 'events' | 'zones' | 'moments'; id: string; query: string };
+type Pending = {
+  table: 'events' | 'moments';
+  id: string;
+  query: string;
+  /** Upcoming plans are placed before past ones and shared places. */
+  upcoming: boolean;
+};
 
 /**
- * Geocode the caller's OWN un-located entities — plans they host, zones they
- * organize, shared places they opened — from the free-text address the row
- * already stores, caching the coordinate back onto the row so the map can plot
- * it. Every query is scoped to the caller's id (RLS is the backstop), and we
- * only ever write our own rows' latitude/longitude.
+ * Upcoming plans first, then everything else, each group in a fresh random
+ * order. There is no column recording a failed lookup, so a fixed order would
+ * spend every press on the same few addresses that never match and never reach
+ * the rest of the backlog.
+ */
+function lookupOrder(pending: Pending[]): Pending[] {
+  const shuffled = pending
+    .map((item) => ({ item, key: Math.random() }))
+    .sort((a, b) => a.key - b.key)
+    .map(({ item }) => item);
+  return [...shuffled.filter((p) => p.upcoming), ...shuffled.filter((p) => !p.upcoming)];
+}
+
+/**
+ * Geocode the caller's OWN un-located entities — plans they host and shared
+ * places they opened — from the free-text address the row already stores,
+ * caching the coordinate back onto the row so the map can plot it. Every query
+ * is scoped to the caller's id (RLS is the backstop), and we only ever write our
+ * own rows' latitude/longitude.
+ *
+ * Zones are left out on purpose: they have no address, only a name, and a zone
+ * called "Book club" geocodes to whichever Book Club the lookup finds first,
+ * anywhere in the world. A zone gets a pin from the place picker on its form.
  */
 export async function locateMyPlaces(): Promise<LocateResult> {
   const auth = await requireUser();
@@ -80,18 +105,13 @@ export async function locateMyPlaces(): Promise<LocateResult> {
     return failure('SB-RATE-LIMIT', 'Too many location lookups. Try again shortly.');
   }
 
-  const [{ data: events }, { data: zones }, { data: moments }] = await Promise.all([
+  const [{ data: events }, { data: moments }] = await Promise.all([
     supabase
       .from('events')
-      .select('id, location_name, location_address')
+      .select('id, location_name, location_address, starts_at')
       .eq('host_id', user.id)
       .is('latitude', null)
       .neq('status', 'cancelled'),
-    supabase
-      .from('zones')
-      .select('id, name')
-      .eq('organizer_id', user.id)
-      .is('latitude', null),
     supabase
       .from('moments')
       .select('id, place_name')
@@ -99,22 +119,22 @@ export async function locateMyPlaces(): Promise<LocateResult> {
       .is('latitude', null),
   ]);
 
+  const now = Date.now();
   const pending: Pending[] = [];
   for (const event of events ?? []) {
     const query = [event.location_name, event.location_address].filter(Boolean).join(', ');
-    if (query) pending.push({ table: 'events', id: event.id, query });
-  }
-  for (const zone of zones ?? []) {
-    // Zones carry no address column, so their name is the best available hint;
-    // an unrecognizable name simply geocodes to null and stays unplaced.
-    if (zone.name) pending.push({ table: 'zones', id: zone.id, query: zone.name });
+    const upcoming = Boolean(event.starts_at) && Date.parse(event.starts_at as string) >= now;
+    if (query) pending.push({ table: 'events', id: event.id, query, upcoming });
   }
   for (const moment of moments ?? []) {
-    if (moment.place_name) pending.push({ table: 'moments', id: moment.id, query: moment.place_name });
+    if (moment.place_name) {
+      pending.push({ table: 'moments', id: moment.id, query: moment.place_name, upcoming: false });
+    }
   }
 
+  const batch = lookupOrder(pending).slice(0, MAX_PER_RUN);
   let located = 0;
-  for (const item of pending.slice(0, MAX_PER_RUN)) {
+  for (const [index, item] of batch.entries()) {
     const point = await geocode(item.query);
     if (point) {
       const { error } = await supabase
@@ -123,9 +143,16 @@ export async function locateMyPlaces(): Promise<LocateResult> {
         .eq('id', item.id);
       if (!error) located += 1;
     }
-    await new Promise((resolve) => setTimeout(resolve, SPACING_MS));
+    if (index < batch.length - 1) {
+      await new Promise((resolve) => setTimeout(resolve, SPACING_MS));
+    }
   }
 
   revalidatePath('/map');
-  return { ok: true, located, remaining: Math.max(0, pending.length - located) };
+  return {
+    ok: true,
+    located,
+    unmatched: batch.length - located,
+    remaining: Math.max(0, pending.length - located),
+  };
 }

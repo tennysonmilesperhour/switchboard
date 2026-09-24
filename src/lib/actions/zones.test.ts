@@ -4,6 +4,7 @@ const mocks = vi.hoisted(() => ({
   requireUser: vi.fn(),
   rpc: vi.fn(),
   zoneSelect: vi.fn(),
+  zoneUpdate: vi.fn(),
   revalidatePath: vi.fn(),
 }));
 
@@ -14,7 +15,7 @@ vi.mock('@/lib/supabase/server', () => ({ createClient: vi.fn() }));
 vi.mock('@/lib/server/notify', () => ({ notifyUsers: vi.fn() }));
 vi.mock('@/lib/server/observability', () => ({ reportAndFail: vi.fn() }));
 
-import { ensureZoneInviteLink, setZoneVisibility } from './zones';
+import { ensureZoneInviteLink, setZoneLocation, setZoneVisibility } from './zones';
 
 function supabase() {
   return {
@@ -22,9 +23,10 @@ function supabase() {
     from: (table: string) => {
       if (table !== 'zones') throw new Error(`Unexpected table: ${table}`);
       return {
-        update: () => ({
-          eq: () => ({ select: mocks.zoneSelect }),
-        }),
+        update: (values: unknown) => {
+          mocks.zoneUpdate(values);
+          return { eq: () => ({ select: mocks.zoneSelect }) };
+        },
       };
     },
   };
@@ -61,5 +63,38 @@ describe('zone actions', () => {
       url: 'https://switchboardsocial.me/zones/join/join-code',
     });
     expect(mocks.revalidatePath).toHaveBeenCalledWith('/zones');
+  });
+
+  it('pins a zone and refreshes its page, the index, and the map', async () => {
+    mocks.zoneSelect.mockResolvedValueOnce({ data: [{ slug: 'book-club' }], error: null });
+
+    const result = await setZoneLocation('zone-1', { lat: 40.7, lng: -111.9 });
+
+    expect(result).toEqual({ ok: true });
+    expect(mocks.zoneUpdate).toHaveBeenCalledWith({ latitude: 40.7, longitude: -111.9 });
+    expect(mocks.revalidatePath).toHaveBeenCalledWith('/zones/book-club');
+    expect(mocks.revalidatePath).toHaveBeenCalledWith('/map');
+  });
+
+  it('clears the pin when given no point', async () => {
+    mocks.zoneSelect.mockResolvedValueOnce({ data: [{ slug: 'book-club' }], error: null });
+
+    await setZoneLocation('zone-1', null);
+
+    expect(mocks.zoneUpdate).toHaveBeenCalledWith({ latitude: null, longitude: null });
+  });
+
+  it('refuses a pin from someone who does not run the zone', async () => {
+    const result = await setZoneLocation('zone-1', { lat: 40.7, lng: -111.9 });
+
+    expect(result).toMatchObject({ ok: false, code: 'SB-ZONE-ACCESS' });
+    expect(mocks.revalidatePath).not.toHaveBeenCalled();
+  });
+
+  it('rejects an impossible coordinate before touching the database', async () => {
+    const result = await setZoneLocation('zone-1', { lat: 200, lng: 0 });
+
+    expect(result.ok).toBe(false);
+    expect(mocks.zoneUpdate).not.toHaveBeenCalled();
   });
 });

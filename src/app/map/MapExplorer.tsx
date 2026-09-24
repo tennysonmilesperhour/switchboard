@@ -140,17 +140,24 @@ export function MapExplorer({
         toast.error(result.error ?? 'Could not look up locations.', result.code);
         return;
       }
-      if ((result.located ?? 0) === 0) {
-        toast.success(
-          result.remaining
-            ? 'No new spots matched. Add an address to your plans, then try again.'
-            : 'Everything with an address is already on the map.',
-        );
-      } else {
-        toast.success(
-          `Placed ${result.located} on the map${result.remaining ? ` · ${result.remaining} still to go` : ''}.`,
+      const located = result.located ?? 0;
+      const unmatched = result.unmatched ?? 0;
+      const remaining = result.remaining ?? 0;
+      if (located === 0 && unmatched === 0) {
+        toast.success('Everything with an address is already on the map.');
+        return;
+      }
+      const parts: string[] = [];
+      if (located > 0) parts.push(`Placed ${located} on the map.`);
+      if (unmatched > 0) {
+        parts.push(
+          `Couldn’t find ${unmatched === 1 ? 'one address' : `${unmatched} addresses`}. A street address or city usually fixes it.`,
         );
       }
+      if (remaining > unmatched) parts.push('Press again to keep going.');
+      const message = parts.join(' ');
+      if (located > 0) toast.success(message);
+      else toast.info(message);
     });
   }
 
@@ -228,7 +235,8 @@ export function MapExplorer({
       />
 
       <p className="text-xs leading-relaxed text-ink-faint">
-        “Locate my plans” places the ones that already have an address. Distances
+        “Locate my plans” places your plans and shared places that already have an
+        address. Zones are placed from their own settings. Distances
         are measured from your own pin, so they appear once you’re sharing.
       </p>
     </div>
