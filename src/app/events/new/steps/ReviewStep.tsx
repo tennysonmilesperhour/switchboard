@@ -95,7 +95,7 @@ export function ReviewStep({
             <p className="text-sm text-ink-faint mt-1">
               {invitees.length} invitee{invitees.length === 1 ? '' : 's'} ·{' '}
               {MODE_OPTIONS.find((o) => o.mode === inviteMode)?.title}
-              {capacity ? ` · ${capacity} spots` : ''}
+              {capacity ? ` · ${capacity} spot${capacity === '1' ? '' : 's'}` : ''}
               {enablePoll ? ' · group decides activity' : ''}
             </p>
             {recurrence !== 'none' && (

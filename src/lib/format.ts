@@ -44,22 +44,51 @@ export function formatTimeOnly(
   });
 }
 
+/** Past this, an end on a later day is a multi-day plan, not a late night. */
+const OVERNIGHT_MS = 12 * 3_600_000;
+
 /**
  * Render a start→end span. When there's no end, this is just the start line.
  * When both exist, the end is appended as a bare time ("Tue, Jul 14, 6:00 PM –
  * 8:00 PM CDT"). The date is only shown once.
+ *
+ * Except when the end is a different day and more than a night away. A bare
+ * time after a Friday 5 PM start read "Fri, Sep 25, 5:00 PM – 11:00 AM PDT" for a
+ * weekend that ends Sunday morning - an end that looks earlier than the start,
+ * on every invitation for the plan. A party that lets out at 1 AM keeps the
+ * compact form, because "9:00 PM – 1:00 AM" is how people say it.
  */
 export function formatDateTimeRange(
   startIso: string | null,
   endIso: string | null,
   timeZone?: string | null,
 ): string {
+  if (
+    startIso &&
+    endIso &&
+    Date.parse(endIso) - Date.parse(startIso) > OVERNIGHT_MS &&
+    calendarDay(startIso, timeZone) !== calendarDay(endIso, timeZone)
+  ) {
+    const endLine = format(new Date(endIso), {
+      weekday: 'short',
+      month: 'short',
+      day: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit',
+      ...(timeZone ? { timeZone, timeZoneName: 'short' } : {}),
+    });
+    return `${formatStartWithoutZone(startIso, timeZone)} – ${endLine}`;
+  }
   const end = formatTimeOnly(endIso, timeZone);
   if (!startIso || !end) return formatDateTime(startIso, timeZone);
   // The zone label belongs on the range, not on each end of it: labelling both
   // reads as "11:00 AM PDT – 2:00 PM PDT", which looks like two zones. The end
   // already carries it, so the start drops it while staying in the same zone.
-  const start = format(new Date(startIso), {
+  return `${formatStartWithoutZone(startIso, timeZone)} – ${end}`;
+}
+
+function formatStartWithoutZone(startIso: string, timeZone?: string | null): string {
+  return format(new Date(startIso), {
     weekday: 'short',
     month: 'short',
     day: 'numeric',
@@ -67,7 +96,16 @@ export function formatDateTimeRange(
     minute: '2-digit',
     ...(timeZone ? { timeZone } : {}),
   });
-  return `${start} – ${end}`;
+}
+
+/** The calendar date an instant falls on in the plan's zone, for comparing days. */
+function calendarDay(iso: string, timeZone?: string | null): string {
+  return format(new Date(iso), {
+    year: 'numeric',
+    month: 'numeric',
+    day: 'numeric',
+    ...(timeZone ? { timeZone } : {}),
+  });
 }
 
 export function formatDate(iso: string | null, timeZone?: string | null): string {

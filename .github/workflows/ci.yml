@@ -92,8 +92,42 @@ jobs:
         run: |
           [ -f supabase/config.toml ] || printf 'project_id = "switchboard"\n' > supabase/config.toml
 
+      - name: Log in to ghcr.io
+        # Anonymous pulls from ghcr.io share a rate limit with every other
+        # anonymous runner, and that limit refused postgres and realtime for
+        # seven minutes straight. The job token's packages:read is enough to
+        # pull Supabase's public images as an authenticated client.
+        run: echo "${{ github.token }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+
       - name: Start local Supabase
-        run: supabase start
+        # ghcr.io rate-limits image pulls (toomanyrequests) when several runs
+        # start at once, and one refused pull fails the whole start. Images
+        # that did land stay cached, so each retry has less to fetch. The
+        # excluded services (dashboard, log pipeline, image resizer, edge
+        # functions) are never touched by these tests: five fewer pulls to lose.
+        run: |
+          for attempt in 1 2 3 4; do
+            # Alternate mirrors: when ghcr.io is refusing pulls outright, the
+            # same images are on AWS's public registry (the CLI's own default).
+            if [ $((attempt % 2)) = 0 ]; then
+              export SUPABASE_INTERNAL_IMAGE_REGISTRY=public.ecr.aws
+            else
+              export SUPABASE_INTERNAL_IMAGE_REGISTRY=ghcr.io
+            fi
+            echo "Pulling from $SUPABASE_INTERNAL_IMAGE_REGISTRY (attempt $attempt)"
+            if supabase start -x studio,logflare,vector,imgproxy,edge-runtime; then
+              # Later steps (gen types, status) pull too; keep them on the
+              # registry that just worked.
+              echo "SUPABASE_INTERNAL_IMAGE_REGISTRY=$SUPABASE_INTERNAL_IMAGE_REGISTRY" >> "$GITHUB_ENV"
+              exit 0
+            fi
+            supabase stop --no-backup || true
+            [ "$attempt" = 4 ] && break
+            delay=$(( attempt * 45 + RANDOM % 30 ))
+            echo "::warning::supabase start failed (attempt $attempt); retrying in ${delay}s"
+            sleep "$delay"
+          done
+          exit 1
 
       - name: Verify generated database types
         run: |

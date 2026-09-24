@@ -12,6 +12,7 @@ import { capture } from '@/lib/analytics/server';
 import { ANALYTICS_EVENTS } from '@/lib/analytics/events';
 import type { DeclineNote } from '@/lib/types';
 import { checkRateLimit } from '@/lib/server/rate-limit';
+import { isEventManager } from '@/lib/server/authz';
 
 export interface RespondResult {
   ok: boolean;
@@ -422,6 +423,15 @@ export async function respondViaShareLink(
 
   const admin = createAdminClient();
 
+  // A host opening their own link to check it used to be able to answer it,
+  // which put them on their own guest list as an invitee and counted them
+  // against their own capacity. The page no longer offers the buttons to a
+  // host; this is the backstop for a stale tab.
+  const hostedEventId = await eventIdForShareToken(admin, shareToken);
+  if (hostedEventId && (await isEventManager(user.id, hostedEventId))) {
+    return validation('You’re hosting this plan, so there’s nothing to answer.');
+  }
+
   // The host sees a real name, not whatever the browser posted: prefer the
   // signed-in profile's display name and treat the client's value as the
   // fallback for an account that somehow has none yet.
@@ -476,7 +486,7 @@ export async function respondViaShareLink(
     };
   }
 
-  const eventId = await eventIdForShareToken(admin, shareToken);
+  const eventId = hostedEventId;
 
   // The invite the RPC just answered. `rsvp_via_share_token` returns only
   // (outcome, token), and nothing enforces one invite per (event, invitee), so

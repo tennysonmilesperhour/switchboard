@@ -413,6 +413,14 @@ const REGISTRY = {
     fix: 'Ask the host if the group still needs another option or vote.',
     actor: 'host',
   },
+  // A host moving a decision along: locking suggestions, closing the vote,
+  // choosing the winner. These used to return nothing at all, so a failure
+  // looked exactly like a button that did not work.
+  'SB-POLL-DECIDE': {
+    message: 'That decision didn’t move forward.',
+    fix: 'Reload to see where the poll stands, then try again.',
+    actor: 'reader',
+  },
   // Clearing a match off Home. Its own code rather than a borrowed save
   // failure: the reader's worry when a dismissed card reappears is "did I just
   // un-match this person?", and the message has to answer that before it
@@ -866,6 +874,9 @@ const AREA_CODES: Record<string, ErrorCode> = {
   'poll.edit': 'SB-POLL-EDIT',
   'poll.remove': 'SB-POLL-EDIT',
   'poll.vote': 'SB-PLAN-SAVE',
+  'poll.open-voting': 'SB-POLL-DECIDE',
+  'poll.close': 'SB-POLL-DECIDE',
+  'poll.pick': 'SB-POLL-DECIDE',
 
   // Answering
   'share-rsvp.respond': 'SB-RSVP-SAVE',

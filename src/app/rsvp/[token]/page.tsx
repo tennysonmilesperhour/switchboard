@@ -263,10 +263,15 @@ export default async function GuestRsvpPage({
             {!user && invite.status !== 'sent' && (
               <JoinPrompt hostName={hostName} next={`/rsvp/${token}`} />
             )}
+            {/* This used to promise that "invitations flow one person at a
+                time", on every plan. Most plans ask everyone at once (it is the
+                wizard's default), and a share link is open to anyone holding
+                it, so the line told recipients something untrue about the plan
+                in front of them. What holds for every plan is what stays. */}
             <p className="text-xs text-ink-faint mt-10 leading-relaxed">
-              Switchboard makes plans without pressure - invitations flow one
-              person at a time, so nobody feels like a backup. If you can’t
-              make it, the invitation quietly moves along. No hard feelings.
+              Switchboard keeps plans low-pressure: answer when you’re ready,
+              and if you can’t make it, that’s a complete answer. No hard
+              feelings.
             </p>
           </>
         )}

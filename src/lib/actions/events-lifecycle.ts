@@ -32,6 +32,8 @@ import { safeHttpUrl } from '@/lib/security';
 import { toJson } from '@/lib/supabase/json';
 import { hasInviteDetails } from '@/lib/event-details';
 import { runItBackCrew } from '@/lib/run-it-back';
+import { capacityProblem } from '@/lib/plan-capacity';
+import { sameInstant } from '@/lib/plan-time';
 import {
   createEventError,
   deliveryWarning,
@@ -70,6 +72,11 @@ export async function createEvent(input: CreateEventInput): Promise<CreateEventR
   if (input.startsAt && input.endsAt && new Date(input.endsAt) <= new Date(input.startsAt)) {
     return createEventError('End time should be after the start time.');
   }
+  // Refused here with a sentence rather than left to `capacity > 0` and the
+  // `::int` cast in `create_event_atomic`, which reported a typo as a failed
+  // publish with an operator code.
+  const capacityError = capacityProblem(input.capacity);
+  if (capacityError) return createEventError(capacityError);
   if (input.enablePoll) {
     const now = Date.now();
     if (input.suggestDeadline && new Date(input.suggestDeadline).getTime() < now) {
@@ -177,8 +184,13 @@ export async function updateEventDetails(
       'Add a location or a short detail so invitees know what they’re answering.',
     );
   }
-  if (input.capacity !== null && (!Number.isInteger(input.capacity) || input.capacity < 1)) {
-    return validation('Capacity must be a whole number of at least 1.');
+  const capacityError = capacityProblem(input.capacity);
+  if (capacityError) return validation(capacityError);
+  // `createEvent` has always refused an end at or before the start; the edit
+  // form did not, so a plan could be saved as "9:00 PM – 7:00 PM" and every
+  // invitation, calendar entry and reminder would carry it.
+  if (input.startsAt && input.endsAt && new Date(input.endsAt) <= new Date(input.startsAt)) {
+    return validation('End time should be after the start time.');
   }
 
   const wishlistUrl = safeHttpUrl(input.wishlistUrl);
@@ -190,6 +202,19 @@ export async function updateEventDetails(
     .eq('id', eventId)
     .maybeSingle();
   if (!before) return validation('Plan not found.');
+
+  // Compared as instants, never as strings. The row comes back from PostgREST
+  // as `2026-09-25T02:00:00+00:00` and the form sends `toISOString()`'s
+  // `2026-09-25T02:00:00.000Z` - the same moment in two spellings - so the
+  // string test was true on every save of a dated plan. Fixing a typo in the
+  // details told every accepted guest "the time changed", and inside the last
+  // two hours it went out as an urgent change.
+  const whenChanged = !sameInstant(before.starts_at, input.startsAt);
+  // A plan that is under way can still have its details fixed, so a start in
+  // the past is only refused when this edit is what put it there.
+  if (whenChanged && input.startsAt && new Date(input.startsAt).getTime() < Date.now()) {
+    return validation('That time has already passed. Pick a time in the future.');
+  }
 
   const { error } = await admin
     .from('events')
@@ -220,7 +245,6 @@ export async function updateEventDetails(
   }
 
   // Notify accepted guests only when the logistics they'd act on actually change.
-  const whenChanged = (before.starts_at ?? null) !== (input.startsAt || null);
   const whereChanged = (before.location_name ?? null) !== (input.locationName?.trim() || null) || (before.location_address ?? null) !== (input.locationAddress?.trim() || null);
   if (whenChanged || whereChanged) {
     const { data: accepted } = await admin
