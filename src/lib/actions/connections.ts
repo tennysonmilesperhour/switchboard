@@ -14,6 +14,7 @@ import { notifyUsers } from '@/lib/server/notify';
 import { normalizePhoneNumber } from '@/lib/phone';
 import { checkRateLimit } from '@/lib/server/rate-limit';
 import { reportAndFail } from '@/lib/server/observability';
+import { circleEmoji } from '@/lib/circle-emoji';
 
 /** PostgREST `.or()` filters are built by string interpolation below; only ever
  *  feed them DB-issued UUIDs. Assert that before interpolating (SB-29). */
@@ -30,6 +31,8 @@ export interface ConnectionResult {
   code?: ErrorCode;
   /** The next step, when the reader has one. */
   fix?: string | null;
+  /** True when a request turned out to answer theirs, so you're now connected. */
+  connected?: boolean;
 }
 
 export interface ContactCandidate {
@@ -75,22 +78,69 @@ function contactMatchKind(value: string | undefined): ContactMatch['kind'] {
   }
 }
 
+/** A PostgREST filter matching the connection between two people, whichever
+ *  of them asked. `connections` is unique per direction, not per pair. */
+function pairFilter(a: string, b: string): string {
+  assertUuid(a);
+  assertUuid(b);
+  return `and(requester_id.eq.${a},addressee_id.eq.${b}),and(requester_id.eq.${b},addressee_id.eq.${a})`;
+}
+
 async function connectionStatusFor(
   supabase: Awaited<ReturnType<typeof createClient>>,
   userId: string,
   targetId: string,
 ): Promise<ContactMatch['connectionStatus']> {
   if (targetId === userId) return 'self';
-  assertUuid(userId);
-  assertUuid(targetId);
   const { data } = await supabase
     .from('connections')
     .select('requester_id, addressee_id, status')
-    .or(`and(requester_id.eq.${userId},addressee_id.eq.${targetId}),and(requester_id.eq.${targetId},addressee_id.eq.${userId})`)
-    .maybeSingle();
-  if (!data) return 'none';
-  if (data.status === 'accepted') return 'accepted';
-  return data.requester_id === userId ? 'outgoing' : 'incoming';
+    .or(pairFilter(userId, targetId));
+  const rows = data ?? [];
+  if (rows.length === 0) return 'none';
+  if (rows.some((row) => row.status === 'accepted')) return 'accepted';
+  return rows.some((row) => row.requester_id === targetId) ? 'incoming' : 'outgoing';
+}
+
+/**
+ * Insert a request from `userId` to `targetId`, unless the pair already has a
+ * connection. The unique constraint is per direction, so without this check
+ * asking someone who had already asked you created a second pending row: each
+ * side then saw a request waiting on the other and nobody was connected. An
+ * incoming request is accepted instead, which is what asking back means.
+ */
+async function requestOrAccept(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  userId: string,
+  targetId: string,
+): Promise<ConnectionResult> {
+  const { data: existing } = await supabase
+    .from('connections')
+    .select('id, requester_id, status')
+    .or(pairFilter(userId, targetId));
+  const rows = existing ?? [];
+  if (rows.some((row) => row.status === 'accepted')) {
+    return validation('You’re already connected.');
+  }
+  const incoming = rows.find((row) => row.requester_id === targetId);
+  if (incoming) {
+    const accepted = await acceptConnection(incoming.id);
+    return accepted.ok ? { ok: true, connected: true } : accepted;
+  }
+  if (rows.length > 0) return validation('Request already sent');
+
+  const { error } = await supabase.from('connections').insert({
+    requester_id: userId,
+    addressee_id: targetId,
+  });
+  if (error) {
+    if (error.code === '23505') return validation('Request already sent');
+    return reportAndFail('SB-CONNECTION-SAVE', 'connection.request', error, { targetId });
+  }
+
+  await notifyConnectionRequested(supabase, userId, targetId);
+  revalidatePath('/people');
+  return { ok: true };
 }
 
 /**
@@ -155,20 +205,7 @@ export async function sendConnectionRequest(identifier: string): Promise<Connect
   }
   if (target.id === user.id) return validation('That is you.');
 
-  const { error } = await supabase.from('connections').insert({
-    requester_id: user.id,
-    addressee_id: target.id,
-  });
-  if (error) {
-    if (error.code === '23505') return validation('Request already sent');
-    return reportAndFail('SB-CONNECTION-SAVE', 'connection.request', error, {
-      targetId: target.id,
-    });
-  }
-
-  await notifyConnectionRequested(supabase, user.id, target.id);
-  revalidatePath('/people');
-  return { ok: true };
+  return requestOrAccept(supabase, user.id, target.id);
 }
 
 /**
@@ -199,18 +236,7 @@ export async function sendConnectionRequestToId(
     .maybeSingle();
   if (!target) return validation('That account no longer exists.');
 
-  const { error } = await supabase.from('connections').insert({
-    requester_id: user.id,
-    addressee_id: targetId,
-  });
-  if (error) {
-    if (error.code === '23505') return validation('Request already sent');
-    return reportAndFail('SB-CONNECTION-SAVE', 'connection.request', error, { targetId });
-  }
-
-  await notifyConnectionRequested(supabase, user.id, targetId);
-  revalidatePath('/people');
-  return { ok: true };
+  return requestOrAccept(supabase, user.id, targetId);
 }
 
 /**
@@ -378,13 +404,11 @@ export async function removeConnection(connectionId: string): Promise<Connection
   return { ok: true };
 }
 
-export async function blockProfile(
-  profileId: string,
-  connectionId?: string,
-): Promise<ConnectionResult> {
+export async function blockProfile(profileId: string): Promise<ConnectionResult> {
   const auth = await requireUser();
   if (!auth.ok) return auth;
   const { supabase, user } = auth;
+  if (!UUID_RE.test(profileId)) return validation('Unknown person.');
   if (profileId === user.id) return validation('You cannot block yourself.');
 
   const { error } = await supabase.from('profile_blocks').insert({
@@ -394,9 +418,54 @@ export async function blockProfile(
   if (error && error.code !== '23505') {
     return reportAndFail('SB-CONNECTION-SAVE', 'connection.block', error, { profileId });
   }
-  if (connectionId) {
-    await supabase.from('connections').delete().eq('id', connectionId);
+  // A block ends the connection whichever surface it came from. This used to
+  // happen only when the caller passed the connection id, which the People
+  // page does and a room or a profile page does not, so blocking someone from
+  // a room left them connected (and still inside every circle-scoped signal).
+  const { error: unlinkError } = await supabase
+    .from('connections')
+    .delete()
+    .or(pairFilter(user.id, profileId));
+  if (unlinkError) {
+    return reportAndFail('SB-CONNECTION-SAVE', 'connection.block', unlinkError, { profileId });
   }
+  // They leave your circles too, so a later unblock doesn't silently restore
+  // them to groups you curated. circle_members is owner-only under RLS.
+  const { data: myCircles } = await supabase
+    .from('circles')
+    .select('id')
+    .eq('owner_id', user.id);
+  const circleIds = (myCircles ?? []).map((circle) => circle.id);
+  if (circleIds.length > 0) {
+    await supabase
+      .from('circle_members')
+      .delete()
+      .in('circle_id', circleIds)
+      .eq('member_id', profileId);
+  }
+  revalidatePath('/people');
+  return { ok: true };
+}
+
+/**
+ * Undo a block. Nothing else comes back with it: the connection and circle
+ * memberships the block removed stay removed, so either person has to ask again.
+ */
+export async function unblockProfile(profileId: string): Promise<ConnectionResult> {
+  const auth = await requireUser();
+  if (!auth.ok) return auth;
+  const { supabase, user } = auth;
+  if (!UUID_RE.test(profileId)) return validation('Unknown person.');
+
+  const { error } = await supabase
+    .from('profile_blocks')
+    .delete()
+    .eq('blocker_id', user.id)
+    .eq('blocked_id', profileId);
+  if (error) {
+    return reportAndFail('SB-CONNECTION-SAVE', 'connection.unblock', error, { profileId });
+  }
+  revalidatePath('/settings');
   revalidatePath('/people');
   return { ok: true };
 }
@@ -496,7 +565,7 @@ export async function createCircle(name: string, emoji: string): Promise<Connect
   if (!trimmed) return validation('Circle needs a name');
   const { error } = await supabase
     .from('circles')
-    .insert({ owner_id: user.id, name: trimmed.slice(0, 40), emoji: emoji.trim().slice(0, 8) || '👥' });
+    .insert({ owner_id: user.id, name: trimmed.slice(0, 40), emoji: circleEmoji(emoji) });
   if (error) return reportAndFail('SB-CIRCLE-SAVE', 'circle.create', error);
   revalidatePath('/people');
   return { ok: true };
@@ -513,8 +582,7 @@ export async function renameCircle(
   const trimmed = name.trim();
   if (!trimmed) return validation('Circle needs a name');
   const patch: { name: string; emoji?: string } = { name: trimmed.slice(0, 40) };
-  const cleanEmoji = emoji?.trim().slice(0, 8);
-  if (cleanEmoji) patch.emoji = cleanEmoji;
+  if (emoji?.trim()) patch.emoji = circleEmoji(emoji);
   // RLS already scopes this to the owner; the owner_id filter is defense in
   // depth so a stray id can never touch someone else's circle (SB-20).
   const { error } = await supabase

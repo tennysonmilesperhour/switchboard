@@ -343,7 +343,7 @@ export default async function HomePage() {
             </div>
             <p className="text-xs text-ink-faint leading-relaxed">
               Nothing is revealed unless both sides choose it, and nothing nags.
-              Invitations flow one person at a time.
+              Invite everyone at once, or one person at a time.
             </p>
           </div>
         )}

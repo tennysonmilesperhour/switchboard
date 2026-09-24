@@ -16,6 +16,7 @@ import { InterestPicker } from '@/components/profile/InterestPicker';
 import { SettingsForm, SettingsSaveProvider } from './SettingsSaveBar';
 import { AccountControls } from './AccountControls';
 import { upcomingHostedPlans } from '@/lib/server/hosted-plans';
+import { BlockedPeople, type BlockedPerson } from './BlockedPeople';
 import { CalendarSubscribe } from './CalendarSubscribe';
 import { CalendarConnect } from './CalendarConnect';
 import { ContactVerification } from './ContactVerification';
@@ -68,6 +69,19 @@ export default async function SettingsPage({
   const hostedPlanCount = await upcomingHostedPlans(supabase, user.id)
     .then((plans) => plans.length)
     .catch(() => 0);
+  const { data: blockRows } = await supabase
+    .from('profile_blocks')
+    .select('blocked_id, profile:profiles!profile_blocks_blocked_id_fkey(display_name, handle)')
+    .eq('blocker_id', user.id)
+    .order('created_at', { ascending: false });
+  const blockedPeople: BlockedPerson[] = (blockRows ?? []).map((row) => {
+    const blocked = Array.isArray(row.profile) ? row.profile[0] : row.profile;
+    return {
+      id: row.blocked_id,
+      name: blocked?.display_name ?? 'Someone',
+      handle: blocked?.handle ?? null,
+    };
+  });
   const { data: notificationRoutes } = await supabase.from('notification_routes').select('plans, reminders').eq('user_id', user.id).maybeSingle();
   const currentSmsPreferences = smsPreferences && smsPreferences.phone === privateProfile?.contact_phone ? smsPreferences : null;
   const calendarToken = privateProfile?.calendar_token ?? null;
@@ -425,6 +439,13 @@ export default async function SettingsPage({
               </Card>
             </section>
           )}
+
+          <section>
+            <SectionHeader title="Blocked" hint="People you’ve blocked. Only you see this list." />
+            <Card>
+              <BlockedPeople people={blockedPeople} />
+            </Card>
+          </section>
 
           <section>
             <SectionHeader title="Account" hint="Password and account controls" />

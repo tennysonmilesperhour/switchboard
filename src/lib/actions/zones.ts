@@ -5,11 +5,12 @@ import type { ActionResult } from '@/lib/errors';
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import { requireUser, requireUserOrRedirect } from '@/lib/server/require-user';
-import { failure } from '@/lib/errors';
+import { failure, validation } from '@/lib/errors';
 import { reportAndFail } from '@/lib/server/observability';
 import { zoneJoinUrl } from '@/lib/links';
 import { notifyUsers } from '@/lib/server/notify';
 import { isValidCoordinate } from '@/lib/geo';
+import { zoneSlugBase, zoneSlugCandidate } from '@/lib/zone-slug';
 
 /** Parse a hidden coordinate field the place picker fills in, or null. */
 function coordField(formData: FormData, name: string): number | null {
@@ -29,36 +30,34 @@ export async function createZone(formData: FormData): Promise<void> {
   // case that zones were built for is unchanged by this feature existing.
   const visibility =
     String(formData.get('visibility') ?? 'public') === 'private' ? 'private' : 'public';
-  const slug = name
-    .toLowerCase()
-    .replace(/[^a-z0-9\s-]/g, '')
-    .trim()
-    .replace(/\s+/g, '-')
-    .slice(0, 40);
-
-  if (!name || slug.length < 3) redirect('/zones?error=name');
+  if (name.length < 3) redirect('/zones?error=name');
+  const base = zoneSlugBase(name);
 
   // Optional coordinate captured when the organizer picks a map-recognized place,
   // so the zone is anchored on the Map from creation. Free text still works: an
-  // unplaced zone can be located later from the map's "Locate my plans" control.
+  // unplaced zone can be pinned later from its own page.
   const lat = coordField(formData, 'latitude');
   const lng = coordField(formData, 'longitude');
   const located = lat !== null && lng !== null && isValidCoordinate(lat, lng);
 
-  const { error } = await supabase.from('zones').insert({
-    slug,
-    name,
-    description: description || null,
-    organizer_id: user.id,
-    experiences,
-    visibility,
-    latitude: located ? lat : null,
-    longitude: located ? lng : null,
-  });
-  if (error) {
-    redirect(`/zones?error=${error.code === '23505' ? 'taken' : 'save'}`);
+  // Two zones may share a name; only their addresses have to differ. A taken
+  // slug is retried with a short suffix rather than refused.
+  for (let attempt = 0; attempt < 4; attempt += 1) {
+    const slug = zoneSlugCandidate(base, attempt);
+    const { error } = await supabase.from('zones').insert({
+      slug,
+      name: name.slice(0, 80),
+      description: description || null,
+      organizer_id: user.id,
+      experiences,
+      visibility,
+      latitude: located ? lat : null,
+      longitude: located ? lng : null,
+    });
+    if (!error) redirect(`/zones/${slug}`);
+    if (error.code !== '23505') break;
   }
-  redirect(`/zones/${slug}`);
+  redirect('/zones?error=save');
 }
 
 /**
@@ -84,6 +83,36 @@ export async function setZoneVisibility(
   if (!data || data.length === 0) return failure('SB-ZONE-ACCESS');
 
   revalidatePath('/zones');
+  return { ok: true };
+}
+
+/**
+ * Pin a zone to a spot, move its pin, or clear it (`point` null). Organizer or
+ * moderator only, enforced by the zones UPDATE policy; an RLS-filtered update
+ * comes back empty and is reported as an access failure.
+ */
+export async function setZoneLocation(
+  zoneId: string,
+  point: { lat: number; lng: number } | null,
+): Promise<ActionResult> {
+  if (point && !isValidCoordinate(point.lat, point.lng)) {
+    return validation('Pick a place from the suggestions to pin it.');
+  }
+  const auth = await requireUser();
+  if (!auth.ok) return auth;
+  const { supabase } = auth;
+
+  const { data, error } = await supabase
+    .from('zones')
+    .update({ latitude: point?.lat ?? null, longitude: point?.lng ?? null })
+    .eq('id', zoneId)
+    .select('slug');
+  if (error) return reportAndFail('SB-ZONE-SAVE', 'zone.location', error, { zoneId });
+  if (!data || data.length === 0) return failure('SB-ZONE-ACCESS');
+
+  revalidatePath(`/zones/${data[0].slug}`);
+  revalidatePath('/zones');
+  revalidatePath('/map');
   return { ok: true };
 }
 

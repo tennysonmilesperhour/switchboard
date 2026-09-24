@@ -420,8 +420,8 @@ export const FEATURE_GROUPS: readonly FeatureGroup[] = [
         id: 'block-report',
         title: 'Block and report',
         blurb:
-          'Blocking is enforced across discovery, matching, and the map — not just hidden. Both are reachable anywhere you’d actually meet someone.',
-        where: 'Profiles, room members, moment reveals, and requests',
+          'Blocking is enforced across discovery, matching, and the map — not just hidden. Both are reachable anywhere you’d actually meet someone, and Settings lists everyone you’ve blocked so you can undo one.',
+        where: 'Profiles, room members, moment reveals, and requests. Your blocked list is in Settings.',
         start: { href: '/people', label: 'People' },
       },
       {

@@ -83,7 +83,7 @@ const mocks = vi.hoisted(() => {
     return b;
   }
 
-  const rpc = vi.fn(async (name: string) => {
+  const rpc = vi.fn(async (name: string): Promise<{ data: unknown; error: null }> => {
     if (name === 'rsvp_via_share_token') {
       return { data: [{ outcome: 'accepted', token: 'guest-token-1' }], error: null };
     }
@@ -233,6 +233,31 @@ describe('respondViaShareLink', () => {
       inviteId: 'invite-4',
       eventId: 'event-1',
     });
+  });
+});
+
+describe('respondViaShareLink for the plan\u2019s own host', () => {
+  /**
+   * A host opening their own link to check it could answer it, which put them
+   * on their own guest list as an invitee and counted them against their own
+   * capacity. Refused before the RSVP function runs.
+   */
+  it('refuses a host answering their own share link', async () => {
+    mocks.db.user = { id: 'host-1' };
+    mocks.db.events['event-1'] = { id: 'event-1', title: 'Taco night', host_id: 'host-1' };
+    mocks.db.shareTokens['share-token'] = 'event-1';
+    // The manager check is the first RPC this path makes.
+    mocks.rpc.mockImplementationOnce(async () => ({ data: true, error: null }));
+
+    const result = await respondViaShareLink('share-token', true, 'Me');
+
+    expect(result.ok).toBe(false);
+    expect(result.error).toContain('You\u2019re hosting this plan');
+    expect(mocks.rpc).toHaveBeenCalledWith('is_event_host', {
+      p_event: 'event-1',
+      p_user: 'host-1',
+    });
+    expect(mocks.rpc).not.toHaveBeenCalledWith('rsvp_via_share_token', expect.anything());
   });
 });
 

@@ -3,43 +3,48 @@
 import { useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { useToast } from '@/components/ui/Toast';
-import { useConfirm } from '@/components/ui/ConfirmDialog';
+import { useConfirm, usePrompt } from '@/components/ui/ConfirmDialog';
 import { blockProfile, reportProfile } from '@/lib/actions/connections';
 
 interface BlockReportButtonsProps {
   targetId: string;
   name: string;
-  connectionId?: string | null;
 }
 
-export function BlockReportButtons({ targetId, name, connectionId }: BlockReportButtonsProps) {
+export function BlockReportButtons({ targetId, name }: BlockReportButtonsProps) {
   const [pending, startTransition] = useTransition();
   const router = useRouter();
   const toast = useToast();
   const confirm = useConfirm();
+  const askReason = usePrompt();
 
   function handleBlock() {
     void (async () => {
       const ok = await confirm({
         title: `Block ${name}?`,
-        body: 'They will be removed from your connections, discovery, and the map. They won’t be told.',
+        body: 'You’ll stop being connected, and they won’t find you in discovery or on the map or be able to reconnect. They won’t be told.',
         confirmLabel: 'Block',
         danger: true,
       });
       if (!ok) return;
       startTransition(async () => {
-        const result = await blockProfile(targetId, connectionId ?? undefined);
+        const result = await blockProfile(targetId);
         if (!result.ok) {
           toast.error(result.error ?? 'Could not block that person.', result.code);
           return;
         }
+        toast.success(`${name} is blocked.`);
         router.refresh();
       });
     })();
   }
 
-  function handleReport() {
-    const reason = window.prompt(`Briefly describe why you are reporting ${name}.`);
+  async function handleReport() {
+    const reason = await askReason({
+      title: `Report ${name}?`,
+      body: 'A sentence is plenty. A moderator reads it, and they won’t be told who sent it.',
+      confirmLabel: 'Send report',
+    });
     if (!reason) return;
     startTransition(async () => {
       const result = await reportProfile(targetId, reason);

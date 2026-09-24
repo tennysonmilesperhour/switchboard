@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import Link from 'next/link';
 import { createAdminClient, hasAdminCredentials } from '@/lib/supabase/admin';
 import { getUser } from '@/lib/supabase/server';
 import { reportOperationalError } from '@/lib/server/observability';
@@ -37,6 +38,13 @@ import { ShareLinkRsvp } from './ShareLinkRsvp';
  * one module the host-side Share affordances ask as well. That shared answer is
  * what stops this page rejecting a link the app itself just handed out.
  */
+
+/** What a returning guest is told they already said. Change is still offered. */
+const ANSWER_LINES: Record<string, string> = {
+  accepted: 'You’ve said you’re in. You can change your answer below.',
+  declined: 'You’ve said you can’t make it. You can change your answer below.',
+  waitlisted: 'You’re on the waitlist. You can change your answer below.',
+};
 
 const EVENT_FIELDS =
   'id, title, description, location_name, location_address, starts_at, ends_at, time_zone, host_id, status, share_link_active, cover_url, wishlist_url';
@@ -131,6 +139,35 @@ export default async function SharedInvitePage({
     : { data: null };
 
   const zone = admin && event ? await resolveEventZone(admin, event) : null;
+
+  // Who the viewer is to this plan. A host checking their own link used to get
+  // "I'm in / Can't make it", and answering added them to their own guest list
+  // as an invitee, counting against their own capacity. And a guest who had
+  // already answered saw the same two buttons with no sign of what they had
+  // said, so reopening the link read as though the answer had been lost.
+  const { data: cohost } = user && event && admin && user.id !== event.host_id
+    ? await admin
+        .from('event_cohosts')
+        .select('cohost_id')
+        .eq('event_id', event.id)
+        .eq('cohost_id', user.id)
+        .maybeSingle()
+    : { data: null };
+  const viewerHosts = Boolean(user && event && (user.id === event.host_id || cohost));
+  const { data: existingInvites } = user && event && admin && !viewerHosts
+    ? await admin
+        .from('invites')
+        .select('status, guest_token, responded_at')
+        .eq('event_id', event.id)
+        .eq('invitee_id', user.id)
+        .order('responded_at', { ascending: false, nullsFirst: false })
+        .limit(1)
+    : { data: null };
+  const existingInvite = existingInvites?.[0] ?? null;
+  const previousAnswer =
+    existingInvite && ANSWER_LINES[existingInvite.status]
+      ? { line: ANSWER_LINES[existingInvite.status], token: existingInvite.guest_token }
+      : null;
 
   // One classification, three decisions: whether the plan renders at all,
   // whether the answer buttons appear, and what the recipient is told alongside
@@ -257,7 +294,35 @@ export default async function SharedInvitePage({
                 code={notice.code}
               />
             )}
-            {answerable &&
+            {viewerHosts && event && (
+              <div className="mt-8 rounded-card bg-cream px-4 py-3.5">
+                <p className="text-sm font-bold text-ink">This is your plan.</p>
+                <p className="mt-1 text-sm text-ink-soft">
+                  This is the page people see when you share the link. Replies
+                  and the guest list are on the plan itself.
+                </p>
+                <Link
+                  href={`/events/${event.id}`}
+                  className="mt-2 inline-flex min-h-11 items-center text-sm font-bold text-terracotta-deep"
+                >
+                  Open your plan
+                </Link>
+              </div>
+            )}
+            {answerable && !viewerHosts && user && previousAnswer && (
+              <p className="mt-8 text-sm text-ink-soft">
+                {previousAnswer.line}{' '}
+                {previousAnswer.token && (
+                  <Link
+                    href={`/rsvp/${previousAnswer.token}`}
+                    className="font-bold text-terracotta-deep underline"
+                  >
+                    Open your invitation
+                  </Link>
+                )}
+              </p>
+            )}
+            {answerable && !viewerHosts &&
               (user ? (
                 <ShareLinkRsvp
                   shareToken={token}
@@ -270,10 +335,15 @@ export default async function SharedInvitePage({
                   hostName={host?.display_name ?? undefined}
                 />
               ))}
+            {/* This used to promise that "invitations flow one person at a
+                time", on every plan. Most plans ask everyone at once (it is the
+                wizard's default), and a share link is open to anyone holding
+                it, so the line told recipients something untrue about the plan
+                in front of them. What holds for every plan is what stays. */}
             <p className="text-xs text-ink-faint mt-10 leading-relaxed">
-              Switchboard makes plans without pressure - invitations flow one
-              person at a time, so nobody feels like a backup. If you can’t make
-              it, the invitation quietly moves along. No hard feelings.
+              Switchboard keeps plans low-pressure: answer when you’re ready,
+              and if you can’t make it, that’s a complete answer. No hard
+              feelings.
             </p>
           </>
         )}

@@ -202,11 +202,7 @@ export default async function PublicProfilePage({
               {/* Give space: reachable for anyone, not just people you are
                   connected to. Warn, never remove — see GiveSpaceButton. */}
               <GiveSpaceButton targetId={profile.id} avoided={Boolean(avoid.data)} />
-              <BlockReportButtons
-                targetId={profile.id}
-                name={displayName}
-                connectionId={relationship.connectionId}
-              />
+              <BlockReportButtons targetId={profile.id} name={displayName} />
               {mutualLine ? (
                 <p className="flex items-center gap-1.5 text-xs font-semibold text-ink-soft">
                   <Icon name="users" size={14} className="text-ink-faint" />

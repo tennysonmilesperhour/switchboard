@@ -1,6 +1,11 @@
 import { createAdminClient } from '@/lib/supabase/admin';
 import { notifyUsers } from '@/lib/server/notify';
-import { normalizeWeight, scoreOptions, type Vote } from '@/lib/engine/scoring';
+import {
+  decidePoll,
+  normalizeWeight,
+  scoreOptions,
+  type Vote,
+} from '@/lib/engine/scoring';
 import { pollQuestion } from '@/lib/types';
 
 /**
@@ -95,18 +100,16 @@ export async function resolvePoll(pollId: string): Promise<void> {
     weight: normalizeWeight(v.weight),
   }));
   const ranked = scoreOptions((options ?? []).map((o) => o.id), engineVotes);
+  const outcome = decidePoll({
+    resolution: poll.resolution,
+    phase: poll.phase,
+    ranked,
+    // A rating tapped twice is stored as a neutral 0, which says nothing.
+    voteCount: engineVotes.filter((v) => v.weight !== 0).length,
+  });
 
-  if (poll.resolution === 'auto' && ranked.length > 0) {
-    await admin
-      .from('polls')
-      .update({ phase: 'decided', winning_option_id: ranked[0].optionId })
-      .eq('id', pollId);
-    await openFollowUpPolls(pollId);
-    return;
-  }
-
-  if (poll.resolution === 'runoff' && poll.phase !== 'runoff' && ranked.length > 3) {
-    const finalistIds = new Set(ranked.slice(0, 3).map((r) => r.optionId));
+  if (outcome.kind === 'runoff') {
+    const finalistIds = new Set(outcome.finalistIds);
     const retired = (options ?? []).filter((o) => !finalistIds.has(o.id));
     if (retired.length > 0) {
       await admin.from('poll_options').delete().in('id', retired.map((o) => o.id));
@@ -116,18 +119,16 @@ export async function resolvePoll(pollId: string): Promise<void> {
     return;
   }
 
-  // host_pick, a runoff that ran its course, or a tiny option set:
-  // mark decided; the host picks from the finalists (or the auto winner
-  // for a runoff is applied when they close it).
-  if (poll.resolution === 'runoff' && poll.phase === 'runoff' && ranked.length > 0) {
-    await admin
-      .from('polls')
-      .update({ phase: 'decided', winning_option_id: ranked[0].optionId })
-      .eq('id', pollId);
-    await openFollowUpPolls(pollId);
-    return;
-  }
-  await admin.from('polls').update({ phase: 'decided' }).eq('id', pollId);
+  // A clear winner, or nothing that can honestly be called one - no votes, or a
+  // leader only ahead on the id tiebreak - in which case the poll closes with
+  // no winner and the host chooses from what the group said.
+  await admin
+    .from('polls')
+    .update({
+      phase: 'decided',
+      ...(outcome.kind === 'winner' ? { winning_option_id: outcome.optionId } : {}),
+    })
+    .eq('id', pollId);
   await openFollowUpPolls(pollId);
 }
 

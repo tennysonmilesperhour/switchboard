@@ -24,6 +24,7 @@ export function ZoneLocationField({ className }: { className?: string }) {
         onChange={setValue}
         onPointChange={setPoint}
         pinned={point !== null}
+        pinnedMessage="Pinned. This zone will show up on the map."
         placeholder="Venue, campus, city…"
         className={className}
       />

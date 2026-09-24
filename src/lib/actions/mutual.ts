@@ -41,6 +41,23 @@ export async function downToConnect(
     return failure('SB-RATE-LIMIT', 'Give it a moment before sending more.');
   }
 
+  // Already mutual: say so and write nothing. The upsert below sets `status:
+  // 'active'`, so re-sending an interest that had matched flipped the caller's
+  // side back to active - which sent the other person a fresh anonymous
+  // "someone's interested" for a match they already had, and a tap back from
+  // them then matched the pair a second time, with a second room.
+  const { data: existing } = await supabase
+    .from('mutual_intents')
+    .select('status')
+    .eq('author_id', user.id)
+    .eq('target_id', targetId)
+    .eq('activity', cleanActivity)
+    .eq('kind', kind)
+    .maybeSingle();
+  if (existing?.status === 'matched') {
+    return { ok: true, matched: true };
+  }
+
   const { data: intent, error } = await supabase
     .from('mutual_intents')
     .upsert(

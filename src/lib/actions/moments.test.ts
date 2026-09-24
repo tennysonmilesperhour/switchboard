@@ -25,7 +25,7 @@ vi.mock('@/lib/server/observability', () => ({
   })),
 }));
 
-import { acceptMoment, expressCuriosity } from './moments';
+import { acceptMoment, checkIn, expressCuriosity } from './moments';
 
 function readBuilder(data: unknown) {
   const builder = {
@@ -101,5 +101,122 @@ describe('Moments block recheck', () => {
     expect(result).toMatchObject({ ok: false, code: 'SB-MOMENT-ACCESS' });
     expect(mocks.adminFrom).toHaveBeenCalledWith('moment_interests');
     expect(mocks.notifyUsers).not.toHaveBeenCalled();
+  });
+});
+
+describe('checkIn bounds', () => {
+  function arrangeCheckIn() {
+    const inserts: Record<string, unknown>[] = [];
+    const supabase = {
+      from: vi.fn(() => ({
+        update: () => ({ eq: () => ({ eq: async () => ({ error: null }) }) }),
+        insert: async (row: Record<string, unknown>) => {
+          inserts.push(row);
+          return { error: null };
+        },
+      })),
+    };
+    mocks.requireUser.mockResolvedValue({ ok: true, user: { id: 'user-mine' }, supabase });
+    return inserts;
+  }
+
+  /**
+   * The screen offers 1-8 hours; a direct call could ask for a year and leave
+   * an anonymous presence in everyone else's Moments long after leaving.
+   */
+  it('caps how long a check-in stays live', async () => {
+    const inserts = arrangeCheckIn();
+    const before = Date.now();
+    await checkIn('Union Station', ['coffee'], '', 24 * 365);
+    const until = Date.parse(String(inserts[0].available_until));
+    expect(until - before).toBeLessThanOrEqual(8 * 3_600_000 + 5_000);
+  });
+
+  it('keeps at least an hour, and trims the free text', async () => {
+    const inserts = arrangeCheckIn();
+    const before = Date.now();
+    await checkIn(`  ${'x'.repeat(300)}  `, ['coffee', '', 'y'.repeat(90)], 'h'.repeat(400), -5);
+    const row = inserts[0];
+    expect(Date.parse(String(row.available_until)) - before).toBeGreaterThanOrEqual(3_600_000 - 5_000);
+    expect(String(row.place_name)).toHaveLength(120);
+    expect(row.experiences).toEqual(['coffee', 'y'.repeat(40)]);
+    expect(String(row.headline)).toHaveLength(140);
+  });
+});
+
+describe('two accepts at the same moment', () => {
+  /** Each `from(table)` call takes the next queued result for that table. */
+  function queuedAdmin(queues: Record<string, unknown[]>) {
+    const calls: string[] = [];
+    return {
+      calls,
+      admin: {
+        from(table: string) {
+          calls.push(table);
+          const result = { data: (queues[table] ?? []).shift() ?? null, error: null };
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const builder: any = new Proxy(
+            {},
+            {
+              get: (_target, prop) => {
+                if (prop === 'then') {
+                  return (resolve: (value: unknown) => unknown) =>
+                    Promise.resolve(result).then(resolve);
+                }
+                if (prop === 'maybeSingle' || prop === 'single') return async () => result;
+                return () => builder;
+              },
+            },
+          );
+          return builder;
+        },
+      },
+    };
+  }
+
+  /**
+   * Both people tapped "I'd love to share this moment" together: each call saw
+   * the other's acceptance and each opened a room, so the pair got two rooms
+   * and two sets of match notifications.
+   */
+  it('opens no second room when the other accept already claimed the match', async () => {
+    arrangePair(false);
+    const { admin, calls } = queuedAdmin({
+      moments: [
+        { user_id: 'user-other', place_name: 'Union Station' }, // candidate read
+        [], // the claim: already matched by the other call
+      ],
+      moment_interests: [
+        { id: 'interest-mine', stage: 'revealed' },
+        null, // promote mine to accepted
+        { stage: 'accepted' }, // theirs
+      ],
+    });
+    mocks.createAdminClient.mockReturnValue(admin);
+
+    const result = await acceptMoment('moment-mine', 'moment-other');
+
+    expect(result).toMatchObject({ ok: true, stage: 'matched' });
+    expect(calls).not.toContain('rooms');
+    expect(mocks.notifyUsers).not.toHaveBeenCalled();
+  });
+
+  it('opens the room when this accept claims the match', async () => {
+    arrangePair(false);
+    const { admin, calls } = queuedAdmin({
+      moments: [
+        { user_id: 'user-other', place_name: 'Union Station' },
+        [{ id: 'moment-mine' }, { id: 'moment-other' }],
+      ],
+      moment_interests: [{ id: 'interest-mine', stage: 'revealed' }, null, { stage: 'accepted' }],
+      rooms: [{ id: 'room-1' }],
+    });
+    mocks.createAdminClient.mockReturnValue(admin);
+
+    const result = await acceptMoment('moment-mine', 'moment-other');
+
+    expect(result).toMatchObject({ ok: true, stage: 'matched', roomId: 'room-1' });
+    expect(calls.filter((table) => table === 'rooms')).toHaveLength(1);
+    expect(mocks.notifyUsers).toHaveBeenCalledTimes(1);
   });
 });
