@@ -123,7 +123,12 @@ export function RoomClient({
 
   useEffect(() => {
     markRoomRead(roomId).catch(() => undefined);
+    // Only while the room is actually on screen. The notifier skips anyone who
+    // marked the room read in the last 90 seconds, so a heartbeat that kept
+    // beating in a background tab told it "they're watching" for as long as the
+    // tab stayed open, and that person was never told about new messages.
     const interval = setInterval(() => {
+      if (document.visibilityState !== 'visible') return;
       markRoomRead(roomId).catch(() => undefined);
     }, 30_000);
     const onVisibility = () => {

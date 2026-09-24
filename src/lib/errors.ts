@@ -517,6 +517,15 @@ const REGISTRY = {
   // it. It exists so a provider rejecting a live subscription (anything other
   // than 404/410, which just prune it) is a searchable log line, distinct from
   // SB-CONFIG-PUSH, which means the VAPID keys are missing.
+  // Never shown to a reader either: the domain action has already succeeded
+  // and must not fail because its announcement could not be recorded. It makes
+  // "I never got told" answerable from the logs, which a bare console line was
+  // not.
+  'SB-NOTIFY-RECORD': {
+    message: 'A notification couldn’t be saved to the inbox.',
+    fix: null,
+    actor: 'operator',
+  },
   'SB-PUSH-SEND': {
     message: 'A push notification couldn’t be delivered.',
     fix: null,
@@ -870,6 +879,11 @@ const AREA_CODES: Record<string, ErrorCode> = {
   'zone.location': 'SB-ZONE-SAVE',
   'zone.join': 'SB-ZONE-SAVE',
 
+  // Notification inbox
+  'notification.read': 'SB-NOTIFY-SAVE',
+  'notification.read-all': 'SB-NOTIFY-SAVE',
+  'notification.clear': 'SB-NOTIFY-CLEAR',
+
   // Poll input
   'poll.suggest': 'SB-POLL-SUGGEST',
   'poll.edit': 'SB-POLL-EDIT',
@@ -983,6 +997,7 @@ const AREA_CODES: Record<string, ErrorCode> = {
   // Best-effort delivery still needs an operator-visible trace when a provider
   // rejects a live subscription for a reason other than "gone".
   'push.send': 'SB-PUSH-SEND',
+  'notify.record': 'SB-NOTIFY-RECORD',
 
   // Uploads
   'audio-upload': 'SB-UPLOAD-FAILED',

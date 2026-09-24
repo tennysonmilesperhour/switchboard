@@ -1,9 +1,10 @@
 'use server';
 
-import { failure, type ActionResult } from '@/lib/errors';
+import type { ActionResult } from '@/lib/errors';
 
 import { revalidatePath } from 'next/cache';
 import { requireUser } from '@/lib/server/require-user';
+import { reportAndFail } from '@/lib/server/observability';
 
 /**
  * Mark every unread notification for this user as read — including ones too old
@@ -24,9 +25,7 @@ export async function markAllNotificationsRead(): Promise<ActionResult> {
     .update({ read_at: new Date().toISOString() })
     .eq('user_id', user.id)
     .is('read_at', null);
-  if (error) {
-    return failure('SB-NOTIFY-SAVE', 'Could not mark those as read.');
-  }
+  if (error) return reportAndFail('SB-NOTIFY-SAVE', 'notification.read-all', error);
 
   // The bell badge renders in the shared shell on every page.
   revalidatePath('/', 'layout');
@@ -54,7 +53,7 @@ export async function clearNotifications(): Promise<ActionResult> {
     .from('notifications')
     .delete()
     .eq('user_id', user.id);
-  if (error) return failure('SB-NOTIFY-CLEAR');
+  if (error) return reportAndFail('SB-NOTIFY-CLEAR', 'notification.clear', error);
 
   revalidatePath('/', 'layout');
   return { ok: true };
@@ -72,7 +71,7 @@ export async function markNotificationRead(id: string): Promise<ActionResult> {
     .eq('id', id)
     .eq('user_id', user.id)
     .is('read_at', null);
-  if (error) return failure('SB-NOTIFY-SAVE');
+  if (error) return reportAndFail('SB-NOTIFY-SAVE', 'notification.read', error, { id });
 
   revalidatePath('/', 'layout');
   return { ok: true };
