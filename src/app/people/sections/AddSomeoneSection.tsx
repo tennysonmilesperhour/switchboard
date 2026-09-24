@@ -120,7 +120,8 @@ export function AddSomeoneSection({
                         : 'No Switchboard account found'}
                   </span>
                 </span>
-                {match.profile && match.connectionStatus === 'none' && (
+                {match.profile &&
+                  (match.connectionStatus === 'none' || match.connectionStatus === 'incoming') && (
                   <Button
                     type="button"
                     size="sm"
@@ -128,16 +129,14 @@ export function AddSomeoneSection({
                     disabled={pending}
                     onClick={() => quickConnect(match)}
                   >
-                    Add
+                    {/* They already asked you; adding them back accepts it. */}
+                    {match.connectionStatus === 'incoming' ? 'Accept' : 'Add'}
                   </Button>
                 )}
-                {match.profile && match.connectionStatus !== 'none' && (
+                {match.profile &&
+                  (match.connectionStatus === 'accepted' || match.connectionStatus === 'outgoing') && (
                   <span className="rounded-pill bg-cream px-2.5 py-1 text-xs font-bold text-ink-soft">
-                    {match.connectionStatus === 'accepted'
-                      ? 'Friend'
-                      : match.connectionStatus === 'incoming'
-                        ? 'Pending'
-                        : 'Sent'}
+                    {match.connectionStatus === 'accepted' ? 'Friend' : 'Sent'}
                   </span>
                 )}
                 {/*

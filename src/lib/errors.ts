@@ -931,6 +931,7 @@ const AREA_CODES: Record<string, ErrorCode> = {
   'connection.respond': 'SB-CONNECTION-SAVE',
   'connection.remove': 'SB-CONNECTION-SAVE',
   'connection.block': 'SB-CONNECTION-SAVE',
+  'connection.unblock': 'SB-CONNECTION-SAVE',
   'connection.avoid': 'SB-CONNECTION-SAVE',
   'connection.unavoid': 'SB-CONNECTION-SAVE',
   'connection.report': 'SB-CONNECTION-SAVE',

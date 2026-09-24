@@ -4,7 +4,7 @@ import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { useToast } from '@/components/ui/Toast';
-import { useConfirm } from '@/components/ui/ConfirmDialog';
+import { useConfirm, usePrompt } from '@/components/ui/ConfirmDialog';
 import {
   acceptConnection,
   blockProfile,
@@ -76,6 +76,7 @@ export function PeopleClient({
   const router = useRouter();
   const toast = useToast();
   const confirm = useConfirm();
+  const askReason = usePrompt();
 
   async function removeFriend(friend: FriendRow) {
     const ok = await confirm({
@@ -98,14 +99,15 @@ export function PeopleClient({
   async function blockFriend(friend: FriendRow) {
     const ok = await confirm({
       title: `Block ${friend.name}?`,
-      body: 'They will be removed from your connections and will not be able to reconnect with you.',
+      body: 'You’ll stop being connected, and they won’t find you in discovery or on the map or be able to reconnect. They won’t be told.',
       confirmLabel: 'Block',
       danger: true,
     });
     if (!ok) return;
     startTransition(async () => {
-      const result = await blockProfile(friend.id, friend.connectionId);
+      const result = await blockProfile(friend.id);
       if (!result.ok) return toast.error(result.error ?? 'Could not block that person.', result.code);
+      toast.success(`${friend.name} is blocked.`);
       router.refresh();
     });
   }
@@ -129,7 +131,11 @@ export function PeopleClient({
   }
 
   async function reportFriend(friend: FriendRow) {
-    const reason = window.prompt(`Briefly describe why you are reporting ${friend.name}.`);
+    const reason = await askReason({
+      title: `Report ${friend.name}?`,
+      body: 'A sentence is plenty. A moderator reads it, and they won’t be told who sent it.',
+      confirmLabel: 'Send report',
+    });
     if (!reason) return;
     startTransition(async () => {
       const result = await reportProfile(friend.id, reason);
@@ -217,7 +223,12 @@ export function PeopleClient({
       const result = await sendConnectionRequest(value);
       setMessage(
         result.ok
-          ? { tone: 'ok', text: 'Request sent.' }
+          ? {
+              tone: 'ok',
+              text: result.connected
+                ? 'You’re connected. They had already asked you.'
+                : 'Request sent.',
+            }
           : { tone: 'error', text: result.error ?? 'Something went wrong' },
       );
       if (result.ok) setIdentifier('');
@@ -264,7 +275,18 @@ export function PeopleClient({
         toast.error(result.error ?? 'Could not send that request.', result.code);
         return;
       }
-      toast.success(`Request sent to ${profile.name}.`);
+      toast.success(
+        result.connected
+          ? `You’re connected with ${profile.name}.`
+          : `Request sent to ${profile.name}.`,
+      );
+      setContactMatches((current) =>
+        current.map((row) =>
+          row.key === match.key
+            ? { ...row, connectionStatus: result.connected ? 'accepted' : 'outgoing' }
+            : row,
+        ),
+      );
       router.refresh();
     });
   }
@@ -314,8 +336,12 @@ export function PeopleClient({
     });
   }
 
-  function reportRequest(request: RequestRow) {
-    const reason = window.prompt(`Briefly describe why you are reporting ${request.name}.`);
+  async function reportRequest(request: RequestRow) {
+    const reason = await askReason({
+      title: `Report ${request.name}?`,
+      body: 'A sentence is plenty. A moderator reads it, and they won’t be told who sent it.',
+      confirmLabel: 'Send report',
+    });
     if (!reason) return;
     startTransition(async () => {
       const result = await reportProfile(request.id, reason);
@@ -330,17 +356,18 @@ export function PeopleClient({
   async function blockRequest(request: RequestRow) {
     const ok = await confirm({
       title: `Block ${request.name}?`,
-      body: 'They will be removed and will not be able to reconnect with you.',
+      body: 'You’ll stop being connected, and they won’t find you in discovery or on the map or be able to reconnect. They won’t be told.',
       confirmLabel: 'Block',
       danger: true,
     });
     if (!ok) return;
     startTransition(async () => {
-      const result = await blockProfile(request.id, request.connectionId);
+      const result = await blockProfile(request.id);
       if (!result.ok) {
         toast.error(result.error ?? 'Could not block that person.', result.code);
         return;
       }
+      toast.success(`${request.name} is blocked.`);
       router.refresh();
     });
   }
