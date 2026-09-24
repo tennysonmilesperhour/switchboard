@@ -136,7 +136,12 @@ export function BoardClient({
     if (!ok) return;
     startTransition(async () => {
       try {
-        await deleteBoardPost(postId, slug);
+        const result = await deleteBoardPost(postId, slug);
+        if (!result.ok) {
+          toast.error(result.error ?? 'Could not remove the post.', result.code);
+          return;
+        }
+        toast.success('Post removed.');
         router.refresh();
       } catch {
         toast.error('Could not remove the post. Try again.');
@@ -154,7 +159,12 @@ export function BoardClient({
     if (!ok) return;
     startTransition(async () => {
       try {
-        await removeFromBoard(boardId, member.id);
+        const result = await removeFromBoard(boardId, member.id);
+        if (!result.ok) {
+          toast.error(result.error ?? 'Could not remove that neighbor.', result.code);
+          return;
+        }
+        toast.success(`${member.name} is off the board.`);
         router.refresh();
       } catch {
         toast.error('Could not remove that neighbor. Try again.');
@@ -252,9 +262,11 @@ export function BoardClient({
     if (!inviteHandle.trim()) return;
     setInviteError(null);
     startTransition(async () => {
+      const handle = inviteHandle.trim().replace(/^@/, '');
       const result = await inviteToBoard(boardId, inviteHandle);
       if (result.ok) {
         setInviteHandle('');
+        toast.success(`Added @${handle}. They’ve been told.`);
         router.refresh();
       } else {
         setInviteError(result.error ?? 'Could not add them.');

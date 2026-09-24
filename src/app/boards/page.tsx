@@ -11,9 +11,8 @@ import { createBoard } from '@/lib/actions/boards';
 export const metadata: Metadata = { title: 'Neighborhood Boards' };
 
 const ERRORS: Record<string, string> = {
-  name: 'Boards need a name of at least 3 letters.',
-  taken: 'That board name is taken. Try another.',
-  save: 'Could not create the board. Try again.',
+  name: 'Give the board a name of at least 3 characters.',
+  save: 'Switchboard couldn’t create the board.',
 };
 
 export default async function BoardsPage({

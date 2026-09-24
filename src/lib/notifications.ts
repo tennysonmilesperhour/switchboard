@@ -73,7 +73,7 @@ export const NOTIFICATION_CATEGORIES: NotificationCategoryMeta[] = [
     column: 'notify_social',
     emoji: '✨',
     label: 'Connections & matches',
-    description: 'Connection requests, accepted connections, and mutual matches.',
+    description: 'Connection requests, accepted connections, mutual matches, and posts on your boards.',
   },
 ];
 
@@ -133,6 +133,11 @@ const KIND_TO_CATEGORY: Record<string, NotificationCategory> = {
   // about who is in a group with you, which is what 'social' covers.
   zone_join_request: 'social',
   zone_join_approved: 'social',
+  // A new post on a board you belong to, and being added to a board. A busy
+  // board posts often; unmapped, these could not be muted without turning off
+  // every push, so they sit with the other "who is in a group with you" kinds.
+  board_post: 'social',
+  board_added: 'social',
   // Anonymous "someone's down to connect" nudge — never names the sender, so it
   // belongs with the other consent-first social signals, gated by notify_social.
   interest_received: 'social',
