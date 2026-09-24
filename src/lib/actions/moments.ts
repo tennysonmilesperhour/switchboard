@@ -21,6 +21,9 @@ export interface MomentActionResult {
   roomId?: string;
 }
 
+/** The longest a check-in stays live: the top of the check-in screen's slider. */
+const MAX_MOMENT_HOURS = 8;
+
 export async function checkIn(
   placeName: string,
   experiences: string[],
@@ -34,6 +37,18 @@ export async function checkIn(
   const { supabase, user } = auth;
   if (!placeName.trim()) return validation('Where are you?');
   if (experiences.length === 0) return validation('Pick at least one experience');
+  // The check-in screen offers 1-8 hours, but this is a server action: nothing
+  // stopped a direct call from keeping a check-in "live" for a year, a stranger's
+  // anonymous presence in everyone else's Moments long after they had left.
+  // Bounded here, as are the free-text fields.
+  const hours = Number.isFinite(hoursAvailable)
+    ? Math.min(Math.max(Math.round(hoursAvailable), 1), MAX_MOMENT_HOURS)
+    : 2;
+  const cleanExperiences = experiences
+    .filter((value): value is string => typeof value === 'string' && value.trim().length > 0)
+    .map((value) => value.trim().slice(0, 40))
+    .slice(0, 8);
+  if (cleanExperiences.length === 0) return validation('Pick at least one experience');
 
   // One open moment at a time.
   await supabase
@@ -49,10 +64,10 @@ export async function checkIn(
 
   const { error } = await supabase.from('moments').insert({
     user_id: user.id,
-    place_name: placeName.trim(),
-    experiences,
-    headline: headline.trim() || null,
-    available_until: new Date(Date.now() + hoursAvailable * 3_600_000).toISOString(),
+    place_name: placeName.trim().slice(0, 120),
+    experiences: cleanExperiences,
+    headline: headline.trim().slice(0, 140) || null,
+    available_until: new Date(Date.now() + hours * 3_600_000).toISOString(),
     zone_id: zoneId,
     latitude: point?.lat ?? null,
     longitude: point?.lng ?? null,
@@ -208,12 +223,17 @@ export async function expressCuriosity(
   const authorization = await authorizeMomentCandidate(mine, otherMomentId);
   if (!authorization.ok) return authorization.result;
   const { admin, other } = authorization;
-  await admin
+  // Only a row this call actually created counts as news. A second tap on the
+  // same person used to notify them again every time, while the write itself
+  // was (correctly) ignored as a duplicate.
+  const { data: created } = await admin
     .from('moment_interests')
     .upsert(
       { moment_id: myMomentId, other_moment_id: otherMomentId, stage: 'curious' },
       { onConflict: 'moment_id,other_moment_id', ignoreDuplicates: true },
-    );
+    )
+    .select('id');
+  const firstTime = (created?.length ?? 0) > 0;
 
   const { data: reverse } = await admin
     .from('moment_interests')
@@ -223,6 +243,8 @@ export async function expressCuriosity(
     .maybeSingle();
 
   if (reverse && reverse.stage !== 'passed') {
+    // Already mutual on an earlier tap: nothing new to say.
+    const alreadyRevealed = reverse.stage === 'revealed' || reverse.stage === 'accepted';
     // Mutual curiosity → both sides may now see a gentle introduction.
     await admin
       .from('moment_interests')
@@ -235,24 +257,28 @@ export async function expressCuriosity(
       .eq('moment_id', myMomentId)
       .eq('other_moment_id', otherMomentId)
       .neq('stage', 'accepted');
-    await notifyUsers([other.user_id], {
-      kind: 'moment',
-      title: '✨ The interest is mutual',
-      body: 'Someone near you is curious too - take a look.',
-      url: '/moments',
-    });
+    if (!alreadyRevealed) {
+      await notifyUsers([other.user_id], {
+        kind: 'moment',
+        title: '✨ The interest is mutual',
+        body: 'Someone near you is curious too - take a look.',
+        url: '/moments',
+      });
+    }
     revalidatePath('/moments');
     return { ok: true, stage: 'revealed' };
   }
 
   // First one-sided curiosity: nudge the other person (no identity revealed)
-  // so they can come reciprocate if they'd like.
-  await notifyUsers([other.user_id], {
-    kind: 'moment',
-    title: '✨ Someone’s curious',
-    body: 'A person near you would like to connect. Open Moments to see.',
-    url: '/moments',
-  });
+  // so they can come reciprocate if they'd like. Once.
+  if (firstTime) {
+    await notifyUsers([other.user_id], {
+      kind: 'moment',
+      title: '✨ Someone’s curious',
+      body: 'A person near you would like to connect. Open Moments to see.',
+      url: '/moments',
+    });
+  }
 
   revalidatePath('/moments');
   return { ok: true, stage: 'curious' };
@@ -311,7 +337,34 @@ export async function acceptMoment(
     return { ok: true, stage: 'accepted' };
   }
 
-  // Both said yes → open a room, connect the two people.
+  // Both said yes. If both tapped at the same moment, both calls get here, and
+  // each used to open its own room and send its own match notifications. The
+  // pair of moments is claimed first, open → matched in one guarded write; only
+  // the call that flips both opens the room.
+  const { data: claimed } = await admin
+    .from('moments')
+    .update({ status: 'matched' })
+    .in('id', [myMomentId, otherMomentId])
+    .eq('status', 'open')
+    .select('id');
+  const claimedCount = claimed?.length ?? 0;
+  if (claimedCount === 1) {
+    // One side was no longer open: that check-in ended between the two taps.
+    // Give back the half we took rather than strand this side as matched with
+    // no room, and say what happened.
+    await admin
+      .from('moments')
+      .update({ status: 'open' })
+      .in('id', (claimed ?? []).map((row) => row.id));
+    revalidatePath('/moments');
+    return failure('SB-MOMENT-ACCESS');
+  }
+  if (claimedCount === 0) {
+    // The other accept got here first and is opening the room.
+    revalidatePath('/moments');
+    return { ok: true, stage: 'matched' };
+  }
+
   const { data: room, error: roomError } = await admin
     .from('rooms')
     .insert({
@@ -322,6 +375,11 @@ export async function acceptMoment(
     .select('id')
     .single();
   if (roomError || !room) {
+    // Give the claim back so another accept can try again.
+    await admin
+      .from('moments')
+      .update({ status: 'open' })
+      .in('id', [myMomentId, otherMomentId]);
     return reportAndFail(
       'SB-MOMENT-CHAT',
       'moment.chat',
@@ -334,10 +392,6 @@ export async function acceptMoment(
     { room_id: room.id, member_id: mine.user_id },
     { room_id: room.id, member_id: other.user_id },
   ]);
-  await admin
-    .from('moments')
-    .update({ status: 'matched' })
-    .in('id', [myMomentId, otherMomentId]);
 
   // Durable notification (in-app row + push), so a match is discoverable later
   // in /notifications even if the recipient never enabled push or is offline.
