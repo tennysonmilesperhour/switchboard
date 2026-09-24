@@ -112,7 +112,7 @@ export async function extractItems(body: string): Promise<ExtractedItem[]> {
     const toolUse = response.content.find((block) => block.type === 'tool_use');
     if (!toolUse || toolUse.type !== 'tool_use') return extractWithRules(body);
     const parsed = toolUse.input as { items?: ExtractedItem[] };
-    return (parsed.items ?? [])
+    const filed = (parsed.items ?? [])
       .filter((item) => typeof item.title === 'string' && item.title.trim())
       .slice(0, 5)
       .map((item) => ({
@@ -121,7 +121,28 @@ export async function extractItems(body: string): Promise<ExtractedItem[]> {
         detail: typeof item.detail === 'string' ? item.detail.slice(0, 500) : null,
         url: typeof item.url === 'string' ? sanitizeUrl(item.url) : null,
       }));
+    return withEveryLink(filed, body);
   } catch {
     return extractWithRules(body);
   }
+}
+
+/**
+ * A pasted link always reaches the Links tab.
+ *
+ * The model is told most messages hold nothing worth filing, and it sometimes
+ * agrees about a message that is nothing *but* a link — so "paste a link and it
+ * files into Links" held on some messages and not others. A URL is found by a
+ * pattern, not a judgement, so any the model left out are added back.
+ */
+export function withEveryLink(filed: ExtractedItem[], body: string): ExtractedItem[] {
+  // Compared in the model's normalised form, so `https://x.com` found by the
+  // pattern and `https://x.com/` returned by the model count as one link.
+  const have = new Set(filed.map((item) => item.url).filter(Boolean));
+  const missing = extractWithRules(body).filter((item) => {
+    if (item.kind !== 'link' || !item.url) return false;
+    const url = sanitizeUrl(item.url) ?? item.url;
+    return !have.has(url) && !have.has(item.url);
+  });
+  return [...filed, ...missing];
 }

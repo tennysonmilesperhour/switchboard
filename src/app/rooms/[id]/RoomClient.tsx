@@ -698,7 +698,14 @@ export function RoomClient({
                     onChange={() =>
                       startTransition(async () => {
                         try {
-                          await toggleTask(item.id, roomId, !item.done);
+                          const result = await toggleTask(item.id, roomId, !item.done);
+                          if (!result.ok) {
+                            toast.error(
+                              result.error ?? 'Could not update the task. Try again.',
+                              result.code,
+                            );
+                            return;
+                          }
                           router.refresh();
                         } catch {
                           toast.error('Could not update the task. Try again.');

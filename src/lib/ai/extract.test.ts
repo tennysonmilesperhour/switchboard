@@ -146,3 +146,32 @@ describe('extractItems', () => {
     ]);
   });
 });
+
+describe('a pasted link always files', () => {
+  /**
+   * The model is told most messages hold nothing worth filing, and sometimes it
+   * says so about a message that is nothing but a link.
+   */
+  it('files a link the model returned nothing for', async () => {
+    create.mockResolvedValue(toolResponse([]));
+    await expect(extractItems('https://www.opentable.com/r/mei-wei')).resolves.toEqual([
+      {
+        kind: 'link',
+        title: 'opentable.com',
+        detail: null,
+        url: 'https://www.opentable.com/r/mei-wei',
+      },
+    ]);
+  });
+
+  it('does not file a link twice when the model already did', async () => {
+    create.mockResolvedValue(
+      toolResponse([
+        { kind: 'link', title: 'Reservation', url: 'https://www.opentable.com/r/mei-wei' },
+      ]),
+    );
+    const items = await extractItems('booked: https://www.opentable.com/r/mei-wei');
+    expect(items).toHaveLength(1);
+    expect(items[0].title).toBe('Reservation');
+  });
+});
