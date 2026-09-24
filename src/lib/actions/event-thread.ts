@@ -120,17 +120,22 @@ export async function deleteComment(
   if (!auth.ok) return auth;
   const { supabase } = auth;
 
-  // RLS enforces author-or-host; this is a no-op row-count for anyone else.
-  const { error } = await supabase
+  // RLS enforces author-or-host; for anyone else the delete matches zero rows
+  // rather than raising, which used to come back as success.
+  const { data: removed, error } = await supabase
     .from('event_comments')
     .delete()
     .eq('id', commentId)
-    .eq('event_id', eventId);
+    .eq('event_id', eventId)
+    .select('id');
   if (error) {
-    return reportAndFail('SB-THREAD-SAVE', 'event-thread.react', error, {
+    return reportAndFail('SB-THREAD-SAVE', 'event-thread.delete', error, {
       eventId,
       commentId,
     });
+  }
+  if (!removed || removed.length === 0) {
+    return failure('SB-PERM-DENIED', 'Only the person who wrote this, or the host, can remove it.');
   }
 
   revalidatePath(`/events/${eventId}`);

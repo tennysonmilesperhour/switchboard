@@ -179,28 +179,40 @@ export async function activateSignals(
     return reportAndFail('SB-SIGNAL-SAVE', 'signal.activate', rememberError);
   }
 
-  // Re-activating the same status replaces it rather than duplicating.
+  // Re-activating the same status replaces it rather than duplicating. The new
+  // rows go in first and the old ones come out after: deleting first meant a
+  // failed insert left the person with their status silently switched off.
   const labels = [...chosen.keys()];
-  const { error: clearError } = await supabase
-    .from('availability_signals')
-    .delete()
-    .eq('user_id', user.id)
-    .in('label', labels);
-  if (clearError) return reportAndFail('SB-SIGNAL-SAVE', 'signal.activate', clearError);
-
   const expiresAt = new Date(Date.now() + hours * 3_600_000).toISOString();
-  const { error } = await supabase.from('availability_signals').insert(
-    [...chosen.values()].map((signal) => ({
-      user_id: user.id,
-      emoji: signal.emoji,
-      label: signal.label,
-      circle_ids: circleIds,
-      person_ids: personIds,
-      board_ids: boardIds,
-      expires_at: expiresAt,
-    })),
-  );
+  const { data: inserted, error } = await supabase
+    .from('availability_signals')
+    .insert(
+      [...chosen.values()].map((signal) => ({
+        user_id: user.id,
+        emoji: signal.emoji,
+        label: signal.label,
+        circle_ids: circleIds,
+        person_ids: personIds,
+        board_ids: boardIds,
+        expires_at: expiresAt,
+      })),
+    )
+    .select('id');
   if (error) return reportAndFail('SB-SIGNAL-SAVE', 'signal.activate', error);
+
+  // Ids come from the insert above, so interpolating them is safe. Without
+  // them there is no way to tell new rows from old, so the old ones stay (a
+  // duplicate status is a smaller problem than deleting the one just saved).
+  const freshIds = (inserted ?? []).map((row) => row.id);
+  if (freshIds.length > 0) {
+    const { error: clearError } = await supabase
+      .from('availability_signals')
+      .delete()
+      .eq('user_id', user.id)
+      .in('label', labels)
+      .not('id', 'in', `(${freshIds.join(',')})`);
+    if (clearError) return reportAndFail('SB-SIGNAL-SAVE', 'signal.activate', clearError);
+  }
   revalidatePath('/');
   return { ok: true };
 }

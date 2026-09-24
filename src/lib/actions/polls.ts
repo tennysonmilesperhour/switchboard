@@ -11,7 +11,7 @@ import { openFollowUpPolls, resolvePoll } from '@/lib/server/poll-runner';
 import { notifySuggestionAdded } from '@/lib/server/notify';
 import { failure, validation } from '@/lib/errors';
 import { isOwnPublicStorageUrl } from '@/lib/server/media';
-import { OPTION_LINK_MAX, prepareOptionFields } from '@/lib/poll-option-input';
+import { OPTION_LINK_MAX, duplicateIdea, prepareOptionFields } from '@/lib/poll-option-input';
 import { reportAndFail } from '@/lib/server/observability';
 import { capture } from '@/lib/analytics/server';
 import { ANALYTICS_EVENTS } from '@/lib/analytics/events';
@@ -54,6 +54,26 @@ function preparedImage(raw: string | null | undefined): string | null | Validati
   return trimmed;
 }
 
+/**
+ * Refuse an idea already on the list. Two guests suggesting "Pizza" split the
+ * votes that belong together, and can hand the win to something else. Read
+ * through the caller's own client, so it only ever compares against options
+ * they can already see.
+ */
+async function existingDuplicate(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  pollId: string,
+  label: string,
+  exceptId?: string,
+): Promise<ValidationFailure | null> {
+  const { data: options } = await supabase
+    .from('poll_options')
+    .select('id, label')
+    .eq('poll_id', pollId);
+  const match = duplicateIdea(label, options ?? [], exceptId);
+  return match ? validation(`“${match.label}” is already on the list. Vote for it instead.`) : null;
+}
+
 export async function addSuggestion(
   pollId: string,
   eventId: string,
@@ -85,6 +105,9 @@ export async function addSuggestion(
   if (!poll.allow_suggestions && !isHost) {
     return failure('SB-PERM-HOST', 'Only the host can add options');
   }
+
+  const duplicate = await existingDuplicate(supabase, pollId, prepared.fields.label);
+  if (duplicate) return duplicate;
 
   const { data: option, error } = await supabase
     .from('poll_options')
@@ -137,6 +160,9 @@ export async function updateSuggestion(
   const auth = await requireUser();
   if (!auth.ok) return auth;
   const { supabase } = auth;
+
+  const duplicate = await existingDuplicate(supabase, pollId, prepared.fields.label, optionId);
+  if (duplicate) return duplicate;
 
   const { data: option, error } = await supabase
     .from('poll_options')

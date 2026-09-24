@@ -116,3 +116,28 @@ export function prepareOptionFields(input: {
     fields: { label, detail, linkUrl: explicitLink ?? split.linkUrl },
   };
 }
+
+/**
+ * The form two ideas share when they are the same idea: case, spacing, and
+ * trailing punctuation ignored. "Pizza", "pizza " and "Pizza!" are one idea,
+ * and letting all three onto the list splits the votes that belong together.
+ */
+export function ideaKey(label: string): string {
+  return label
+    .normalize('NFKC')
+    .toLowerCase()
+    .replace(/\s+/g, ' ')
+    .trim()
+    .replace(/[\s.,!?;:]+$/u, '');
+}
+
+/** The existing idea `label` would duplicate, if any (ignoring `exceptId`). */
+export function duplicateIdea<T extends { id: string; label: string }>(
+  label: string,
+  existing: readonly T[],
+  exceptId?: string,
+): T | null {
+  const key = ideaKey(label);
+  if (!key) return null;
+  return existing.find((option) => option.id !== exceptId && ideaKey(option.label) === key) ?? null;
+}
