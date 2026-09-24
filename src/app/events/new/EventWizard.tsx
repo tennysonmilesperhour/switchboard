@@ -12,6 +12,8 @@ import type { ImportResult } from '@/lib/actions/import';
 import type { InviteMode, EventTheme } from '@/lib/types';
 import { resolveTimeZone } from '@/lib/client/time-zone';
 import { hasInviteDetails } from '@/lib/event-details';
+import { planEnd } from '@/lib/plan-time';
+import { capacityProblem } from '@/lib/plan-capacity';
 
 import { useInviteeDraft } from './use-invitee-draft';
 import { BasicsStep } from './steps/BasicsStep';
@@ -125,10 +127,12 @@ export function EventWizard({
     return new Date(`${date}T${time || DEFAULT_START_TIME}`).toISOString();
   }, [date, time]);
 
-  const endsAt = useMemo(() => {
-    if (!date || !endTime) return null;
-    return new Date(`${date}T${endTime}`).toISOString();
-  }, [date, endTime]);
+  // An end at or before the start means the next morning: see `planEnd`.
+  const end = useMemo(
+    () => planEnd(date, time || DEFAULT_START_TIME, endTime),
+    [date, time, endTime],
+  );
+  const endsAt = end.endsAt;
 
   const suggested = useMemo(
     () =>
@@ -177,10 +181,11 @@ export function EventWizard({
     () => startsAt !== null && new Date(startsAt).getTime() < new Date().getTime(),
     [startsAt],
   );
-  const endsBeforeStart = useMemo(
-    () => Boolean(startsAt && endsAt && new Date(endsAt) <= new Date(startsAt)),
-    [startsAt, endsAt],
-  );
+  const endsBeforeStart = end.sameAsStart;
+  // The number the host typed, checked here rather than left to the database
+  // CHECK, which turned "0" or "2.5" into "Something went wrong publishing your
+  // plan" - an operator error for a typo, with nothing saying which field.
+  const capacityError = capacityProblem(capacity);
 
   // Gentle nudge to check the forecast when the plan reads as outdoors. Purely
   // a heuristic on what the host typed — no forecast API involved.
@@ -311,13 +316,23 @@ export function EventWizard({
             title.trim().length > 0 &&
             hasInviteDetails(locationName, description) &&
             !startsInPast &&
-            !endsBeforeStart
+            !endsBeforeStart &&
+            capacityError === null
           );
         }
         if (key === 'people') return invitees.length > 0;
         return true;
       }),
-    [steps, title, locationName, description, startsInPast, endsBeforeStart, invitees.length],
+    [
+      steps,
+      title,
+      locationName,
+      description,
+      startsInPast,
+      endsBeforeStart,
+      capacityError,
+      invitees.length,
+    ],
   );
   useEffect(() => {
     // Nothing to protect on the first step: back should leave, as it always
@@ -449,6 +464,8 @@ export function EventWizard({
           endTime={endTime} setEndTime={setEndTime}
           startsInPast={startsInPast}
           endsBeforeStart={endsBeforeStart}
+          endsNextDay={end.nextDay}
+          capacityError={capacityError}
           recurrence={recurrence} setRecurrence={setRecurrence}
           customDays={customDays} setCustomDays={setCustomDays}
           locationName={locationName} setLocationName={setLocationName}

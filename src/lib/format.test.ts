@@ -84,4 +84,28 @@ describe('formatDateTimeRange', () => {
   it('survives a malformed zone rather than throwing', () => {
     expect(() => formatDateTimeRange(start, end, 'Not/AZone')).not.toThrow();
   });
+
+  it('keeps a late night compact: the end is the next morning', () => {
+    // Fri 9 PM – Sat 1 AM in Los Angeles.
+    const out = formatDateTimeRange(
+      '2026-09-26T04:00:00.000Z',
+      '2026-09-26T08:00:00.000Z',
+      'America/Los_Angeles',
+    );
+    expect(out).toBe('Fri, Sep 25, 9:00 PM – 1:00 AM PDT');
+  });
+
+  /**
+   * A bare end time after a Friday start read as ending before it began: the
+   * weekend below rendered "Fri, Sep 25, 5:00 PM – 11:00 AM PDT".
+   */
+  it('names the end day when a plan runs over more than a night', () => {
+    const out = formatDateTimeRange(
+      '2026-09-26T00:00:00.000Z',
+      '2026-09-27T18:00:00.000Z',
+      'America/Los_Angeles',
+    );
+    expect(out).toBe('Fri, Sep 25, 5:00 PM – Sun, Sep 27, 11:00 AM PDT');
+    expect(out.match(/PDT/g)).toHaveLength(1);
+  });
 });

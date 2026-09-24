@@ -5,6 +5,7 @@ import type { ActionResult, ValidationFailure } from '@/lib/errors';
 import { revalidatePath } from 'next/cache';
 import { after } from 'next/server';
 import { requireUser } from '@/lib/server/require-user';
+import type { createClient } from '@/lib/supabase/server';
 import { isEventManager } from '@/lib/server/authz';
 import { openFollowUpPolls, resolvePoll } from '@/lib/server/poll-runner';
 import { notifySuggestionAdded } from '@/lib/server/notify';
@@ -236,16 +237,52 @@ export async function castVote(
   return { ok: true };
 }
 
-export async function openVoting(pollId: string, eventId: string): Promise<void> {
+type ServerClient = Awaited<ReturnType<typeof createClient>>;
+
+/**
+ * Which poll this is, checked against the plan the caller manages.
+ *
+ * `closeVoting` authorised the caller against `eventId` and then resolved
+ * `pollId` with the service-role client, which never asked whether the poll
+ * was on that plan. So anyone hosting any plan could close any other plan's
+ * poll, given its id - and a poll id is visible to every guest of the plan it
+ * belongs to. The service-role client bypasses RLS, so the pairing has to be
+ * checked here, every time.
+ */
+async function pollOnPlan(
+  supabase: ServerClient,
+  pollId: string,
+  eventId: string,
+): Promise<{ phase: string } | null> {
+  const { data } = await supabase
+    .from('polls')
+    .select('event_id, phase')
+    .eq('id', pollId)
+    .maybeSingle();
+  if (!data || data.event_id !== eventId) return null;
+  return { phase: data.phase };
+}
+
+export async function openVoting(pollId: string, eventId: string): Promise<ActionResult> {
   const auth = await requireUser();
-  if (!auth.ok) return;
+  if (!auth.ok) return auth;
   const { supabase, user } = auth;
   // Host/co-host only (parity with closeVoting); RLS also enforces this, but
-  // check here so a non-host gets a clean no-op rather than relying on it.
-  const isHost = await isEventManager(user.id, eventId);
-  if (!isHost) return;
-  await supabase.from('polls').update({ phase: 'voting' }).eq('id', pollId);
+  // check here so a non-host gets a clear refusal rather than a silent no-op.
+  if (!(await isEventManager(user.id, eventId))) {
+    return failure('SB-PERM-HOST', 'Only the host can run this decision.');
+  }
+  const { data, error } = await supabase
+    .from('polls')
+    .update({ phase: 'voting' })
+    .eq('id', pollId)
+    .eq('event_id', eventId)
+    .eq('phase', 'suggesting')
+    .select('id');
+  if (error) return reportAndFail('SB-POLL-DECIDE', 'poll.open-voting', error, { pollId, eventId });
+  if (!data || data.length === 0) return failure('SB-POLL-DECIDE');
   revalidatePath(`/events/${eventId}`);
+  return { ok: true };
 }
 
 /**
@@ -253,39 +290,68 @@ export async function openVoting(pollId: string, eventId: string): Promise<void>
  * auto-picks the winner, hands the host the finalists, or opens a runoff.
  * Host-only; the actual resolution logic is shared with the cron sweep.
  */
-export async function closeVoting(pollId: string, eventId: string): Promise<void> {
+export async function closeVoting(pollId: string, eventId: string): Promise<ActionResult> {
   const auth = await requireUser();
-  if (!auth.ok) return;
-  const { user } = auth;
+  if (!auth.ok) return auth;
+  const { supabase, user } = auth;
 
   // Co-hosts share host powers (is_event_host covers both).
-  const isHost = await isEventManager(user.id, eventId);
-  if (!isHost) return;
+  if (!(await isEventManager(user.id, eventId))) {
+    return failure('SB-PERM-HOST', 'Only the host can run this decision.');
+  }
+  const poll = await pollOnPlan(supabase, pollId, eventId);
+  if (!poll) return failure('SB-POLL-DECIDE');
+  if (poll.phase === 'decided') {
+    // Someone else closed it first (a co-host, or the deadline sweep). The
+    // page is out of date, not broken: refresh it rather than report a fault.
+    revalidatePath(`/events/${eventId}`);
+    return { ok: true };
+  }
 
-  await resolvePoll(pollId);
+  try {
+    await resolvePoll(pollId);
+  } catch (error) {
+    return reportAndFail('SB-POLL-DECIDE', 'poll.close', error, { pollId, eventId });
+  }
   revalidatePath(`/events/${eventId}`);
+  return { ok: true };
 }
 
 export async function pickWinner(
   pollId: string,
   eventId: string,
   optionId: string,
-): Promise<void> {
+): Promise<ActionResult> {
   const auth = await requireUser();
-  if (!auth.ok) return;
+  if (!auth.ok) return auth;
   const { supabase, user } = auth;
   // Host/co-host only (parity with closeVoting); RLS also enforces this.
-  const isHost = await isEventManager(user.id, eventId);
-  if (!isHost) return;
-  await supabase
+  if (!(await isEventManager(user.id, eventId))) {
+    return failure('SB-PERM-HOST', 'Only the host can run this decision.');
+  }
+  // The winner has to be one of this poll's own ideas.
+  const { data: option } = await supabase
+    .from('poll_options')
+    .select('poll_id')
+    .eq('id', optionId)
+    .maybeSingle();
+  if (!option || option.poll_id !== pollId) {
+    return validation('That idea is not on this poll.');
+  }
+  const { data, error } = await supabase
     .from('polls')
     .update({ phase: 'decided', winning_option_id: optionId })
-    .eq('id', pollId);
+    .eq('id', pollId)
+    .eq('event_id', eventId)
+    .select('id');
+  if (error) return reportAndFail('SB-POLL-DECIDE', 'poll.pick', error, { pollId, eventId });
+  if (!data || data.length === 0) return failure('SB-POLL-DECIDE');
   // A host picking the winner decides the poll just as much as the runner
   // does, so the follow-ups have to open from here too — otherwise a chain
   // stalls silently for every host who uses the pick-the-winner path.
   await openFollowUpPolls(pollId);
   revalidatePath(`/events/${eventId}`);
+  return { ok: true };
 }
 
 /**

@@ -53,6 +53,57 @@ import {
   deleteEventPermanently,
   updateEventDetails,
 } from './events';
+import { notifyUsers } from '@/lib/server/notify';
+
+/**
+ * A service-role client just deep enough for `updateEventDetails`: the "before"
+ * read, the update, and the accepted-guest lookup that decides who hears about
+ * a change.
+ */
+function editAdmin(before: { starts_at: string | null; location_name: string | null }) {
+  const updates: Record<string, unknown>[] = [];
+  const admin = {
+    from(table: string) {
+      if (table === 'events') {
+        return {
+          select: () => ({
+            eq: () => ({
+              maybeSingle: async () => ({
+                data: { ...before, location_address: null, title: 'Dinner' },
+              }),
+            }),
+          }),
+          update: (row: Record<string, unknown>) => {
+            updates.push(row);
+            return { eq: async () => ({ error: null }) };
+          },
+        };
+      }
+      // invites: the accepted guests who would be told about a change.
+      return {
+        select: () => ({
+          eq: () => ({
+            eq: () => ({
+              not: async () => ({ data: [{ invitee_id: 'guest-1' }] }),
+            }),
+          }),
+        }),
+      };
+    },
+  };
+  return { admin, updates };
+}
+
+const EDIT = {
+  title: 'Dinner',
+  description: 'Dumplings.',
+  locationName: 'Mei Wei',
+  locationAddress: null,
+  endsAt: null,
+  timeZone: null,
+  capacity: null,
+  wishlistUrl: null,
+};
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -147,6 +198,99 @@ describe('event management actions', () => {
         wishlistUrl: null,
       }),
     ).rejects.toThrow('Admin client should not be reached');
+  });
+
+  /**
+   * The row comes back as `...+00:00` and the form sends `...000Z`. Compared as
+   * strings those differ, so every save of a dated plan told every accepted
+   * guest "the time changed" - an urgent change inside the last two hours.
+   */
+  it('does not tell guests the time changed when only the words did', async () => {
+    const start = new Date(Date.now() + 3 * 86_400_000);
+    start.setUTCSeconds(0, 0);
+    const { admin } = editAdmin({
+      starts_at: start.toISOString().replace('.000Z', '+00:00'),
+      location_name: 'Mei Wei',
+    });
+    mocks.createAdminClient.mockReturnValue(admin);
+
+    const result = await updateEventDetails('event-1', {
+      ...EDIT,
+      startsAt: start.toISOString(),
+    });
+
+    expect(result.ok).toBe(true);
+    expect(vi.mocked(notifyUsers)).not.toHaveBeenCalled();
+  });
+
+  it('still tells guests when the time really moved', async () => {
+    const start = new Date(Date.now() + 3 * 86_400_000);
+    start.setUTCSeconds(0, 0);
+    const later = new Date(start.getTime() + 30 * 60_000);
+    const { admin } = editAdmin({
+      starts_at: start.toISOString().replace('.000Z', '+00:00'),
+      location_name: 'Mei Wei',
+    });
+    mocks.createAdminClient.mockReturnValue(admin);
+
+    await updateEventDetails('event-1', { ...EDIT, startsAt: later.toISOString() });
+
+    expect(vi.mocked(notifyUsers)).toHaveBeenCalledWith(
+      ['guest-1'],
+      expect.objectContaining({ body: expect.stringContaining('The time for Dinner changed') }),
+    );
+  });
+
+  it('refuses an edit that ends the plan before it starts', async () => {
+    const start = new Date(Date.now() + 86_400_000);
+    const result = await updateEventDetails('event-1', {
+      ...EDIT,
+      startsAt: start.toISOString(),
+      endsAt: new Date(start.getTime() - 3_600_000).toISOString(),
+    });
+
+    expect(result.ok).toBe(false);
+    expect(result.error).toBe('End time should be after the start time.');
+    expect(mocks.createAdminClient).not.toHaveBeenCalled();
+  });
+
+  it('refuses moving a plan into the past, but not editing one already under way', async () => {
+    const past = new Date(Date.now() - 3_600_000);
+    past.setUTCSeconds(0, 0);
+
+    // Moving it there: refused.
+    mocks.createAdminClient.mockReturnValue(
+      editAdmin({
+        starts_at: new Date(Date.now() + 86_400_000).toISOString(),
+        location_name: 'Mei Wei',
+      }).admin,
+    );
+    const moved = await updateEventDetails('event-1', { ...EDIT, startsAt: past.toISOString() });
+    expect(moved.ok).toBe(false);
+    expect(moved.error).toContain('already passed');
+
+    // Already there, fixing the details mid-plan: allowed.
+    const { admin, updates } = editAdmin({
+      starts_at: past.toISOString().replace('.000Z', '+00:00'),
+      location_name: 'Mei Wei',
+    });
+    mocks.createAdminClient.mockReturnValue(admin);
+    const fixed = await updateEventDetails('event-1', {
+      ...EDIT,
+      description: 'Dumplings, then the park.',
+      startsAt: past.toISOString(),
+    });
+    expect(fixed.ok).toBe(true);
+    expect(updates).toHaveLength(1);
+  });
+
+  it.each([0, -2, 2.5])('refuses a capacity of %s with a sentence', async (capacity) => {
+    const result = await updateEventDetails('event-1', {
+      ...EDIT,
+      startsAt: null,
+      capacity,
+    });
+    expect(result).toMatchObject({ ok: false, error: 'Spots must be a whole number of at least 1.' });
   });
 
   it('refuses cancellation before any privileged read for a non-manager', async () => {
