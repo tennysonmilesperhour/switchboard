@@ -30,7 +30,7 @@ vi.mock('@/lib/supabase/admin', () => ({
     from: (table: string) => ({
       select: (_cols: string, opts?: { head?: boolean }) => {
         if (table === 'scope_progress' && opts?.head) {
-          return { eq: mocks.countSelect };
+          return { in: () => ({ eq: mocks.countSelect }) };
         }
         if (table === 'scope_progress') {
           return { eq: mocks.progressSelect };
@@ -116,6 +116,15 @@ describe('GET /api/scope-progress', () => {
     expect(JSON.stringify(json)).not.toContain('abc/0-def.png');
   });
 
+  it('does not count invented ids saved by older deployments as client verification', async () => {
+    mocks.progressSelect.mockResolvedValue({
+      data: [{ item_id: 'Z999', updated_at: '2026-09-25T10:00:00Z', updated_by: 'Someone' }],
+      error: null,
+    });
+    const response = await GET(new Request(URL_));
+    expect((await response.json()).checked).toEqual({});
+  });
+
   it('is never cached, or it would show a stale board', async () => {
     const response = await GET(new Request(URL_));
     expect(response.headers.get('cache-control')).toContain('no-store');
@@ -171,9 +180,14 @@ describe('POST /api/scope-progress', () => {
       ['a key that is not a checklist id', { itemId: 'DROP TABLE', checked: true }],
       ['an empty id', { itemId: '', checked: true }],
       ['an id with no number', { itemId: 'A', checked: true }],
+      ['a valid-looking id absent from the checklist', { itemId: 'Z999', checked: true }],
+      ['a nonexistent item in a real section', { itemId: 'A5', checked: true }],
       ['an absurdly long id', { itemId: 'A'.repeat(40), checked: true }],
       ['a missing checked flag', { itemId: 'A1' }],
       ['a non-boolean checked flag', { itemId: 'A1', checked: 'yes' }],
+      ['a null JSON body', null],
+      ['an array JSON body', []],
+      ['a primitive JSON body', true],
     ])('refuses %s', async (_label, body) => {
       const response = await post(body);
       expect(response.status).toBe(400);
@@ -229,8 +243,8 @@ describe('POST /api/scope-progress', () => {
     expect(mocks.reportOperationalError).toHaveBeenCalled();
   });
 
-  it('passes the page’s total through so the email can say 3 of 35', async () => {
-    await post({ itemId: 'A1', checked: true, total: 35 });
+  it('uses the real checklist total even when a caller claims a different scope', async () => {
+    await post({ itemId: 'A1', checked: true, total: 1 });
     expect(mocks.notifyProgress).toHaveBeenCalledWith(
       expect.objectContaining({ checked: 3, total: 35 }),
     );
@@ -239,7 +253,7 @@ describe('POST /api/scope-progress', () => {
   it('ignores a nonsense total rather than emailing “3 of NaN”', async () => {
     await post({ itemId: 'A1', checked: true, total: 'lots' });
     expect(mocks.notifyProgress).toHaveBeenCalledWith(
-      expect.objectContaining({ total: 3 }),
+      expect.objectContaining({ total: 35 }),
     );
   });
 });

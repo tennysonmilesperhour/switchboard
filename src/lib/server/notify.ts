@@ -1,6 +1,7 @@
 import 'server-only';
 
 import webPush from 'web-push';
+import { supportEmail } from '@/lib/contact';
 import { mapInBatches } from '@/lib/server/batches';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { reportOperationalError } from '@/lib/server/observability';
@@ -350,7 +351,7 @@ function configureVapid(): boolean {
   const privateKey = process.env.VAPID_PRIVATE_KEY;
   if (!publicKey || !privateKey) return false;
   if (!vapidConfigured) {
-    webPush.setVapidDetails('mailto:hello@switchboard.app', publicKey, privateKey);
+    webPush.setVapidDetails(`mailto:${supportEmail()}`, publicKey, privateKey);
     vapidConfigured = true;
   }
   return true;

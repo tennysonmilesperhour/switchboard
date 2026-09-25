@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { supportEmail } from '@/lib/contact';
 
 const SECTIONS = [
   {
@@ -56,6 +57,12 @@ export default function TermsPage() {
           </section>
         ))}
       </div>
+      <p className="mt-8 leading-relaxed text-ink-soft">
+        For support or questions about these terms, email{' '}
+        <a href={`mailto:${supportEmail()}`} className="break-words font-bold text-terracotta-deep underline">
+          {supportEmail()}
+        </a>.
+      </p>
       <div className="mt-10 flex flex-wrap gap-4 text-sm font-bold text-terracotta-deep">
         <Link href="/privacy">Privacy</Link>
         <Link href="/community">Community Covenant</Link>

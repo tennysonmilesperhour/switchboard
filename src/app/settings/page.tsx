@@ -3,6 +3,7 @@ import { SmsPreferences } from './SmsPreferences';
 import type { Metadata } from 'next';
 import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
+import { supportEmail } from '@/lib/contact';
 import { AppShell } from '@/components/shell/AppShell';
 import { Card, SectionHeader } from '@/components/ui/Card';
 import { Avatar } from '@/components/ui/Avatar';
@@ -455,8 +456,11 @@ export default async function SettingsPage({
           </section>
 
           <section>
-            <SectionHeader title="Legal" hint="Privacy, terms, copyright, and community expectations" />
+            <SectionHeader title="Support and legal" hint="Get help, or review privacy, terms, and community expectations" />
             <Card>
+              <a href={`mailto:${supportEmail()}`} className="mb-3 block break-words rounded-card bg-paper px-3 py-2 text-sm font-bold text-terracotta-deep underline">
+                Contact support
+              </a>
               <div className="grid grid-cols-2 gap-2 text-sm font-bold text-terracotta-deep">
                 <Link href="/privacy" className="rounded-card bg-paper px-3 py-2 hover:text-terracotta-deep">
                   Privacy

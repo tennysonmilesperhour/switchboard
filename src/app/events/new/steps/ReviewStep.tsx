@@ -178,7 +178,7 @@ export function ReviewStep({
                             {index + 1}
                           </span>
                         )}
-                        <span className="min-w-0 flex-1 truncate text-sm font-bold text-ink">
+                        <span className="min-w-0 flex-1 break-words text-sm font-bold text-ink">
                           {item.name}
                         </span>
                         {!item.profileId && (
@@ -186,12 +186,12 @@ export function ReviewStep({
                             guest
                           </span>
                         )}
-                        {!enablePoll && (
-                          <span className="shrink-0 text-xs text-ink-faint">
-                            {staggered && when ? TIME.format(when) : 'right away'}
-                          </span>
-                        )}
                       </span>
+                      {!enablePoll && (
+                        <span className={`mt-1 block text-xs text-ink-faint${ordered ? ' pl-7' : ''}`}>
+                          {staggered && when ? TIME.format(when) : 'right away'}
+                        </span>
+                      )}
                       {warning && (
                         <span className="mt-1 flex flex-wrap items-center gap-2 text-xs text-gold-deep">
                           <span>

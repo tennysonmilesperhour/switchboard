@@ -50,19 +50,20 @@ export function MomentsClient({
   const location = useCurrentLocation();
   const router = useRouter();
   const toast = useToast();
+  const momentId = myMoment?.id;
 
   useEffect(() => {
-    if (!myMoment) return;
+    if (!momentId) return;
     const supabase = createClient();
     const channel = supabase
-      .channel(`moments-${myMoment.id}`)
+      .channel(`moments-${momentId}`)
       .on(
         'postgres_changes',
         {
           event: 'UPDATE',
           schema: 'public',
           table: 'moments',
-          filter: `id=eq.${myMoment.id}`,
+          filter: `id=eq.${momentId}`,
         },
         () => {
           router.refresh();
@@ -74,7 +75,7 @@ export function MomentsClient({
           event: '*',
           schema: 'public',
           table: 'moment_interests',
-          filter: `moment_id=eq.${myMoment.id}`,
+          filter: `moment_id=eq.${momentId}`,
         },
         () => {
           router.refresh();
@@ -84,7 +85,7 @@ export function MomentsClient({
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [myMoment?.id, router]);
+  }, [momentId, router]);
 
   function toggleExperience(label: string) {
     setExperiences((current) =>
