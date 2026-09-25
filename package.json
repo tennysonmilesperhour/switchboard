@@ -8,6 +8,7 @@
     "start": "next start",
     "lint": "eslint",
     "test": "vitest run",
+    "test:ci": "node --test scripts/ci/*.test.mjs",
     "seed:test-profiles": "node --env-file-if-exists=.env.local scripts/seed-test-profiles.mjs",
     "seed:discovery-demo": "node --env-file-if-exists=.env.local scripts/seed-discovery-demo.mjs",
     "e2e": "playwright test"
