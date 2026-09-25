@@ -6,14 +6,24 @@ name: Database tests
 # covers lint/unit/build/e2e; this is the database's own test suite.
 
 on:
+  # Only when the schema, its tests, or this workflow change. Booting the
+  # Supabase stack is heavy, and a merge that leaves supabase/ alone cannot
+  # change what these tests see.
   push:
     branches: [main]
-  pull_request:
     paths:
-      # Only when the schema, its tests, or this workflow change — booting the
-      # Supabase stack is heavy, so skip it for pure app-code PRs.
       - 'supabase/**'
       - '.github/workflows/db-tests.yml'
+  pull_request:
+    paths:
+      - 'supabase/**'
+      - '.github/workflows/db-tests.yml'
+  workflow_dispatch:
+
+# A new push to a pull request cancels the run for the previous commit.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   pgtap:
