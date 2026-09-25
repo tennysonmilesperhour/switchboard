@@ -4,6 +4,26 @@
 This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` before writing any code. Heed deprecation notices.
 <!-- END:nextjs-agent-rules -->
 
+# GitHub Actions usage
+
+Every PR update starts hosted verification. Batch related edits and commits
+into one locally verified push per coherent checkpoint. Do not push after each
+small edit or use repeated hosted runs as the edit/test loop.
+
+- Run relevant local tests, lint and type checks before pushing. For CI helper
+  changes, also run `npm run test:ci`.
+- When coordinating parallel agents, collect their finished changes before
+  pushing the shared branch. Independent PRs should each contain a complete,
+  locally checked change; do not create empty commits just to retry CI.
+- Diagnose a failed run before retrying. Fix deterministic code, configuration
+  or migration errors locally; retry only failed jobs after a transient outage
+  clears. Do not rerun successful jobs to obtain the same evidence again.
+- Keep hosted PR and main checks enabled, including pgTAP, generated database
+  types, account export/deletion and authenticated browser tests. Budget savings
+  must not use skip markers, draft-state bypasses or weakened security tests.
+
+See [`docs/CI.md`](docs/CI.md) for the shared database setup and startup limits.
+
 # Security
 
 Switchboard touches private contacts, invitations, moderation, and relationship
