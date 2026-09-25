@@ -450,9 +450,9 @@
     </div>
     <h1>Scope of Work Verification</h1>
     <p class="lede">
-      Everything the delivered product is supposed to do. Open the app, try each item, and tick it off. If something doesn't work, leave it unchecked and note what happened.
+      Open the app, try each item, and tick it off when it works for you. If something doesn't work, leave it unchecked and note what happened. Checks and notes are shared with everyone who has this link.
     </p>
-    <div class="date">September 12, 2026</div>
+    <div class="date">Updated September 25, 2026</div>
 
     <div class="stats" id="stats">
       <div class="stat verified"><span class="n" id="cntDone">0</span><span class="lbl"><span class="lamp"></span>Verified</span></div>
@@ -470,7 +470,7 @@
         <button class="toolbtn" id="expandAll">Expand all</button>
         <button class="toolbtn" id="collapseAll">Collapse all</button>
         <span class="spacer"></span>
-        <button class="toolbtn" id="resetBtn">Reset all</button>
+        <button class="toolbtn" id="refreshBoard">Refresh shared board</button>
       </div>
       <div class="who-row">
         <label for="whoField">Your name</label>
@@ -505,7 +505,7 @@
 
   <footer class="foot">
     <div>Covers the full delivered scope: demo MVP, all post-MVP hardening, and the September 2026 client-feedback round.</div>
-    <div style="margin-top:8px;font-family:var(--mono);font-size:11px;">Switchboard &middot; scope of work verification &middot; Sep 12, 2026</div>
+    <div style="margin-top:8px;font-family:var(--mono);font-size:11px;">Switchboard &middot; scope of work verification &middot; Sep 25, 2026</div>
   </footer>
 </div>
 
@@ -544,7 +544,7 @@
   var GROUPS = [
     { id: "A", title: "Creating a plan", blurb: "Wizard, cascading invites, polls, and plan extras", items: [
       { id:"A1", name:"Create a plan with the wizard", what:"Set a title, pick a date and time (5-minute increments), add a location, write a description, and attach a cover image. Every plan requires at least a location or description before invites can go out.", verify:"Create a plan from scratch. Fill in all the fields and confirm each step saves." },
-      { id:"A2", name:"Cascading invites", what:"Set an invitation order and the app invites one person (or wave) at a time. Preview the cascade before sending, and edit it while live — reorder, resend, change response windows — without affecting anyone who already accepted.", verify:"Add several people in order. Preview the cascade, send it, then reorder someone in the queue while it’s running." },
+      { id:"A2", name:"Cascading invites", what:"Choose One at a time to invite people in order, or In waves to invite groups in stages. Preview before sending. Reorder queued people in a one-at-a-time plan, or change a queued person’s wave and response window. Accepted guests stay unchanged. Everyone at once sends together and has no queue to reorder.", verify:"Choose One at a time, add at least three people, and drag them into order on the review. Send, then reorder the two still queued. On an In waves plan, change a queued person’s wave." },
       { id:"A3", name:"Anonymous polls", what:"For group decisions, everyone privately rates each option (love / good / rather not). A consensus meter shows how the group is leaning. No one can see individual votes. Polls can resolve by deadline, host pick, or runoff.", verify:"Create a poll, vote from a non-host account, and confirm only group totals are visible. Resolve the poll." },
       { id:"A4", name:"RSVP questions, wishlist, and calendar", what:"Ask custom questions when people RSVP (answers visible only to the host). Link out to a registry or wishlist. Guests can add the event to Google Calendar in one tap.", verify:"Add an RSVP question and a wishlist link. As a guest, answer the question and add to calendar." },
     ]},
@@ -608,8 +608,20 @@
     ]},
   ];
 
-  var TOTAL = 0;
-  GROUPS.forEach(function(g) { TOTAL += g.items.length; });
+  var ITEM_IDS = [];
+  GROUPS.forEach(function(g) {
+    g.items.forEach(function(it) { ITEM_IDS.push(it.id); });
+  });
+  var TOTAL = ITEM_IDS.length;
+  function isItem(id) { return ITEM_IDS.indexOf(id) !== -1; }
+  function itemValues(value) {
+    var result = {};
+    if (!value || typeof value !== "object" || Array.isArray(value)) return result;
+    Object.keys(value).forEach(function(id) {
+      if (isItem(id)) result[id] = value[id];
+    });
+    return result;
+  }
 
   // The key this checklist has always stored ticks under. NEVER bump it when
   // items are added: the ids are stable and additive, so a new section costs
@@ -634,10 +646,9 @@
   var KEY = "swb-scope-v4";
   var LEGACY_KEYS = ["swb-scope-v5"];
   var PUSHED_KEY = "swb-scope-pushed-v1";
-  // Writes that did not reach the board: { id: true | false }, replayed on the
-  // next load. Only failed writes go here. The local copy of the whole list is
-  // a mirror of the server, so pushing it back would re-tick anything someone
-  // else unticked in the meantime.
+  // Save every edit before starting a request, so closing the page while a
+  // write is in flight cannot lose it. Only these edits are replayed; the
+  // cached board must never re-tick something somebody else unchecked.
   var PENDING_KEY = "swb-scope-pending-v1";
   function savePending(pending) {
     try { localStorage.setItem(PENDING_KEY, JSON.stringify(pending)); } catch {}
@@ -646,7 +657,11 @@
   function read(key) {
     try { return JSON.parse(localStorage.getItem(key)) || {}; } catch { return {}; }
   }
-  var state = read(KEY);
+  var state = itemValues(read(KEY));
+  var pending = itemValues(read(PENDING_KEY));
+  var revision = 0;
+  var changedAt = {};
+  var flushing = null;
   function save() { try { localStorage.setItem(KEY, JSON.stringify(state)); } catch {} }
 
   // Fold each retired key in once, then remove it, so a box the reader
@@ -655,7 +670,7 @@
   LEGACY_KEYS.forEach(function (key) {
     var legacy = read(key);
     Object.keys(legacy).forEach(function (id) {
-      if (legacy[id] && !state[id]) { state[id] = true; migrated = true; }
+      if (isItem(id) && legacy[id] && !state[id]) { state[id] = true; migrated = true; }
     });
     try { localStorage.removeItem(key); } catch {}
   });
@@ -673,7 +688,7 @@
 
   // Server-side detail per item: when it was ticked and by whom.
   var marks = {};
-  var boardLive = false;
+  var boardLoaded = false;
 
   function postTick(id, checked) {
     return fetch("/api/scope-progress", {
@@ -688,77 +703,96 @@
     });
   }
 
-  /*
-    Replay the writes this browser could not send. The old version compared the
-    local list with the server's, but only after the server's copy had replaced
-    it, so there was never anything to send and an offline tick was simply
-    erased on the next load. Done one at a time: a burst of writes from one
-    address is exactly what the endpoint's rate limit is there to stop.
+  function pendingNote() {
+    var count = Object.keys(pending).length;
+    setBoardNote(count
+      ? count + (count === 1 ? " change is" : " changes are") +
+        " saved on this device but have not reached the shared board. Use Refresh shared board to try again. (SB-SCOPE-BOARD)"
+      : "");
+  }
 
-    The one-time fold-up of ticks made before the board was shared still runs
-    once per browser (PUSHED_KEY), from the list as it stood before this load.
-  */
-  function pushLocalBacklog(localChecked, serverChecked) {
-    var pending = read(PENDING_KEY);
-    var alreadyPushed = read(PUSHED_KEY);
-    if (!alreadyPushed.__folded) {
-      Object.keys(localChecked).forEach(function (id) {
-        if (localChecked[id] && !serverChecked[id] && !(id in pending)) pending[id] = true;
-      });
-      alreadyPushed.__folded = true;
-      try { localStorage.setItem(PUSHED_KEY, JSON.stringify(alreadyPushed)); } catch {}
-    }
-    var ids = Object.keys(pending);
-    if (!ids.length) return Promise.resolve(false);
-
-    return ids.reduce(function (chain, id) {
-      return chain.then(function () {
-        return postTick(id, pending[id]).then(function (res) {
-          if (!res.ok) return;
+  // One request at a time preserves the order of a quick check / uncheck.
+  // All callbacks share the same outbox, so a second edit cannot overwrite
+  // the first failed edit's localStorage snapshot.
+  function flushPending() {
+    if (flushing) return flushing;
+    function next() {
+      var id = Object.keys(pending)[0];
+      if (!id) return Promise.resolve();
+      var checked = pending[id];
+      return postTick(id, checked).then(function(res) {
+        if (!res.ok) throw new Error(String(res.status));
+        if (pending[id] === checked) {
           delete pending[id];
-          savePending(pending);
-        }).catch(function () {});
+          if (checked) marks[id] = { by: myName(), at: new Date().toISOString() };
+          else delete marks[id];
+        }
+        savePending(pending);
+        return next();
       });
-    }, Promise.resolve()).then(function () { return true; });
+    }
+    flushing = next().catch(function() {
+      // Leave the complete outbox intact for the next connection or refresh.
+    }).then(function() {
+      flushing = null;
+      pendingNote();
+    });
+    return flushing;
   }
 
   function loadBoard() {
+    var requestedAtRevision = revision;
+    var pendingAtRequest = Object.keys(pending);
     return fetch("/api/scope-progress", { headers: { Accept: "application/json" } })
-      .then(function (res) { return res.ok ? res.json() : null; })
-      .then(function (data) {
-        if (!data || !data.ok) return;
-        boardLive = true;
-        // Taken before the server copy replaces it, for the one-time fold-up.
-        var localChecked = state;
-        marks = data.checked || {};
-        // The server is the truth for what is ticked. The local copy becomes a
-        // mirror of it rather than a competing opinion.
+      .then(function(res) {
+        if (!res.ok) throw new Error(String(res.status));
+        return res.json();
+      })
+      .then(function(data) {
+        if (!data || !data.ok) throw new Error("Invalid board response");
+        boardLoaded = true;
+        var serverChecked = itemValues(data.checked);
+        var alreadyPushed = read(PUSHED_KEY);
+        if (!alreadyPushed.__folded) {
+          Object.keys(state).forEach(function(id) {
+            if (state[id] && !serverChecked[id] && !(id in pending)) pending[id] = true;
+          });
+          // Persist before marking the migration complete; failed legacy
+          // writes must survive a reload just like a newly checked item.
+          savePending(pending);
+          try { localStorage.setItem(PUSHED_KEY, JSON.stringify({ __folded: true })); } catch {}
+        }
+        // Merge untouched server items even if someone edited while this GET
+        // was loading. Preserve only edits newer than the read, plus writes
+        // that were already in flight when it began.
+        var previousState = state;
+        var previousMarks = marks;
+        marks = serverChecked;
         state = {};
-        Object.keys(marks).forEach(function (id) { state[id] = true; });
+        ITEM_IDS.forEach(function(id) {
+          var newer = changedAt[id] > requestedAtRevision || pendingAtRequest.indexOf(id) !== -1;
+          if (newer) {
+            if (previousState[id]) state[id] = true;
+            if (previousMarks[id]) marks[id] = previousMarks[id];
+            else delete marks[id];
+          } else if (marks[id]) state[id] = true;
+        });
+        Object.keys(pending).forEach(function(id) {
+          if (pending[id]) state[id] = true;
+          else { delete state[id]; delete marks[id]; }
+        });
         save();
         renderGroups();
         updateCounts();
         renderNotes(data.notes || []);
-        return pushLocalBacklog(localChecked, marks).then(function (sent) {
-          if (!sent) return;
-          // A backlog push changes the totals, so read the board back once.
-          return fetch("/api/scope-progress").then(function (r) {
-            return r.ok ? r.json() : null;
-          }).then(function (fresh) {
-            if (!fresh || !fresh.ok) return;
-            marks = fresh.checked || {};
-            state = {};
-            Object.keys(marks).forEach(function (id) { state[id] = true; });
-            save();
-            renderGroups();
-            updateCounts();
-            renderNotes(fresh.notes || []);
-          }).catch(function () {});
-        });
+        return flushPending();
       })
-      .catch(function () {
-        // Offline or the board is not configured. The local copy already
-        // rendered, so the page still works; it just is not shared.
+      .catch(function() {
+        setBoardNote("The shared board could not be loaded. You are viewing this device’s saved checks; new changes stay here until they can sync. Use Refresh shared board to try again. (SB-SCOPE-BOARD)");
+        if (!boardLoaded) {
+          document.getElementById("notesList").textContent = "Notes could not be loaded. Refresh the shared board to try again.";
+          document.getElementById("notesCount").textContent = "—";
+        }
       });
   }
 
@@ -778,7 +812,7 @@
       card.className = "group";
 
       card.innerHTML =
-        '<button class="group-head">' +
+        '<button class="group-head" aria-expanded="true">' +
           '<div class="gh-icon">' + g.id + '</div>' +
           '<div class="gh-text"><h3>' + esc(g.title) + '</h3><div class="gh-blurb">' + esc(g.blurb) + '</div></div>' +
           '<span class="gh-count' + (isFull ? ' full' : '') + '">' + groupDone + ' / ' + groupTotal + '</span>' +
@@ -794,7 +828,7 @@
         var el = document.createElement("div");
         el.className = "item" + (checked ? " done" : "");
         el.innerHTML =
-          '<div class="item-check"><input type="checkbox" class="chk" data-id="' + it.id + '"' + (checked ? ' checked' : '') + '></div>' +
+          '<div class="item-check"><input type="checkbox" class="chk" aria-label="Verify ' + it.id + ': ' + esc(it.name) + '" data-id="' + it.id + '"' + (checked ? ' checked' : '') + '></div>' +
           '<div class="item-body">' +
             '<div class="item-top">' +
               '<span class="item-id">' + it.id + '</span>' +
@@ -810,6 +844,7 @@
 
       card.querySelector(".group-head").addEventListener("click", function() {
         card.classList.toggle("collapsed");
+        this.setAttribute("aria-expanded", String(!card.classList.contains("collapsed")));
       });
 
       root.appendChild(card);
@@ -828,8 +863,9 @@
     var id = e.target.getAttribute("data-id");
     var checked = e.target.checked;
 
-    // Optimistic: the tick is already drawn, so record it locally and correct
-    // course only if the write fails.
+    revision++;
+    changedAt[id] = revision;
+    // Optimistic in the UI; persist the outbox before the network request.
     if (checked) { state[id] = true; } else { delete state[id]; }
     save();
     updateCounts();
@@ -838,30 +874,20 @@
     var group = e.target.closest(".group");
     if (group) updateGroupCount(group);
 
-    var pending = read(PENDING_KEY);
-    postTick(id, checked)
-      .then(function (res) {
-        if (!res.ok) throw new Error(String(res.status));
-        boardLive = true;
-        delete pending[id];
-        savePending(pending);
-        setBoardNote("");
-      })
-      .catch(function () {
-        pending[id] = checked;
-        savePending(pending);
-        // Kept locally, not shared. Say so rather than letting someone believe
-        // the other side can see it.
-        setBoardNote(
-          "That tick is saved on this device but hasn\u2019t reached the shared board yet. It will be sent the next time this page opens with a connection."
-        );
-      });
+    pending[id] = checked;
+    savePending(pending);
+    if (!checked) {
+      delete marks[id];
+      var mark = item && item.querySelector(".item-mark");
+      if (mark) mark.remove();
+    }
+    flushPending();
   });
 
   function esc(s) {
     var d = document.createElement("div");
     d.textContent = s;
-    return d.innerHTML;
+    return d.innerHTML.replace(/"/g, "&quot;").replace(/'/g, "&#39;");
   }
 
   /** "3 hours ago" beats a timestamp nobody converts in their head. */
@@ -937,7 +963,7 @@
   }
 
   function updateCounts() {
-    var done = Object.keys(state).length;
+    var done = ITEM_IDS.filter(function(id) { return state[id] === true; }).length;
     var left = TOTAL - done;
     var pct = TOTAL ? Math.round(done / TOTAL * 100) : 0;
 
@@ -976,17 +1002,23 @@
   }
 
   document.getElementById("expandAll").addEventListener("click", function() {
-    document.querySelectorAll(".group").forEach(function(g) { g.classList.remove("collapsed"); });
+    document.querySelectorAll(".group").forEach(function(g) {
+      g.classList.remove("collapsed");
+      g.querySelector(".group-head").setAttribute("aria-expanded", "true");
+    });
   });
   document.getElementById("collapseAll").addEventListener("click", function() {
-    document.querySelectorAll(".group").forEach(function(g) { g.classList.add("collapsed"); });
+    document.querySelectorAll(".group").forEach(function(g) {
+      g.classList.add("collapsed");
+      g.querySelector(".group-head").setAttribute("aria-expanded", "false");
+    });
   });
-  document.getElementById("resetBtn").addEventListener("click", function() {
-    if (confirm("Reset all checkboxes?")) {
-      state = {}; save();
-      renderGroups(); updateCounts();
-    }
+  document.getElementById("refreshBoard").addEventListener("click", function() {
+    var button = this;
+    button.disabled = true;
+    flushPending().then(loadBoard).then(function() { button.disabled = false; });
   });
+  window.addEventListener("online", function() { flushPending().then(loadBoard); });
 
   /* ————————————————————————— Feedback ————————————————————————— */
   /*
@@ -1125,12 +1157,13 @@
         }
         fbSetNote(sent, "ok");
         fbReset();
+        loadBoard();
         setTimeout(function () {
           if (fbNote.classList.contains("ok")) fbClose();
         }, 1800);
       })
       .catch(function () {
-        fbSetNote("That didn’t send — check your connection and try again.", "err");
+        fbSetNote("That didn’t send — check your connection and try again. (SB-FEEDBACK-SAVE)", "err");
       })
       .then(function () {
         fbSend.disabled = false;

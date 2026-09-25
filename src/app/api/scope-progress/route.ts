@@ -5,6 +5,7 @@ import { clientIpFromHeaders } from '@/lib/server/request-ip';
 import { reportOperationalError } from '@/lib/server/observability';
 import { notifyProgress } from '@/lib/server/scope-watch';
 import { codeForArea } from '@/lib/errors';
+import { isScopeItemId, SCOPE_ITEM_IDS } from '@/lib/scope-checklist';
 
 /**
  * The scope checklist's shared board: what is ticked, and what people wrote.
@@ -40,9 +41,6 @@ const WRITE_LIMIT = 200;
 const WRITE_WINDOW_SECONDS = 60 * 60;
 const WRITE_GLOBAL_LIMIT = 2000;
 const WRITE_GLOBAL_WINDOW_SECONDS = 24 * 60 * 60;
-
-/** The shape the checklist's own ids take. Mirrors the CHECK in the migration. */
-const ITEM_ID = /^[A-Z][0-9]{1,3}$/;
 
 function fail(message: string, status: number, code?: string) {
   return NextResponse.json(code ? { error: message, code } : { error: message }, {
@@ -106,6 +104,7 @@ export async function GET(request: Request) {
 
   const checked: Record<string, { at: string; by: string | null }> = {};
   for (const row of progressResult.data ?? []) {
+    if (!isScopeItemId(row.item_id)) continue;
     checked[row.item_id] = { at: row.updated_at, by: row.updated_by };
   }
 
@@ -185,7 +184,7 @@ export async function POST(request: Request) {
     itemId?: unknown;
     checked?: unknown;
     name?: unknown;
-    /** How many items the page is showing, so the email can say "18 of 35". */
+    /** Accepted for older pages; the server always uses its own scope total. */
     total?: unknown;
   };
   try {
@@ -193,12 +192,15 @@ export async function POST(request: Request) {
   } catch {
     return fail('Expected a JSON body.', 400);
   }
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+    return fail('Expected a checklist change.', 400);
+  }
 
   const itemId = text(
     typeof payload.itemId === 'string' ? payload.itemId : null,
     MAX_ITEM_ID,
   ).toUpperCase();
-  if (!ITEM_ID.test(itemId)) {
+  if (!isScopeItemId(itemId)) {
     return fail('That isn’t a checklist item.', 400);
   }
   if (typeof payload.checked !== 'boolean') {
@@ -234,12 +236,11 @@ export async function POST(request: Request) {
     const { count } = await admin
       .from('scope_progress')
       .select('item_id', { count: 'exact', head: true })
+      .in('item_id', SCOPE_ITEM_IDS)
       .eq('checked', true);
-    const claimed = Number(payload.total);
-    const total = Number.isFinite(claimed) && claimed > 0 ? claimed : null;
     await notifyProgress({
       checked: count ?? 0,
-      total: total ?? (count ?? 0),
+      total: SCOPE_ITEM_IDS.length,
       lastBy: name || null,
     });
   } catch (error) {

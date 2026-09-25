@@ -1,6 +1,6 @@
 'use server';
 
-import type { ActionResult, ValidationFailure } from '@/lib/errors';
+import type { ActionResult, Failure, ValidationFailure } from '@/lib/errors';
 
 import { revalidatePath } from 'next/cache';
 import { after } from 'next/server';
@@ -30,6 +30,8 @@ import type { PollOption, PollTopic } from '@/lib/types';
  * can be voted on the moment it appears.
  */
 export type SuggestionResult = ActionResult & { option?: PollOption };
+
+export type FollowUpResult = ActionResult & { opened?: boolean; warning?: Failure };
 
 /** Everything an idea may carry. Only the label is required. */
 export interface SuggestionInput {
@@ -300,7 +302,7 @@ export async function openVoting(pollId: string, eventId: string): Promise<Actio
   }
   const { data, error } = await supabase
     .from('polls')
-    .update({ phase: 'voting' })
+    .update({ phase: 'voting', allow_suggestions: false })
     .eq('id', pollId)
     .eq('event_id', eventId)
     .eq('phase', 'suggesting')
@@ -327,13 +329,6 @@ export async function closeVoting(pollId: string, eventId: string): Promise<Acti
   }
   const poll = await pollOnPlan(supabase, pollId, eventId);
   if (!poll) return failure('SB-POLL-DECIDE');
-  if (poll.phase === 'decided') {
-    // Someone else closed it first (a co-host, or the deadline sweep). The
-    // page is out of date, not broken: refresh it rather than report a fault.
-    revalidatePath(`/events/${eventId}`);
-    return { ok: true };
-  }
-
   try {
     await resolvePoll(pollId);
   } catch (error) {
@@ -375,7 +370,11 @@ export async function pickWinner(
   // A host picking the winner decides the poll just as much as the runner
   // does, so the follow-ups have to open from here too — otherwise a chain
   // stalls silently for every host who uses the pick-the-winner path.
-  await openFollowUpPolls(pollId);
+  try {
+    await openFollowUpPolls(pollId);
+  } catch (error) {
+    return reportAndFail('SB-POLL-DECIDE', 'poll.pick', error, { pollId, eventId });
+  }
   revalidatePath(`/events/${eventId}`);
   return { ok: true };
 }
@@ -392,7 +391,7 @@ export async function addFollowUpPoll(
   eventId: string,
   topic: PollTopic,
   title?: string,
-): Promise<ActionResult> {
+): Promise<FollowUpResult> {
   const auth = await requireUser();
   if (!auth.ok) return auth;
   const { supabase, user } = auth;
@@ -403,7 +402,7 @@ export async function addFollowUpPoll(
 
   const { data: parent } = await supabase
     .from('polls')
-    .select('id, event_id, resolution, allow_suggestions')
+    .select('id, event_id, resolution')
     .eq('id', parentPollId)
     .maybeSingle();
   if (!parent || parent.event_id !== eventId) {
@@ -418,11 +417,41 @@ export async function addFollowUpPoll(
     // A follow-up inherits how the parent decides things: a host who set the
     // first question to resolve itself doesn't want to be asked again.
     resolution: parent.resolution,
-    allow_suggestions: parent.allow_suggestions,
+    // Each follow-up starts a new brainstorm. The parent's flag may now be
+    // false because its suggestions were locked; that lock must not follow
+    // the group into a question they have not had a chance to answer yet.
+    allow_suggestions: true,
     phase: 'pending',
   });
   if (error) return reportAndFail('SB-PLAN-SAVE', 'poll.follow-up', error);
 
+  // The host can queue from a decided question too. The same idempotent
+  // resolver covers that path and a parent deciding during this insert.
+  let opened: string[];
+  try {
+    opened = await openFollowUpPolls(parentPollId);
+  } catch (error) {
+    // The insert succeeded. Report that fact even when opening is delayed,
+    // so a retry cannot create a second copy of the question.
+    const warning = await reportAndFail('SB-PLAN-SAVE', 'poll.follow-up', error);
+    revalidatePath(`/events/${eventId}`);
+    return { ok: true, opened: false, warning };
+  }
   revalidatePath(`/events/${eventId}`);
-  return { ok: true };
+  return { ok: true, opened: opened.length > 0 };
+}
+
+/** Retry only the saved question's unlock; never insert or close its parent. */
+export async function retryFollowUpPolls(parentPollId: string, eventId: string): Promise<FollowUpResult> {
+  const auth = await requireUser();
+  if (!auth.ok) return auth;
+  if (!(await isEventManager(auth.user.id, eventId))) return failure('SB-PERM-HOST');
+  if (!(await pollOnPlan(auth.supabase, parentPollId, eventId))) return failure('SB-POLL-DECIDE');
+  try {
+    const opened = await openFollowUpPolls(parentPollId);
+    revalidatePath(`/events/${eventId}`);
+    return { ok: true, opened: opened.length > 0 };
+  } catch (error) {
+    return reportAndFail('SB-PLAN-SAVE', 'poll.follow-up', error);
+  }
 }

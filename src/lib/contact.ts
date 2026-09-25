@@ -6,5 +6,5 @@
  * operator" with no way to do so.
  */
 export function supportEmail(): string {
-  return process.env.NEXT_PUBLIC_SUPPORT_EMAIL || 'hello@switchboard.app';
+  return process.env.NEXT_PUBLIC_SUPPORT_EMAIL || 'morphiclabsdata@gmail.com';
 }

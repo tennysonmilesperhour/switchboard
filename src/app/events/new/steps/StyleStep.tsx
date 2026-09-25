@@ -172,35 +172,25 @@ export function StyleStep({
                   </div>
                   <div className="space-y-1.5">
                     <label htmlFor="voteDeadline" className="text-xs font-bold text-ink-soft">
-                      Voting closes
+                      Voting closes (optional)
                     </label>
                     <input
                       id="voteDeadline"
                       type="datetime-local"
                       value={voteDeadline}
+                      min={minDate ? `${minDate}T00:00` : undefined}
                       onChange={(e) => setVoteDeadline(e.target.value)}
                       className={`${FIELD} py-2.5 text-sm`}
                     />
                   </div>
                 </div>
-              </div>
-            )}
-            {enablePoll && (
-              <div className="mt-3 pl-7 space-y-1.5">
-                <label htmlFor="voteDeadline" className="text-sm font-semibold text-ink">
-                  Decide by <span className="font-normal text-ink-faint">(optional)</span>
-                </label>
-                <input
-                  id="voteDeadline"
-                  type="datetime-local"
-                  value={voteDeadline}
-                  min={minDate ? `${minDate}T00:00` : undefined}
-                  onChange={(e) => setVoteDeadline(e.target.value)}
-                  className={`${FIELD} appearance-none [color-scheme:light]`}
-                />
                 <p className="text-xs text-ink-faint">
-                  Voting closes and the winner is picked automatically at this
-                  time. Leave blank to decide whenever you’re ready.
+                  {pollResolution === 'host_pick'
+                    ? 'Voting closes at this time, then you choose from the results.'
+                    : pollResolution === 'runoff'
+                      ? 'At this time, the leading ideas move to a final round with the same voting time as the first round. Its closing time appears on the poll.'
+                      : 'Voting closes at this time. A clear winner is picked automatically; you settle any tie.'}{' '}
+                  Leave blank to close voting whenever you’re ready.
                 </p>
               </div>
             )}

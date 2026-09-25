@@ -500,13 +500,15 @@ export default async function EventPage({
               isHost={isHost}
               eventId={event.id}
               currentUserId={user.id}
+              timeZone={event.time_zone}
             />
             {canManage && (
               <FollowUpComposer
                 parentPollId={poll.id}
                 eventId={event.id}
                 parentTopic={normalizePollTopic(poll.topic)}
-                hasPending={pendingPolls.length > 0}
+                parentDecided={poll.phase === 'decided'}
+                hasPending={pendingPolls.some((row) => row.parent_poll_id === poll.id)}
               />
             )}
           </>

@@ -10,6 +10,12 @@ Two tiers:
   contract. These need a real database, so they are **gated behind `E2E_DB=1`**
   and skipped otherwise. This keeps the default CI green while the fixtures/DB
   aren't wired.
+- **`scope-board.spec.ts`** — shared checklist persistence, offline recovery,
+  delayed reads/writes, and feedback visibility with an intercepted board API.
+- **`client-signoff.spec.ts`** — the client's A2 report reproduced from the
+  wizard's final Review step, including keyboard and pointer reordering. Runs
+  only with `E2E_DB=1` against a local app and local Supabase, and never sends
+  the test draft's invitations.
 
 ## Running the authenticated tests locally
 
