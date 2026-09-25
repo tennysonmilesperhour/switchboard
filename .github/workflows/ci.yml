@@ -6,22 +6,15 @@ on:
   pull_request:
   workflow_dispatch:
 
-# A new push to a pull request makes the run for the previous commit worthless,
-# so it is cancelled rather than billed to the end. Runs on main are keyed by
-# commit and never cancel each other.
+# Cancel older PR runs when a newer commit needs testing. Each main or manual
+# run has its own group, so verifying a merged tree cannot cancel another run.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || github.sha }}
+  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   verify:
     name: Verify
-    # A squash merge (subject ends "(#123)") lands the tree its pull request
-    # already passed on, so running both jobs again on main doubled the bill
-    # for every merge. Direct pushes to main have no PR run behind them and
-    # still get the full suite. Run it by hand from the Actions tab when two
-    # merges in a row need checking together.
-    if: github.event_name != 'push' || !contains(github.event.head_commit.message, '(#')
     runs-on: ubuntu-latest
     timeout-minutes: 15
 
@@ -79,8 +72,6 @@ jobs:
 
   authenticated-e2e:
     name: Authenticated E2E
-    # Same rule as Verify above.
-    if: github.event_name != 'push' || !contains(github.event.head_commit.message, '(#')
     runs-on: ubuntu-latest
     timeout-minutes: 25
 
