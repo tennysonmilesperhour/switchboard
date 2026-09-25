@@ -14,6 +14,18 @@ exposes. Progress used to live in `localStorage`, which meant a tick never left
 the device that made it; that is why nobody could see the client's walk through
 the list, and why nobody was told about it.
 
+Each change is saved on the device before its request starts, then sent in
+order. A failed request leaves the remaining changes queued across reloads.
+**Refresh shared board** retries them and reads the latest checks and notes;
+coming back online also retries. A failed initial read explicitly labels the
+device copy and unavailable notes. There is no bulk reset: uncheck an item to
+change the shared record. Counts and write validation use the actual 35 item
+ids in `src/lib/scope-checklist.ts`, checked against the page by a unit test;
+the database's shape constraint alone does not establish that an item exists.
+
+The optional name is self-reported. Shared checks record review progress, not
+authenticated client identity or a separate contractual acceptance.
+
 **The job** is what this runbook is mostly about: twice a day, read what came in
 and fix what is safe to fix.
 

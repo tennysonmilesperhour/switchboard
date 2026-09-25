@@ -93,6 +93,9 @@ The app reads these (see `.env.example` for the full list). Set them in Vercel
 - `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY` — client access
 - `SUPABASE_SERVICE_ROLE_KEY` — server-only privileged access
 - `NEXT_PUBLIC_APP_URL` — the app's public origin (used in emails/links)
+- `NEXT_PUBLIC_SUPPORT_EMAIL` — public support, privacy/deletion, copyright,
+  unsubscribe and web-push contact; defaults to `morphiclabsdata@gmail.com`.
+  Keep any deployment override consistent with the approved support address.
 - `CRON_SECRET` — required; the cron endpoint refuses to run without it
 - `ANTHROPIC_API_KEY` — optional; AI features degrade gracefully without it
 - `RESEND_API_KEY`, `EMAIL_FROM` — optional; off-platform email

@@ -4,13 +4,15 @@ import { useState, useTransition } from 'react';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { useToast } from '@/components/ui/Toast';
-import { addFollowUpPoll } from '@/lib/actions/polls';
+import { addFollowUpPoll, retryFollowUpPolls } from '@/lib/actions/polls';
+import { errorFor, errorRef, type ErrorCode } from '@/lib/errors';
 import { POLL_TOPICS, SUGGESTED_FOLLOW_UPS, type PollTopic } from '@/lib/types';
 
 interface FollowUpComposerProps {
   parentPollId: string;
   eventId: string;
   parentTopic: PollTopic;
+  parentDecided: boolean;
   hasPending: boolean;
 }
 
@@ -28,10 +30,16 @@ export function FollowUpComposer({
   parentPollId,
   eventId,
   parentTopic,
+  parentDecided,
   hasPending,
 }: FollowUpComposerProps) {
   const [open, setOpen] = useState(false);
   const [custom, setCustom] = useState('');
+  const [saveUncertain, setSaveUncertain] = useState(false);
+  const [openingError, setOpeningError] = useState<{
+    code: ErrorCode;
+    parentPollId: string;
+  } | null>(null);
   const [pending, startTransition] = useTransition();
   const toast = useToast();
 
@@ -39,27 +47,79 @@ export function FollowUpComposer({
   const topics = POLL_TOPICS.filter((entry) => suggested.includes(entry.topic));
 
   function add(topic: PollTopic, title?: string) {
+    if (pending || saveUncertain) return;
     startTransition(async () => {
-      const result = await addFollowUpPoll(parentPollId, eventId, topic, title);
-      if (!result.ok) {
-        toast.error(result.error ?? 'Could not add that question.', result.code);
-        return;
+      try {
+        const result = await addFollowUpPoll(parentPollId, eventId, topic, title);
+        if (!result.ok) {
+          toast.error(result.error ?? 'Could not add that question.', result.code);
+          return;
+        }
+        setCustom('');
+        setOpen(false);
+        if (result.warning) {
+          setOpeningError({ code: result.warning.code, parentPollId });
+          toast.success('Question saved. Opening is delayed.');
+          return;
+        }
+        setOpeningError(null);
+        toast.success(result.opened ? 'The next question is open.' : 'Queued. It opens when this one is settled.');
+      } catch {
+        // A lost response cannot tell us whether the insert committed. Make
+        // the saved plan visible before offering another potentially duplicate
+        // insert; a normal server refusal above can still be corrected here.
+        setOpen(false);
+        setSaveUncertain(true);
       }
-      setCustom('');
-      setOpen(false);
-      toast.success('Queued. It opens when this one is settled.');
     });
+  }
+
+  function retryOpening() {
+    startTransition(async () => {
+      try {
+        const result = await retryFollowUpPolls(openingError?.parentPollId ?? parentPollId, eventId);
+        if (!result.ok) {
+          toast.error(result.error ?? 'The question could not open.', result.code);
+          return;
+        }
+        setOpeningError(null);
+        toast.success(result.opened ? 'The next question is open.' : 'Saved. It opens when the previous question is settled.');
+      } catch {
+        toast.error(errorFor('SB-PLAN-SAVE').message, 'SB-PLAN-SAVE');
+      }
+    });
+  }
+
+  if (saveUncertain) {
+    return (
+      <div className="space-y-2" role="alert">
+        <p className="text-sm text-ink-soft">We couldn’t confirm whether your question saved. Refresh the plan to check before adding it again.</p>
+        <p className="font-mono text-[11px] text-ink-faint">{errorRef('SB-PLAN-SAVE')}</p>
+        <a href={`/events/${eventId}`} className="inline-flex min-h-11 items-center text-sm font-bold text-terracotta-deep underline">Refresh plan</a>
+      </div>
+    );
   }
 
   if (!open) {
     return (
-      <button
-        type="button"
-        onClick={() => setOpen(true)}
-        className="inline-flex min-h-11 items-center text-sm font-bold text-terracotta-deep focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-terracotta"
-      >
-        {hasPending ? 'Queue another question' : 'Decide something after this →'}
-      </button>
+      <div>
+        <button
+          type="button"
+          onClick={() => setOpen(true)}
+          className="inline-flex min-h-11 items-center text-sm font-bold text-terracotta-deep focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-terracotta"
+        >
+          {hasPending ? 'Queue another question' : 'Decide something after this →'}
+        </button>
+        {(openingError || (parentDecided && hasPending)) && (
+          <div className="mt-2 space-y-2" role="status">
+            <p className="text-sm text-ink-soft">Your question is saved. Try opening it again.</p>
+            <p className="font-mono text-[11px] text-ink-faint">{errorRef(openingError?.code ?? 'SB-PLAN-SAVE')}</p>
+            <Button size="sm" variant="secondary" disabled={pending} onClick={retryOpening}>
+              {pending ? 'Opening…' : 'Retry opening'}
+            </Button>
+          </div>
+        )}
+      </div>
     );
   }
 

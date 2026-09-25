@@ -149,9 +149,10 @@ describe('the checklist itself', () => {
     expect(script, 'notes must be rendered for anyone with the link').toContain(
       'function renderNotes',
     );
-    // Whatever was already ticked in this browser has to reach the server once,
-    // or the client silently loses the walk she already did.
-    expect(script).toContain('function pushLocalBacklog');
+    // The persistent outbox handles both old device checks and new edits.
+    // e2e/scope-board.spec.ts exercises failed migration, in-flight writes,
+    // check/uncheck ordering and reload against the actual rendered page.
+    expect(script).toContain('function flushPending');
   });
 
   it('does not promise privacy it no longer provides', () => {

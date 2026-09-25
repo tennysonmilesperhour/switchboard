@@ -11,6 +11,7 @@ import { Switch } from '@/components/ui/Switch';
 import { runDiscovery } from '@/lib/actions/discovery';
 import type { Suggestion } from '@/lib/ai/discovery';
 import { DEFAULT_GROUP_SIZE, GROUP_SIZES, isSolo } from '@/lib/ai/discovery-options';
+import { errorFor, errorRef, type ErrorCode } from '@/lib/errors';
 
 const BUDGETS = ['Free', '$', '$$', '$$$'];
 const VIBES = ['Relaxed', 'Adventurous', 'Cozy', 'Lively', 'Quiet'];
@@ -25,24 +26,33 @@ export function DiscoverClient({ defaultInterests }: { defaultInterests: string[
   const [openToMeeting, setOpenToMeeting] = useState(false);
   const [suggestions, setSuggestions] = useState<Suggestion[] | null>(null);
   const [error, setError] = useState('');
+  const [errorCode, setErrorCode] = useState<ErrorCode | null>(null);
   const [pending, startTransition] = useTransition();
   const solo = isSolo(groupSize);
 
   function search() {
     setError('');
+    setErrorCode(null);
     startTransition(async () => {
-      const result = await runDiscovery({
-        location,
-        distanceMiles: distance,
-        when,
-        budget,
-        groupSize,
-        openToMeeting,
-        vibes,
-        interests: defaultInterests,
-      });
-      if (!result.ok) setError(result.error ?? 'Something went wrong');
-      else setSuggestions(result.suggestions);
+      try {
+        const result = await runDiscovery({
+          location,
+          distanceMiles: distance,
+          when,
+          budget,
+          groupSize,
+          openToMeeting,
+          vibes,
+          interests: defaultInterests,
+        });
+        if (!result.ok) {
+          setError(result.error ?? errorFor('SB-DISCOVERY-RUN').message);
+          setErrorCode(result.code ?? null);
+        } else setSuggestions(result.suggestions);
+      } catch {
+        setError(errorFor('SB-DISCOVERY-RUN').message);
+        setErrorCode('SB-DISCOVERY-RUN');
+      }
     });
   }
 
@@ -159,7 +169,12 @@ export function DiscoverClient({ defaultInterests }: { defaultInterests: string[
         <Button type="submit" size="lg" className="w-full" disabled={pending}>
           {pending ? 'Curating…' : 'Find something great ✨'}
         </Button>
-        {error && <p role="alert" className="text-sm text-rose-deep">{error}</p>}
+        {error && (
+          <p role="alert" className="text-sm text-rose-deep">
+            {error}
+            {errorCode && <span className="ml-2 text-xs opacity-70">{errorRef(errorCode)}</span>}
+          </p>
+        )}
       </form>
 
       {suggestions && suggestions.length === 0 && (

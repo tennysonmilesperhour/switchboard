@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import type { ReactNode } from 'react';
 import Link from 'next/link';
+import { supportEmail } from '@/lib/contact';
 
 export const metadata: Metadata = {
   title: 'SMS Program Compliance',
@@ -194,6 +195,12 @@ export default function SmsCompliancePage() {
           or REVOKE to opt out. Users can reply HELP or INFO for help. Standard
           message and data rates may apply, and message frequency varies based
           on account activity and notification settings.
+        </p>
+        <p className="mt-3 leading-relaxed text-ink-soft">
+          For SMS support, email{' '}
+          <a href={`mailto:${supportEmail()}`} className="break-words font-bold text-terracotta-deep underline">
+            {supportEmail()}
+          </a>.
         </p>
       </section>
 

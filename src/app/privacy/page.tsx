@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { supportEmail } from '@/lib/contact';
 
 const SECTIONS = [
   {
@@ -69,6 +70,15 @@ export default function PrivacyPage() {
           </section>
         ))}
       </div>
+      <section className="mt-8">
+        <h2 className="text-xl font-extrabold text-ink">Privacy and Deletion Help</h2>
+        <p className="mt-3 leading-relaxed text-ink-soft">
+          For privacy questions or help deleting your account, email{' '}
+          <a href={`mailto:${supportEmail()}`} className="break-words font-bold text-terracotta-deep underline">
+            {supportEmail()}
+          </a>.
+        </p>
+      </section>
       <div className="mt-10 flex flex-wrap gap-4 text-sm font-bold text-terracotta-deep">
         <Link href="/terms">Terms</Link>
         <Link href="/community">Community Covenant</Link>

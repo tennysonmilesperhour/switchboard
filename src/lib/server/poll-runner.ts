@@ -21,9 +21,10 @@ import { pollQuestion } from '@/lib/types';
 export async function openFollowUpPolls(pollId: string): Promise<string[]> {
   const admin = createAdminClient();
 
-  const { data: opened } = await admin.rpc('resolve_poll_children', {
+  const { data: opened, error } = await admin.rpc('resolve_poll_children', {
     p_poll: pollId,
   });
+  if (error) throw error;
   const ids = (opened ?? [])
     .map((row: { id?: string } | string) =>
       typeof row === 'string' ? row : row?.id,
@@ -79,20 +80,36 @@ export async function openFollowUpPolls(pollId: string): Promise<string[]> {
  * Resolve a poll according to its resolution mode. Used by the host's
  * "close voting" action (after authz) and the cron deadline sweep.
  */
-export async function resolvePoll(pollId: string): Promise<void> {
+export async function resolvePoll(
+  pollId: string,
+  { onlyIfDue = false }: { onlyIfDue?: boolean } = {},
+): Promise<void> {
   const admin = createAdminClient();
 
-  const { data: poll } = await admin
+  const { data: poll, error: pollError } = await admin
     .from('polls')
-    .select('id, resolution, phase')
+    .select('id, resolution, phase, created_at, vote_deadline')
     .eq('id', pollId)
     .single();
-  if (!poll || poll.phase === 'decided') return;
+  if (pollError) throw pollError;
+  if (!poll || poll.phase === 'pending') return;
+  if (poll.phase === 'decided') {
+    // Retry an unlock that failed after the decision itself was saved.
+    await openFollowUpPolls(pollId);
+    return;
+  }
+  // Another worker may have opened a runoff after this sweep collected its
+  // ids. Re-read the current deadline so that stale work cannot close it.
+  if (onlyIfDue && (!poll.vote_deadline || Date.parse(poll.vote_deadline) > Date.now())) return;
 
-  const [{ data: options }, { data: votes }] = await Promise.all([
+  const [{ data: options, error: optionsError }, { data: votes, error: votesError }] = await Promise.all([
     admin.from('poll_options').select('id').eq('poll_id', pollId),
     admin.from('poll_votes').select('option_id, voter_id, weight').eq('poll_id', pollId),
   ]);
+  // A failed read is not an empty ballot. Otherwise an outage decides the
+  // poll without a winner and discards the group's chance to finish voting.
+  if (optionsError) throw optionsError;
+  if (votesError) throw votesError;
 
   const engineVotes: Vote[] = (votes ?? []).map((v) => ({
     voterId: v.voter_id,
@@ -109,26 +126,42 @@ export async function resolvePoll(pollId: string): Promise<void> {
   });
 
   if (outcome.kind === 'runoff') {
+    // The first round's deadline has just expired. Give the final round the
+    // same length as the first, starting now; retaining that expired instant
+    // made the very next cron tick close the runoff with no new votes.
+    // An untimed poll stays untimed and can still be closed by its host.
+    const duration = poll.vote_deadline
+      ? Date.parse(poll.vote_deadline) - Date.parse(poll.created_at)
+      : null;
+    if (duration !== null && (!Number.isFinite(duration) || duration <= 0)) {
+      throw new Error('The voting deadline must be after the poll was created.');
+    }
+    const voteDeadline = duration === null ? null : new Date(Date.now() + duration).toISOString();
     const finalistIds = new Set(outcome.finalistIds);
     const retired = (options ?? []).filter((o) => !finalistIds.has(o.id));
     if (retired.length > 0) {
-      await admin.from('poll_options').delete().in('id', retired.map((o) => o.id));
+      const { error } = await admin.from('poll_options').delete().in('id', retired.map((o) => o.id));
+      if (error) throw error;
     }
-    await admin.from('poll_votes').delete().eq('poll_id', pollId);
-    await admin.from('polls').update({ phase: 'runoff' }).eq('id', pollId);
+    const { error: deleteError } = await admin.from('poll_votes').delete().eq('poll_id', pollId);
+    if (deleteError) throw deleteError;
+    const { error: updateError } = await admin.from('polls')
+      .update({ phase: 'runoff', vote_deadline: voteDeadline, allow_suggestions: false }).eq('id', pollId);
+    if (updateError) throw updateError;
     return;
   }
 
   // A clear winner, or nothing that can honestly be called one - no votes, or a
   // leader only ahead on the id tiebreak - in which case the poll closes with
   // no winner and the host chooses from what the group said.
-  await admin
+  const { error: updateError } = await admin
     .from('polls')
     .update({
       phase: 'decided',
       ...(outcome.kind === 'winner' ? { winning_option_id: outcome.optionId } : {}),
     })
     .eq('id', pollId);
+  if (updateError) throw updateError;
   await openFollowUpPolls(pollId);
 }
 
@@ -146,13 +179,14 @@ export async function resolvePoll(pollId: string): Promise<void> {
  */
 export async function sweepSuggestionDeadlines(): Promise<number> {
   const admin = createAdminClient();
-  const { data: closed } = await admin
+  const { data: closed, error } = await admin
     .from('polls')
-    .update({ phase: 'voting' })
+    .update({ phase: 'voting', allow_suggestions: false })
     .eq('phase', 'suggesting')
     .not('suggest_deadline', 'is', null)
     .lt('suggest_deadline', new Date().toISOString())
     .select('id');
+  if (error) throw error;
   return (closed ?? []).length;
 }
 
@@ -164,15 +198,16 @@ export async function sweepSuggestionDeadlines(): Promise<number> {
  */
 export async function sweepDuePolls(): Promise<number> {
   const admin = createAdminClient();
-  const { data: due } = await admin
+  const { data: due, error } = await admin
     .from('polls')
     .select('id')
     .in('phase', ['suggesting', 'voting', 'runoff'])
     .not('vote_deadline', 'is', null)
     .lt('vote_deadline', new Date().toISOString());
+  if (error) throw error;
 
   for (const poll of due ?? []) {
-    await resolvePoll(poll.id);
+    await resolvePoll(poll.id, { onlyIfDue: true });
   }
   return (due ?? []).length;
 }

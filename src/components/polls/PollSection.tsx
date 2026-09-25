@@ -19,6 +19,7 @@ import {
 import { linkHostname, OPTION_DETAIL_MAX } from '@/lib/poll-option-input';
 import { closesIntoRunoff, nextWeight, type Weight } from '@/lib/engine/scoring';
 import { errorFor, errorRef, type ErrorCode } from '@/lib/errors';
+import { formatDateTime } from '@/lib/format';
 import type { Poll, PollOption } from '@/lib/types';
 
 export interface OptionResult {
@@ -38,6 +39,7 @@ interface PollSectionProps {
   eventId: string;
   /** Whose ideas the Edit and Remove controls belong to. */
   currentUserId: string;
+  timeZone?: string | null;
 }
 
 /** The optional parts of an idea, shared by the suggestion box and the editor. */
@@ -185,6 +187,7 @@ export function PollSection({
   isHost,
   eventId,
   currentUserId,
+  timeZone,
 }: PollSectionProps) {
   const [suggestion, setSuggestion] = useState('');
   const [extras, setExtras] = useState<IdeaExtras>(EMPTY_EXTRAS);
@@ -448,10 +451,19 @@ export function PollSection({
     // the starting point has to be the weight the voter can actually see.
     const next = nextWeight(shownVotes[optionId] ?? 0, weight);
     setError('');
+    setErrorCode(null);
     startTransition(async () => {
       showVote({ optionId, weight: next });
-      const result = await castVote(poll.id, eventId, optionId, next);
-      if (!result.ok) setError(result.error ?? 'Vote failed');
+      try {
+        const result = await castVote(poll.id, eventId, optionId, next);
+        if (!result.ok) {
+          setError(result.error ?? 'Vote failed');
+          setErrorCode(result.code ?? null);
+        }
+      } catch {
+        setError(errorFor('SB-PLAN-SAVE').message);
+        setErrorCode('SB-PLAN-SAVE');
+      }
     });
   }
 
@@ -471,6 +483,13 @@ export function PollSection({
               : 'Rank ideas privately. Nobody sees your individual votes.'
         }
       />
+
+      {votingOpen && poll.vote_deadline && (
+        <p className="mb-4 text-xs text-ink-faint">
+          {poll.phase === 'runoff' ? 'Final round closes' : 'Voting closes'}{' '}
+          <time dateTime={poll.vote_deadline}>{formatDateTime(poll.vote_deadline, timeZone ?? 'UTC')}</time>.
+        </p>
+      )}
 
       {/* Consensus meter - aggregate only, never individual votes */}
       {votingOpen && results.some((r) => r.voters > 0) && (
