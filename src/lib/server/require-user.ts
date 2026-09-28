@@ -5,6 +5,16 @@ import { createClient } from '@/lib/supabase/server';
 
 type ServerClient = Awaited<ReturnType<typeof createClient>>;
 
+function safeRedirectPath(to: string): string {
+  // Next's redirect accepts absolute URLs. Authentication callers only need
+  // same-origin paths, so reject protocol-relative URLs, backslashes, and
+  // other values that browsers may interpret as an external destination.
+  if (!to.startsWith('/') || to.startsWith('//') || to.includes('\\')) {
+    return '/login';
+  }
+  return to;
+}
+
 /**
  * The auth preamble every server action shares: create the session client, read
  * the authenticated user, and bail if there is none. Two flavors for the two
@@ -52,6 +62,6 @@ export async function requireUserOrRedirect(
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  if (!user) redirect(to);
+  if (!user) redirect(safeRedirectPath(to));
   return { supabase, user };
 }
