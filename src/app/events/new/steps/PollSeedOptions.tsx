@@ -46,7 +46,7 @@ export function PollSeedOptions({ options, setOptions }: PollSeedOptionsProps) {
       <label htmlFor="seedOption" className="text-xs font-bold text-ink-soft">
         Float a few options (optional)
       </label>
-      <p className="text-xs text-ink-faint">
+      <p className="text-plate text-plate-inset text-xs text-ink-faint">
         Start the list so nobody faces a blank poll. Everyone can add more.
       </p>
       {options.length > 0 && (

@@ -387,6 +387,11 @@ integrations a deployment has wired up is reconnaissance, not public data.
   into an ended one, and deleting a zone ends the check-ins in it.
 - `supabase/tests/board_moderators.test.sql` — board roles change only through
   `set_board_member_role`, and no board is left without a moderator.
+- `supabase/tests/rls_initplan.test.sql`, `foreign_key_indexes.test.sql` and
+  `single_permissive_policies.test.sql` — every policy calls `auth.uid()` once
+  per statement, every foreign key has a covering index, and no table has two
+  permissive policies for the same role and command. These are cost rules, not
+  access rules, but a new policy or key that breaks one fails CI.
 
 ## Media privacy (gated content)
 
