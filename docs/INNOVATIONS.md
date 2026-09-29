@@ -62,6 +62,14 @@ surfaced to hosts at planning time and to Discovery as filters.
 Why: inclusion is a feature, not a checkbox. Effort: M. Risk: sensitive
 data; strictly opt-in and visible only to hosts of plans you join.
 
+### 13. Battery Pacing
+Social Battery today feeds only the energy map in Your Read. Pacing would let
+it steer what Switchboard offers next: fewer nudges, smaller plans, and
+quieter suggestions while the battery is low, and more when it is full.
+Why: the setting already exists and people expect it to do something beyond
+the chart (D26 in the completion plan). Effort: M. Risk: it must never tell
+anyone else your battery is low, and it must not hide an invitation.
+
 ### 14. Matchmaker Hints
 Switchboard privately notices that two of your friends share three
 interests and have never been at the same plan, and suggests you introduce

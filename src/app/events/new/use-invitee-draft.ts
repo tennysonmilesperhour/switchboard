@@ -288,7 +288,7 @@ export function useInviteeDraft({
     onError(null);
     setContactsNote(null);
     try {
-      const matches = await resolveContactMatches(contacts);
+      const { matches, error: lookupError, code } = await resolveContactMatches(contacts);
       // Drop yourself and anyone with no way to be invited (no account and no
       // textable number); on-Switchboard matches float to the top.
       const invitable = matches
@@ -298,7 +298,10 @@ export function useInviteeDraft({
       setContactMatches(invitable);
       const onApp = invitable.filter((match) => match.profile).length;
       setContactsNote(
-        invitable.length === 0
+        // A rate-limited lookup is not "no matches": say so, with its code (G7).
+        lookupError
+          ? `${lookupError}${code ? ` ${code}` : ''}`
+          : invitable.length === 0
           ? 'None of those contacts can be invited yet - no matching accounts or numbers.'
           : onApp === 0
             ? `${invitable.length} ${invitable.length === 1 ? 'contact' : 'contacts'} can be invited by text.`

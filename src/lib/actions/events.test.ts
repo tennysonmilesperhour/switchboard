@@ -42,6 +42,10 @@ vi.mock('@/lib/server/sms', () => ({
   sendSmsMessages: vi.fn(),
 }));
 vi.mock('@/lib/server/geocode', () => ({ geocode: vi.fn() }));
+vi.mock('@/lib/server/poll-notices', () => ({
+  notifyDateSettled: vi.fn(),
+  openDecidingPlan: vi.fn(),
+}));
 vi.mock('@/lib/server/observability', () => ({
   reportAndFail: vi.fn(),
   reportOperationalError: mocks.reportOperationalError,
@@ -59,6 +63,10 @@ import {
 import { notifyUsers } from '@/lib/server/notify';
 import { capture } from '@/lib/analytics/server';
 import { reportAndFail } from '@/lib/server/observability';
+import { notifyDateSettled } from '@/lib/server/poll-notices';
+
+/** A plan with a date, as startInviting's read of it returns. */
+const DATED = { starts_at: '2026-10-02T22:00:00+00:00' };
 
 /**
  * A service-role client for the host lifecycle actions. Every write records its
@@ -460,7 +468,7 @@ describe('event management actions', () => {
   ] as const)(
     '%s only moves a plan from its one valid status',
     async (_name, action, target, source) => {
-      const { admin, writes } = lifecycleAdmin({ updated: null });
+      const { admin, writes } = lifecycleAdmin({ updated: null, current: DATED });
       mocks.createAdminClient.mockReturnValue(admin);
 
       const result = await action('event-1');
@@ -481,21 +489,47 @@ describe('event management actions', () => {
   );
 
   it.each([
-    ['a poll is still being voted on', [{ phase: 'decided' }, { phase: 'voting' }]],
-    ['no poll has been decided', [{ phase: 'pending' }]],
-    ['the plan has no poll at all', []],
-  ])('startInviting refuses while %s', async (_case, polls) => {
-    // The button is disabled on the page for exactly these cases; a stale tab
-    // or a direct call must meet the same rule rather than send invitations
-    // for a date nobody has settled.
-    const { admin, writes } = lifecycleAdmin({ updated: { id: 'event-1' }, polls });
+    ['a poll is still being voted on', [{ phase: 'decided' }, { phase: 'voting' }], DATED, 'still deciding'],
+    ['a runoff is open, even with a date', [{ phase: 'runoff' }], DATED, 'still deciding'],
+    ['the group decided but the plan has no date', [{ phase: 'decided' }], { starts_at: null }, 'date first'],
+    ['a poll closed empty and nothing set a date', [{ phase: 'decided' }, { phase: 'pending' }], null, 'date first'],
+    ['the plan has no poll and no date', [], { starts_at: null }, 'date first'],
+  ])('startInviting refuses while %s', async (_case, polls, current, reason) => {
+    // The page shows "Waiting for the group" or "Set the date" for exactly
+    // these cases; a stale tab or a direct call must meet the same rule rather
+    // than send "The date is set" for a plan with no date.
+    const { admin, writes } = lifecycleAdmin({ updated: { id: 'event-1' }, polls, current });
     mocks.createAdminClient.mockReturnValue(admin);
 
     const result = await startInviting('event-1');
 
     expect(result).toMatchObject({ ok: false });
-    expect(result.error).toContain('still deciding');
+    expect(result.error).toContain(reason);
     expect(writes).toHaveLength(0);
+    expect(vi.mocked(notifyDateSettled)).not.toHaveBeenCalled();
+  });
+
+  it('startInviting sends a decided, dated plan and tells the people already in', async () => {
+    const { admin, writes } = lifecycleAdmin({
+      updated: { id: 'event-1' },
+      polls: [{ phase: 'decided' }, { phase: 'pending' }],
+      current: DATED,
+    });
+    mocks.createAdminClient.mockReturnValue(admin);
+
+    await expect(startInviting('event-1')).resolves.toEqual({ ok: true });
+
+    // The date is re-checked in the UPDATE itself, so one cleared since the
+    // read cannot slip through.
+    expect(writes[0]).toMatchObject({
+      table: 'events',
+      row: { status: 'inviting' },
+      filters: expect.arrayContaining([
+        ['eq', 'status', 'deciding'],
+        ['not', 'starts_at', 'is', null],
+      ]),
+    });
+    expect(vi.mocked(notifyDateSettled)).toHaveBeenCalledWith('event-1');
   });
 
   it('confirms an inviting plan and retires the invitations still in motion', async () => {
@@ -509,7 +543,7 @@ describe('event management actions', () => {
   });
 
   it('reports a failed status write with a code', async () => {
-    const { admin } = lifecycleAdmin({ updated: null, error: { message: 'boom' } });
+    const { admin } = lifecycleAdmin({ updated: null, error: { message: 'boom' }, current: DATED });
     mocks.createAdminClient.mockReturnValue(admin);
     vi.mocked(reportAndFail).mockResolvedValueOnce({
       ok: false,

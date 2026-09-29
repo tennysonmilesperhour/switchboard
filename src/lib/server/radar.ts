@@ -1,4 +1,5 @@
 import { createAdminClient } from '@/lib/supabase/admin';
+import { createClient } from '@/lib/supabase/server';
 
 export interface RadarSuggestion {
   friendId: string;
@@ -14,12 +15,28 @@ const MS_PER_DAY = 86_400_000;
  * Reconnection Radar: friends you haven't shared anything with in a while.
  * Strictly private to the viewer; computed server-side, never shown to the
  * other person.
+ *
+ * Nobody the viewer gives space to is ever suggested (G8). "You haven't seen
+ * them in a while — make a plan?" about a person you asked for space from is
+ * the one nudge Give Space exists to prevent. The list is read through the
+ * viewer's own client, where `profile_avoids` RLS returns only their own rows;
+ * it only ever narrows what this viewer is shown, and says nothing about anyone.
  */
 export async function getReconnectionSuggestions(
   userId: string,
   limit = 2,
+  viewerClient?: Awaited<ReturnType<typeof createClient>>,
 ): Promise<RadarSuggestion[]> {
   const admin = createAdminClient();
+  const viewer = viewerClient ?? (await createClient());
+  const { data: avoidRows, error: avoidError } = await viewer
+    .from('profile_avoids')
+    .select('avoided_id')
+    .eq('avoider_id', userId);
+  // Fail closed: without the list, a suggestion could name someone the viewer
+  // asked for space from, so suggest nobody this time.
+  if (avoidError) return [];
+  const givingSpace = new Set((avoidRows ?? []).map((row) => row.avoided_id));
 
   const { data: connections } = await admin
     .from('connections')
@@ -43,7 +60,9 @@ export async function getReconnectionSuggestions(
         sabbatical: Boolean(other.sabbatical),
       };
     })
-    .filter((friend) => !friend.sabbatical);
+    .filter((friend) => !friend.sabbatical)
+    .filter((friend) => !givingSpace.has(friend.id));
+  if (friends.length === 0) return [];
   const friendIds = friends.map((f) => f.id);
 
   // My events (hosted or accepted).

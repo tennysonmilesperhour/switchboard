@@ -10,7 +10,7 @@
 -- exercise the policies and triggers exactly as that user would experience them.
 
 begin;
-select plan(7);
+select plan(8);
 
 -- ————————————————————————— fixtures —————————————————————————
 -- alice (owner/host), mallory (attacker/co-host), victim (never consents).
@@ -33,16 +33,16 @@ insert into public.connections (requester_id, addressee_id, status) values
   ('00000000-0000-0000-0000-00000000a11c', '00000000-0000-0000-0000-00000000ba11', 'pending');
 
 -- F2 fixture: alice hosts an event; mallory is a co-host (is_event_host true).
--- Mallory also holds an accepted invite so can_view_event lets her SELECT the
--- event row — co-hosts alone are not covered by can_view_event, and an UPDATE
--- can only reach rows the actor can see, so without this her update would match
--- zero rows and never reach the freeze trigger.
+-- Mallory holds no invitation of her own. An UPDATE can only reach rows the
+-- actor can see, and can_view_event used to leave co-hosts out, so this fixture
+-- once had to give her an accepted invite as well or her update would match
+-- zero rows and never reach the freeze trigger. Since
+-- 20260930010000_cohost_plan_access.sql being a co-host is enough to see the
+-- plan, and the positive control below proves the update actually lands.
 insert into public.events (id, host_id, title, status) values
   ('00000000-0000-0000-0000-0000000e0001', '00000000-0000-0000-0000-00000000a11c', 'Alice dinner', 'inviting');
 insert into public.event_cohosts (event_id, cohost_id, added_by) values
   ('00000000-0000-0000-0000-0000000e0001', '00000000-0000-0000-0000-00000000ba11', '00000000-0000-0000-0000-00000000a11c');
-insert into public.invites (event_id, invitee_id, position, status) values
-  ('00000000-0000-0000-0000-0000000e0001', '00000000-0000-0000-0000-00000000ba11', 0, 'accepted');
 
 -- F6 fixture: alice blocks mallory.
 insert into public.profile_blocks (blocker_id, blocked_id) values
@@ -85,6 +85,13 @@ select lives_ok(
   $$ update public.events set title = 'Alice brunch'
      where id = '00000000-0000-0000-0000-0000000e0001' $$,
   'F2: a co-host can still edit non-ownership event fields'
+);
+-- lives_ok alone would also pass for an update that matched zero rows, which
+-- is exactly what a co-host without an invitation used to get.
+select is(
+  (select title from public.events where id = '00000000-0000-0000-0000-0000000e0001'),
+  'Alice brunch',
+  'F2: a co-host with no invitation of their own sees the plan and the edit lands'
 );
 
 -- F6: a user blocked by the target cannot record a mutual intent toward them

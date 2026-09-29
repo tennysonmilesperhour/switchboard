@@ -14,12 +14,25 @@ function boardPostKind(kind: string): BoardPostRow['kind'] {
   }
 }
 
+/** Posts per page. Older ones are a link away rather than silently gone. */
+const PAGE_SIZE = 50;
+
 export default async function BoardPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ slug: string }>;
+  searchParams: Promise<{ before?: string | string[] }>;
 }) {
   const { slug } = await params;
+  const { before: rawBefore } = await searchParams;
+  // `?before=<created_at>` walks back through older posts. Anything that isn't
+  // a real timestamp is ignored rather than trusted into the query.
+  const beforeValue = Array.isArray(rawBefore) ? rawBefore[0] : rawBefore;
+  const before =
+    beforeValue && Number.isFinite(Date.parse(beforeValue))
+      ? new Date(beforeValue).toISOString()
+      : null;
   const supabase = await createClient();
   const {
     data: { user },
@@ -29,7 +42,7 @@ export default async function BoardPage({
   // RLS only returns the board if the viewer is a member.
   const { data: board } = await supabase
     .from('boards')
-    .select('id, slug, name, description')
+    .select('id, slug, name, description, created_by')
     .eq('slug', slug)
     .maybeSingle();
   if (!board) notFound();
@@ -37,26 +50,35 @@ export default async function BoardPage({
   // Expired offers/requests drop out at read time (the signals/moments
   // precedent) — no sweep needed; the rows stay until the author removes them.
   const nowIso = new Date().toISOString();
+  let postsQuery = supabase
+    .from('board_posts')
+    .select('*, responses:board_post_responses(responder_id)')
+    .eq('board_id', board.id)
+    .or(`expires_at.is.null,expires_at.gt.${nowIso}`)
+    .order('created_at', { ascending: false })
+    // One extra row answers "is there an older page?" without a count query.
+    .limit(PAGE_SIZE + 1);
+  if (before) postsQuery = postsQuery.lt('created_at', before);
   const [{ data: postRows }, { data: memberRows }] = await Promise.all([
-    supabase
-      .from('board_posts')
-      .select('*, responses:board_post_responses(responder_id)')
-      .eq('board_id', board.id)
-      .or(`expires_at.is.null,expires_at.gt.${nowIso}`)
-      .order('created_at', { ascending: false })
-      .limit(50),
+    postsQuery,
     supabase
       .from('board_members')
-      .select('member_id, role, profile:profiles(display_name)')
-      .eq('board_id', board.id),
+      .select('member_id, role, joined_at, profile:profiles(display_name, handle)')
+      .eq('board_id', board.id)
+      .order('joined_at', { ascending: true }),
   ]);
+  const hasOlder = (postRows ?? []).length > PAGE_SIZE;
+  const pagePosts = (postRows ?? []).slice(0, PAGE_SIZE);
+  const olderCursor = hasOlder ? pagePosts[pagePosts.length - 1]?.created_at ?? null : null;
 
   const members: BoardMemberRow[] = (memberRows ?? []).map((row) => {
     const profile = Array.isArray(row.profile) ? row.profile[0] : row.profile;
     return {
       id: row.member_id,
       name: profile?.display_name ?? 'Member',
+      handle: profile?.handle ?? null,
       role: row.role === 'moderator' ? 'moderator' : 'member',
+      founder: row.member_id === board.created_by,
     };
   });
   const isModerator = members.some(
@@ -84,11 +106,17 @@ export default async function BoardPage({
           slug={board.slug}
           currentUserId={user.id}
           isModerator={isModerator}
-          initialPosts={(postRows ?? []).map((post) => ({
+          isFounder={board.created_by === user.id}
+          founderPresent={members.some((member) => member.founder)}
+          boardName={board.name}
+          boardDescription={board.description}
+          initialPosts={pagePosts.map((post) => ({
             ...post,
             kind: boardPostKind(post.kind),
           }))}
           members={members}
+          olderCursor={olderCursor}
+          viewingOlder={before !== null}
         />
       </div>
     </AppShell>

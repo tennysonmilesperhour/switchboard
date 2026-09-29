@@ -9,7 +9,13 @@ import {
   useState,
 } from 'react';
 
-export type BottomOverlayId = 'install' | 'pmf' | 'notifications';
+/**
+ * Everything that floats in the `bottom-24` band above the tab bar. Only one
+ * owns it at a time; the rest wait. Priorities in use: Settings save bar 100
+ * (unsaved edits outrank everything), update toast 40, notification nudge 30,
+ * install 20, PMF survey 10.
+ */
+export type BottomOverlayId = 'settings' | 'update' | 'install' | 'pmf' | 'notifications';
 
 interface Claim {
   id: BottomOverlayId;

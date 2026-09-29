@@ -33,7 +33,7 @@ function fallback(kind: ReflectionKind, facets: ReflectionFacet[]): string {
   };
   return (
     `${opener[kind]}\n\n${lines}\n\n` +
-    '(Connect an Anthropic key for a fuller, written reflection - this is the ' +
+    '(A fuller, written reflection is unavailable right now - this is the ' +
     'plain-language version drawn straight from your reads.)'
   );
 }

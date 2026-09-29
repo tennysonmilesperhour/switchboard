@@ -9,6 +9,7 @@ import {
 
 import { revalidatePath } from 'next/cache';
 import type { createClient } from '@/lib/supabase/server';
+import { createAdminClient, hasAdminCredentials } from '@/lib/supabase/admin';
 import { requireUser } from '@/lib/server/require-user';
 import { notifyUsers } from '@/lib/server/notify';
 import { normalizePhoneNumber } from '@/lib/phone';
@@ -40,6 +41,22 @@ export interface ContactCandidate {
   emails: string[];
   phones: string[];
 }
+
+/**
+ * What a contact import found. `throttled` is set when the lookup budget ran out
+ * before every contact was checked: the unmatched rows are then *unknown*, not
+ * absent, and the caller must say so rather than "No contacts matched" (G7).
+ * `error`/`code` carry the sentence and its code for that case.
+ */
+export interface ContactMatchResult {
+  matches: ContactMatch[];
+  throttled: boolean;
+  error?: string;
+  code?: ErrorCode;
+}
+
+/** How long "Ignore" hides someone's connection requests (D22). */
+const IGNORE_DAYS = 90;
 
 export interface ContactMatch {
   key: string;
@@ -114,6 +131,15 @@ async function requestOrAccept(
   userId: string,
   targetId: string,
 ): Promise<ConnectionResult> {
+  // Asking someone you ignored means you changed your mind. Clear it first:
+  // while it stands, their pending request is hidden from you by RLS, and this
+  // would otherwise create a second, opposite request instead of accepting it.
+  await supabase
+    .from('connection_request_ignores')
+    .delete()
+    .eq('ignorer_id', userId)
+    .eq('ignored_id', targetId);
+
   const { data: existing } = await supabase
     .from('connections')
     .select('id, requester_id, status')
@@ -158,6 +184,10 @@ async function notifyConnectionRequested(
   requesterId: string,
   addresseeId: string,
 ): Promise<void> {
+  // Someone who pressed Ignore on this person in the last 90 days is not told
+  // again (D22). The request itself still stands — the sender sees it pending,
+  // which is true, and learns nothing either way.
+  if (await requestIsIgnored(addresseeId, requesterId)) return;
   // The addressee is entitled to see who requested them (the pending row is
   // already visible to them on /people), so naming the requester here leaks
   // nothing and makes the bell self-explanatory.
@@ -172,6 +202,26 @@ async function notifyConnectionRequested(
     body: `${requester?.display_name ?? 'Someone'} wants to connect on Switchboard.`,
     url: '/people',
   });
+}
+
+/**
+ * Whether `addresseeId` ignored `requesterId`'s requests within the last 90
+ * days. Ignore rows are private to the person who ignored (RLS), and the caller
+ * here is the *requester*, so this reads with the service role — re-authorized
+ * by the fact that its only effect is to withhold a notification, and nothing
+ * about the answer reaches the caller.
+ */
+async function requestIsIgnored(addresseeId: string, requesterId: string): Promise<boolean> {
+  if (!hasAdminCredentials()) return false;
+  const since = new Date(Date.now() - IGNORE_DAYS * 86_400_000).toISOString();
+  const { data } = await createAdminClient()
+    .from('connection_request_ignores')
+    .select('ignorer_id')
+    .eq('ignorer_id', addresseeId)
+    .eq('ignored_id', requesterId)
+    .gt('ignored_at', since)
+    .maybeSingle();
+  return Boolean(data);
 }
 
 export async function sendConnectionRequest(identifier: string): Promise<ConnectionResult> {
@@ -284,15 +334,24 @@ export async function resendConnectionRequest(
 
 export async function resolveContactMatches(
   contacts: ContactCandidate[],
-): Promise<ContactMatch[]> {
+): Promise<ContactMatchResult> {
   const auth = await requireUser();
-  if (!auth.ok) return [];
+  if (!auth.ok) {
+    return { matches: [], throttled: false, error: auth.error, code: auth.code };
+  }
   const { supabase, user } = auth;
 
   // resolveProfile is an account-existence oracle; throttle bulk lookups so a
   // contact list can't be used to enumerate who's on Switchboard (SB-12).
+  // Exhausted, it used to return an empty list, which every caller rendered as
+  // "No contacts matched" — telling a host their friends weren't here (G7).
   if (!(await checkRateLimit(`contact-match:${user.id}`, 10, 60 * 60))) {
-    return [];
+    return {
+      matches: [],
+      throttled: true,
+      error: CONTACT_MATCH_LIMIT_MESSAGE,
+      code: 'SB-RATE-LIMIT',
+    };
   }
 
   const cleanedContacts = contacts.slice(0, 100).map((contact, index) => ({
@@ -349,7 +408,17 @@ export async function resolveContactMatches(
     });
   }
 
-  return rows;
+  if (!throttled) return { matches: rows, throttled: false };
+  const found = rows.filter((row) => row.profile).length;
+  return {
+    matches: rows,
+    throttled: true,
+    error:
+      found > 0
+        ? `Found ${found} before hitting the lookup limit, so the rest weren’t checked. Wait a few minutes and import again, or add people by @handle.`
+        : CONTACT_MATCH_LIMIT_MESSAGE,
+    code: 'SB-RATE-LIMIT',
+  };
 }
 
 export async function acceptConnection(connectionId: string): Promise<ConnectionResult> {
@@ -404,6 +473,44 @@ export async function removeConnection(connectionId: string): Promise<Connection
   return { ok: true };
 }
 
+/**
+ * "Ignore" on an incoming request (D22): hide this person's requests for 90
+ * days. The request is not deleted — deleting it let the same person ask again
+ * a minute later, with a fresh notification. It stays pending from their side
+ * and is hidden from yours by RLS until the ignore expires or you ask them
+ * yourself. They are never told.
+ */
+export async function ignoreConnectionRequest(connectionId: string): Promise<ConnectionResult> {
+  const auth = await requireUser();
+  if (!auth.ok) return auth;
+  const { supabase, user } = auth;
+  if (!UUID_RE.test(connectionId)) return validation('That request is no longer available.');
+
+  const { data: connection } = await supabase
+    .from('connections')
+    .select('requester_id, addressee_id, status')
+    .eq('id', connectionId)
+    .maybeSingle();
+  if (!connection || connection.addressee_id !== user.id || connection.status !== 'pending') {
+    return validation('That request is no longer available.');
+  }
+
+  const { error } = await supabase.from('connection_request_ignores').upsert(
+    {
+      ignorer_id: user.id,
+      ignored_id: connection.requester_id,
+      ignored_at: new Date().toISOString(),
+    },
+    { onConflict: 'ignorer_id,ignored_id' },
+  );
+  if (error) {
+    return reportAndFail('SB-CONNECTION-SAVE', 'connection.ignore', error, { connectionId });
+  }
+  revalidatePath('/people');
+  revalidatePath('/notifications');
+  return { ok: true };
+}
+
 export async function blockProfile(profileId: string): Promise<ConnectionResult> {
   const auth = await requireUser();
   if (!auth.ok) return auth;
@@ -418,6 +525,15 @@ export async function blockProfile(profileId: string): Promise<ConnectionResult>
   if (error && error.code !== '23505') {
     return reportAndFail('SB-CONNECTION-SAVE', 'connection.block', error, { profileId });
   }
+  // A block supersedes an ignore. Clear it first: while it stands, their
+  // pending request is hidden from us by RLS, and a hidden row is also out of
+  // reach of the delete below — it would outlive the block and resurface when
+  // the ignore expired.
+  await supabase
+    .from('connection_request_ignores')
+    .delete()
+    .eq('ignorer_id', user.id)
+    .eq('ignored_id', profileId);
   // A block ends the connection whichever surface it came from. This used to
   // happen only when the caller passed the connection id, which the People
   // page does and a room or a profile page does not, so blocking someone from

@@ -79,11 +79,20 @@ export async function notifyUsers(
       url: payload.url,
     },
     categoryForKind(payload.kind) ?? undefined,
+    { kind: payload.kind },
   );
   return { recorded: !error };
 }
 
-/** Record at most one unread room alert per recipient every 30 minutes. */
+/**
+ * Record at most one unread room alert per recipient every 30 minutes.
+ *
+ * Nobody is told about a room they muted (D20), and nobody is told about a
+ * message from someone either of them has blocked (D12): in a group room the
+ * blocked pair keep reading the same plan, but neither's messages reach the
+ * other's lock screen. Two-person rooms need no filter here — a block makes
+ * them read-only, so there is no message to announce.
+ */
 export async function notifyRoomActivity(
   roomId: string,
   roomTitle: string,
@@ -93,12 +102,26 @@ export async function notifyRoomActivity(
   const activeThreshold = new Date(Date.now() - 90_000).toISOString();
   const { data: members } = await admin
     .from('room_members')
-    .select('member_id, last_read_at')
+    .select('member_id, last_read_at, muted')
     .eq('room_id', roomId)
     .neq('member_id', senderId);
-  const recipients = (members ?? [])
+  const candidates = (members ?? [])
+    .filter((m) => !m.muted)
     .filter((m) => !m.last_read_at || m.last_read_at < activeThreshold)
     .map((m) => m.member_id);
+  if (candidates.length === 0) return;
+  // Both directions: the sender's blocks and blocks placed on the sender.
+  const { data: blocks, error: blockError } = await admin
+    .from('profile_blocks')
+    .select('blocker_id, blocked_id')
+    .or(`blocker_id.eq.${senderId},blocked_id.eq.${senderId}`);
+  // Fail closed: if the block list can't be read, a blocked person must not be
+  // the one who hears about this message, so nobody does this time.
+  if (blockError) return;
+  const blockedWithSender = new Set(
+    (blocks ?? []).map((row) => (row.blocker_id === senderId ? row.blocked_id : row.blocker_id)),
+  );
+  const recipients = candidates.filter((id) => !blockedWithSender.has(id));
   const cutoff = new Date(Date.now() - 30 * 60 * 1000).toISOString();
 
   await Promise.all(
@@ -384,9 +407,96 @@ export function isQuietTime(
 }
 
 /**
- * Push to a set of users, silently skipping anyone in quiet hours or who has
- * muted this category, and pruning dead subscriptions. Never throws -
- * notifications are best-effort.
+ * The kinds that still push the moment they happen while the daily digest is
+ * on (decision D16). Plan changes and direct invitations are about *now*: a
+ * new time or place, a cancellation, a date that just landed, an invitation
+ * with a clock on it. Reminders are here too, although D16 does not name them:
+ * a "starting soon" held until tomorrow morning's summary would be worse than
+ * none, and the digest's own copy has always promised they still come through.
+ * Everything else — answers, requests, comments, ideas, matches, room activity
+ * — waits for the summary.
+ */
+export const DIGEST_IMMEDIATE_KINDS: ReadonlySet<string> = new Set([
+  'event_invite',
+  'event_updated',
+  'event_urgent_change',
+  'event_cancelled',
+  'event_date_set',
+  'reminder',
+]);
+
+/** Whether a push of this kind waits for the digest, for someone who has it on. */
+export function heldForDigest(kind: string | undefined, digestEnabled: boolean | null): boolean {
+  return Boolean(digestEnabled) && Boolean(kind) && !DIGEST_IMMEDIATE_KINDS.has(kind as string);
+}
+
+export interface PushOptions {
+  /**
+   * The notification kind. With it, a recipient who chose the daily digest is
+   * skipped for everything but the kinds in `DIGEST_IMMEDIATE_KINDS`; the row
+   * notifyUsers wrote is what the digest later summarises.
+   */
+  kind?: string;
+}
+
+interface PushSubscriptionRow {
+  id: string;
+  endpoint: string;
+  p256dh: string;
+  auth: string;
+}
+
+interface DeliveryCounts {
+  delivered: number;
+  failed: number;
+  pruned: number;
+}
+
+/** Send to each subscription, pruning the gone ones. Never throws. */
+async function deliverPush(
+  admin: ReturnType<typeof createAdminClient>,
+  subs: PushSubscriptionRow[],
+  payload: PushPayload,
+): Promise<DeliveryCounts> {
+  const counts: DeliveryCounts = { delivered: 0, failed: 0, pruned: 0 };
+  // Push endpoints are third-party servers: bound the fan-out like every
+  // other provider call so one hung endpoint cannot pin a cron sweep.
+  await mapInBatches(
+    subs,
+    async (sub) => {
+      try {
+        await webPush.sendNotification(
+          {
+            endpoint: sub.endpoint,
+            keys: { p256dh: sub.p256dh, auth: sub.auth },
+          },
+          JSON.stringify(payload),
+          { timeout: WEB_PUSH_TIMEOUT_MS },
+        );
+        counts.delivered += 1;
+      } catch (error: unknown) {
+        const statusCode = (error as { statusCode?: number }).statusCode;
+        if (statusCode === 404 || statusCode === 410) {
+          counts.pruned += 1;
+          await admin.from('push_subscriptions').delete().eq('id', sub.id);
+          return;
+        }
+        counts.failed += 1;
+        await reportOperationalError('push.send', error, {
+          subscriptionId: sub.id,
+          statusCode: statusCode ?? null,
+        });
+      }
+    },
+    WEB_PUSH_BATCH_SIZE,
+  );
+  return counts;
+}
+
+/**
+ * Push to a set of users, silently skipping anyone in quiet hours, who has
+ * muted this category, or whose daily digest will carry this kind instead, and
+ * pruning dead subscriptions. Never throws - notifications are best-effort.
  *
  * `category` gates the push against the recipient's per-category preference
  * (a `notify_*` column on their profile). Omit it — or pass a payload whose
@@ -396,6 +506,7 @@ export async function sendPushToUsers(
   userIds: string[],
   payload: PushPayload,
   category?: NotificationCategory,
+  options: PushOptions = {},
 ): Promise<void> {
   if (userIds.length === 0 || !configureVapid()) return;
 
@@ -404,7 +515,7 @@ export async function sendPushToUsers(
   const { data: profiles } = await admin
     .from('profiles')
     .select(
-      'id, quiet_hours_start, quiet_hours_end, timezone, notify_plans, notify_suggestions, notify_reminders, notify_messages, notify_social',
+      'id, quiet_hours_start, quiet_hours_end, timezone, notify_plans, notify_suggestions, notify_reminders, notify_messages, notify_social, digest_enabled',
     )
     .in('id', userIds);
 
@@ -429,6 +540,9 @@ export async function sendPushToUsers(
     // A muted category opts out of the push. Default-on: only an explicit
     // `false` suppresses, so a null (pre-migration row) still notifies.
     .filter((p) => !prefColumn || p[prefColumn] !== false)
+    // Someone who asked for one summary a day gets exactly that: this kind
+    // is in tomorrow's digest, not on their lock screen now.
+    .filter((p) => !heldForDigest(options.kind, p.digest_enabled))
     .map((p) => p.id);
   if (awake.length === 0) return;
 
@@ -437,32 +551,45 @@ export async function sendPushToUsers(
     .select('id, endpoint, p256dh, auth')
     .in('user_id', awake);
 
-  // Push endpoints are third-party servers: bound the fan-out like every
-  // other provider call so one hung endpoint cannot pin a cron sweep.
-  await mapInBatches(
-    subs ?? [],
-    async (sub) => {
-      try {
-        await webPush.sendNotification(
-          {
-            endpoint: sub.endpoint,
-            keys: { p256dh: sub.p256dh, auth: sub.auth },
-          },
-          JSON.stringify(payload),
-          { timeout: WEB_PUSH_TIMEOUT_MS },
-        );
-      } catch (error: unknown) {
-        const statusCode = (error as { statusCode?: number }).statusCode;
-        if (statusCode === 404 || statusCode === 410) {
-          await admin.from('push_subscriptions').delete().eq('id', sub.id);
-          return;
-        }
-        await reportOperationalError('push.send', error, {
-          subscriptionId: sub.id,
-          statusCode: statusCode ?? null,
-        });
-      }
-    },
-    WEB_PUSH_BATCH_SIZE,
-  );
+  await deliverPush(admin, subs ?? [], payload);
+}
+
+/**
+ * What happened to one person's digest push.
+ *   - `delivered`: at least one device accepted it.
+ *   - `unavailable`: push can't reach them — no VAPID keys, no subscription,
+ *     or every subscription turned out to be gone. The digest falls back to
+ *     email.
+ *   - `failed`: they have live subscriptions and none accepted it (a provider
+ *     outage). Also worth the email fallback, and a retry if that fails too.
+ */
+export type DigestPushOutcome = 'delivered' | 'unavailable' | 'failed';
+
+/**
+ * Push the daily digest to one person.
+ *
+ * Deliberately ignores quiet hours (D16: the digest hour beats them — it is the
+ * one push someone scheduled for themselves) and the category switches (the
+ * body was already filtered to categories they have not muted). Reports
+ * whether it actually reached a device, because the digest is only marked sent
+ * when it did.
+ */
+export async function pushDigest(
+  userId: string,
+  payload: PushPayload,
+): Promise<DigestPushOutcome> {
+  if (!configureVapid()) return 'unavailable';
+  const admin = createAdminClient();
+  const { data: subs, error } = await admin
+    .from('push_subscriptions')
+    .select('id, endpoint, p256dh, auth')
+    .eq('user_id', userId);
+  if (error) {
+    await reportOperationalError('push.send', error, { stage: 'digest-subscriptions' });
+    return 'failed';
+  }
+  if (!subs || subs.length === 0) return 'unavailable';
+  const counts = await deliverPush(admin, subs, payload);
+  if (counts.delivered > 0) return 'delivered';
+  return counts.failed > 0 ? 'failed' : 'unavailable';
 }

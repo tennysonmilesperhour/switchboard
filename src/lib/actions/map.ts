@@ -5,15 +5,17 @@ import { failure, type ErrorCode } from '@/lib/errors';
 import { revalidatePath } from 'next/cache';
 import { requireUser } from '@/lib/server/require-user';
 import { checkRateLimit } from '@/lib/server/rate-limit';
-import { geocode, searchPlaces as nominatimSearch } from '@/lib/server/geocode';
+import { geocodeDetailed, searchPlacesDetailed } from '@/lib/server/geocode';
 import type { PlaceResult } from '@/lib/geo';
-import { reportAndFail } from '@/lib/server/observability';
+import { reportAndFail, reportOperationalError } from '@/lib/server/observability';
 
 export interface LocateResult {
   ok: boolean;
   located?: number; // rows given a coordinate this run
   unmatched?: number; // rows tried this run whose address matched nothing
   remaining?: number; // rows still lacking one afterward
+  /** The lookup service stopped answering part-way; the rest wait for a retry. */
+  interrupted?: boolean;
   error?: string;
   /** Stable failure code from `@/lib/errors`, shown beside the message. */
   code?: ErrorCode;
@@ -51,23 +53,33 @@ export async function searchPlaces(query: string): Promise<PlaceSearchResult> {
   }
 
   try {
-    return { ok: true, results: await nominatimSearch(trimmed) };
+    const results = await searchPlacesDetailed(trimmed);
+    // No answer at all is an outage, not "nothing matched": say so with the
+    // code instead of showing an empty list the reader will try to fix.
+    if (results === null) {
+      return reportAndFail(
+        'SB-MAP-LOOKUP',
+        'map.search',
+        new Error('geocoder did not answer'),
+        { queryLength: trimmed.length },
+      );
+    }
+    return { ok: true, results };
   } catch (error) {
     return reportAndFail('SB-MAP-LOOKUP', 'map.search', error, { queryLength: trimmed.length });
   }
 }
 
-// Bound latency and respect Nominatim's ~1 req/sec policy: geocode at most this
-// many rows per click, spacing the calls out. The button can be pressed again
-// to work through a longer backlog.
+// Bound latency: geocode at most this many rows per click. The ~1 req/s pace is
+// kept app-wide inside the geocoder (see `claimSlot` in
+// src/lib/server/geocode.ts), not by a sleep here. The button can be pressed
+// again to work through a longer backlog.
 const MAX_PER_RUN = 6;
-const SPACING_MS = 1100;
 
 type Pending = {
-  table: 'events' | 'moments';
   id: string;
   query: string;
-  /** Upcoming plans are placed before past ones and shared places. */
+  /** Upcoming plans are placed before past ones. */
   upcoming: boolean;
 };
 
@@ -86,15 +98,25 @@ function lookupOrder(pending: Pending[]): Pending[] {
 }
 
 /**
- * Geocode the caller's OWN un-located entities — plans they host and shared
- * places they opened — from the free-text address the row already stores,
- * caching the coordinate back onto the row so the map can plot it. Every query
- * is scoped to the caller's id (RLS is the backstop), and we only ever write our
- * own rows' latitude/longitude.
+ * Geocode the caller's OWN un-located plans from the free-text address each
+ * already stores, caching the coordinate back onto the row so the map can plot
+ * it. Every query is scoped to the caller's id (RLS is the backstop), and we
+ * only ever write our own rows' latitude/longitude.
  *
- * Zones are left out on purpose: they have no address, only a name, and a zone
- * called "Book club" geocodes to whichever Book Club the lookup finds first,
- * anywhere in the world. A zone gets a pin from the place picker on its form.
+ * Shared places (moments) are left out on purpose. A moment's place is a bare
+ * name — "Café Luna", "Gate B27" — and the first match for it anywhere in the
+ * world is not where anyone is. Worse, since D11 a located moment matches
+ * people within 200 m of that point, so a guessed pin would introduce someone
+ * to strangers in another city. A moment is located only by the device at
+ * check-in ("use my location").
+ *
+ * Zones are left out for the same reason: they have no address, only a name. A
+ * zone gets a pin from the place picker on its form.
+ *
+ * A lookup the service did not answer is not an unmatched address. The run
+ * stops at the first one and says the lookup is down (SB-MAP-LOOKUP), rather
+ * than reporting "Couldn't find N addresses" and sending the host off to
+ * rewrite addresses that were fine.
  */
 export async function locateMyPlaces(): Promise<LocateResult> {
   const auth = await requireUser();
@@ -105,58 +127,66 @@ export async function locateMyPlaces(): Promise<LocateResult> {
     return failure('SB-RATE-LIMIT', 'Too many location lookups. Try again shortly.');
   }
 
-  const [{ data: events }, { data: moments }] = await Promise.all([
-    supabase
-      .from('events')
-      .select('id, location_name, location_address, starts_at')
-      .eq('host_id', user.id)
-      .is('latitude', null)
-      .neq('status', 'cancelled'),
-    supabase
-      .from('moments')
-      .select('id, place_name')
-      .eq('user_id', user.id)
-      .is('latitude', null)
-      // The map plots only moments that aren't closed; looking up a closed
-      // one spent a scarce, rate-limited lookup on a pin nobody would see and
-      // reported it as "Placed on the map".
-      .neq('status', 'closed'),
-  ]);
+  const { data: events, error: loadError } = await supabase
+    .from('events')
+    .select('id, location_name, location_address, starts_at')
+    .eq('host_id', user.id)
+    .is('latitude', null)
+    .neq('status', 'cancelled');
+  if (loadError) {
+    return reportAndFail('SB-PLAN-LOAD', 'plans.load', loadError, { from: 'map.locate' });
+  }
 
   const now = Date.now();
   const pending: Pending[] = [];
   for (const event of events ?? []) {
     const query = [event.location_name, event.location_address].filter(Boolean).join(', ');
     const upcoming = Boolean(event.starts_at) && Date.parse(event.starts_at as string) >= now;
-    if (query) pending.push({ table: 'events', id: event.id, query, upcoming });
-  }
-  for (const moment of moments ?? []) {
-    if (moment.place_name) {
-      pending.push({ table: 'moments', id: moment.id, query: moment.place_name, upcoming: false });
-    }
+    if (query) pending.push({ id: event.id, query, upcoming });
   }
 
   const batch = lookupOrder(pending).slice(0, MAX_PER_RUN);
   let located = 0;
-  for (const [index, item] of batch.entries()) {
-    const point = await geocode(item.query);
-    if (point) {
-      const { error } = await supabase
-        .from(item.table)
-        .update({ latitude: point.lat, longitude: point.lng })
-        .eq('id', item.id);
-      if (!error) located += 1;
+  let unmatched = 0;
+  let interrupted = false;
+  for (const item of batch) {
+    const outcome = await geocodeDetailed(item.query);
+    if (outcome.status === 'unavailable') {
+      interrupted = true;
+      break;
     }
-    if (index < batch.length - 1) {
-      await new Promise((resolve) => setTimeout(resolve, SPACING_MS));
+    if (outcome.status === 'none') {
+      unmatched += 1;
+      continue;
     }
+    const { error } = await supabase
+      .from('events')
+      .update({ latitude: outcome.point.lat, longitude: outcome.point.lng })
+      .eq('id', item.id)
+      .eq('host_id', user.id);
+    if (!error) located += 1;
+  }
+
+  if (interrupted) {
+    if (located === 0 && unmatched === 0) {
+      return reportAndFail('SB-MAP-LOOKUP', 'map.locate', new Error('geocoder did not answer'), {
+        batch: batch.length,
+      });
+    }
+    await reportOperationalError(
+      'map.locate',
+      new Error('geocoder stopped answering mid-run'),
+      { located, unmatched },
+      'SB-MAP-LOOKUP',
+    );
   }
 
   revalidatePath('/map');
   return {
     ok: true,
     located,
-    unmatched: batch.length - located,
+    unmatched,
     remaining: Math.max(0, pending.length - located),
+    interrupted,
   };
 }

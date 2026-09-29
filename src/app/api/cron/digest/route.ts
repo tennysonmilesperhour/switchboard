@@ -19,7 +19,9 @@ export const maxDuration = 60;
  * and a once-a-day job can only ever be 8am somewhere. Sending at most one a
  * day is guaranteed by `digest_sent_at`, not by this schedule — a cron that
  * fires twice, or a retry after a partial failure, must not produce two
- * digests.
+ * digests. An undelivered one is retried by the next two sweeps
+ * (`retrying` in the summary), and `emailed` counts the ones push could not
+ * reach.
  */
 export async function GET(request: Request) {
   const startedAt = Date.now();
@@ -42,8 +44,8 @@ export async function GET(request: Request) {
   }
 
   try {
-    const sent = await sweepDigests();
-    const summary = { ok: true, sent };
+    const result = await sweepDigests();
+    const summary = { ok: true, ...result };
     try {
       await finishCronSweep('digest', summary);
     } finally {

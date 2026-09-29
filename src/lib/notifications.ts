@@ -107,6 +107,8 @@ const KIND_TO_CATEGORY: Record<string, NotificationCategory> = {
   event_cancelled: 'plans',
   announcement: 'plans',
   board_response: 'plans',
+  // Being made a co-host is a plan you now help run.
+  cohost_added: 'plans',
   // A plan whose date was still being voted on now has one. Goes to everyone
   // who already said yes through the share link, so it must honour notify_plans
   // like every other plan update rather than falling through uncategorised.
@@ -133,6 +135,7 @@ const KIND_TO_CATEGORY: Record<string, NotificationCategory> = {
   // about who is in a group with you, which is what 'social' covers.
   zone_join_request: 'social',
   zone_join_approved: 'social',
+  zone_join_denied: 'social',
   // A new post on a board you belong to, and being added to a board. A busy
   // board posts often; unmapped, these could not be muted without turning off
   // every push, so they sit with the other "who is in a group with you" kinds.
@@ -143,6 +146,9 @@ const KIND_TO_CATEGORY: Record<string, NotificationCategory> = {
   interest_received: 'social',
   moment: 'social',
   ritual: 'social',
+  // Left unmapped on purpose, so no toggle can hide an answer someone is
+  // waiting on: parental_approval, parental_approval_denied (a guardian's
+  // decision) and venue_review (the outcome of a partner claim).
 };
 
 export function categoryForKind(kind: string): NotificationCategory | null {

@@ -103,7 +103,14 @@ because `profiles` has no authority column — no `role`, `is_admin`, `rank`,
   the specific columns with a `REVOKE UPDATE` / freeze trigger.
 - Board membership role and event host/co-host powers already follow this: they
   live in separate tables gated by `is_board_moderator` / `is_event_host`, and
-  role changes go through security-definer functions.
+  role changes go through security-definer functions. For boards that function
+  is `set_board_member_role` (`20260930044000_board_moderators.sql`): a trigger
+  refuses any other write to `board_members.role` (lifted only by that
+  function's transaction-local flag, the `rotate_event_share_token`
+  precedent), it never demotes the last moderator, and only the founder may
+  step the founder down. The last moderator cannot leave; if an account
+  deletion takes them, the longest-standing member is promoted, so a board
+  with people in it always has someone who can run it.
 - Verification attaches to what was verified. A venue's `status` is frozen to
   moderators, but its owner may edit the name, area, perk, and link, so an
   edit to any of those on a verified venue sends it back to `pending`
@@ -127,6 +134,26 @@ a cookie value you set yourself, or a request body field.
   `user_reports` / `profile_avoids` are owner-scoped by RLS, and `are_blocked()`
   is consulted on discovery, matching, connection requests, mutual intents, and
   facet sharing. A moderation decision that only hides a button is not enforced.
+- A block reaches the rooms a pair shares (D12,
+  `20260930020000_room_blocks_and_controls.sql`). A two-person room (`match`,
+  `moment`) becomes read-only for both people: `private.room_closed_by_block`
+  sits in the `messages`, `room_items` and `expenses` write policies and in the
+  ledger functions, so nothing new can be added by either side while what was
+  said stays readable. A plan's room keeps working, and `notifyRoomActivity`
+  drops the notification between the pair (it fails closed if the block list
+  cannot be read). The room tells the blocker who they blocked and tells the
+  other person only that the room is read-only.
+- Room membership rows are identity-frozen by trigger. `room_members_update`
+  pins `member_id` but not `room_id`, so before
+  `20260930020000_room_blocks_and_controls.sql` a member could repoint their own
+  row at any room id and read it. Only `last_read_at` and `muted` change now.
+- People discovery is see-and-be-seen, in the database: `list_discoverable_people`
+  returns nothing to a caller who is not discoverable themselves (or is on
+  sabbatical), and an active `discover_connect` intent needs the same standing
+  under the `mutual_intents` policy; withdrawing one never does. Its "Nearby"
+  lane compares home points snapped to the same 0.25° cells as the Home density
+  check, so a moved home point learns no more than a city-sized cell
+  (`20260930042000_discovery_requires_discoverable.sql`).
 - `localStorage` is fine for **preferences** (a dismissed nudge, a UI toggle),
   never for **authorization**.
 
@@ -315,6 +342,25 @@ integrations a deployment has wired up is reconnaissance, not public data.
 - `supabase/tests/matchmaker_blocks.test.sql` — a matchmaker intro can never
   pair two people who have blocked each other, and an intro sent before a
   block closes instead of opening a shared room.
+- `supabase/tests/room_blocks_and_controls.test.sql` — a block makes a
+  two-person room read-only for both people and leaves group rooms working, a
+  membership row cannot be moved into another room, leave follows D20, and a
+  room photo can only point at the writer's own upload folder.
+- `supabase/tests/split_the_bill.test.sql` — the payer must be in the room,
+  shares add up and are written only by the ledger functions, only the logger
+  or payer may edit, and settling touches exactly one pair.
+- `supabase/tests/people_controls.test.sql` — household members must be the
+  owner's connections, an ignored request stays hidden for 90 days and the
+  sender never learns it, and only a party to a match can unmatch it.
+- `supabase/tests/cohost_access.test.sql` — a co-host can open and run the plan
+  they co-host, a stranger still can't, and only a connection or an invitee
+  can be made a co-host (D1).
+- `supabase/tests/guardian_hold.test.sql` — every RSVP path holds a guardian
+  plan's yes without a seat, only the guardian's approval makes it count (with
+  capacity re-checked), and no other write can.
+- `supabase/tests/invite_list_visibility.test.sql` — the invite list shows only
+  invitations that went out, only when the host allows it, and never a contact
+  or an RSVP the host kept private.
 - `supabase/tests/private_place_leaks.test.sql` — a private zone's headcount
   and its members' moments stay invisible to non-members, same-named zones do
   not cross-match, and editing a verified venue sends it back to review.
@@ -330,6 +376,17 @@ integrations a deployment has wired up is reconnaissance, not public data.
   are still withheld, and the columns the app reads are readable.
 - `src/lib/profile-column-grants.test.ts` — no `profiles` column is left off the
   allowlist without a written reason.
+- `supabase/tests/private_zone_requests.test.sql` — a denied or removed
+  requester waits 30 days for their one new ask, cannot erase a decision, and
+  leaving or removal ends their check-in in the zone.
+- `supabase/tests/shared_moments_distance.test.sql` — located check-ins match
+  within about 200 m and not at 1 km; zones, blocks and anonymity still hold.
+- `supabase/tests/discovery_requires_discoverable.test.sql` — browsing and
+  marking interest require being discoverable; Nearby compares locations.
+- `supabase/tests/zone_end_dates.test.sql` — every zone ends, nobody checks
+  into an ended one, and deleting a zone ends the check-ins in it.
+- `supabase/tests/board_moderators.test.sql` — board roles change only through
+  `set_board_member_role`, and no board is left without a moderator.
 
 ## Media privacy (gated content)
 
@@ -345,6 +402,21 @@ working. Genuinely public media (profile avatars/covers, event covers) stays in
 the public buckets. When adding a new gated-media surface, upload to
 `media-private` and sign at the (server) render site — never store or render a
 public URL for gated content.
+
+Room photos joined this bucket in `20260930021000_private_room_photos.sql`
+(they had been public "so realtime needs no signing"). Two things are specific
+to them:
+
+- **A path must be in its writer's own folder.** Room rows are writable from the
+  browser, and the bucket also holds other people's voice notes and capsule
+  photos, so a room that signed any stored path would sign *those*. A trigger
+  on `messages.image_url` and photo `room_items.url` refuses a path whose first
+  segment is not the writer (`auth.uid()`, or the sender the server
+  authenticated), and `signRoomPhotos` (`src/lib/server/room-media.ts`) checks
+  the same thing again before minting a URL.
+- **Realtime carries the path, not a URL.** A photo that arrives live is signed
+  by `signRoomMessagePhotos`, which re-reads the message through the caller's
+  own RLS client first; the page signs everything it renders in one batch.
 
 ## Event invitations (consent is not host-writable)
 
@@ -362,7 +434,10 @@ invites, open-table requests, and share-link RSVP rows:
   message; the trigger remains authoritative.
 - **Hosts may enqueue or send, not RSVP.** `invites_insert` accepts only
   `queued` and `sent`. `accepted`, `declined`, `waitlisted`, and the other
-  response states are written only by the recipient/token response functions.
+  response states are written only by the recipient/token response functions —
+  and, on a plan that needs a guardian's approval, a yes is `pending_approval`
+  until the guardian's own token-addressed answer makes it count (see
+  "Guardian approval" below).
 - **External text is metered.** Invitation and cancellation email/SMS consume
   durable per-host daily allowances before a provider is called. Email and SMS
   share the same allowance; in-app notifications are not part of that external
@@ -425,23 +500,117 @@ by handle, email, or phone.
 Litmus test: *is any contact detail on this page something the viewer did not
 themselves supply?*
 
-## Guardian approval (two separately authorized paths)
+## Co-hosts (who may be one, and what they can read)
 
-A guardian link is a capability that can decide whether an accepted RSVP
-counts, so creating it is not an ordinary form post. The first request and a
-host's recovery resend have different authority and must stay separate:
+A co-host shares the host's powers: `is_event_host` is true for them, so every
+host-gated write policy and definer function already admits them. Two things
+follow, and both used to be broken
+(`20260930010000_cohost_plan_access.sql`):
 
-- **The invitee creates the first request.** `requestParentalApproval` reads the
-  invite through the caller's session/RLS client and requires both
-  `invitee_id = user.id` and the submitted `event_id` to match before any
-  service-role read or write. The browser has no direct INSERT policy on
-  `parental_approvals`.
-- **A host may correct and resend, not impersonate the invitee path.**
+- **A co-host can read what they manage.** `can_view_event` admits co-hosts, so
+  the plan page, its polls, questions and thread open for them without an
+  invitation; `invites_select` routes through `is_event_host` like
+  `invites_insert`/`invites_delete` already did. Before, a co-host without an
+  invite was bounced from `/events/<id>` to `/join/<id>`, and their delete of an
+  Open Table request matched zero rows (a DELETE only reaches rows the caller
+  may SELECT). `/plans` and the calendar feed list co-hosted plans.
+- **Only someone the host knows can be made one (decision D1).** The
+  `event_cohosts_host` policy's WITH CHECK requires `private.cohost_eligible`:
+  an accepted connection of the primary host, or someone already on this
+  plan's guest list (not an unanswered Open Table request), never across a
+  block. Co-hosting hands over the guest list, every guest's contact card and
+  the cancel button; a typo'd handle must not be enough. The roster itself
+  stays primary-host-only, and removal is never blocked by eligibility.
+
+Covered by `supabase/tests/cohost_access.test.sql`.
+
+Litmus test: *can the primary host hand plan-management powers to a stranger,
+or can a co-host be locked out of a plan the database already lets them run?*
+
+## The invite list (who else is invited)
+
+"Show the whole invite list" (`events.show_invite_list`, decision D3) is read
+through one definer function, `event_invite_list`
+(`20260930012000_invite_list_visibility.sql`), never a policy on `invites`
+(which would expose every column, contacts included) and never a filter in the
+page:
+
+- Only for someone who can view the plan, and only when the host has switched
+  the list on (managers always).
+- Only invitations that have gone out: sent, accepted, waitlisted, or a yes held
+  for a guardian. Never somebody still queued — being listed would tell them
+  and everyone else where they sit in the host's line — and never a decline, an
+  expiry, a withdrawal or an unanswered Open Table request.
+- Identity fields only. A guest "name" that is really the email or phone the
+  host typed is shown as "Guest"; `guest_contact` never leaves the function.
+- A status only when "show who's in" is also on. Otherwise everyone reads as
+  `invited`, so the list is not a side door to RSVPs the host kept private; a
+  guardian-held yes always reads as `invited`.
+
+`show_expired` was never read by anything and is retired: no longer offered or
+written by the app, kept as a column only so plan creation keeps working.
+
+Covered by `supabase/tests/invite_list_visibility.test.sql`.
+
+Litmus test: *can a guest learn who is queued, who declined, how to reach a
+guest, or who said yes when the host chose not to show it?*
+
+## Guardian approval (a held yes, and two separately authorized paths)
+
+On a plan with `parental_approval`, a yes does not count until a parent or
+guardian approves it (decision D2, `20260930011000_guardian_hold.sql`). It used
+to count at once and could only be taken back by a denial, the in-app RSVP never
+asked for a guardian at all, and a yes whose guardian step was abandoned in a
+closed tab simply stayed counted.
+
+- **Every RSVP path holds the yes as `pending_approval`.** `respond_to_invite`,
+  `rsvp_via_share_token`, `respond_to_guest_invite` and `approve_join_request`
+  (a host letting in an Open Table request is not the guardian's yes) all write
+  it instead of `accepted`. The SMS YES path refuses guardian plans outright. A
+  held yes takes no seat — every capacity check counts `accepted` only — joins
+  no room, gets no reminders or "going" notifications, and appears in no
+  attendee list or calendar feed. It does not block the cascade and is not
+  retired when the plan fills: the guardian's answer decides it.
+- **Only the guardian's answer makes it count.** Approval re-checks capacity
+  under the event lock at that moment (a seat if one is free, the waitlist if
+  not) and grants room membership; denial releases the yes (`declined`). The
+  `invites_guardian_hold` trigger enforces the invariant for every writer,
+  including one added later: on a guardian plan an invite may become `accepted`
+  only once its approval row is `approved`. Anything else raises.
+- **The step survives a closed tab.** The held state is on the invite, so the
+  plan page, `/rsvp/<token>` and the share link's hand-off all show "waiting on
+  a guardian" with the form to (re)send the request. The invitee sees the
+  guardian's address masked (`p•••@example.com`), and only on their own
+  invitation: `/rsvp/<token>` is a forwardable link.
+- **The email outcome is reported, not assumed.** Sending uses
+  `sendEmailWithResult`; the outcome is stored on the request
+  (`parental_approvals.email_status`) and a request whose email did not go out
+  says so — with `SB-GUARDIAN-EMAIL`, or `SB-CONFIG-EMAIL` when the deployment
+  cannot send mail — to the invitee and to the host, on the spot and after a
+  reload. The request itself is saved either way and can be sent again.
+- **The guardian sees exactly what D2 allows.** The email and `/approve/<token>`
+  both render from `loadGuardianPlanFacts`: the plan's title, when and where,
+  the host's name, and who said yes. Not the description, not the guest list.
+
+Creating a guardian link is not an ordinary form post: the link decides whether
+a yes counts. The invitee's request and a host's recovery resend have different
+authority and must stay separate:
+
+- **The invitee asks their own guardian.** `requestParentalApproval` reads the
+  invite through the caller's session/RLS client and requires
+  `invitee_id = user.id`, the submitted `event_id` to match, and the invite to
+  be `pending_approval` before any service-role read or write. Asking again
+  reuses the pending request and rotates its token, so a mistyped address is
+  corrected without leaving a second live link behind. The browser has no
+  direct INSERT policy on `parental_approvals`.
+- **A host may correct and resend, not start or impersonate the invitee path.**
   `resendParentalApproval` first proves the caller manages the exact plan, then
   scopes every service-role query and update to that plan, invite, and a
-  still-pending approval. Both paths are rate-limited per caller. A resend
-  rotates the token, so the mis-addressed link it exists to correct stops
-  working the moment the corrected one is sent.
+  still-pending approval. A host sees every held yes — including those where
+  nobody has been asked yet — but the first request is always the invitee's.
+  Both paths are rate-limited per caller. A resend rotates the token, so the
+  mis-addressed link it exists to correct stops working the moment the
+  corrected one is sent.
 - **The token column is withheld from browser roles.**
   `parental_approvals_host_read` lets a host see the guardian's name and
   address, but the token is the guardian's decision, so
@@ -453,14 +622,23 @@ host's recovery resend have different authority and must stay separate:
 - **The guardian needs no account.** `/approve/<token>` is in the proxy's
   public paths: the token is the whole authorization, and the person holding
   it is usually a parent who has never signed up. Sending them to `/welcome`
-  was a dead end with the invitee's RSVP stuck behind it.
+  was a dead end with the invitee's RSVP stuck behind it. For the same reason
+  `resolve_parental_approval` stays a `public` definer executable by `anon`
+  rather than a private body behind an invoker wrapper: `anon` has no USAGE on
+  schema `private`.
 - **The resolver distrusts even privileged rows.** The token-addressed
   `resolve_parental_approval` function checks that the approval's `event_id`
   equals its invite's `event_id` before mutating either row. A mismatch returns
-  `invite_mismatch` and leaves both records unchanged.
+  `invite_mismatch` and leaves both records unchanged. It approves only a held
+  (or legacy already-counted) yes on a plan still taking answers; a withdrawn
+  yes or a closed plan is reported, not revived.
+
+Covered by `supabase/tests/guardian_hold.test.sql`,
+`parental_approval_authz.test.sql` and `parental_approval_token_column.test.sql`.
 
 Litmus test: *can this caller prove they own this RSVP, or manage this exact
-plan—and would a cross-plan approval row still be harmless?*
+plan—would a cross-plan approval row still be harmless—and can any write make a
+guardian plan's yes count without the guardian?*
 
 ## SMS consent and suppression
 
@@ -496,6 +674,14 @@ Notification routing is recipient-owned and rechecked at dispatch. New channel
 choices suppress legacy member email and push/SMS duplicates. Opting into urgent
 SMS does not bypass consent, STOP, channel preferences, budget limits, or the
 explicit deadline. See `docs/SMS.md` for the complete behavior and retention.
+
+Withdrawing SMS consent never silences a member. SMS can only be chosen as a
+category's sole channel while it can deliver (subscribed, verified, not
+STOPped), and when any of those stops being true — including a STOP arriving
+through the signed webhook — database triggers put that route back to
+"existing" and record why (`20260930030000_sms_route_fallback.sql`). The route
+columns stay owner-readable and definer-written: members dismiss the note
+through `dismiss_sms_route_note()`, never by writing the row.
 
 ## Live location (opt-in presence)
 
@@ -608,12 +794,20 @@ profile:
   action. The action proves the caller owns a live moment, revalidates that the
   candidate is still discoverable, then resolves the target server-side. Once
   mutual consent reveals a profile, the normal profile safety controls apply.
-- **A zone is part of the place.** Matching compares typed place names, so it
-  also requires both moments to be in the same zone (or both in none), and a
-  zone moment only matches someone who can view that zone
+- **A zone is part of the place.** Two moments match only in the same zone (or
+  both in none), and a zone moment only for someone who can view that zone
   (`20260929160000_private_place_leaks.sql`). Without that, typing a private
   zone's name found its members, and two zones sharing a name in different
   cities matched each other's people.
+- **Where, not what was typed (D11).** In a zone, the zone is the place. Outside
+  zones, two located check-ins match within about 200 m whatever each typed;
+  only when either is unlocated does the typed name decide
+  (`20260930041000_shared_moments_distance.sql`). The distance is taken between
+  points rounded to three decimals (~110 m): a moment's coordinate is
+  self-writable and the RPC is unmetered, so an exact 200 m boundary would be a
+  trilateration oracle for an anonymous person's device fix. "Locate my plans"
+  never geocodes a moment's bare name for the same reason — a guessed pin would
+  match strangers in another city.
 
 Litmus test: *does any field or action available before mutual reveal let the
 browser identify the person behind a candidate moment?*
@@ -684,8 +878,23 @@ than inventing a second access system.
   already asked — nothing else, keyed by exact slug, at most one row. It answers
   "does this address exist" for someone who was handed the URL; it cannot be
   used to enumerate private zones or read their contents.
+- **Asking goes through one door, and a decision sticks (D10).** There is no
+  INSERT policy on `zone_join_requests`; `request_zone_join` files or reopens a
+  request and says what happened. A denial, or a removal by a moderator, is
+  timestamped and allows one new ask 30 days later. A requester may delete a
+  request only while it is still pending, so deleting a decision is not a way
+  around the wait. The requester reads their own row, so the door shows the
+  real state, and they are notified either way.
+- **Out of the zone means out of its count.** Leaving or being removed closes
+  the person's open check-in there (`on_zone_member_removed`), and deleting a
+  zone closes every check-in in it before `moments.zone_id` is nulled — an
+  open zone check-in turned zone-less would otherwise start matching strangers
+  outside the zone. A zone that has ended (`zones.ends_at`, D23) takes no new
+  check-ins.
 
-Covered by `supabase/tests/private_zones.test.sql` and
+Covered by `supabase/tests/private_zones.test.sql`,
+`supabase/tests/private_zone_requests.test.sql`,
+`supabase/tests/zone_end_dates.test.sql` and
 `supabase/tests/moment_zone_checkout.test.sql`.
 
 Litmus test: *could someone outside a private zone learn its description, its

@@ -37,6 +37,9 @@ export function JoinRequests({
         toast.error(result.error ?? 'Could not approve that request.', result.code);
       } else if (result.outcome === 'waitlisted') {
         toast.info(`The plan is full, so ${request.name} is on the waitlist.`);
+      } else if (result.outcome === 'pending_approval') {
+        // A guardian plan: the host's yes is not the guardian's.
+        toast.info(`${request.name} is waiting on a guardian’s OK - it counts once they approve.`);
       } else if (result.outcome === 'gone') {
         toast.info('That request was already answered.');
       } else {

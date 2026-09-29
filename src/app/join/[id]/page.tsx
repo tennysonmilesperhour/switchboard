@@ -113,11 +113,16 @@ export default async function JoinPage({
   }
 
   // Figure out how the signed-in viewer already relates to this plan. Anyone
-  // who can actually see the event page (host, or an invitee whose invite is
-  // live) is sent straight there. People who are involved but *can't* yet view
-  // it — a co-host without an invite, or an invitee still queued in the line —
-  // get a gentle heads-up instead of a redirect that would 404, and never the
+  // who can actually see the event page (host, co-host, or an invitee whose
+  // invite is live) is sent straight there. People who are involved but
+  // *can't* yet view it — an invitee still queued in the line — get a gentle
+  // heads-up instead of a redirect that would bounce, and never the
   // ask-to-join button (asking again would just error "already involved").
+  //
+  // A co-host used to be in that second group: `can_view_event` left them out,
+  // so "Open your plan" on /i/<token> sent them to /events/<id>, which sent
+  // them here. Since 20260930010000 co-hosts pass the policy and are
+  // redirected like the host; the co-host lookup below stays as a backstop.
   let alreadyInvolved = false;
   if (event && user) {
     // Ask the same row-level policy the event page reads through, rather than
@@ -198,8 +203,8 @@ export default async function JoinPage({
       </header>
       <main className="flex-1 flex flex-col justify-center pb-24">
         {/* `alreadyInvolved` keeps the plan visible for someone who is on it but
-            can't see the event page yet (a queued invitee, a co-host without an
-            invite). Telling them their invite link "isn't active" while they are
+            can't see the event page yet (a queued invitee). Telling them their
+            invite link "isn't active" while they are
             literally on the guest list is the same misleading dead end this page
             exists to undo — open_table governs who may ASK to join, not who may
             read a plan they are already part of. */}

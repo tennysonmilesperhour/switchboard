@@ -1,12 +1,15 @@
 import { createAdminClient } from '@/lib/supabase/admin';
-import { notifyUsers } from '@/lib/server/notify';
+import { notifyPollOpened, notifyPollOutcome } from '@/lib/server/poll-notices';
+import { applyDecidedDate } from '@/lib/server/poll-date';
 import {
   decidePoll,
   normalizeWeight,
   scoreOptions,
   type Vote,
 } from '@/lib/engine/scoring';
-import { pollQuestion } from '@/lib/types';
+
+/** Phases in which a poll is still taking answers. */
+const OPEN_PHASES = ['suggesting', 'voting', 'runoff'];
 
 /**
  * Open any follow-up polls that were waiting on this one, and tell the group.
@@ -32,45 +35,14 @@ export async function openFollowUpPolls(pollId: string): Promise<string[]> {
     .filter((id: string | undefined): id is string => Boolean(id));
   if (ids.length === 0) return [];
 
-  // One notification per newly-open poll, to everyone who is in on the plan.
-  // A decision landing is exactly the moment the next question becomes
-  // answerable, so this is news, not noise — and it rides `notify_plans` like
-  // every other plan update.
+  // One notification per newly-open poll, to everyone the plan puts its
+  // questions to: the host and co-hosts, everyone who said yes, and — while the
+  // plan is still deciding — everyone on the list, who are the voters a
+  // deciding plan exists to ask (`pollAudience`). A decision landing is exactly
+  // the moment the next question becomes answerable, so this is news, not
+  // noise — and it rides `notify_plans` like every other plan update.
   for (const id of ids) {
-    const { data: poll } = await admin
-      .from('polls')
-      .select('id, event_id, topic, title, event:events(title)')
-      .eq('id', id)
-      .maybeSingle();
-    if (!poll) continue;
-
-    const { data: invites } = await admin
-      .from('invites')
-      .select('invitee_id')
-      .eq('event_id', poll.event_id)
-      .eq('status', 'accepted');
-    const { data: event } = await admin
-      .from('events')
-      .select('host_id, title')
-      .eq('id', poll.event_id)
-      .maybeSingle();
-
-    const recipients = new Set<string>();
-    for (const invite of invites ?? []) {
-      if (invite.invitee_id) recipients.add(invite.invitee_id);
-    }
-    if (event?.host_id) recipients.add(event.host_id);
-    if (recipients.size === 0) continue;
-
-    await notifyUsers([...recipients], {
-      kind: 'poll_opened',
-      title: `That's settled — now: ${pollQuestion({
-        topic: poll.topic,
-        title: poll.title,
-      })}`,
-      body: event?.title ? `Weigh in on ${event.title}.` : 'Weigh in when you can.',
-      url: `/events/${poll.event_id}`,
-    });
+    await notifyPollOpened(id, 'follow-up');
   }
 
   return ids;
@@ -82,7 +54,14 @@ export async function openFollowUpPolls(pollId: string): Promise<string[]> {
  */
 export async function resolvePoll(
   pollId: string,
-  { onlyIfDue = false }: { onlyIfDue?: boolean } = {},
+  {
+    onlyIfDue = false,
+    actorId = null,
+  }: {
+    onlyIfDue?: boolean;
+    /** The host or co-host closing it by hand; they are not told their own news. */
+    actorId?: string | null;
+  } = {},
 ): Promise<void> {
   const admin = createAdminClient();
 
@@ -94,7 +73,9 @@ export async function resolvePoll(
   if (pollError) throw pollError;
   if (!poll || poll.phase === 'pending') return;
   if (poll.phase === 'decided') {
-    // Retry an unlock that failed after the decision itself was saved.
+    // Retry what follows a decision if it failed after the decision itself was
+    // saved: the plan's date, then the unlock. Both are idempotent.
+    await applyDecidedDate(pollId);
     await openFollowUpPolls(pollId);
     return;
   }
@@ -148,21 +129,34 @@ export async function resolvePoll(
     const { error: updateError } = await admin.from('polls')
       .update({ phase: 'runoff', vote_deadline: voteDeadline, allow_suggestions: false }).eq('id', pollId);
     if (updateError) throw updateError;
+    // Every first-round rating was just cleared, so the finalists need everyone
+    // again; a runoff nobody hears about closes on no votes.
+    await notifyPollOpened(pollId, 'runoff', actorId);
     return;
   }
 
   // A clear winner, or nothing that can honestly be called one - no votes, or a
   // leader only ahead on the id tiebreak - in which case the poll closes with
   // no winner and the host chooses from what the group said.
-  const { error: updateError } = await admin
+  //
+  // Guarded on the poll still being open, so when the sweep and the host's own
+  // "Close voting" race, only the one that actually decided it announces it.
+  const { data: decided, error: updateError } = await admin
     .from('polls')
     .update({
       phase: 'decided',
       ...(outcome.kind === 'winner' ? { winning_option_id: outcome.optionId } : {}),
     })
-    .eq('id', pollId);
+    .eq('id', pollId)
+    .in('phase', OPEN_PHASES)
+    .select('id');
   if (updateError) throw updateError;
+  if (!decided || decided.length === 0) return;
+  // The date first, so the unlock and the announcement both see the plan as
+  // it now stands ("It's decided: Friday evening. It's Fri, Oct 2, 6:00 PM").
+  const date = await applyDecidedDate(pollId);
   await openFollowUpPolls(pollId);
+  await notifyPollOutcome(pollId, { date, actorId });
 }
 
 /**
@@ -201,7 +195,7 @@ export async function sweepDuePolls(): Promise<number> {
   const { data: due, error } = await admin
     .from('polls')
     .select('id')
-    .in('phase', ['suggesting', 'voting', 'runoff'])
+    .in('phase', OPEN_PHASES)
     .not('vote_deadline', 'is', null)
     .lt('vote_deadline', new Date().toISOString());
   if (error) throw error;

@@ -8,6 +8,10 @@ import { ZoneCheckIn } from './ZoneCheckIn';
 import { ZoneAccess } from './ZoneAccess';
 import { ZoneLocationEditor } from './ZoneLocationEditor';
 import { ZoneJoinRequest } from './ZoneJoinRequest';
+import { ZoneSettings } from './ZoneSettings';
+import { ZoneLeave } from './ZoneLeave';
+import { zoneIsActive, zoneRequestState } from '@/lib/zone-rules';
+import { formatDate } from '@/lib/format';
 
 export default async function ZonePage({
   params,
@@ -28,7 +32,7 @@ export default async function ZonePage({
   const { data: zone } = await supabase
     .from('zones')
     .select(
-      'id, slug, name, description, experiences, latitude, longitude, visibility, organizer_id',
+      'id, slug, name, description, experiences, latitude, longitude, visibility, organizer_id, ends_at',
     )
     .eq('slug', slug)
     .maybeSingle();
@@ -42,21 +46,42 @@ export default async function ZonePage({
     });
     const row = Array.isArray(knockable) ? knockable[0] : null;
     if (!row) notFound();
+    // Their own request, which RLS lets them read: pending, or the decision
+    // that was made about them and when they may ask again (D10).
+    const { data: mine } = await supabase
+      .from('zone_join_requests')
+      .select('status, asks, created_at, decided_at')
+      .eq('zone_id', row.id)
+      .eq('requester_id', user.id)
+      .maybeSingle();
     return (
       <AppShell title={row.name} back="/zones">
         <ZoneJoinRequest
           zoneId={row.id}
           zoneName={row.name}
-          alreadyAsked={row.request_pending}
+          initialState={
+            mine ? zoneRequestState(mine) : row.request_pending ? { kind: 'pending' } : { kind: 'none' }
+          }
         />
       </AppShell>
     );
   }
 
   const point = toMapPoint(zone.latitude, zone.longitude);
-  const canManage = await supabase
-    .rpc('is_current_user_zone_moderator', { p_zone: zone.id })
-    .then(({ data }) => data === true);
+  const isOrganizer = zone.organizer_id === user.id;
+  const active = zoneIsActive(zone.ends_at);
+  const [canManage, { data: myMembership }] = await Promise.all([
+    supabase
+      .rpc('is_current_user_zone_moderator', { p_zone: zone.id })
+      .then(({ data }) => data === true),
+    // On the roster (the organizer never is): the one row "Leave zone" deletes.
+    supabase
+      .from('zone_members')
+      .select('member_id')
+      .eq('zone_id', zone.id)
+      .eq('member_id', user.id)
+      .maybeSingle(),
+  ]);
 
   // Only fetched for someone who can act on them; RLS returns nothing to
   // anyone else regardless.
@@ -113,6 +138,9 @@ export default async function ZonePage({
           {zone.description && (
             <p className="text-sm opacity-70 mt-2 leading-relaxed">{zone.description}</p>
           )}
+          <p className="text-xs opacity-60 mt-2">
+            {active ? `Open until ${formatDate(zone.ends_at)}` : `Ended ${formatDate(zone.ends_at)}`}
+          </p>
           <p className="text-sm opacity-70 mt-3">
             {others > 0
               ? `${others} ${others === 1 ? 'other person is' : 'other people are'} currently open to a shared moment here.${
@@ -139,15 +167,33 @@ export default async function ZonePage({
           )}
         </div>
         {canManage && <ZoneLocationEditor zoneId={zone.id} pinned={point !== null} />}
-        <ZoneCheckIn
-          zoneId={zone.id}
-          zoneName={zone.name}
-          experiences={
-            zone.experiences.length > 0
-              ? zone.experiences
-              : ['Coffee Conversation', 'Networking', 'Meet Someone New']
-          }
-        />
+        {active ? (
+          <ZoneCheckIn
+            zoneId={zone.id}
+            zoneName={zone.name}
+            experiences={
+              zone.experiences.length > 0
+                ? zone.experiences
+                : ['Coffee Conversation', 'Networking', 'Meet Someone New']
+            }
+          />
+        ) : (
+          <p className="rounded-card border border-line bg-cream px-4 py-3 text-sm text-ink-soft">
+            This zone has ended, so nobody new can check in.
+            {canManage ? ' Move its end date in Zone settings to open it again.' : ''}
+          </p>
+        )}
+
+        {canManage && (
+          <ZoneSettings
+            zoneId={zone.id}
+            name={zone.name}
+            description={zone.description}
+            experiences={zone.experiences}
+            endsAt={zone.ends_at}
+            isOrganizer={isOrganizer}
+          />
+        )}
 
         {canManage && (
           <ZoneAccess
@@ -166,6 +212,16 @@ export default async function ZonePage({
               display_name: nameOf(row),
             }))}
           />
+        )}
+
+        {myMembership && !isOrganizer && (
+          <div className="flex justify-center">
+            <ZoneLeave
+              zoneId={zone.id}
+              zoneName={zone.name}
+              isPrivate={zone.visibility === 'private'}
+            />
+          </div>
         )}
       </div>
     </AppShell>

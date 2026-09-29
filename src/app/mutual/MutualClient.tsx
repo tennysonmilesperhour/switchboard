@@ -13,6 +13,7 @@ import { Icon } from '@/components/ui/Icon';
 import { useToast } from '@/components/ui/Toast';
 import { useConfirm } from '@/components/ui/ConfirmDialog';
 import { downToConnect, withdrawIntent } from '@/lib/actions/mutual';
+import { unmatch } from '@/lib/actions/matches';
 import { endRitual, pauseRitual, proposeRitual, respondToRitual } from '@/lib/actions/rituals';
 import { formatRelative } from '@/lib/format';
 import { ACTIVITY_PRESETS } from '@/lib/types';
@@ -145,6 +146,27 @@ export function MutualClient({
     });
   }
 
+  // G37: the ordinary way out of a match. Blocking was the only one, and it
+  // says something much stronger than "this isn't going anywhere".
+  async function endMatch(match: MyMatch) {
+    const ok = await confirm({
+      title: `Unmatch with ${match.otherName}?`,
+      body: `The match and its room go away for both of you, messages included, and neither of you is told. If something happened that a moderator should see, report it from the room first.`,
+      confirmLabel: 'Unmatch',
+      danger: true,
+    });
+    if (!ok) return;
+    startTransition(async () => {
+      const result = await unmatch(match.id);
+      if (!result.ok) {
+        toast.error(result.error ?? 'Could not unmatch. Try again.', result.code);
+        return;
+      }
+      toast.success('Unmatched.');
+      router.refresh();
+    });
+  }
+
   async function end(ritual: RitualRow) {
     const ok = await confirm({
       title: `End your ${ritual.activity} ritual?`,
@@ -207,6 +229,16 @@ export function MutualClient({
                       <Button size="sm">Say hi 💬</Button>
                     </Link>
                   )}
+                </div>
+                <div className="mt-2 flex justify-end">
+                  <button
+                    type="button"
+                    disabled={pending}
+                    onClick={() => endMatch(match)}
+                    className="min-h-11 rounded-pill px-2 text-xs font-semibold text-ink-faint hover:text-rose-deep focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-terracotta"
+                  >
+                    Unmatch
+                  </button>
                 </div>
               </Card>
             ))}

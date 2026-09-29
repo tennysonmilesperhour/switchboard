@@ -50,7 +50,7 @@ export function EnergyPrompt({
     <Card tone="cream">
       <p className="text-sm font-medium">How did “{eventTitle}” leave you feeling?</p>
       <p className="text-xs text-ink-faint mt-0.5">
-        Private. Helps Switchboard pace your suggestions.
+        Private. It feeds the energy map in Your Read, which only you see.
       </p>
       <div className="flex gap-2 mt-3">
         {(

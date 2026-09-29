@@ -61,3 +61,24 @@ export function describeCompany(groupSize: string, openToMeeting: boolean): stri
 
   return guidance ? `${who} ${guidance}` : who;
 }
+
+/** The budget chips, cheapest first. The server treats anything else as `$$`. */
+export const DISCOVERY_BUDGETS = ['Free', '$', '$$', '$$$'] as const;
+export const DEFAULT_BUDGET = '$$';
+
+/** The vibe chips. The server drops anything else. */
+export const DISCOVERY_VIBES = ['Relaxed', 'Adventurous', 'Cozy', 'Lively', 'Quiet'] as const;
+
+/**
+ * Server-side bounds on what a search may carry. The form keeps to them; these
+ * are what a direct call to the action is held to, since every field ends up
+ * in a model prompt and a request log.
+ */
+export const DISCOVERY_LIMITS = {
+  location: 80,
+  when: 60,
+  interests: 12,
+  interestLength: 40,
+  minMiles: 1,
+  maxMiles: 100,
+} as const;

@@ -12,6 +12,8 @@ interface ProfileShareProps {
   vcard: string;
   displayName: string;
   handle: string;
+  /** Absolute `/u/<handle>` link, or null when there is no handle to link to. */
+  profileUrl: string | null;
   /** Whether contact details are included in the shared card. */
   contactIncluded: boolean;
 }
@@ -21,6 +23,7 @@ export function ProfileShare({
   vcard,
   displayName,
   handle,
+  profileUrl,
   contactIncluded,
 }: ProfileShareProps) {
   const [open, setOpen] = useState(false);
@@ -102,8 +105,13 @@ export function ProfileShare({
             <h2 id={titleId} className="mt-4 text-lg font-extrabold text-ink">
               {displayName}
             </h2>
-            <p className="text-sm text-ink-faint">@{handle}</p>
-            <div className="mt-4 flex items-center justify-center gap-2">
+            {handle && <p className="text-sm text-ink-faint">@{handle}</p>}
+            {profileUrl && (
+              // The link itself, visible, so it can be read out or checked
+              // before it is sent anywhere.
+              <p className="mt-2 break-all text-xs text-ink-soft">{profileUrl}</p>
+            )}
+            <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
               <button
                 type="button"
                 onClick={downloadVcf}
@@ -112,8 +120,14 @@ export function ProfileShare({
                 <Icon name="account" size={15} />
                 Save contact
               </button>
-              <CopyButton text={`@${handle}`} label="Copy handle" />
+              {profileUrl && <CopyButton text={profileUrl} label="Copy profile link" />}
+              {handle && <CopyButton text={`@${handle}`} label="Copy handle" />}
             </div>
+            {!handle && (
+              <p className="mt-3 text-xs text-ink-faint">
+                Pick a handle in Edit profile to get a link people can open.
+              </p>
+            )}
             <button
               type="button"
               onClick={() => setOpen(false)}

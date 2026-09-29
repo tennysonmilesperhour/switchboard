@@ -63,6 +63,13 @@ const nextConfig: NextConfig = {
   },
   // PostHog relies on trailing-slash-sensitive paths; don't auto-redirect them.
   skipTrailingSlashRedirect: true,
+  experimental: {
+    // A tap or form submit while the connection is down used to throw and land
+    // on the crash page. With this, Next.js holds the navigation or Server
+    // Action and runs it once the connection returns; OfflineBanner says why
+    // nothing is happening meanwhile (G44).
+    useOffline: true,
+  },
 };
 
 const postHogPersonalApiKey = process.env.POSTHOG_API_KEY;

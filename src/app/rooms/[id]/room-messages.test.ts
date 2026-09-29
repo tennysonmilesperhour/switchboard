@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { mergeRoomMessages, type RoomMessage } from './room-messages';
+import {
+  mergeRoomMessages,
+  prependEarlierMessages,
+  type RoomMessage,
+} from './room-messages';
 
 function message(id: string, body: string, at: string, sender = 'them'): RoomMessage {
   return { id, sender_id: sender, body, image_url: null, created_at: at };
@@ -49,5 +53,59 @@ describe('mergeRoomMessages', () => {
     const server = [message('new', 'today', '2026-09-29T10:00:00+00:00')];
 
     expect(mergeRoomMessages(onScreen, server).map((m) => m.id)).toEqual(['old', 'new']);
+  });
+
+  it('drops a message its sender deleted, inside the window the server read', () => {
+    const onScreen = [
+      message('a', 'first', '2026-09-29T10:00:00.000Z'),
+      message('gone', 'oops', '2026-09-29T10:01:00.000Z'),
+      message('c', 'third', '2026-09-29T10:02:00.000Z'),
+    ];
+    const server = [
+      message('a', 'first', '2026-09-29T10:00:00+00:00'),
+      message('c', 'third', '2026-09-29T10:02:00+00:00'),
+    ];
+
+    expect(mergeRoomMessages(onScreen, server).map((m) => m.id)).toEqual(['a', 'c']);
+  });
+
+  it('keeps a message newer than the server read (it arrived after the read)', () => {
+    const onScreen = [
+      message('a', 'first', '2026-09-29T10:00:00.000Z'),
+      message('late', 'just now', '2026-09-29T10:09:00.000Z'),
+    ];
+    const server = [message('a', 'first', '2026-09-29T10:00:00+00:00')];
+
+    expect(mergeRoomMessages(onScreen, server)).toBe(onScreen);
+  });
+
+  it('gives a realtime photo the signed URL from the server read', () => {
+    const photo: RoomMessage = {
+      ...message('p', '📷 Photo', '2026-09-29T10:00:00.000Z'),
+      image_url: 'them/room-1.jpg',
+    };
+    const signed = { ...photo, image_src: 'https://signed.example/room-1.jpg' };
+
+    const onScreen = [photo];
+    const merged = mergeRoomMessages(onScreen, [signed]);
+
+    expect(merged).not.toBe(onScreen);
+    expect(merged[0].image_src).toBe('https://signed.example/room-1.jpg');
+  });
+});
+
+describe('prependEarlierMessages', () => {
+  it('puts older messages in front and skips ones already shown', () => {
+    const onScreen = [
+      message('b', 'second', '2026-09-29T10:01:00.000Z'),
+      message('c', 'third', '2026-09-29T10:02:00.000Z'),
+    ];
+    const earlier = [
+      message('a', 'first', '2026-09-29T10:00:00.000Z'),
+      message('b', 'second', '2026-09-29T10:01:00.000Z'),
+    ];
+
+    expect(prependEarlierMessages(onScreen, earlier).map((m) => m.id)).toEqual(['a', 'b', 'c']);
+    expect(prependEarlierMessages(onScreen, [])).toBe(onScreen);
   });
 });

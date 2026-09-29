@@ -51,7 +51,17 @@ export async function GET(request: Request) {
     }
   }
 
-  return NextResponse.redirect(
-    `${origin}/login?error=auth&reason=expired-link`,
-  );
+  // Keep where the link was taking them. An expired confirmation opened from a
+  // deep link used to lose the destination, so signing in afterwards landed
+  // on Home instead of the invitation that started it all (docs/AUTH.md,
+  // decision 15). `next` is already validated above.
+  const login = new URL('/login', origin);
+  login.searchParams.set('error', 'auth');
+  login.searchParams.set('reason', 'expired-link');
+  if (type === 'recovery') {
+    login.searchParams.set('type', 'recovery');
+  } else if (next !== '/') {
+    login.searchParams.set('next', next);
+  }
+  return NextResponse.redirect(login.toString());
 }

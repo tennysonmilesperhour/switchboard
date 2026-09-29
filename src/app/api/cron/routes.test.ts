@@ -60,7 +60,7 @@ beforeEach(() => {
     momentsClosed: 7,
     liveLocationsDeleted: 8,
   });
-  mocks.sweepDigests.mockResolvedValue(9);
+  mocks.sweepDigests.mockResolvedValue({ sent: 9, emailed: 0, retrying: 0, unreachable: 0 });
   mocks.claimCronSweep.mockResolvedValue(true);
   mocks.finishCronSweep.mockResolvedValue(undefined);
 });
@@ -105,7 +105,13 @@ describe('cron route handlers', () => {
     const response = await runDigest(cronRequest());
 
     expect(response.status).toBe(200);
-    expect(await response.json()).toEqual({ ok: true, sent: 9 });
+    expect(await response.json()).toEqual({
+      ok: true,
+      sent: 9,
+      emailed: 0,
+      retrying: 0,
+      unreachable: 0,
+    });
     expect(mocks.checkRateLimit).toHaveBeenCalledWith('cron:digest', 5, 60);
     expect(mocks.sweepDigests).toHaveBeenCalledTimes(1);
   });

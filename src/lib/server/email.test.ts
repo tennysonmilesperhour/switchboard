@@ -117,4 +117,24 @@ describe('looksLikeEmail', () => {
       },
     }));
   });
+
+  test('sends a reply-to address through the provider field', async () => {
+    process.env.RESEND_API_KEY = 'test-key';
+    process.env.EMAIL_FROM = 'Switchboard <test@example.com>';
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ id: 'email_456' }), { status: 200 }),
+    ));
+
+    await sendEmailWithResult({
+      to: 'owner@example.com',
+      subject: 'Your claim',
+      text: 'Hello',
+      replyTo: 'support@example.com',
+    });
+
+    const [, init] = (fetch as unknown as ReturnType<typeof vi.fn>).mock.calls[0];
+    const body = JSON.parse(init.body as string);
+    expect(body.reply_to).toBe('support@example.com');
+    expect(body.headers).toBeUndefined();
+  });
 });

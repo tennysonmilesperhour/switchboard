@@ -11,6 +11,7 @@ import {
   createCircle,
   deleteCircle,
   giveSpace,
+  ignoreConnectionRequest,
   removeConnection,
   renameCircle,
   reportProfile,
@@ -23,7 +24,11 @@ import {
   type ContactMatch,
 } from '@/lib/actions/connections';
 import { proposeIntroduction } from '@/lib/actions/matchmaker';
-import { createHousehold, deleteHousehold } from '@/lib/actions/households';
+import {
+  createHousehold,
+  deleteHousehold,
+  updateHouseholdMembers,
+} from '@/lib/actions/households';
 import { AddSomeoneSection } from './sections/AddSomeoneSection';
 import { IncomingRequestsSection } from './sections/IncomingRequestsSection';
 import { FriendsSection } from './sections/FriendsSection';
@@ -31,12 +36,14 @@ import { OutgoingRequestsSection } from './sections/OutgoingRequestsSection';
 import { HouseholdsSection } from './sections/HouseholdsSection';
 import { MatchmakerSection } from './sections/MatchmakerSection';
 import { CirclesSection } from './sections/CirclesSection';
+import { GivingSpaceSection } from './sections/GivingSpaceSection';
 import type {
   CircleRow,
   FriendRow,
   HouseholdRow,
   PeopleMessage,
   RequestRow,
+  SpaceRow,
 } from './sections/types';
 
 export function PeopleClient({
@@ -45,6 +52,7 @@ export function PeopleClient({
   outgoing,
   circles,
   households = [],
+  givingSpace = [],
   inviteUrl,
 }: {
   friends: FriendRow[];
@@ -52,6 +60,8 @@ export function PeopleClient({
   outgoing: RequestRow[];
   circles: CircleRow[];
   households?: HouseholdRow[];
+  /** Everyone the viewer gives space to, friend or not (G35). */
+  givingSpace?: SpaceRow[];
   /** Absolute link to Switchboard itself, from `appInviteUrl()` on the server. */
   inviteUrl: string;
 }) {
@@ -127,6 +137,37 @@ export function PeopleClient({
           : `You’ll get a quiet heads-up if ${friend.name} is somewhere you’re headed. They’re never told.`,
       );
       router.refresh();
+    });
+  }
+
+  function stopSpaceFor(person: SpaceRow) {
+    startTransition(async () => {
+      const result = await stopGivingSpace(person.id);
+      if (!result.ok) {
+        toast.error(result.error ?? 'Could not update. Try again.', result.code);
+        return;
+      }
+      toast.success(`You’re no longer giving ${person.name.split(' ')[0]} space.`);
+      router.refresh();
+    });
+  }
+
+  async function saveHouseholdMembers(
+    household: HouseholdRow,
+    memberIds: string[],
+  ): Promise<boolean> {
+    return new Promise((resolve) => {
+      startTransition(async () => {
+        const result = await updateHouseholdMembers(household.id, memberIds);
+        if (!result.ok) {
+          toast.error(result.error ?? 'Could not update the household.', result.code);
+          resolve(false);
+          return;
+        }
+        toast.success(`${household.name} updated.`);
+        router.refresh();
+        resolve(true);
+      });
     });
   }
 
@@ -244,8 +285,18 @@ export function PeopleClient({
     setContactsBusy(true);
     setMessage(null);
     try {
-      const matches = await resolveContactMatches(contacts);
+      const { matches, throttled, error, code } = await resolveContactMatches(contacts);
       setContactMatches(matches);
+      // Rate-limited is not "no matches": the unchecked contacts are unknown,
+      // and the reader needs to hear that with its code (G7).
+      if (throttled || error) {
+        setMessage({
+          tone: 'error',
+          text: error ?? 'Contact lookups are paused for a few minutes.',
+          code,
+        });
+        return;
+      }
       const matchCount = matches.filter((match) => match.profile).length;
       setMessage({
         tone: 'ok',
@@ -331,11 +382,14 @@ export function PeopleClient({
 
   function ignoreRequest(request: RequestRow) {
     startTransition(async () => {
-      const result = await removeConnection(request.connectionId);
+      const result = await ignoreConnectionRequest(request.connectionId);
       if (!result.ok) {
         toast.error(result.error ?? 'Could not update. Try again.', result.code);
         return;
       }
+      toast.success(
+        `Hidden. You won’t see requests from ${request.name.split(' ')[0]} for 90 days. They aren’t told.`,
+      );
       router.refresh();
     });
   }
@@ -447,6 +501,9 @@ export function PeopleClient({
         outgoing={outgoing} pending={pending}
         resendOutgoing={resendOutgoing} cancelOutgoing={cancelOutgoing}
       />
+      <GivingSpaceSection
+        people={givingSpace} pending={pending} stopGivingSpace={stopSpaceFor}
+      />
       {friends.length === 0 && incoming.length === 0 && outgoing.length === 0 && (
         <EmptyState
           emoji="👋"
@@ -459,6 +516,7 @@ export function PeopleClient({
         householdName={householdName} setHouseholdName={setHouseholdName}
         householdMembers={householdMembers} setHouseholdMembers={setHouseholdMembers}
         removeHousehold={removeHousehold} createNewHousehold={createNewHousehold}
+        saveHouseholdMembers={saveHouseholdMembers}
       />
       <MatchmakerSection
         friends={friends} pending={pending}

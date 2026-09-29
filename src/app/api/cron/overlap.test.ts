@@ -62,7 +62,7 @@ beforeEach(() => {
     momentsClosed: 6,
     liveLocationsDeleted: 7,
   });
-  mocks.sweepDigests.mockResolvedValue(8);
+  mocks.sweepDigests.mockResolvedValue({ sent: 8, emailed: 0, retrying: 0, unreachable: 0 });
 });
 
 afterEach(() => {
@@ -106,11 +106,20 @@ describe('cron overlap leases', () => {
     const response = await runDigest(cronRequest());
 
     expect(response.status).toBe(200);
-    expect(await response.json()).toEqual({ ok: true, sent: 8 });
+    expect(await response.json()).toEqual({
+      ok: true,
+      sent: 8,
+      emailed: 0,
+      retrying: 0,
+      unreachable: 0,
+    });
     expect(mocks.claimCronSweep).toHaveBeenCalledWith('digest');
     expect(mocks.finishCronSweep).toHaveBeenCalledWith('digest', {
       ok: true,
       sent: 8,
+      emailed: 0,
+      retrying: 0,
+      unreachable: 0,
     });
     expect(mocks.logCronSummary).toHaveBeenCalledTimes(1);
   });

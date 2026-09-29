@@ -41,6 +41,10 @@ revoke insert, update, delete on public.give_space_notices from anon, authentica
 revoke insert, update, delete on public.event_availability from anon, authenticated;
 revoke insert, update, delete on public.event_availability_responses from anon, authenticated;
 
+-- Expense shares are written only by the split-the-bill definer functions
+-- (20260930022000), which keep every expense's shares summing to its amount.
+revoke insert, update, delete on public.expense_shares from anon, authenticated;
+
 -- SELECT everywhere EXCEPT tables with explicit column allowlists.
 --
 -- SB-01 (20260710120000_lock_sensitive_profile_columns.sql) dropped the

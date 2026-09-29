@@ -13,6 +13,7 @@ import { parseProfileLinks, parseProfileSocials } from '@/lib/supabase/json';
 import { ProfileTabs, type ProfileEvent } from './ProfileTabs';
 import { ProfileShare } from './ProfileShare';
 import { ProfileStrength } from '@/components/profile/ProfileStrength';
+import { absoluteUrl } from '@/lib/links';
 
 export const metadata: Metadata = { title: 'Profile' };
 
@@ -112,6 +113,18 @@ export default async function ProfilePage() {
   });
   const qrMarkup = await qrSvg(vcard);
 
+  // The public page people can open (G36). Built from the one validated origin
+  // (src/lib/links.ts); on a deployment with no valid origin the share sheet
+  // simply offers no link rather than a wrong one, and the QR still works.
+  let profileUrl: string | null = null;
+  if (handle) {
+    try {
+      profileUrl = absoluteUrl(`/u/${encodeURIComponent(handle)}`);
+    } catch {
+      profileUrl = null;
+    }
+  }
+
   return (
     <AppShell
       title="Profile"
@@ -163,7 +176,17 @@ export default async function ProfilePage() {
                 </span>
               ) : null}
             </div>
-            <p className="text-sm text-ink-faint">@{handle}</p>
+            {handle ? (
+              <p className="text-sm text-ink-faint">@{handle}</p>
+            ) : (
+              // No bare "@" for an account that has not picked a handle yet.
+              <Link
+                href="/profile/edit"
+                className="text-sm font-semibold text-terracotta-deep underline-offset-2 hover:underline"
+              >
+                Pick a handle so friends can find you
+              </Link>
+            )}
 
             {profile?.tagline ? (
               <p className="mt-2 text-sm font-semibold text-terracotta-deep">
@@ -349,6 +372,7 @@ export default async function ProfilePage() {
             vcard={vcard}
             displayName={displayName}
             handle={handle}
+            profileUrl={profileUrl}
             contactIncluded={contactPublic && hasContact}
           />
         </section>

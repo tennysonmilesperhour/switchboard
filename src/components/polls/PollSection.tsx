@@ -22,7 +22,7 @@ import { closesIntoRunoff, nextWeight, type Weight } from '@/lib/engine/scoring'
 import { errorFor, errorRef, type ErrorCode } from '@/lib/errors';
 import { formatDateTime } from '@/lib/format';
 import type { Poll, PollOption } from '@/lib/types';
-import { pollOptionLabel } from './option-label';
+import { pollHint, pollOptionDetail, pollOptionLabel } from './option-label';
 
 export interface OptionResult {
   option_id: string;
@@ -485,17 +485,7 @@ export function PollSection({
     <section aria-labelledby="poll-heading">
       <SectionHeader
         title={question}
-        hint={
-          poll.phase === 'decided'
-            ? winner
-              ? 'The group has decided.'
-              : isHost
-                ? 'Voting is closed - choose the winner below.'
-                : 'Voting is closed - the host is choosing.'
-            : poll.phase === 'runoff'
-              ? 'Final runoff - pick between the finalists.'
-              : 'Rank ideas privately. Nobody sees your individual votes.'
-        }
+        hint={pollHint({ phase: poll.phase, decided: Boolean(winner), isHost, ideas: options.length })}
       />
 
       {votingOpen && poll.vote_deadline && (
@@ -529,8 +519,8 @@ export function PollSection({
           <p className="font-extrabold text-3xl tracking-tight mt-1">
             {pollOptionLabel(winner.label, timeZone)}
           </p>
-          {winner.detail && (
-            <p className="text-sm text-ink-soft mt-1">{winner.detail}</p>
+          {pollOptionDetail(winner.detail) && (
+            <p className="text-sm text-ink-soft mt-1">{pollOptionDetail(winner.detail)}</p>
           )}
         </Card>
       )}
@@ -612,8 +602,8 @@ export function PollSection({
                     <p className="font-bold break-words">
                       {pollOptionLabel(option.label, timeZone)}
                     </p>
-                    {option.detail && (
-                      <p className="text-xs text-ink-faint mt-0.5 whitespace-pre-wrap">{option.detail}</p>
+                    {pollOptionDetail(option.detail) && (
+                      <p className="text-xs text-ink-faint mt-0.5 whitespace-pre-wrap">{pollOptionDetail(option.detail)}</p>
                     )}
                     {option.source === 'ai' && (
                       <span className="text-[10px] uppercase tracking-wide text-terracotta-deep">

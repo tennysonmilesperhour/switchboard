@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { safeNextPath } from '@/lib/security';
+import { reportOperationalError } from '@/lib/server/observability';
 
 function loginErrorUrl(origin: string, error: string, next: string): string {
   const url = new URL('/login', origin);
@@ -9,7 +10,13 @@ function loginErrorUrl(origin: string, error: string, next: string): string {
   return url.toString();
 }
 
-/** OAuth code exchange. */
+/**
+ * OAuth code exchange.
+ *
+ * Each way this ends short is logged under the code /login shows for it
+ * (SB-OAUTH-DENIED, SB-OAUTH-EXCHANGE, SB-OAUTH-MISSING), so a screenshot and
+ * the log line meet on the same string.
+ */
 export async function GET(request: Request) {
   const { searchParams, origin } = new URL(request.url);
   const code = searchParams.get('code');
@@ -20,8 +27,7 @@ export async function GET(request: Request) {
   const next = safeNextPath(searchParams.get('next'), '/');
 
   if (providerError) {
-    console.error('[auth:oauth-provider:error]', {
-      code: providerError,
+    await reportOperationalError('auth.oauth-provider', { code: providerError, message: 'provider returned an error' }, {
       hasDescription: Boolean(providerErrorDescription),
     });
     return NextResponse.redirect(loginErrorUrl(origin, 'oauth_provider', next));
@@ -33,12 +39,11 @@ export async function GET(request: Request) {
     if (!error) {
       return NextResponse.redirect(`${origin}${next}`);
     }
-    console.error('[auth:oauth-exchange:error]', {
-      code: error.code ?? 'unknown',
+    await reportOperationalError('auth.oauth-exchange', { code: error.code ?? 'unknown', message: 'code exchange failed' }, {
       status: error.status ?? null,
     });
     return NextResponse.redirect(loginErrorUrl(origin, 'oauth_exchange', next));
   }
-  console.error('[auth:oauth-callback:error]', { code: 'missing_code' });
+  await reportOperationalError('auth.oauth-callback', { code: 'missing_code', message: 'callback had no code' });
   return NextResponse.redirect(loginErrorUrl(origin, 'oauth_missing_code', next));
 }

@@ -358,6 +358,39 @@ describe('signInWithPasswordIdentifier', () => {
     expect(result.error).toMatch(/did not work/);
   });
 
+  it('names a deployment that cannot look usernames up, instead of guessing an address', async () => {
+    // Without the service role the handle used to become the synthetic
+    // `<handle>@users.switchboard.local`, which is wrong for anyone who signed
+    // up with an email — so their username "did not work" with the right
+    // password (docs/AUTH.md, decision 13).
+    seed(account);
+    mocks.hasAdminCredentials.mockReturnValue(false);
+
+    const result = await signInWithPasswordIdentifier({
+      identifier: 'alice',
+      password: 'correct-horse',
+    });
+
+    expect(result.ok).toBe(false);
+    expect(result.code).toBe('SB-CONFIG-AUTH');
+    expect(result.error).not.toMatch(/did not work/);
+    expect(result.error).toMatch(/email/);
+    expect(mocks.signInWithPassword).not.toHaveBeenCalled();
+  });
+
+  it('still signs in by email when usernames cannot be looked up', async () => {
+    seed(account);
+    mocks.hasAdminCredentials.mockReturnValue(false);
+    mocks.signInWithPassword.mockResolvedValue({ data: {}, error: null });
+
+    const result = await signInWithPasswordIdentifier({
+      identifier: 'alice@example.com',
+      password: 'correct-horse',
+    });
+
+    expect(result).toEqual({ ok: true });
+  });
+
   it('signs in when the grant succeeds', async () => {
     seed(account);
     mocks.signInWithPassword.mockResolvedValue({ data: {}, error: null });

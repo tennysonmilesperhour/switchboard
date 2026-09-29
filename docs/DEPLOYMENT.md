@@ -105,6 +105,13 @@ The app reads these (see `.env.example` for the full list). Set them in Vercel
 - `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_FROM_NUMBER`,
   `CONTACT_VERIFICATION_SECRET` — required together for phone verification
 - `NEXT_PUBLIC_VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY` — optional; web push
+- `NEXT_PUBLIC_MAP_TILE_URL`, `NEXT_PUBLIC_MAP_TILE_ATTRIBUTION` — optional;
+  an https raster tile template with `{z}`, `{x}` and `{y}`, and its credit.
+  Unset or invalid falls back to OpenStreetMap's public tiles, whose usage
+  policy does not cover heavy production traffic.
+- `GEOCODER_URL` — optional; a Nominatim-compatible https `/search` endpoint
+  (hosted Nominatim, LocationIQ). Unset or invalid falls back to the public
+  Nominatim, which the app throttles to one lookup a second across all users.
 
 See [SMS purpose and acceptance checks](SMS.md) for implemented behavior, gaps,
 and the September 8 database repair.

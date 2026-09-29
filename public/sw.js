@@ -1,39 +1,99 @@
 /* Switchboard service worker — web push + PWA installability + offline shell. */
 
-// Bumped when cached entries must be dropped: v4 purges any failed responses
-// v3 could have stored (see the static-asset branch below).
-const CACHE = 'switchboard-v4';
+// Bumped when cached entries must be dropped. v5 splits the shell (offline
+// page, manifest, icons) from the build's static chunks so each can be kept
+// fresh on its own terms, and drops everything v4 accumulated.
+const VERSION = 'v5';
+const SHELL_CACHE = `switchboard-shell-${VERSION}`;
+const STATIC_CACHE = `switchboard-static-${VERSION}`;
+const CURRENT_CACHES = [SHELL_CACHE, STATIC_CACHE];
+
 // Static, non-user-specific assets safe to cache. Authenticated page HTML is
 // NEVER cached (it's per-user); navigations are network-first with a generic
 // offline fallback, so one user can't be served another's cached content.
 const PRECACHE = ['/offline.html', '/manifest.webmanifest', '/icons/icon.svg'];
 
+// Content-hashed build chunks never change, but every deploy adds new ones and
+// nothing ever removed the old: the cache only grew. Keep the most recent few
+// deploys' worth and let the rest go.
+const STATIC_MAX_ENTRIES = 250;
+const STATIC_MAX_AGE_MS = 14 * 24 * 60 * 60 * 1000;
+const CACHED_AT_HEADER = 'sw-cached-at';
+
 self.addEventListener('install', (event) => {
   event.waitUntil(
-    caches.open(CACHE).then((cache) => cache.addAll(PRECACHE)).catch(() => {}),
+    caches.open(SHELL_CACHE).then((cache) => cache.addAll(PRECACHE)).catch(() => {}),
   );
   self.skipWaiting();
 });
 
-self.addEventListener('activate', (event) => {
-  event.waitUntil(
-    Promise.all([
-      caches
-        .keys()
-        .then((keys) =>
-          Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k))),
-        ),
-      self.clients.claim(),
-    ]),
+/** Delete old-version caches, then trim this version's static chunks. */
+async function pruneCaches() {
+  const keys = await caches.keys();
+  await Promise.all(
+    keys.filter((key) => !CURRENT_CACHES.includes(key)).map((key) => caches.delete(key)),
   );
+  await trimStaticCache();
+}
+
+async function trimStaticCache() {
+  const cache = await caches.open(STATIC_CACHE);
+  const requests = await cache.keys();
+  const now = Date.now();
+  const fresh = [];
+  for (const request of requests) {
+    const response = await cache.match(request);
+    const cachedAt = Number(response && response.headers.get(CACHED_AT_HEADER));
+    if (!cachedAt || now - cachedAt > STATIC_MAX_AGE_MS) {
+      await cache.delete(request);
+    } else {
+      fresh.push({ request, cachedAt });
+    }
+  }
+  // Oldest first, so the overflow that goes is the stalest.
+  fresh.sort((a, b) => a.cachedAt - b.cachedAt);
+  const overflow = fresh.length - STATIC_MAX_ENTRIES;
+  for (let i = 0; i < overflow; i += 1) {
+    await cache.delete(fresh[i].request);
+  }
+}
+
+self.addEventListener('activate', (event) => {
+  event.waitUntil(Promise.all([pruneCaches().catch(() => {}), self.clients.claim()]));
 });
 
-function isStaticAsset(url) {
-  return (
-    url.pathname.startsWith('/_next/static/') ||
-    url.pathname.startsWith('/icons/') ||
-    url.pathname === '/manifest.webmanifest'
-  );
+function isBuildChunk(url) {
+  return url.pathname.startsWith('/_next/static/');
+}
+
+function isShellAsset(url) {
+  return url.pathname.startsWith('/icons/') || url.pathname === '/manifest.webmanifest';
+}
+
+/** A copy of a response stamped with when it was cached, for pruning by age. */
+async function stamped(response) {
+  const headers = new Headers(response.headers);
+  headers.set(CACHED_AT_HEADER, String(Date.now()));
+  const body = await response.blob();
+  return new Response(body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers,
+  });
+}
+
+let putsSinceTrim = 0;
+
+async function cacheBuildChunk(request, response) {
+  const cache = await caches.open(STATIC_CACHE);
+  await cache.put(request, await stamped(response));
+  // A long-lived tab across many deploys should not have to wait for the next
+  // service-worker update to be trimmed.
+  putsSinceTrim += 1;
+  if (putsSinceTrim >= 50) {
+    putsSinceTrim = 0;
+    await trimStaticCache();
+  }
 }
 
 self.addEventListener('fetch', (event) => {
@@ -50,8 +110,9 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Static assets: cache-first (they're content-hashed / immutable enough).
-  if (isStaticAsset(url)) {
+  // Build chunks: cache-first. They are content-hashed, so a cached one is
+  // never stale — only unused, which the pruning above deals with.
+  if (isBuildChunk(url)) {
     event.respondWith(
       caches.match(request).then(
         (cached) =>
@@ -62,10 +123,37 @@ self.addEventListener('fetch', (event) => {
             // URL until the cache name changes.
             if (response.ok) {
               const copy = response.clone();
-              caches.open(CACHE).then((cache) => cache.put(request, copy)).catch(() => {});
+              event.waitUntil(cacheBuildChunk(request, copy).catch(() => {}));
             }
             return response;
           }),
+      ),
+    );
+    return;
+  }
+
+  // Manifest and icons: stale-while-revalidate. They keep the same URL when
+  // they change, so cache-first meant an installed app kept its old name and
+  // icon forever. Serve the cached copy for speed (and offline), and refresh it
+  // in the background for next time.
+  if (isShellAsset(url)) {
+    event.respondWith(
+      caches.open(SHELL_CACHE).then((cache) =>
+        cache.match(request).then((cached) => {
+          const refresh = fetch(request)
+            .then((response) => {
+              if (response.ok) {
+                return cache.put(request, response.clone()).then(() => response);
+              }
+              return response;
+            })
+            .catch(() => cached);
+          if (cached) {
+            event.waitUntil(refresh.then(() => undefined, () => undefined));
+            return cached;
+          }
+          return refresh.then((response) => response || Response.error());
+        }),
       ),
     );
     return;
@@ -75,7 +163,11 @@ self.addEventListener('fetch', (event) => {
   if (request.mode === 'navigate') {
     event.respondWith(
       fetch(request).catch(
-        () => caches.match(request).then((cached) => cached || caches.match('/offline.html')),
+        () =>
+          caches
+            .match('/offline.html', { cacheName: SHELL_CACHE })
+            .then((cached) => cached || caches.match('/offline.html'))
+            .then((cached) => cached || Response.error()),
       ),
     );
   }
@@ -101,18 +193,33 @@ self.addEventListener('push', (event) => {
   );
 });
 
+/** Only ever open our own pages from a notification. */
+function notificationTarget(raw) {
+  try {
+    const url = new URL(raw || '/', self.location.origin);
+    return url.origin === self.location.origin ? url.href : new URL('/', self.location.origin).href;
+  } catch {
+    return new URL('/', self.location.origin).href;
+  }
+}
+
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
-  const url = event.notification.data?.url || '/';
+  const url = notificationTarget(event.notification.data && event.notification.data.url);
   event.waitUntil(
-    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clients) => {
-      for (const client of clients) {
-        if ('focus' in client) {
-          client.navigate(url);
-          return client.focus();
-        }
-      }
-      return self.clients.openWindow(url);
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((windows) => {
+      // Prefer a window already showing Switchboard. `navigate()` rejects for
+      // a window this worker does not control (one opened before it was
+      // installed, or after a hard reload), and the old code did not wait for
+      // or catch that — so the tap focused nothing and went nowhere. Focus
+      // first, then navigate, and if navigating is refused open a fresh window
+      // instead: a tap must always land on the page it names.
+      const client = windows.find((candidate) => 'focus' in candidate);
+      if (!client) return self.clients.openWindow(url);
+      return client
+        .focus()
+        .then((focused) => (focused || client).navigate(url))
+        .catch(() => self.clients.openWindow(url));
     }),
   );
 });

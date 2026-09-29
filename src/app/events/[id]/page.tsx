@@ -16,6 +16,7 @@ import { AttendeeGrid } from '@/components/events/AttendeeGrid';
 import { HostCard } from '@/components/events/HostCard';
 import { JoinRequests } from '@/components/events/JoinRequests';
 import { ParentalApprovalManager } from '@/components/events/ParentalApprovalManager';
+import { GuardianApprovalStep } from '@/components/events/GuardianApprovalStep';
 import { RsvpCard } from '@/components/events/RsvpCard';
 import { Announcements } from '@/components/events/Announcements';
 import { EventThread } from '@/components/events/EventThread';
@@ -129,9 +130,12 @@ export default async function EventPage({
     isHost,
     canManage,
     cohosts,
+    cohostCandidates,
     hostCard,
     hostInvites,
     myInvite,
+    guardianStep,
+    inviteList,
     addableConnections,
     attendees,
     giveSpaceNotice,
@@ -472,6 +476,16 @@ export default async function EventPage({
           />
           </div>
         )}
+        {/* A yes held for a guardian, or one a guardian turned down. The step
+            lives on the invite, so it is here whenever they come back. */}
+        {myInvite && guardianStep && (
+          <GuardianApprovalStep
+            inviteId={myInvite.id}
+            eventId={event.id}
+            request={guardianStep.request}
+            canSend
+          />
+        )}
         {myInvite?.status === 'accepted' && (
           <Card tone="sage" lifted>
             <p className="font-extrabold text-lg text-sage-deep">You’re in ✓</p>
@@ -615,6 +629,15 @@ export default async function EventPage({
           </section>
         )}
 
+        {/* Everyone the host has asked, when they chose to show it. What is on
+            this list, and what it may say, is decided by event_invite_list. */}
+        {inviteList.length > 0 && (
+          <section>
+            <SectionHeader title="Who’s invited" hint="Everyone the host has asked so far" />
+            <AttendeeGrid people={inviteList} />
+          </section>
+        )}
+
         {/* Open Table join requests */}
         {canManage && (
           <JoinRequests
@@ -728,11 +751,12 @@ export default async function EventPage({
             eventId={event.id}
             showInviteList={event.show_invite_list}
             showAccepted={event.show_accepted}
-            showExpired={event.show_expired}
           />
         )}
 
-        {isHost && <CoHostManager eventId={event.id} cohosts={cohosts} />}
+        {isHost && (
+          <CoHostManager eventId={event.id} cohosts={cohosts} candidates={cohostCandidates} />
+        )}
 
         {/* Standing plan: a recurring host always has a one-tap "next one". */}
         {isHost && event.recurrence && event.recurrence !== 'none' && (

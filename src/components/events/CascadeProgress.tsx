@@ -65,6 +65,7 @@ const STATUS_STYLE: Record<InviteStatus, { className: string; dot: string }> = {
   cancelled: { className: 'text-ink-faint', dot: 'bg-line' },
   waitlisted: { className: 'text-gold-deep', dot: 'bg-gold' },
   requested: { className: 'text-terracotta-deep', dot: 'bg-terracotta' },
+  pending_approval: { className: 'text-gold-deep', dot: 'bg-gold' },
 };
 
 const REOPENABLE: ReadonlySet<string> = new Set([

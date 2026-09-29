@@ -28,7 +28,7 @@
 begin;
 
 -- One assertion per function, plus the two catch-alls below.
-select plan(18);
+select plan(19);
 
 select ok(
   has_function_privilege('service_role', 'public.is_event_host(uuid, uuid)', 'EXECUTE'),
@@ -68,6 +68,14 @@ select ok(
 select ok(
   has_function_privilege('service_role', 'public.rsvp_via_share_token(uuid, uuid, text, text, boolean)', 'EXECUTE'),
   'service_role can execute rsvp_via_share_token (answering from a share link)'
+);
+
+-- Open Table approvals and, since 20260930011000, a guardian's approval both
+-- complete somebody else's commitment, so both record the Give Space check
+-- through the service-role form.
+select ok(
+  has_function_privilege('service_role', 'public.note_give_space_overlap_for(uuid, uuid)', 'EXECUTE'),
+  'service_role can execute note_give_space_overlap_for (approvals completing a yes)'
 );
 
 select ok(

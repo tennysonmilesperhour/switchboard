@@ -7,6 +7,8 @@ const mocks = vi.hoisted(() => ({
   openFollowUpPolls: vi.fn(),
   revalidatePath: vi.fn(),
   reportAndFail: vi.fn(),
+  applyDecidedDate: vi.fn(),
+  notifyPollOutcome: vi.fn(),
 }));
 
 vi.mock('next/cache', () => ({ revalidatePath: mocks.revalidatePath }));
@@ -19,6 +21,8 @@ vi.mock('@/lib/server/poll-runner', () => ({
   resolvePoll: mocks.resolvePoll, openFollowUpPolls: mocks.openFollowUpPolls,
 }));
 vi.mock('@/lib/server/notify', () => ({ notifySuggestionAdded: vi.fn() }));
+vi.mock('@/lib/server/poll-date', () => ({ applyDecidedDate: mocks.applyDecidedDate }));
+vi.mock('@/lib/server/poll-notices', () => ({ notifyPollOutcome: mocks.notifyPollOutcome }));
 vi.mock('@/lib/server/media', () => ({ isOwnPublicStorageUrl: vi.fn() }));
 vi.mock('@/lib/server/observability', () => ({ reportAndFail: mocks.reportAndFail }));
 vi.mock('@/lib/analytics/server', () => ({ capture: vi.fn() }));
@@ -39,6 +43,7 @@ beforeEach(() => {
   mocks.isEventManager.mockResolvedValue(true);
   mocks.openFollowUpPolls.mockResolvedValue([]);
   mocks.resolvePoll.mockResolvedValue(undefined);
+  mocks.applyDecidedDate.mockResolvedValue({ kind: 'none' });
   mocks.reportAndFail.mockResolvedValue({ ok: false, code: 'SB-POLL-DECIDE', error: 'Could not decide.' });
   mocks.from.mockImplementation((table: string) => {
     let writing = false;
@@ -83,7 +88,19 @@ describe('poll host controls', () => {
   it('lets an already-saved decision retry its follow-up unlock', async () => {
     phase = 'decided';
     await closeVoting('poll-1', 'event-1');
-    expect(mocks.resolvePoll).toHaveBeenCalledWith('poll-1');
+    // The host who closed it is named, so the result is not announced to them.
+    expect(mocks.resolvePoll).toHaveBeenCalledWith('poll-1', { actorId: 'host-1' });
+  });
+
+  it('gives the plan its date, opens the follow-ups and tells the group when the host picks', async () => {
+    const date = { kind: 'set', startsAt: '2026-10-02T22:00:00.000Z', timeZone: 'America/New_York' };
+    mocks.applyDecidedDate.mockResolvedValue(date);
+    await expect(pickWinner('poll-1', 'event-1', 'option-1')).resolves.toEqual({ ok: true });
+    expect(updates).toEqual([{ phase: 'decided', winning_option_id: 'option-1' }]);
+    expect(mocks.applyDecidedDate).toHaveBeenCalledWith('poll-1');
+    expect(mocks.openFollowUpPolls).toHaveBeenCalledWith('poll-1');
+    expect(mocks.notifyPollOutcome).toHaveBeenCalledWith('poll-1', { date, actorId: 'host-1' });
+    expect(mocks.revalidatePath).toHaveBeenCalledWith('/plans');
   });
 
   it('handles a follow-up failure after an explicit winner pick with a diagnostic', async () => {
@@ -95,6 +112,8 @@ describe('poll host controls', () => {
     expect(mocks.reportAndFail).toHaveBeenCalledWith('SB-POLL-DECIDE', 'poll.pick', error, {
       pollId: 'poll-1', eventId: 'event-1',
     });
+    // The result is only announced once the decision has fully landed.
+    expect(mocks.notifyPollOutcome).not.toHaveBeenCalled();
   });
 });
 

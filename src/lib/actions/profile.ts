@@ -25,6 +25,7 @@ import { isValidCoordinate } from '@/lib/geo';
 import type { ProfileLink, ProfileSocial } from '@/lib/types';
 import { toJson } from '@/lib/supabase/json';
 import type { NotificationPrefs } from '@/lib/notifications';
+import { requestContactVerification } from '@/lib/actions/contact-verification';
 
 const HANDLE_PATTERN = USERNAME_PATTERN;
 const MAX_LINKS = 15;
@@ -132,13 +133,22 @@ function parseSocials(raw: string): ProfileSocial[] {
  * a zone it doesn't recognise.
  */
 function knownTimeZone(raw: string): string {
-  const zone = raw.trim().slice(0, 64);
-  if (!zone) return 'UTC';
+  return exactTimeZone(raw) ?? 'UTC';
+}
+
+/**
+ * The zone exactly as given when Intl recognises it, otherwise null. Settings
+ * uses this rather than `knownTimeZone`: a choice someone made on purpose is
+ * refused out loud, never quietly swapped for UTC.
+ */
+function exactTimeZone(raw: string): string | null {
+  const zone = raw.trim();
+  if (!zone || zone.length > 64) return null;
   try {
     new Intl.DateTimeFormat('en-US', { timeZone: zone });
     return zone;
   } catch {
-    return 'UTC';
+    return null;
   }
 }
 
@@ -273,6 +283,14 @@ export async function completeOnboarding(formData: FormData): Promise<void> {
   if (!HANDLE_PATTERN.test(handle)) onboardingError('handle');
   if (!acceptedTerms || !acceptedCovenant) onboardingError('agreement');
 
+  // The optional recovery step, offered only to username sign-ups: without a
+  // verified email they have no way back in if they forget their password
+  // (docs/AUTH.md, decision 14). It becomes the profile's contact email, which
+  // the contact sync marks unverified until the link we send is opened —
+  // `/forgot-password` never mails an address nobody has proved.
+  const recoveryEmail = nullableText(formData.get('recovery_email'), 120)?.toLowerCase() ?? null;
+  if (recoveryEmail && !isEmail(recoveryEmail)) onboardingError('recovery_email');
+
   const profileUpdate = {
     display_name: displayName,
     handle,
@@ -283,6 +301,7 @@ export async function completeOnboarding(formData: FormData): Promise<void> {
     legal_terms_version: LEGAL_VERSION,
     legal_terms_accepted_at: new Date().toISOString(),
     community_covenant_accepted_at: new Date().toISOString(),
+    ...(recoveryEmail ? { contact_email: recoveryEmail } : {}),
   };
 
   // The authenticated user has already been verified by requireUserOrRedirect.
@@ -336,6 +355,14 @@ export async function completeOnboarding(formData: FormData): Promise<void> {
     await reportOperationalError('invite-claim.contact', claimError, {
       area: 'onboarding',
     });
+  }
+
+  // Send the proof-of-ownership link for the recovery email. Best-effort: a
+  // failure here must not hold someone at onboarding (the only route out of
+  // onboarding is finishing it), and Settings keeps asking them to verify it
+  // until they do, with its own button to send the link again.
+  if (recoveryEmail) {
+    await requestContactVerification('email').catch(() => undefined);
   }
 
   // Counts only — never the interest strings themselves.
@@ -611,10 +638,22 @@ export async function updateQuietHours(formData: FormData): Promise<ActionResult
   if (start !== null && start === end) {
     return validation('Quiet hours need to start and end at different times.');
   }
+  // The zone the hours are read in. Optional so an older form without the
+  // field still saves the hours; an explicit choice must be one Intl knows,
+  // because the sweeps hand it straight to Intl and to Postgres.
+  const rawZone = formData.get('timezone');
+  const timezone = rawZone === null ? null : exactTimeZone(String(rawZone));
+  if (rawZone !== null && !timezone) {
+    return validation('Choose a time zone from the list.');
+  }
 
   const { error } = await supabase
     .from('profiles')
-    .update({ quiet_hours_start: start, quiet_hours_end: end })
+    .update({
+      quiet_hours_start: start,
+      quiet_hours_end: end,
+      ...(timezone ? { timezone } : {}),
+    })
     .eq('id', user.id);
   if (error) {
     return reportAndFail('SB-SETTINGS-SAVE', 'settings.quiet-hours', error, {
@@ -623,6 +662,8 @@ export async function updateQuietHours(formData: FormData): Promise<ActionResult
   }
 
   revalidatePath('/settings');
+  // Home greets by the stored zone before the browser corrects it.
+  if (timezone) revalidatePath('/');
   return { ok: true };
 }
 

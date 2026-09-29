@@ -110,16 +110,85 @@ export function formatDistance(meters: number): string {
   return km < 10 ? `${km.toFixed(1)} km` : `${Math.round(km)} km`;
 }
 
+/**
+ * Two check-ins outside any zone match when they are this close (D11). The
+ * database measures it (`find_shared_moments`,
+ * 20260930041000_shared_moments_distance.sql); this copy is for the words on
+ * the check-in screen, so the two must change together.
+ */
+export const MOMENT_MATCH_RADIUS_M = 200;
+
 const NOMINATIM_ENDPOINT = 'https://nominatim.openstreetmap.org/search';
 
+/** The public OpenStreetMap search endpoint, used when nothing else is set. */
+export const DEFAULT_GEOCODER_ENDPOINT = NOMINATIM_ENDPOINT;
+
+/**
+ * The geocoder's search endpoint from configuration (`GEOCODER_URL`, a
+ * Nominatim-compatible `/search` URL — a hosted Nominatim, LocationIQ, or your
+ * own), falling back to the public one. Only an https URL with no credentials
+ * or query of its own is accepted: anything else would send every address a
+ * host types somewhere nobody chose.
+ */
+export function geocoderEndpoint(raw: string | null | undefined): string {
+  const value = raw?.trim();
+  if (!value) return NOMINATIM_ENDPOINT;
+  try {
+    const url = new URL(value);
+    if (url.protocol !== 'https:' || url.username || url.password || url.search || url.hash) {
+      return NOMINATIM_ENDPOINT;
+    }
+    return url.toString();
+  } catch {
+    return NOMINATIM_ENDPOINT;
+  }
+}
+
+/** Raster tiles the map draws, and who must be credited for them. */
+export interface TileConfig {
+  url: string;
+  attribution: string;
+}
+
+export const DEFAULT_TILES: TileConfig = {
+  url: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+  attribution: '&copy; OpenStreetMap contributors',
+};
+
+/**
+ * The tile source from configuration (`NEXT_PUBLIC_MAP_TILE_URL` and
+ * `NEXT_PUBLIC_MAP_TILE_ATTRIBUTION`), falling back to OpenStreetMap's public
+ * tiles. A template must be https and carry `{z}`, `{x}` and `{y}`; a provider
+ * without its own attribution keeps the OpenStreetMap credit, which is what
+ * nearly every tile provider is built on. The attribution is rendered by
+ * Leaflet as HTML, so only plain text and `&copy;`-style entities survive.
+ */
+export function tileConfig(
+  rawUrl: string | null | undefined,
+  rawAttribution: string | null | undefined,
+): TileConfig {
+  const url = rawUrl?.trim();
+  if (!url) return DEFAULT_TILES;
+  const templated = ['{z}', '{x}', '{y}'].every((part) => url.includes(part));
+  let secure = false;
+  try {
+    secure = new URL(url.replace(/\{[a-z]\}/g, 'a')).protocol === 'https:';
+  } catch {
+    secure = false;
+  }
+  if (!templated || !secure) return DEFAULT_TILES;
+  const attribution = (rawAttribution ?? '').replace(/[<>"']/g, '').trim().slice(0, 200);
+  return { url, attribution: attribution || DEFAULT_TILES.attribution };
+}
+
 /** Build a Nominatim forward-geocode URL for a free-text address or place. */
-export function nominatimUrl(query: string): string {
+export function nominatimUrl(query: string, endpoint: string = NOMINATIM_ENDPOINT): string {
   const params = new URLSearchParams({
     q: query,
     format: 'jsonv2',
     limit: '1',
   });
-  return `${NOMINATIM_ENDPOINT}?${params.toString()}`;
+  return `${endpoint}?${params.toString()}`;
 }
 
 /** Parse the first Nominatim result into a MapPoint, or null if none/invalid. */
@@ -146,14 +215,18 @@ export interface PlaceResult {
 }
 
 /** Build a Nominatim URL that returns up to `limit` candidate places. */
-export function nominatimSearchUrl(query: string, limit = PLACE_SEARCH_LIMIT): string {
+export function nominatimSearchUrl(
+  query: string,
+  limit = PLACE_SEARCH_LIMIT,
+  endpoint: string = NOMINATIM_ENDPOINT,
+): string {
   const params = new URLSearchParams({
     q: query,
     format: 'jsonv2',
     // Clamp so a caller can't ask Nominatim for an unbounded page.
     limit: String(Math.min(Math.max(Math.trunc(limit) || 1, 1), 10)),
   });
-  return `${NOMINATIM_ENDPOINT}?${params.toString()}`;
+  return `${endpoint}?${params.toString()}`;
 }
 
 /**

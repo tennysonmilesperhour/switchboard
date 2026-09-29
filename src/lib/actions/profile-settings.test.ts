@@ -82,4 +82,26 @@ describe('updateQuietHours', () => {
     expect(await updateQuietHours(form('0', '6'))).toEqual({ ok: true });
     expect(mocks.update).toHaveBeenCalledWith({ quiet_hours_start: 0, quiet_hours_end: 6 });
   });
+
+  it('saves the time zone the hours are read in', async () => {
+    // It used to be set once at onboarding and never shown again, so quiet
+    // hours could fall at the wrong time with no way to see why (G13).
+    const data = form('22', '7');
+    data.set('timezone', 'America/Chicago');
+    expect(await updateQuietHours(data)).toEqual({ ok: true });
+    expect(mocks.update).toHaveBeenCalledWith({
+      quiet_hours_start: 22,
+      quiet_hours_end: 7,
+      timezone: 'America/Chicago',
+    });
+  });
+
+  it('refuses a zone Intl does not know rather than quietly saving UTC', async () => {
+    const data = form('22', '7');
+    data.set('timezone', 'Mars/Olympus_Mons');
+    const result = await updateQuietHours(data);
+    expect(result.ok).toBe(false);
+    expect(result.error).toMatch(/time zone/);
+    expect(mocks.update).not.toHaveBeenCalled();
+  });
 });

@@ -5,6 +5,7 @@ import { usePathname } from 'next/navigation';
 import { Icon } from '@/components/ui/Icon';
 import { submitPmf, type PmfChoice } from '@/lib/actions/feedback';
 import { useBottomOverlaySlot } from '@/components/system/BottomOverlaySlot';
+import { readDeviceFlag, writeDeviceFlag } from '@/components/system/device-storage';
 
 const DONE_KEY = 'sb-pmf';
 const CHOICES: { value: PmfChoice; label: string }[] = [
@@ -28,7 +29,7 @@ export function PmfSurvey() {
 
   useEffect(() => {
     if (process.env.NEXT_PUBLIC_PMF_ENABLED !== '1') return;
-    if (localStorage.getItem(DONE_KEY)) return;
+    if (readDeviceFlag(DONE_KEY)) return;
     // Let the page settle before asking.
     const timer = setTimeout(() => setShow(true), 4000);
     return () => clearTimeout(timer);
@@ -37,14 +38,14 @@ export function PmfSurvey() {
   if (!wantsSlot || !ownsSlot) return null;
 
   function close() {
-    localStorage.setItem(DONE_KEY, '1');
+    writeDeviceFlag(DONE_KEY, '1');
     setShow(false);
   }
 
   function answer(choice: PmfChoice) {
     startTransition(async () => {
       await submitPmf(choice);
-      localStorage.setItem(DONE_KEY, '1');
+      writeDeviceFlag(DONE_KEY, '1');
       setDone(true);
       setTimeout(() => setShow(false), 1600);
     });

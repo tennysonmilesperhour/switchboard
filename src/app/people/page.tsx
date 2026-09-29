@@ -6,7 +6,7 @@ import { AppShell } from '@/components/shell/AppShell';
 import { FindableNudge } from '@/components/profile/FindableNudge';
 import { loadFindability } from '@/lib/server/findability';
 import { PeopleClient } from './PeopleClient';
-import type { CircleRow, FriendRow, RequestRow } from './sections/types';
+import type { CircleRow, FriendRow, RequestRow, SpaceRow } from './sections/types';
 import { loadVisibleSignals } from '@/lib/server/signals';
 
 export const metadata: Metadata = { title: 'People' };
@@ -45,6 +45,22 @@ export default async function PeoplePage() {
   const avoidedIds = new Set(
     (avoidRows ?? []).map((row) => row.avoided_id),
   );
+
+  // Everyone on the viewer's Give Space list, friend or not (G35). The ids came
+  // from the viewer's own RLS-scoped rows; only public profile fields are read.
+  const { data: avoidedProfiles } = avoidedIds.size
+    ? await supabase
+        .from('profiles')
+        .select('id, display_name, handle')
+        .in('id', [...avoidedIds])
+    : { data: [] };
+  const givingSpace: SpaceRow[] = (avoidedProfiles ?? [])
+    .map((profile) => ({
+      id: profile.id,
+      name: profile.display_name || 'Someone',
+      handle: profile.handle ?? '',
+    }))
+    .sort((a, b) => a.name.localeCompare(b.name));
 
   const friends: FriendRow[] = [];
   const incoming: RequestRow[] = [];
@@ -128,6 +144,7 @@ export default async function PeoplePage() {
           outgoing={outgoing}
           circles={circleRows}
           households={households}
+          givingSpace={givingSpace}
           inviteUrl={inviteUrl}
         />
       </div>

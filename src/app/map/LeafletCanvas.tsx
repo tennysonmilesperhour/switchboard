@@ -1,9 +1,21 @@
 'use client';
 
-import { useCallback, useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type * as L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
-import type { MapLayerKey, MapMarker } from '@/lib/geo';
+import { tileConfig, type MapLayerKey, type MapMarker } from '@/lib/geo';
+
+// Configurable per deployment (a hosted tile provider instead of the public
+// OpenStreetMap servers, whose usage policy does not cover production apps).
+// Read here, in client code, as literal `process.env.NEXT_PUBLIC_*` references
+// so the build inlines them; `tileConfig` validates and falls back.
+const TILES = tileConfig(
+  process.env.NEXT_PUBLIC_MAP_TILE_URL,
+  process.env.NEXT_PUBLIC_MAP_TILE_ATTRIBUTION,
+);
+
+/** Pins are 44px targets: the smallest a thumb can reliably hit. */
+const PIN_PX = 44;
 
 const LAYER_EMOJI: Record<MapLayerKey, string> = {
   plans: '📅',
@@ -80,10 +92,30 @@ export function LeafletCanvas({
   // silently dropped, which is precisely the "the map ignored me" failure this
   // whole screen is meant to stop having.
   const pendingFocusRef = useRef<MapFocus | null>(null);
+  // On a touch screen a one-finger drag over the map used to pan the map and
+  // never the page, so a phone user scrolling past it got stuck inside it. There
+  // the map starts still: one finger scrolls the page, pins stay tappable, and
+  // "Move map" turns dragging and pinch-zoom on until "Done".
+  const [touch, setTouch] = useState(false);
+  const [unlocked, setUnlocked] = useState(false);
 
   useEffect(() => {
     markersRef.current = markers;
   }, [markers]);
+
+  const setMovable = useCallback((movable: boolean) => {
+    const map = mapRef.current;
+    if (map) {
+      if (movable) {
+        map.dragging.enable();
+        map.touchZoom.enable();
+      } else {
+        map.dragging.disable();
+        map.touchZoom.disable();
+      }
+    }
+    setUnlocked(movable);
+  }, []);
 
   /** Move to whatever focus is queued, as far as the map is currently able. */
   const drainFocus = useCallback(() => {
@@ -107,14 +139,21 @@ export function LeafletCanvas({
     void (async () => {
       const leaflet = (await import('leaflet')).default;
       if (cancelled || !containerRef.current || mapRef.current) return;
+      const coarse =
+        typeof window.matchMedia === 'function' && window.matchMedia('(pointer: coarse)').matches;
       const map = leaflet
-        .map(containerRef.current, { scrollWheelZoom: false })
+        .map(containerRef.current, {
+          scrollWheelZoom: false,
+          dragging: !coarse,
+          touchZoom: !coarse,
+        })
         .setView([20, 0], 2);
-      // Raster OSM tiles load as <img>, which the CSP allows (`img-src https:`);
-      // a vector/WebGL basemap would need cross-origin fetch the CSP forbids.
+      setTouch(coarse);
+      // Raster tiles load as <img>, which the CSP allows (`img-src https:`); a
+      // vector/WebGL basemap would need cross-origin fetch the CSP forbids.
       leaflet
-        .tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-          attribution: '&copy; OpenStreetMap contributors',
+        .tileLayer(TILES.url, {
+          attribution: TILES.attribution,
           maxZoom: 19,
         })
         .addTo(map);
@@ -155,11 +194,11 @@ export function LeafletCanvas({
         const isSelf = marker.layer === 'you';
         const icon = leaflet.divIcon({
           className: isSelf ? 'sb-map-pin sb-map-pin-you' : 'sb-map-pin',
-          html: `<div style="font-size:${isSelf ? 24 : 20}px;line-height:28px;text-align:center;${
+          html: `<div style="font-size:${isSelf ? 26 : 22}px;line-height:${PIN_PX}px;width:${PIN_PX}px;height:${PIN_PX}px;text-align:center;${
             isSelf ? 'filter:drop-shadow(0 0 3px rgba(0,0,0,.35))' : ''
           }">${LAYER_EMOJI[marker.layer]}</div>`,
-          iconSize: [28, 28],
-          iconAnchor: [14, 14],
+          iconSize: [PIN_PX, PIN_PX],
+          iconAnchor: [PIN_PX / 2, PIN_PX / 2],
         });
         const pin = leaflet
           // `title` gives the keyboard-focusable pin an accessible name; an
@@ -221,9 +260,21 @@ export function LeafletCanvas({
   // context and out-stack app chrome like the More sheet overlay (z-40),
   // painting the map's controls on top of it. Isolating scopes them to the map.
   return (
-    <div
-      ref={containerRef}
-      className="isolate h-[60vh] w-full overflow-hidden rounded-card border border-line"
-    />
+    <div className="relative">
+      <div
+        ref={containerRef}
+        className="isolate h-[60vh] w-full overflow-hidden rounded-card border border-line"
+      />
+      {touch && (
+        <button
+          type="button"
+          onClick={() => setMovable(!unlocked)}
+          aria-pressed={unlocked}
+          className="absolute bottom-3 left-3 z-10 inline-flex min-h-11 items-center rounded-pill border border-line bg-card px-4 text-xs font-bold text-ink shadow-lift focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-terracotta"
+        >
+          {unlocked ? 'Done moving the map' : 'Move map'}
+        </button>
+      )}
+    </div>
   );
 }

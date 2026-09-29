@@ -12,28 +12,68 @@ const mocks = vi.hoisted(() => ({
   householdMemberDelete: vi.fn(),
   notifyUsers: vi.fn(),
   revalidatePath: vi.fn(),
+  ignoreDelete: vi.fn(),
+  ignoreUpsert: vi.fn(),
+  connectionMaybeSingle: vi.fn(),
+  adminIgnoreRow: vi.fn(),
+  checkRateLimit: vi.fn(),
+  rpc: vi.fn(),
 }));
 
 vi.mock('next/cache', () => ({ revalidatePath: mocks.revalidatePath }));
 vi.mock('@/lib/server/require-user', () => ({ requireUser: mocks.requireUser }));
 vi.mock('@/lib/supabase/server', () => ({ createClient: vi.fn() }));
 vi.mock('@/lib/server/notify', () => ({ notifyUsers: mocks.notifyUsers }));
-vi.mock('@/lib/server/rate-limit', () => ({ checkRateLimit: vi.fn().mockResolvedValue(true) }));
+vi.mock('@/lib/server/rate-limit', () => ({ checkRateLimit: mocks.checkRateLimit }));
+vi.mock('@/lib/supabase/admin', () => ({
+  hasAdminCredentials: () => true,
+  createAdminClient: () => ({
+    from: () => {
+      const chain = {
+        select: () => chain,
+        eq: () => chain,
+        gt: () => chain,
+        maybeSingle: async () => ({ data: mocks.adminIgnoreRow() }),
+      };
+      return chain;
+    },
+  }),
+}));
 
-import { blockProfile, giveSpace, sendConnectionRequestToId } from './connections';
+import {
+  blockProfile,
+  giveSpace,
+  ignoreConnectionRequest,
+  resolveContactMatches,
+  sendConnectionRequestToId,
+} from './connections';
 
 const ME = '00000000-0000-0000-0000-000000000001';
 const THEM = '00000000-0000-0000-0000-000000000002';
 
 function supabase() {
   return {
+    rpc: mocks.rpc,
     from: (table: string) => {
+      if (table === 'connection_request_ignores') {
+        return {
+          delete: () => ({
+            eq: (_c: string, ignorer: string) => ({
+              eq: (_d: string, ignored: string) => mocks.ignoreDelete(ignorer, ignored),
+            }),
+          }),
+          upsert: mocks.ignoreUpsert,
+        };
+      }
       if (table === 'profile_blocks') return { insert: mocks.blockInsert };
       if (table === 'profile_avoids') return { insert: mocks.avoidInsert };
       if (table === 'connections') {
         return {
           delete: () => ({ or: mocks.connectionDeleteOr }),
-          select: () => ({ or: mocks.connectionSelectOr }),
+          select: () => ({
+            or: mocks.connectionSelectOr,
+            eq: () => ({ maybeSingle: mocks.connectionMaybeSingle }),
+          }),
           insert: mocks.connectionInsert,
           update: (values: unknown) => ({
             eq: (_column: string, id: string) => ({
@@ -99,6 +139,10 @@ beforeEach(() => {
   mocks.connectionUpdate.mockResolvedValue({ data: { requester_id: THEM }, error: null });
   mocks.circleMemberDelete.mockResolvedValue({ error: null });
   mocks.householdMemberDelete.mockResolvedValue({ error: null });
+  mocks.ignoreDelete.mockResolvedValue({ error: null });
+  mocks.ignoreUpsert.mockResolvedValue({ error: null });
+  mocks.adminIgnoreRow.mockReturnValue(null);
+  mocks.checkRateLimit.mockResolvedValue(true);
 });
 
 describe('connection safety actions', () => {
@@ -219,5 +263,94 @@ describe('connection requests', () => {
       [THEM],
       expect.objectContaining({ kind: 'connection_request' }),
     );
+  });
+});
+
+describe('ignoring a request (D22)', () => {
+  it('records a 90-day ignore instead of deleting the request', async () => {
+    mocks.connectionMaybeSingle.mockResolvedValue({
+      data: { requester_id: THEM, addressee_id: ME, status: 'pending' },
+    });
+
+    const result = await ignoreConnectionRequest('00000000-0000-0000-0000-0000000000c1');
+
+    expect(result).toEqual({ ok: true });
+    expect(mocks.ignoreUpsert).toHaveBeenCalledWith(
+      expect.objectContaining({ ignorer_id: ME, ignored_id: THEM }),
+      { onConflict: 'ignorer_id,ignored_id' },
+    );
+    expect(mocks.connectionDeleteOr).not.toHaveBeenCalled();
+  });
+
+  it('refuses to ignore a request that was not sent to the caller', async () => {
+    mocks.connectionMaybeSingle.mockResolvedValue({
+      data: { requester_id: ME, addressee_id: THEM, status: 'pending' },
+    });
+
+    const result = await ignoreConnectionRequest('00000000-0000-0000-0000-0000000000c1');
+
+    expect(result.ok).toBe(false);
+    expect(mocks.ignoreUpsert).not.toHaveBeenCalled();
+  });
+
+  it('does not notify someone who ignored the sender', async () => {
+    mocks.adminIgnoreRow.mockReturnValue({ ignorer_id: THEM });
+
+    const result = await sendConnectionRequestToId(THEM);
+
+    expect(result).toEqual({ ok: true });
+    expect(mocks.connectionInsert).toHaveBeenCalled();
+    expect(mocks.notifyUsers).not.toHaveBeenCalled();
+  });
+
+  it('clears your own ignore when you ask them yourself', async () => {
+    await sendConnectionRequestToId(THEM);
+
+    expect(mocks.ignoreDelete).toHaveBeenCalledWith(ME, THEM);
+  });
+});
+
+describe('contact import throttling (G7)', () => {
+  it('says it was throttled, with a code, instead of returning an empty list', async () => {
+    mocks.checkRateLimit.mockResolvedValue(false);
+
+    const result = await resolveContactMatches([{ name: 'Sam', emails: ['sam@example.com'], phones: [] }]);
+
+    expect(result).toMatchObject({ matches: [], throttled: true, code: 'SB-RATE-LIMIT' });
+    expect(result.error).toBeTruthy();
+  });
+
+  it('keeps what matched before the database limit and flags the rest as unchecked', async () => {
+    mocks.rpc
+      .mockReturnValueOnce({
+        maybeSingle: async () => ({
+          data: { id: THEM, display_name: 'Sam', handle: 'sam', match_kind: 'email' },
+          error: null,
+        }),
+      })
+      .mockReturnValueOnce({
+        maybeSingle: async () => ({
+          data: null,
+          error: { message: 'contact-match rate limit', hint: 'SB-RATE-LIMIT' },
+        }),
+      });
+
+    const result = await resolveContactMatches([
+      { name: 'Sam', emails: ['sam@example.com'], phones: [] },
+      { name: 'Jo', emails: ['jo@example.com'], phones: [] },
+    ]);
+
+    expect(result.throttled).toBe(true);
+    expect(result.code).toBe('SB-RATE-LIMIT');
+    expect(result.matches.filter((match) => match.profile)).toHaveLength(1);
+    expect(result.error).toMatch(/Found 1/);
+  });
+
+  it('is not throttled when every contact was checked', async () => {
+    mocks.rpc.mockReturnValue({ maybeSingle: async () => ({ data: null, error: null }) });
+
+    const result = await resolveContactMatches([{ name: 'Jo', emails: ['jo@example.com'], phones: [] }]);
+
+    expect(result).toEqual({ matches: expect.any(Array), throttled: false });
   });
 });

@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { Icon } from '@/components/ui/Icon';
+import { useBottomOverlaySlot } from '@/components/system/BottomOverlaySlot';
 
 // Baked into the client bundle at build time (see next.config.ts).
 const CURRENT_BUILD = process.env.NEXT_PUBLIC_BUILD_ID ?? 'dev';
@@ -15,6 +16,10 @@ const POLL_MS = 60_000;
  */
 export function VersionWatcher() {
   const [stale, setStale] = useState(false);
+  // It shares the band above the tab bar with the Settings save bar, and its
+  // one button reloads the page. Sitting on top of unsaved edits made it the
+  // quickest way to lose them, so it waits its turn like every other prompt.
+  const ownsSlot = useBottomOverlaySlot('update', stale, 40);
 
   useEffect(() => {
     // No meaningful build id in local dev — nothing to compare against.
@@ -57,7 +62,7 @@ export function VersionWatcher() {
     };
   }, []);
 
-  if (!stale) return null;
+  if (!stale || !ownsSlot) return null;
 
   // Reload the current URL from the network so the newest deployment's HTML +
   // bundle replace this stale tab. bfcache can hand back the old page on a plain
@@ -70,7 +75,7 @@ export function VersionWatcher() {
     <div
       role="status"
       aria-live="polite"
-      className="fixed inset-x-0 bottom-24 z-50 flex justify-center px-4 pointer-events-none"
+      className="fixed inset-x-0 bottom-24 z-40 flex justify-center px-4 pointer-events-none"
     >
       <button
         type="button"

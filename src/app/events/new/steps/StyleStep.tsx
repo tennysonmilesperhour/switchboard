@@ -9,6 +9,7 @@ import type { EventTheme, InviteMode } from '@/lib/types';
 import { EVENT_THEMES } from '@/lib/themes';
 import { FIELD, MODE_OPTIONS } from './wizard-types';
 import { ResponseWindowPicker } from './ResponseWindowPicker';
+import { PollSeedOptions } from './PollSeedOptions';
 
 interface StyleStepProps {
   inviteMode: InviteMode;
@@ -23,6 +24,9 @@ interface StyleStepProps {
   setSuggestDeadline: Dispatch<SetStateAction<string>>;
   voteDeadline: string;
   setVoteDeadline: Dispatch<SetStateAction<string>>;
+  /** Ideas to open the first poll with. Optional. */
+  pollOptions: string[];
+  setPollOptions: Dispatch<SetStateAction<string[]>>;
   minDate: string;
   remindersEnabled: boolean;
   setRemindersEnabled: Dispatch<SetStateAction<boolean>>;
@@ -51,6 +55,8 @@ export function StyleStep({
   setSuggestDeadline,
   voteDeadline,
   setVoteDeadline,
+  pollOptions,
+  setPollOptions,
   minDate,
   remindersEnabled,
   setRemindersEnabled,
@@ -140,6 +146,7 @@ export function StyleStep({
             </label>
             {enablePoll && (
               <div className="mt-3 space-y-3 pl-7">
+                <PollSeedOptions options={pollOptions} setOptions={setPollOptions} />
                 <div className="flex flex-wrap gap-2">
                   {(
                     [

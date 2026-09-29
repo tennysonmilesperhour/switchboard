@@ -18,6 +18,7 @@ import { directInvitePath } from '@/lib/invite-links';
 import { normalizeInviteStatus } from '@/lib/invite-status';
 import { toJson } from '@/lib/supabase/json';
 import { consumeEventOutboundSlot } from '@/lib/server/invite-delivery-limit';
+import { reportOperationalError } from '@/lib/server/observability';
 
 function toEngineInvite(invite: Invite): CascadeInvite {
   return {
@@ -47,7 +48,7 @@ export interface InvitationDeliverySummary {
   manual: number;
 }
 
-interface DeliveryAttemptRow {
+export interface DeliveryAttemptRow {
   invite_id: string;
   channel: 'in_app' | 'email' | 'sms';
   status: DeliveryStatus;
@@ -56,7 +57,7 @@ interface DeliveryAttemptRow {
   error_code: string | null;
 }
 
-function emptyDeliverySummary(): InvitationDeliverySummary {
+export function emptyDeliverySummary(): InvitationDeliverySummary {
   return {
     sent: 0,
     notConfigured: 0,
@@ -67,7 +68,7 @@ function emptyDeliverySummary(): InvitationDeliverySummary {
   };
 }
 
-function countDelivery(summary: InvitationDeliverySummary, status: DeliveryStatus): void {
+export function countDelivery(summary: InvitationDeliverySummary, status: DeliveryStatus): void {
   if (status === 'sent') summary.sent += 1;
   else if (status === 'not_configured') summary.notConfigured += 1;
   else if (status === 'invalid_recipient') summary.invalidRecipient += 1;
@@ -236,10 +237,21 @@ export async function advanceEventCascade(
   // invite's expected predecessor status and a capacity re-check. Returns the
   // invites actually sent, so we notify exactly those (a 'sent' is skipped if
   // the event filled between our snapshot read and the locked apply).
-  const { data: sentRows } = await admin.rpc('apply_cascade_updates', {
+  const { data: sentRows, error: applyError } = await admin.rpc('apply_cascade_updates', {
     p_event: eventId,
     p_updates: toJson(updates),
   });
+  // The apply is one transaction, so a failure changed nothing: no invite was
+  // expired or sent. Reported rather than read as "nobody was sent", and not
+  // retried here — the next cron tick recomputes the same transitions from the
+  // rows as they stand. Dropping the error made a stalled cascade invisible.
+  if (applyError) {
+    await reportOperationalError('cascade.apply', applyError, {
+      eventId,
+      transitions: updates.length,
+    });
+    return emptyDeliverySummary();
+  }
 
   const sentIds = new Set(
     (sentRows ?? []).map((row) => row.sent_id),

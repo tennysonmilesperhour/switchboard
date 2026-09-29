@@ -8,6 +8,30 @@ const OFF_KEY = 'sb-host-suggestions-off';
 const MAX_SHOWN = 3;
 
 /**
+ * Storage access that never throws. `localStorage` itself throws in a private
+ * window, with site data blocked, or in a sandboxed frame — and an uncaught
+ * throw here took the whole review step down with it. A preference that can't
+ * be stored is simply not remembered: tips default to on, and the toggle still
+ * works for this visit.
+ */
+function readTipsOff(): boolean {
+  try {
+    return window.localStorage.getItem(OFF_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+
+function writeTipsOff(off: boolean): void {
+  try {
+    if (off) window.localStorage.setItem(OFF_KEY, '1');
+    else window.localStorage.removeItem(OFF_KEY);
+  } catch {
+    // Not remembered on this device; the in-memory state still applies.
+  }
+}
+
+/**
  * Presentational layer for host coaching suggestions. Gentle, dismissible, and
  * switchable off entirely — the preference lives in localStorage (device-level,
  * non-sensitive) and turning tips off is reversible right here so it never
@@ -27,20 +51,17 @@ export function HostSuggestions({
   useEffect(() => {
     // Deferred out of the effect body so the read of localStorage doesn't run
     // as a synchronous setState (matches the wizard's contact-support probe).
-    const timeout = window.setTimeout(
-      () => setEnabled(localStorage.getItem(OFF_KEY) !== '1'),
-      0,
-    );
+    const timeout = window.setTimeout(() => setEnabled(!readTipsOff()), 0);
     return () => window.clearTimeout(timeout);
   }, []);
 
   function turnOff() {
-    localStorage.setItem(OFF_KEY, '1');
+    writeTipsOff(true);
     setEnabled(false);
   }
 
   function turnOn() {
-    localStorage.removeItem(OFF_KEY);
+    writeTipsOff(false);
     setEnabled(true);
   }
 

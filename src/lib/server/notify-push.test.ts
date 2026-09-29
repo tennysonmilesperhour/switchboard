@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => {
   const route = { plans: 'existing', reminders: 'existing' };
+  const profile: Record<string, unknown> = {};
   const routeRead: { error: { message: string } | null } = { error: null };
   const sendNotification = vi.fn();
   const setVapidDetails = vi.fn();
@@ -10,6 +11,7 @@ const mocks = vi.hoisted(() => {
 
   return {
     route,
+    profile,
     routeRead,
     sendNotification,
     setVapidDetails,
@@ -57,6 +59,7 @@ vi.mock('@/lib/supabase/admin', () => ({
                   notify_reminders: true,
                   notify_messages: true,
                   notify_social: true,
+                  ...mocks.profile,
                 },
               ],
               error: null,
@@ -65,20 +68,19 @@ vi.mock('@/lib/supabase/admin', () => ({
         };
       }
       if (table === 'push_subscriptions') {
+        const rows = async () => ({
+          data: [
+            {
+              id: 'subscription-1',
+              endpoint: 'https://push.example.test/one',
+              p256dh: 'key',
+              auth: 'secret',
+            },
+          ],
+          error: null,
+        });
         return {
-          select: () => ({
-            in: async () => ({
-              data: [
-                {
-                  id: 'subscription-1',
-                  endpoint: 'https://push.example.test/one',
-                  p256dh: 'key',
-                  auth: 'secret',
-                },
-              ],
-              error: null,
-            }),
-          }),
+          select: () => ({ in: rows, eq: rows }),
           delete: () => ({ eq: mocks.deleteSubscription }),
         };
       }
@@ -87,7 +89,7 @@ vi.mock('@/lib/supabase/admin', () => ({
   }),
 }));
 
-import { sendPushToUsers } from './notify';
+import { heldForDigest, pushDigest, sendPushToUsers } from './notify';
 
 describe('web-push failure observability', () => {
   beforeEach(() => {
@@ -172,4 +174,69 @@ it('an unreadable route skips the push and reports it instead of throwing into t
     mocks.routeRead.error = null;
     vi.unstubAllEnvs();
   }
+});
+
+describe('the daily digest (D16)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.stubEnv('NEXT_PUBLIC_VAPID_PUBLIC_KEY', 'public-key');
+    vi.stubEnv('VAPID_PRIVATE_KEY', 'private-key');
+  });
+
+  afterEach(() => {
+    for (const key of Object.keys(mocks.profile)) delete mocks.profile[key];
+    vi.unstubAllEnvs();
+  });
+
+  it('holds everything but plan changes, invitations and reminders for someone who chose it', () => {
+    for (const kind of ['event_invite', 'event_updated', 'event_urgent_change', 'event_cancelled', 'event_date_set', 'reminder']) {
+      expect(heldForDigest(kind, true), kind).toBe(false);
+    }
+    for (const kind of ['room_message', 'rsvp_accepted', 'join_request', 'poll_suggestion', 'match', 'announcement']) {
+      expect(heldForDigest(kind, true), kind).toBe(true);
+    }
+    expect(heldForDigest('room_message', false)).toBe(false);
+    expect(heldForDigest(undefined, true)).toBe(false);
+  });
+
+  it('skips the per-item push the digest will carry, and still sends a plan change', async () => {
+    // sendPushToUsers never read digest_enabled, so turning the digest on
+    // added a summary on top of every buzz instead of replacing them.
+    mocks.profile.digest_enabled = true;
+    await sendPushToUsers(['user-1'], { title: 'New message', body: 'x' }, 'messages', {
+      kind: 'room_message',
+    });
+    expect(mocks.sendNotification).not.toHaveBeenCalled();
+
+    await sendPushToUsers(['user-1'], { title: 'Moved', body: 'x' }, 'plans', {
+      kind: 'event_updated',
+    });
+    expect(mocks.sendNotification).toHaveBeenCalledTimes(1);
+  });
+
+  it('pushes the digest inside quiet hours and reports that it arrived', async () => {
+    mocks.profile.quiet_hours_start = 0;
+    mocks.profile.quiet_hours_end = 23;
+    mocks.sendNotification.mockResolvedValueOnce({});
+    await expect(pushDigest('user-1', { title: 'Your day', body: '3 new messages' })).resolves.toBe(
+      'delivered',
+    );
+    expect(mocks.sendNotification).toHaveBeenCalledTimes(1);
+  });
+
+  it('says a digest push failed when no device took it, so it is not marked sent', async () => {
+    mocks.sendNotification.mockRejectedValueOnce({ statusCode: 503 });
+    await expect(pushDigest('user-1', { title: 'Your day', body: 'x' })).resolves.toBe('failed');
+  });
+
+  it('says push is unavailable when the only subscription is gone, so email can step in', async () => {
+    mocks.sendNotification.mockRejectedValueOnce({ statusCode: 410 });
+    await expect(pushDigest('user-1', { title: 'Your day', body: 'x' })).resolves.toBe(
+      'unavailable',
+    );
+    vi.unstubAllEnvs();
+    await expect(pushDigest('user-1', { title: 'Your day', body: 'x' })).resolves.toBe(
+      'unavailable',
+    );
+  });
 });

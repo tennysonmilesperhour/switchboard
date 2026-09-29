@@ -26,6 +26,8 @@ export interface EmailMessage {
   html?: string;
   /** Provider-level message headers, such as an RFC 2369 unsubscribe route. */
   headers?: Record<string, string>;
+  /** Where a reply goes, when it should reach a person rather than the sender. */
+  replyTo?: string;
 }
 
 export type DeliveryStatus =
@@ -88,6 +90,7 @@ export async function sendEmailWithResult(
         text: message.text,
         ...(message.html ? { html: message.html } : {}),
         ...(message.headers ? { headers: message.headers } : {}),
+        ...(message.replyTo ? { reply_to: message.replyTo } : {}),
       }),
     });
     if (!response.ok) {

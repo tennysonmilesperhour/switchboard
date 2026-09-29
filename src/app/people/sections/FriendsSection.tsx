@@ -1,6 +1,7 @@
 'use client';
 
-import type { Dispatch, SetStateAction } from 'react';
+import { useState, type Dispatch, type SetStateAction } from 'react';
+import Link from 'next/link';
 import { Avatar } from '@/components/ui/Avatar';
 import { Card, SectionHeader } from '@/components/ui/Card';
 import { Chip } from '@/components/ui/Chip';
@@ -32,15 +33,39 @@ export function FriendsSection({
   reportFriend,
   blockFriend,
 }: FriendsSectionProps) {
+  const [query, setQuery] = useState('');
   if (friends.length === 0) return null;
+  const needle = query.trim().toLowerCase().replace(/^@/, '');
+  const shown = needle
+    ? friends.filter((friend) =>
+        `${friend.name} ${friend.handle}`.toLowerCase().includes(needle),
+      )
+    : friends;
   return (
         <section>
           <SectionHeader
             title={`Friends · ${friends.length}`}
             hint="Tap a friend to sort them into circles"
           />
+          {friends.length > 5 && (
+            <label className="mb-2.5 block">
+              <span className="sr-only">Search your friends by name or handle</span>
+              <input
+                type="search"
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+                placeholder="Search your people…"
+                className="w-full rounded-xl border border-line bg-card px-4 py-2.5 text-sm outline-none focus:border-terracotta"
+              />
+            </label>
+          )}
+          {shown.length === 0 && (
+            <p className="py-4 text-center text-sm text-ink-muted">
+              Nobody in your people matches “{query.trim()}”.
+            </p>
+          )}
           <div className="space-y-2">
-            {friends.map((friend) => {
+            {shown.map((friend) => {
               const expanded = expandedFriend === friend.id;
               return (
                 <Card key={friend.id}>
@@ -59,7 +84,8 @@ export function FriendsSection({
                     <span className="flex-1">
                       <span className="font-bold block">{friend.name}</span>
                       <span className="text-xs text-ink-faint">
-                        @{friend.handle}
+                        {/* No bare "@" for an account without a handle. */}
+                        {friend.handle ? `@${friend.handle}` : 'No handle yet'}
                         {friend.circleIds.length > 0 &&
                           ` · ${friend.circleIds
                             .map((id) => circles.find((c) => c.id === id)?.emoji ?? '')
@@ -75,6 +101,17 @@ export function FriendsSection({
                   </button>
                   {expanded && (
                     <div className="mt-3 pt-3 border-t border-line animate-rise">
+                      {/* A profile lives at /u/<handle>; an account with no
+                          handle has no public page to link to yet. */}
+                      {friend.handle && (
+                        <Link
+                          href={`/u/${encodeURIComponent(friend.handle)}?from=/people`}
+                          className="mb-3 inline-flex min-h-11 items-center gap-1.5 rounded-pill text-sm font-semibold text-terracotta-deep underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-terracotta"
+                        >
+                          <Icon name="account" size={16} />
+                          View {friend.name.split(' ')[0]}’s profile
+                        </Link>
+                      )}
                       <p className="text-xs font-bold uppercase tracking-wide text-ink-faint mb-2.5">
                         Circles
                       </p>

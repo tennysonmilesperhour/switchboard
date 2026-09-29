@@ -19,6 +19,13 @@ export interface RequestRow {
   handle: string;
 }
 
+/** Someone the viewer gives space to (G35). Private to the viewer. */
+export interface SpaceRow {
+  id: string;
+  name: string;
+  handle: string;
+}
+
 export interface CircleRow {
   id: string;
   name: string;

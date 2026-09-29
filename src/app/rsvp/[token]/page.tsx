@@ -10,6 +10,7 @@ import { inviteOpenGraph, unfurlSummary } from '@/lib/invite-links';
 import { errorFor, errorRef } from '@/lib/errors';
 import { resolveEventZone } from '@/lib/server/event-zone';
 import { shareLinkNotice } from '@/lib/share-link';
+import { guardianStepFor } from '@/lib/guardian-approval';
 import { ErrorNotice } from '@/components/ui/ErrorNotice';
 import { InvitePlanDetails } from '@/components/events/InvitePlanDetails';
 import { RsvpSignInGate } from '@/components/events/RsvpSignInGate';
@@ -105,7 +106,7 @@ export default async function GuestRsvpPage({
   const { data: event, error: eventError } = invite && admin
     ? await admin
         .from('events')
-        .select('status, title, description, location_name, location_address, starts_at, ends_at, time_zone, host_id, cover_url, wishlist_url')
+        .select('status, title, description, location_name, location_address, starts_at, ends_at, time_zone, host_id, cover_url, wishlist_url, parental_approval')
         .eq('id', invite.event_id)
         .maybeSingle()
     : { data: null, error: null };
@@ -148,6 +149,20 @@ export default async function GuestRsvpPage({
   // and a missing session must never break this public page — so treat an
   // unresolved viewer as logged-out.
   const user = await getUser().catch(() => null);
+  // A yes held for a guardian (or turned down by one) shows its request on
+  // every visit. Only to the person who said yes — the token alone is a
+  // forwardable link — and masked even then (see GuardianRequestView).
+  const viewerOwnsInvite = Boolean(user && invite?.invitee_id === user.id);
+  const { data: guardianRows } =
+    admin && invite && event?.parental_approval && viewerOwnsInvite &&
+    (invite.status === 'pending_approval' || invite.status === 'declined')
+      ? await admin
+          .from('parental_approvals')
+          .select('status, guardian_email, created_at, email_status')
+          .eq('invite_id', invite.id)
+          .eq('event_id', invite.event_id)
+      : { data: null };
+  const guardianRequest = guardianStepFor(invite?.status, guardianRows ?? [])?.request ?? null;
   const smsNumber = normalizePhoneNumber(process.env.TWILIO_FROM_NUMBER);
   const hostName = host?.display_name ?? 'Your host';
   // Show the plan's local time, not the server's UTC. Falls back to the host's
@@ -274,7 +289,9 @@ export default async function GuestRsvpPage({
                 // to the viewer — /events/<id> is RLS-gated on exactly that, so
                 // linking an unclaimed invite would bounce them to /join. A
                 // fresh answer claims the invite and returns the id itself.
-                eventId={user && invite.invitee_id === user.id ? invite.event_id : null}
+                eventId={viewerOwnsInvite ? invite.event_id : null}
+                inviteId={invite.id}
+                guardianRequest={guardianRequest}
                 calendarEvent={
                   event.starts_at
                     ? {

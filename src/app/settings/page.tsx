@@ -1,12 +1,13 @@
-import { NotificationRoutes } from './NotificationRoutes';
-import { SmsPreferences } from './SmsPreferences';
+import { NotificationChannels } from './NotificationChannels';
+import { TimeZoneSelect } from './TimeZoneSelect';
 import type { Metadata } from 'next';
 import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
 import { supportEmail } from '@/lib/contact';
 import { emailEnabled } from '@/lib/server/email';
 import { AppShell } from '@/components/shell/AppShell';
-import { errorRef } from '@/lib/errors';
+import { errorFor, errorRef } from '@/lib/errors';
+import { ErrorNotice } from '@/components/ui/ErrorNotice';
 import { SignOutForm } from '@/components/shell/SignOutForm';
 import { Card, SectionHeader } from '@/components/ui/Card';
 import { Avatar } from '@/components/ui/Avatar';
@@ -27,7 +28,7 @@ import { ContactVerification } from './ContactVerification';
 import { AppearanceSection } from './AppearancePicker';
 import { resolveTheme } from '@/lib/themes-app';
 import { parseCustomAppearance } from '@/lib/theme-custom';
-import { loadSettingsPage } from '@/lib/server/settings-page';
+import { anySettingsReadFailed, loadSettingsPage } from '@/lib/server/settings-page';
 import { INTEREST_CATEGORIES, DOWN_TO_GROUP } from '@/lib/interests';
 import {
   updateInterests,
@@ -64,20 +65,22 @@ export default async function SettingsPage({
     passportComplete,
     emailVerified,
     phoneVerified,
+    verifiedPhone,
+    unverifiedEmail,
+    phoneOptedOut,
     isModerator,
+    smsPreferences,
+    notificationRoutes,
+    blocks,
+    recoveryEmailMissing,
+    failed,
   } = await loadSettingsPage(user);
-  const { data: smsPreferences } = await supabase.from('sms_preferences').select('enabled, plans, reminders, phone, urgent_changes').eq('user_id', user.id).maybeSingle();
   // Shown in the delete-account confirmation, so nobody deletes an account
   // without knowing which of their plans go with it.
   const hostedPlanCount = await upcomingHostedPlans(supabase, user.id)
     .then((plans) => plans.length)
     .catch(() => 0);
-  const { data: blockRows } = await supabase
-    .from('profile_blocks')
-    .select('blocked_id, profile:profiles!profile_blocks_blocked_id_fkey(display_name, handle)')
-    .eq('blocker_id', user.id)
-    .order('created_at', { ascending: false });
-  const blockedPeople: BlockedPerson[] = (blockRows ?? []).map((row) => {
+  const blockedPeople: BlockedPerson[] = blocks.map((row) => {
     const blocked = Array.isArray(row.profile) ? row.profile[0] : row.profile;
     return {
       id: row.blocked_id,
@@ -85,10 +88,24 @@ export default async function SettingsPage({
       handle: blocked?.handle ?? null,
     };
   });
-  const { data: notificationRoutes } = await supabase.from('notification_routes').select('plans, reminders').eq('user_id', user.id).maybeSingle();
-  const currentSmsPreferences = smsPreferences && smsPreferences.phone === privateProfile?.contact_phone ? smsPreferences : null;
+  // A subscription belongs to the phone it was made for. After a number change
+  // it no longer describes anything that can be texted.
+  const currentSmsPreferences =
+    smsPreferences && verifiedPhone && smsPreferences.phone === verifiedPhone
+      ? smsPreferences
+      : null;
   const calendarToken = privateProfile?.calendar_token ?? null;
   const pushConfigured = Boolean(process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY && process.env.VAPID_PRIVATE_KEY);
+
+  // What is safe to render as editable. A control built from a read that failed
+  // would show defaults, and saving it would write those defaults over the real
+  // values — so it is hidden, and saving is off, until a reload brings it back.
+  const loadFailure = errorFor('SB-SETTINGS-LOAD');
+  const profileKnown = !failed.profile && Boolean(profile);
+  const contactsKnown = !failed.private && !failed.contacts;
+  const notificationsKnown =
+    profileKnown && contactsKnown && !failed.sms && !failed.routes;
+  const timeZones = [...new Set(['UTC', ...Intl.supportedValuesOf('timeZone')])];
 
   const interests: string[] = profile?.interests ?? [];
   const downTo: string[] = profile?.down_to ?? [];
@@ -107,14 +124,55 @@ export default async function SettingsPage({
 
   return (
     <AppShell title="Settings" back="/profile">
-      <SettingsSaveProvider>
+      <SettingsSaveProvider
+        blocked={
+          failed.profile ? { message: loadFailure.message, code: loadFailure.code } : null
+        }
+      >
         <div className="space-y-7">
+          {anySettingsReadFailed(failed) && (
+            <Card>
+              <div role="alert">
+                <ErrorNotice
+                  message={loadFailure.message}
+                  fix={loadFailure.fix}
+                  code={loadFailure.code}
+                />
+              </div>
+            </Card>
+          )}
+
+          {recoveryEmailMissing && (
+            <Card tone="gold">
+              <div role="status">
+                <p className="text-sm font-bold text-ink">Add a way back into your account</p>
+                <p className="mt-1 text-sm leading-relaxed text-ink-soft">
+                  You signed up with a username, so if you ever forget your password there is no
+                  way to reset it until your account has a verified email.{' '}
+                  {unverifiedEmail
+                    ? `Verify ${unverifiedEmail} below — until then it can’t be used to recover your account.`
+                    : 'Add one in your contact details, then verify it here.'}
+                </p>
+                {!unverifiedEmail && (
+                  <Link
+                    href="/profile/edit"
+                    className="mt-3 inline-block text-sm font-bold text-terracotta-deep"
+                  >
+                    Add a recovery email
+                  </Link>
+                )}
+              </div>
+            </Card>
+          )}
+
           <Card>
             <div className="flex items-center gap-4">
               <Avatar name={profile?.display_name ?? 'You'} seed={user.id} size="lg" />
               <div>
-                <p className="font-display text-xl">{profile?.display_name}</p>
-                <p className="text-sm text-ink-faint">@{profile?.handle}</p>
+                <p className="font-display text-xl">{profile?.display_name ?? 'You'}</p>
+                {profile?.handle && (
+                  <p className="text-sm text-ink-faint">@{profile.handle}</p>
+                )}
               </div>
             </div>
             {(interests.length > 0 || downTo.length > 0) && (
@@ -138,12 +196,18 @@ export default async function SettingsPage({
               title="Appearance"
               hint="How Switchboard looks, on every device you sign in on"
             />
-            <AppearanceSection
-              current={resolveTheme(profile?.appearance_theme)}
-              custom={parseCustomAppearance(profile?.appearance_custom)}
-              userId={user.id}
-              passportComplete={passportComplete}
-            />
+            {profileKnown ? (
+              <AppearanceSection
+                current={resolveTheme(profile?.appearance_theme)}
+                custom={parseCustomAppearance(profile?.appearance_custom)}
+                userId={user.id}
+                passportComplete={passportComplete}
+              />
+            ) : (
+              <Card>
+                <Unavailable />
+              </Card>
+            )}
           </section>
 
           <section>
@@ -173,12 +237,16 @@ export default async function SettingsPage({
                   )}
                 </p>
               )}
-              <ContactVerification
-                email={privateProfile?.contact_email ?? null}
-                phone={privateProfile?.contact_phone ?? null}
-                emailVerified={emailVerified}
-                phoneVerified={phoneVerified}
-              />
+              {contactsKnown ? (
+                <ContactVerification
+                  email={privateProfile?.contact_email ?? null}
+                  phone={privateProfile?.contact_phone ?? null}
+                  emailVerified={emailVerified}
+                  phoneVerified={phoneVerified}
+                />
+              ) : (
+                <Unavailable />
+              )}
               <Link href="/profile/edit" className="mt-4 inline-block text-sm font-bold text-terracotta-deep">
                 Edit contact details
               </Link>
@@ -191,6 +259,7 @@ export default async function SettingsPage({
               hint="Help Switchboard suggest the right people and plans"
             />
             <Card>
+              {!profileKnown ? <Unavailable /> : (
               <SettingsForm action={updateInterests} className="space-y-6">
                 <div className="space-y-3">
                   <p className="text-sm font-medium text-ink">Interests</p>
@@ -213,6 +282,7 @@ export default async function SettingsPage({
                   />
                 </div>
               </SettingsForm>
+              )}
             </Card>
           </section>
 
@@ -242,6 +312,7 @@ export default async function SettingsPage({
               hint="Choose how new people can find you. Interest stays private unless it is mutual."
             />
             <Card>
+              {!profileKnown ? <Unavailable /> : (
               <SettingsForm action={updateDiscoverability} className="space-y-4">
                 <label className="flex items-start gap-3 cursor-pointer">
                   <input
@@ -302,6 +373,7 @@ export default async function SettingsPage({
                   </p>
                 </div>
               </SettingsForm>
+              )}
             </Card>
           </section>
 
@@ -316,63 +388,109 @@ export default async function SettingsPage({
                   <PushManager serverConfigured={pushConfigured} />
                 </div>
 
-                <div className="py-5">
-                  <NotificationPreferences initial={notificationPrefs} />
-                  <SmsPreferences key={`${privateProfile?.contact_phone}:${phoneVerified}`} initial={currentSmsPreferences} verified={phoneVerified} />
-                  <NotificationRoutes initial={notificationRoutes} urgent={currentSmsPreferences?.urgent_changes ?? false} smsEnabled={Boolean(currentSmsPreferences?.enabled && phoneVerified)} emailVerified={emailVerified} emailAvailable={emailEnabled()} pushAvailable={pushConfigured} />
-                  <DigestPreference
-                    enabled={profile?.digest_enabled ?? false}
-                    hour={profile?.digest_hour ?? 8}
-                  />
-                </div>
+                {!notificationsKnown ? (
+                  <div className="pt-5">
+                    <Unavailable />
+                  </div>
+                ) : (
+                  <>
+                    <div className="py-5">
+                      <NotificationPreferences initial={notificationPrefs} />
+                      <DigestPreference
+                        enabled={profile?.digest_enabled ?? false}
+                        hour={profile?.digest_hour ?? 8}
+                        pushAvailable={pushConfigured}
+                        emailFallback={emailVerified && emailEnabled()}
+                      />
+                      <div className="mt-5">
+                        <NotificationChannels
+                          // A new or re-verified number is a different
+                          // subscription; start its draft from the server.
+                          key={`${verifiedPhone ?? 'none'}:${phoneOptedOut}`}
+                          initialSms={currentSmsPreferences}
+                          initialRoutes={notificationRoutes}
+                          urgent={currentSmsPreferences?.urgent_changes ?? false}
+                          phoneVerified={phoneVerified}
+                          phoneOptedOut={phoneOptedOut}
+                          emailVerified={emailVerified}
+                          emailAvailable={emailEnabled()}
+                          pushAvailable={pushConfigured}
+                          fallback={
+                            notificationRoutes?.sms_fallback_at && notificationRoutes.sms_fallback_reason
+                              ? {
+                                  at: notificationRoutes.sms_fallback_at,
+                                  reason: notificationRoutes.sms_fallback_reason,
+                                }
+                              : null
+                          }
+                        />
+                      </div>
+                    </div>
 
-                <div className="pt-5">
-                  <p className="text-sm font-bold text-ink">Quiet hours</p>
-                  <p className="mt-0.5 mb-3 text-sm text-ink-soft leading-relaxed">
-                    No pushes during these hours — they simply wait for you.
-                  </p>
-                  <SettingsForm
-                    action={updateQuietHours}
-                    className="flex flex-wrap items-end gap-3"
-                  >
-                    <div className="space-y-1.5 flex-1">
-                      <label htmlFor="quiet_start" className="text-sm font-medium">
-                        From
-                      </label>
-                      <select
-                        id="quiet_start"
-                        name="quiet_start"
-                        defaultValue={profile?.quiet_hours_start ?? ''}
-                        className="w-full rounded-card border border-line bg-paper px-3 py-2.5 text-sm"
-                      >
-                        <option value="">Off</option>
-                        {HOURS.map((hour) => (
-                          <option key={hour.value} value={hour.value}>
-                            {hour.label}
-                          </option>
-                        ))}
-                      </select>
+                    <div className="pt-5">
+                      <p className="text-sm font-bold text-ink">Quiet hours</p>
+                      <p className="mt-0.5 mb-3 text-sm text-ink-soft leading-relaxed">
+                        No pushes during these hours. A push that would have arrived then
+                        isn’t sent later — it’s waiting in your notifications inbox instead.
+                        Texts are held until the hours end.
+                      </p>
+                      <SettingsForm action={updateQuietHours} className="space-y-3">
+                        <div className="flex flex-wrap items-end gap-3">
+                          <div className="space-y-1.5 flex-1">
+                            <label htmlFor="quiet_start" className="text-sm font-medium">
+                              From
+                            </label>
+                            <select
+                              id="quiet_start"
+                              name="quiet_start"
+                              defaultValue={profile?.quiet_hours_start ?? ''}
+                              className="w-full rounded-card border border-line bg-paper px-3 py-2.5 text-sm"
+                            >
+                              <option value="">Off</option>
+                              {HOURS.map((hour) => (
+                                <option key={hour.value} value={hour.value}>
+                                  {hour.label}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                          <div className="space-y-1.5 flex-1">
+                            <label htmlFor="quiet_end" className="text-sm font-medium">
+                              Until
+                            </label>
+                            <select
+                              id="quiet_end"
+                              name="quiet_end"
+                              defaultValue={profile?.quiet_hours_end ?? ''}
+                              className="w-full rounded-card border border-line bg-paper px-3 py-2.5 text-sm"
+                            >
+                              <option value="">Off</option>
+                              {HOURS.map((hour) => (
+                                <option key={hour.value} value={hour.value}>
+                                  {hour.label}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                        </div>
+                        <div className="space-y-1.5">
+                          <label htmlFor="timezone" className="text-sm font-medium">
+                            Your time zone
+                          </label>
+                          <TimeZoneSelect
+                            id="timezone"
+                            name="timezone"
+                            initial={profile?.timezone || 'UTC'}
+                            zones={timeZones}
+                          />
+                          <p className="text-xs text-ink-faint">
+                            Quiet hours, the daily summary and text messages all follow it.
+                          </p>
+                        </div>
+                      </SettingsForm>
                     </div>
-                    <div className="space-y-1.5 flex-1">
-                      <label htmlFor="quiet_end" className="text-sm font-medium">
-                        Until
-                      </label>
-                      <select
-                        id="quiet_end"
-                        name="quiet_end"
-                        defaultValue={profile?.quiet_hours_end ?? ''}
-                        className="w-full rounded-card border border-line bg-paper px-3 py-2.5 text-sm"
-                      >
-                        <option value="">Off</option>
-                        {HOURS.map((hour) => (
-                          <option key={hour.value} value={hour.value}>
-                            {hour.label}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                  </SettingsForm>
-                </div>
+                  </>
+                )}
               </div>
             </Card>
           </section>
@@ -405,6 +523,7 @@ export default async function SettingsPage({
               hint="Pause signals, radar, and matchmaking for a while"
             />
             <Card>
+              {!profileKnown ? <Unavailable /> : (
               <SettingsForm action={updateSabbatical} className="space-y-3">
                 <label className="flex items-start gap-3 cursor-pointer">
                   <input
@@ -431,6 +550,7 @@ export default async function SettingsPage({
                   className="w-full rounded-card border border-line bg-paper px-3.5 py-2.5 text-sm outline-none focus:border-terracotta"
                 />
               </SettingsForm>
+              )}
             </Card>
           </section>
 
@@ -452,7 +572,7 @@ export default async function SettingsPage({
           <section>
             <SectionHeader title="Blocked" hint="People you’ve blocked. Only you see this list." />
             <Card>
-              <BlockedPeople people={blockedPeople} />
+              {failed.blocks ? <Unavailable /> : <BlockedPeople people={blockedPeople} />}
             </Card>
           </section>
 
@@ -494,5 +614,19 @@ export default async function SettingsPage({
         </div>
       </SettingsSaveProvider>
     </AppShell>
+  );
+}
+
+/**
+ * Stands in for a section whose read failed. Showing its controls would mean
+ * showing defaults, and a Save would then write those defaults over whatever
+ * the person had actually chosen.
+ */
+function Unavailable() {
+  return (
+    <p className="text-sm text-ink-soft">
+      Hidden until your settings load, so nothing here can be saved over what you chose.
+      Reload the page to try again.
+    </p>
   );
 }

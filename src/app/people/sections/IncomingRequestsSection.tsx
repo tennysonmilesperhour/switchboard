@@ -35,7 +35,9 @@ export function IncomingRequestsSection({
               <Avatar name={request.name} seed={request.id} size="sm" />
               <span className="min-w-0 flex-1 basis-32">
                 <span className="font-bold block truncate">{request.name}</span>
-                <span className="block truncate text-xs text-ink-faint">@{request.handle}</span>
+                {request.handle && (
+                  <span className="block truncate text-xs text-ink-faint">@{request.handle}</span>
+                )}
               </span>
               <Button
                 size="sm"

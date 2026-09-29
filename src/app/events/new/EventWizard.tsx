@@ -117,6 +117,7 @@ export function EventWizard({
     useState<CreateEventInput['pollResolution']>('host_pick');
   const [suggestDeadline, setSuggestDeadline] = useState('');
   const [voteDeadline, setVoteDeadline] = useState('');
+  const [pollOptions, setPollOptions] = useState<string[]>([]);
 
   // Privacy
   const [showInviteList, setShowInviteList] = useState(false);
@@ -403,6 +404,7 @@ export function EventWizard({
         pollResolution,
         suggestDeadline: enablePoll ? localDateTimeToIso(suggestDeadline) : null,
         voteDeadline: enablePoll ? localDateTimeToIso(voteDeadline) : null,
+        pollOptions: enablePoll ? pollOptions : undefined,
         remindersEnabled,
         parentalApproval,
         coverUrl: coverUrl.trim() || null,
@@ -494,6 +496,7 @@ export function EventWizard({
           pollResolution={pollResolution} setPollResolution={setPollResolution}
           suggestDeadline={suggestDeadline} setSuggestDeadline={setSuggestDeadline}
           voteDeadline={voteDeadline} setVoteDeadline={setVoteDeadline}
+          pollOptions={pollOptions} setPollOptions={setPollOptions}
           minDate={minDate}
           remindersEnabled={remindersEnabled} setRemindersEnabled={setRemindersEnabled}
           theme={theme} setTheme={setTheme}

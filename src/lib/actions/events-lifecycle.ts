@@ -12,7 +12,7 @@ import {
   type InvitationDeliverySummary,
 } from '@/lib/server/cascade-runner';
 import { notifyUsers } from '@/lib/server/notify';
-import { formatDateTime } from '@/lib/format';
+import { notifyDateSettled, openDecidingPlan } from '@/lib/server/poll-notices';
 import { capture } from '@/lib/analytics/server';
 import { ANALYTICS_EVENTS } from '@/lib/analytics/events';
 import { isValidMediaRef } from '@/lib/server/media';
@@ -31,7 +31,7 @@ import { safeHttpUrl } from '@/lib/security';
 import { toJson } from '@/lib/supabase/json';
 import { hasInviteDetails } from '@/lib/event-details';
 import { cloneEventForReuse } from '@/lib/server/event-clone';
-import { readyToSendInvitations } from '@/lib/poll-readiness';
+import { invitationStep, readyToSendInvitations } from '@/lib/poll-readiness';
 import { capacityProblem } from '@/lib/plan-capacity';
 import { sameInstant } from '@/lib/plan-time';
 import {
@@ -46,7 +46,11 @@ import {
   type UpdateEventInput,
 } from '@/lib/actions/event-action-shared';
 
-export async function createEvent(input: CreateEventInput): Promise<CreateEventResult> {
+export async function createEvent(
+  // The ideas floated in the wizard for the first poll; optional, and only read
+  // when the plan starts as a vote.
+  input: CreateEventInput & { pollOptions?: string[] },
+): Promise<CreateEventResult> {
   const { supabase, user } = await requireUserOrRedirect();
 
   const title = input.title.trim();
@@ -128,13 +132,16 @@ export async function createEvent(input: CreateEventInput): Promise<CreateEventR
     );
   }
 
+  // A plan that starts as a vote tells its people there is a vote, and gives
+  // email guests the link to help pick the date, once, here (decision D4). One
+  // that doesn't sends its first wave of invitations.
   let delivery: InvitationDeliverySummary | undefined;
-  if (!input.enablePoll) {
-    try {
-      delivery = await notifyCurrentInviteWave(eventId);
-    } catch (cascadeError) {
-      await reportOperationalError('event-initial-delivery', cascadeError, { eventId });
-    }
+  try {
+    delivery = input.enablePoll
+      ? await openDecidingPlan(supabase, eventId, user.id, input.pollOptions)
+      : await notifyCurrentInviteWave(eventId);
+  } catch (cascadeError) {
+    await reportOperationalError('event-initial-delivery', cascadeError, { eventId });
   }
 
   // Put the plan on the map. After invite delivery so a geocode can't delay it.
@@ -293,7 +300,7 @@ export async function updateEventDetails(
  */
 export async function setEventVisibility(
   eventId: string,
-  field: 'show_invite_list' | 'show_accepted' | 'show_expired',
+  field: 'show_invite_list' | 'show_accepted',
   enabled: boolean,
 ): Promise<ActionResult> {
   const auth = await requireUser();
@@ -306,12 +313,9 @@ export async function setEventVisibility(
   }
 
   const admin = createAdminClient();
+  // `show_expired` is retired (D3): nothing reads it, so nothing may set it.
   const update =
-    field === 'show_invite_list'
-      ? { show_invite_list: enabled }
-      : field === 'show_accepted'
-        ? { show_accepted: enabled }
-        : { show_expired: enabled };
+    field === 'show_invite_list' ? { show_invite_list: enabled } : { show_accepted: enabled };
   const { error } = await admin
     .from('events')
     .update(update)
@@ -582,7 +586,7 @@ export async function cancelEvent(
     .from('invites')
     .update({ status: 'cancelled' })
     .eq('event_id', eventId)
-    .in('status', ['queued', 'sent', 'waitlisted', 'requested']);
+    .in('status', ['queued', 'sent', 'waitlisted', 'requested', 'pending_approval']);
   if (retireError) {
     await reportOperationalError('event-update', retireError, {
       eventId,
@@ -691,10 +695,12 @@ export async function scheduleNextOccurrence(eventId: string): Promise<never> {
  * Only from `deciding` — the one status HostControls offers "Send the
  * invitations" for. Without the guard in the WHERE, a stale tab or a direct
  * call moved a cancelled or past plan back to `inviting`, which reopens its
- * share link and restarts its cascade. And only once the group has decided,
- * the same rule that enables the button (`readyToSendInvitations`): the page
- * was the only thing enforcing it, so a direct call could send invitations for
- * a date still being voted on.
+ * share link and restarts its cascade. And only once the group has decided and
+ * the plan has a date — the same rule that enables the button
+ * (`invitationStep` in poll-readiness.ts): the page was the only thing
+ * enforcing it, so a direct call could send invitations for a date still being
+ * voted on, and a poll decided on a free-text idea sent "The date is set" for a
+ * plan with no date at all.
  */
 export async function startInviting(eventId: string): Promise<ActionResult> {
   const auth = await requireUser();
@@ -702,24 +708,31 @@ export async function startInviting(eventId: string): Promise<ActionResult> {
   const refusal = managerRefusal(await checkEventManager(auth.user.id, eventId));
   if (refusal) return refusal;
   const admin = createAdminClient();
-  const { data: polls, error: pollError } = await admin
-    .from('polls')
-    .select('phase')
-    .eq('event_id', eventId);
-  if (pollError) {
-    return reportAndFail('SB-PLAN-SAVE', 'event-update', pollError, {
+  const [{ data: polls, error: pollError }, { data: plan, error: planError }] = await Promise.all([
+    admin.from('polls').select('phase').eq('event_id', eventId),
+    admin.from('events').select('starts_at').eq('id', eventId).maybeSingle(),
+  ]);
+  if (pollError || planError) {
+    return reportAndFail('SB-PLAN-SAVE', 'event-update', pollError ?? planError, {
       eventId,
       step: 'start-inviting-polls',
     });
   }
-  if (!readyToSendInvitations(polls ?? [])) {
+  const step = invitationStep(readyToSendInvitations(polls ?? []), plan?.starts_at);
+  if (step === 'deciding') {
     return validation('The group is still deciding, so the invitations can’t go out yet.');
   }
+  if (step === 'needs-date') {
+    return validation('Set the plan’s date first. The invitations go out with it.');
+  }
+  // `starts_at` is re-checked in the WHERE, so a date cleared since the read
+  // above cannot send invitations for a plan with none.
   const { data: started, error } = await admin
     .from('events')
     .update({ status: 'inviting' })
     .eq('id', eventId)
     .eq('status', 'deciding')
+    .not('starts_at', 'is', null)
     .select('id')
     .maybeSingle();
   if (error) {
@@ -734,50 +747,8 @@ export async function startInviting(eventId: string): Promise<ActionResult> {
   // cascade below only speaks to invites it is sending, so it would never
   // reach them — and a yes given to a dateless plan has to be answered with
   // the date when it lands, or the promise the link made goes unkept.
-  await notifyDateSettled(admin, eventId);
+  await notifyDateSettled(eventId);
   await advanceEventCascade(eventId);
   revalidatePath(`/events/${eventId}`);
   return { ok: true };
-}
-
-/** Tell everyone who already accepted that the plan now has a date. */
-async function notifyDateSettled(
-  admin: ReturnType<typeof createAdminClient>,
-  eventId: string,
-): Promise<void> {
-  const { data: event } = await admin
-    .from('events')
-    .select('id, title, starts_at, time_zone')
-    .eq('id', eventId)
-    .maybeSingle<{
-      id: string;
-      title: string;
-      starts_at: string | null;
-      time_zone: string | null;
-    }>();
-  if (!event) return;
-
-  const { data: accepted } = await admin
-    .from('invites')
-    .select('invitee_id')
-    .eq('event_id', eventId)
-    .eq('status', 'accepted')
-    .not('invitee_id', 'is', null);
-
-  const recipients = (accepted ?? [])
-    .map((row) => row.invitee_id as string | null)
-    .filter((id): id is string => Boolean(id));
-  if (recipients.length === 0) return;
-
-  // In the plan's own zone — a notification has no viewer zone, so without this
-  // it would announce the server's UTC.
-  const when = event.starts_at ? formatDateTime(event.starts_at, event.time_zone) : null;
-  await notifyUsers(recipients, {
-    kind: 'event_date_set',
-    title: 'The date is set 📅',
-    body: when
-      ? `${event.title} is happening ${when}.`
-      : `${event.title} is moving ahead - the host has closed the vote.`,
-    url: `/events/${event.id}`,
-  });
 }

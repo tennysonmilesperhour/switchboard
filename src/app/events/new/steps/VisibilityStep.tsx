@@ -8,8 +8,14 @@ interface VisibilityStepProps {
   setShowInviteList: Dispatch<SetStateAction<boolean>>;
   showAccepted: boolean;
   setShowAccepted: Dispatch<SetStateAction<boolean>>;
-  showExpired: boolean;
-  setShowExpired: Dispatch<SetStateAction<boolean>>;
+  /**
+   * @deprecated Retired by decision D3: nothing ever read `show_expired`, so
+   * this step no longer offers it. Still accepted so the wizard compiles
+   * unchanged; it is ignored.
+   */
+  showExpired?: boolean;
+  /** @deprecated See `showExpired`. Ignored. */
+  setShowExpired?: Dispatch<SetStateAction<boolean>>;
   remindersEnabled: boolean;
   setRemindersEnabled: Dispatch<SetStateAction<boolean>>;
   parentalApproval: boolean;
@@ -24,8 +30,6 @@ export function VisibilityStep({
   setShowInviteList,
   showAccepted,
   setShowAccepted,
-  showExpired,
-  setShowExpired,
   remindersEnabled,
   setRemindersEnabled,
   parentalApproval,
@@ -49,12 +53,6 @@ export function VisibilityStep({
                 hint: 'Attendees can see who’s already in.',
                 value: showAccepted,
                 set: setShowAccepted,
-              },
-              {
-                label: 'Keep expired invitations visible',
-                hint: 'People whose window passed can still see the plan page.',
-                value: showExpired,
-                set: setShowExpired,
               },
               {
                 label: 'Send reminder nudges',

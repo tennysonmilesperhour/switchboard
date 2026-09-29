@@ -4,9 +4,7 @@ import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { Button } from '@/components/ui/Button';
-import { Avatar } from '@/components/ui/Avatar';
 import { Card, SectionHeader } from '@/components/ui/Card';
-import { CopyButton } from '@/components/ui/CopyButton';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { useToast } from '@/components/ui/Toast';
 import { useConfirm, usePrompt } from '@/components/ui/ConfirmDialog';
@@ -17,14 +15,13 @@ import {
   deleteBoardPost,
   planFromBoardPost,
   reportBoardPost,
-  inviteToBoard,
-  ensureBoardInviteLink,
-  rotateBoardInviteLink,
-  removeFromBoard,
   updateBoardPost,
   respondToBoardPost,
   fulfillBoardPost,
+  withdrawBoardResponse,
 } from '@/lib/actions/boards';
+import { BoardSettings } from './BoardSettings';
+import { BoardMembers } from './BoardMembers';
 
 export interface BoardPostRow {
   id: string;
@@ -47,7 +44,11 @@ export interface BoardPostRow {
 export interface BoardMemberRow {
   id: string;
   name: string;
+  /** For a link to their profile — how "Can help: Alice" reaches Alice. */
+  handle: string | null;
   role: 'member' | 'moderator';
+  /** The person who started the board. */
+  founder: boolean;
 }
 
 interface BoardClientProps {
@@ -55,17 +56,36 @@ interface BoardClientProps {
   slug: string;
   currentUserId: string;
   isModerator: boolean;
+  isFounder: boolean;
+  /** Whether the founder is still on the board (decides who may delete it). */
+  founderPresent: boolean;
+  boardName: string;
+  boardDescription: string | null;
   initialPosts: BoardPostRow[];
   members: BoardMemberRow[];
+  /** `created_at` of the last post shown, when older ones exist. */
+  olderCursor: string | null;
+  /** This page is an older one, reached through "Older posts". */
+  viewingOlder: boolean;
 }
+
+/** Post and member actions: text links, but 44px tall so a thumb can hit them. */
+const ACTION_CLASS =
+  'inline-flex min-h-11 items-center rounded-pill px-2.5 text-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-terracotta';
 
 export function BoardClient({
   boardId,
   slug,
   currentUserId,
   isModerator,
+  isFounder,
+  founderPresent,
+  boardName,
+  boardDescription,
   initialPosts,
   members,
+  olderCursor,
+  viewingOlder,
 }: BoardClientProps) {
   const [pending, startTransition] = useTransition();
   const router = useRouter();
@@ -150,29 +170,6 @@ export function BoardClient({
     });
   }
 
-  async function removeNeighbor(member: BoardMemberRow) {
-    const ok = await confirm({
-      title: `Remove ${member.name} from the board?`,
-      body: 'They’ll lose access to this neighborhood board.',
-      confirmLabel: 'Remove',
-      danger: true,
-    });
-    if (!ok) return;
-    startTransition(async () => {
-      try {
-        const result = await removeFromBoard(boardId, member.id);
-        if (!result.ok) {
-          toast.error(result.error ?? 'Could not remove that neighbor.', result.code);
-          return;
-        }
-        toast.success(`${member.name} is off the board.`);
-        router.refresh();
-      } catch {
-        toast.error('Could not remove that neighbor. Try again.');
-      }
-    });
-  }
-
   // Composer state.
   const [kind, setKind] = useState<'notice' | 'event' | 'offer' | 'request'>('notice');
   const [title, setTitle] = useState('');
@@ -185,13 +182,8 @@ export function BoardClient({
   const [postErrorCode, setPostErrorCode] = useState<ErrorCode | null>(null);
   const [editingPostId, setEditingPostId] = useState<string | null>(null);
 
-  // Invite state.
-  const [inviteHandle, setInviteHandle] = useState('');
-  const [inviteError, setInviteError] = useState<string | null>(null);
-  const [inviteErrorCode, setInviteErrorCode] = useState<ErrorCode | null>(null);
-  const [inviteUrl, setInviteUrl] = useState<string | null>(null);
-
   const memberNames = Object.fromEntries(members.map((m) => [m.id, m.name]));
+  const memberById = new Map(members.map((m) => [m.id, m]));
 
   function submitPost(e: React.FormEvent) {
     e.preventDefault();
@@ -260,45 +252,6 @@ export function BoardClient({
     setDate('');
     setListedDays(null);
     setPostError(null);
-  }
-
-  function invite(e: React.FormEvent) {
-    e.preventDefault();
-    if (!inviteHandle.trim()) return;
-    setInviteError(null);
-    setInviteErrorCode(null);
-    startTransition(async () => {
-      const handle = inviteHandle.trim().replace(/^@/, '');
-      const result = await inviteToBoard(boardId, inviteHandle);
-      if (result.ok) {
-        setInviteHandle('');
-        toast.success(`Added @${handle}. They’ve been told.`);
-        router.refresh();
-      } else {
-        setInviteError(result.error ?? 'Could not add them.');
-        setInviteErrorCode(result.code ?? null);
-      }
-    });
-  }
-
-  function createLink() {
-    startTransition(async () => {
-      const result = await ensureBoardInviteLink(boardId);
-      if (result.ok && result.url) setInviteUrl(result.url);
-      else toast.error(result.error ?? 'Could not create an invite link.', result.code);
-    });
-  }
-
-  function rotateLink() {
-    startTransition(async () => {
-      const result = await rotateBoardInviteLink(boardId);
-      if (result.ok && result.url) {
-        setInviteUrl(result.url);
-        toast.success('New link ready. The old one no longer works.');
-      } else {
-        toast.error(result.error ?? 'Could not refresh the link.', result.code);
-      }
-    });
   }
 
   return (
@@ -503,9 +456,11 @@ export function BoardClient({
                           const iResponded = responders.some(
                             (r) => r.responder_id === currentUserId,
                           );
-                          const responderNames = responders.map(
-                            (r) => memberNames[r.responder_id] ?? 'A neighbor',
-                          );
+                          const helpers = responders.map((r) => ({
+                            id: r.responder_id,
+                            name: memberNames[r.responder_id] ?? 'A neighbor',
+                            handle: memberById.get(r.responder_id)?.handle ?? null,
+                          }));
                           return (
                             <div className="mt-2 space-y-1.5">
                               {post.expires_at && !post.fulfilled_at && (
@@ -513,9 +468,26 @@ export function BoardClient({
                                   Listed until {formatDate(post.expires_at)}
                                 </p>
                               )}
-                              {isAuthor && responderNames.length > 0 && (
+                              {isAuthor && helpers.length > 0 && (
                                 <p className="text-xs font-bold text-sage-deep">
-                                  🙋 Can help: {responderNames.join(', ')}
+                                  🙋 Can help:{' '}
+                                  {helpers.map((helper, index) => (
+                                    <span key={helper.id}>
+                                      {index > 0 && ', '}
+                                      {helper.handle ? (
+                                        // Their profile is where you can reach
+                                        // them: connect, or say you're down.
+                                        <Link
+                                          href={`/u/${encodeURIComponent(helper.handle)}?from=/boards/${slug}`}
+                                          className="inline-flex min-h-11 items-center underline underline-offset-2"
+                                        >
+                                          {helper.name}
+                                        </Link>
+                                      ) : (
+                                        helper.name
+                                      )}
+                                    </span>
+                                  ))}
                                 </p>
                               )}
                               <div className="flex items-center gap-2">
@@ -533,14 +505,34 @@ export function BoardClient({
                                         else router.refresh();
                                       })
                                     }
-                                    className="rounded-pill border border-line px-2.5 py-1 text-xs font-bold"
+                                    className="inline-flex min-h-11 items-center rounded-pill border border-line px-3 text-xs font-bold"
                                   >
                                     Mark complete
                                   </button>
                                 ) : iResponded ? (
-                                  <span className="rounded-pill bg-cream px-2.5 py-1 text-xs font-bold text-ink-soft">
-                                    ✓ You offered to help
-                                  </span>
+                                  <>
+                                    <span className="rounded-pill bg-cream px-2.5 py-1 text-xs font-bold text-ink-soft">
+                                      ✓ You offered to help
+                                    </span>
+                                    <button
+                                      type="button"
+                                      disabled={pending}
+                                      onClick={() =>
+                                        startTransition(async () => {
+                                          const result = await withdrawBoardResponse(post.id, slug);
+                                          if (!result.ok) {
+                                            toast.error(result.error ?? 'Could not take that back.', result.code);
+                                            return;
+                                          }
+                                          toast.success('Offer withdrawn.');
+                                          router.refresh();
+                                        })
+                                      }
+                                      className={`${ACTION_CLASS} text-ink-faint hover:text-rose-deep`}
+                                    >
+                                      Withdraw
+                                    </button>
+                                  </>
                                 ) : (
                                   <button
                                     type="button"
@@ -554,7 +546,7 @@ export function BoardClient({
                                         }
                                       })
                                     }
-                                    className="rounded-pill bg-terracotta px-2.5 py-1 text-xs font-bold text-white"
+                                    className="inline-flex min-h-11 items-center rounded-pill bg-terracotta px-3 text-xs font-bold text-white"
                                   >
                                     I can help
                                   </button>
@@ -568,7 +560,7 @@ export function BoardClient({
                         {post.event_id ? (
                           <Link
                             href={`/events/${post.event_id}`}
-                            className="rounded-pill bg-sage-soft px-2 py-1 text-[11px] font-bold text-sage-deep hover:bg-sage/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-terracotta"
+                            className={`${ACTION_CLASS} bg-sage-soft font-bold text-sage-deep hover:bg-sage/20`}
                           >
                             open the plan
                           </Link>
@@ -578,7 +570,7 @@ export function BoardClient({
                               type="button"
                               onClick={() => makePlan(post.id)}
                               disabled={pending}
-                              className="rounded-pill px-2 py-1 text-[11px] font-semibold text-sage-deep hover:text-sage focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-terracotta"
+                              className={`${ACTION_CLASS} font-semibold text-sage-deep hover:text-sage`}
                             >
                               make it a plan
                             </button>
@@ -589,7 +581,7 @@ export function BoardClient({
                             type="button"
                             onClick={() => flagPost(post.id)}
                             disabled={pending}
-                            className="rounded-pill px-2 py-1 text-[11px] text-ink-faint hover:text-rose-deep focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-terracotta"
+                            className={`${ACTION_CLASS} text-ink-faint hover:text-rose-deep`}
                           >
                             report
                           </button>
@@ -602,7 +594,7 @@ export function BoardClient({
                               type="button"
                               onClick={() => editPost(post)}
                               disabled={pending}
-                              className="rounded-pill px-2 py-1 text-[11px] font-semibold text-terracotta-deep hover:text-terracotta-deep focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-terracotta"
+                              className={`${ACTION_CLASS} font-semibold text-terracotta-deep`}
                             >
                               edit
                             </button>
@@ -611,7 +603,7 @@ export function BoardClient({
                             type="button"
                             onClick={() => removePost(post.id)}
                             disabled={pending}
-                            className="rounded-pill px-2 py-1 text-[11px] text-ink-faint hover:text-rose-deep focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-terracotta"
+                            className={`${ACTION_CLASS} text-ink-faint hover:text-rose-deep`}
                           >
                             remove
                           </button>
@@ -624,115 +616,47 @@ export function BoardClient({
             })}
           </ul>
         )}
-      </section>
-
-      {/* Members */}
-      <section>
-        <SectionHeader
-          title="Neighbors"
-          hint={isModerator ? 'Invite-only - you moderate this board' : undefined}
-        />
-        <ul className="space-y-2">
-          {members.map((member) => (
-            <li
-              key={member.id}
-              className="flex items-center gap-3 rounded-card bg-card border border-line px-3.5 py-2.5"
-            >
-              <Avatar name={member.name} seed={member.id} size="sm" />
-              <span className="flex-1 font-medium">
-                {member.name}
-                {member.role === 'moderator' && (
-                  <span className="ml-1.5 text-xs text-gold-deep rounded-pill bg-gold-soft px-1.5 py-0.5">
-                    moderator
-                  </span>
-                )}
-              </span>
-              {isModerator && member.id !== currentUserId && (
-                <button
-                  type="button"
-                  onClick={() => removeNeighbor(member)}
-                  disabled={pending}
-                  className="rounded-pill px-2 py-1 text-xs text-ink-faint hover:text-rose-deep focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-terracotta"
-                >
-                  remove
-                </button>
-              )}
-            </li>
-          ))}
-        </ul>
-
-        {isModerator && (
-          <form onSubmit={invite} className="flex items-center gap-2 mt-3">
-            <div className="flex flex-1 items-center rounded-card border border-line bg-card focus-within:border-terracotta transition-colors">
-              <span className="pl-3.5 text-ink-faint text-sm">@</span>
-              <input
-                value={inviteHandle}
-                onChange={(e) => setInviteHandle(e.target.value.toLowerCase())}
-                placeholder="handle"
-                aria-label="Invite by handle"
-                className="flex-1 bg-transparent px-1.5 py-2.5 text-sm outline-none lowercase"
-              />
-            </div>
-            <Button
-              type="submit"
-              size="sm"
-              variant="secondary"
-              disabled={pending || !inviteHandle.trim()}
-            >
-              Invite
-            </Button>
-          </form>
-        )}
-        {inviteError && (
-          <p role="alert" className="text-xs text-rose-deep mt-2">
-            {inviteError}
-            {inviteErrorCode && <span className="ml-2 opacity-70">{errorRef(inviteErrorCode)}</span>}
-          </p>
-        )}
-
-        {isModerator && (
-          <div className="mt-3">
-            {inviteUrl ? (
-              <Card tone="cream" className="space-y-2.5">
-                <p className="text-sm text-ink-soft leading-relaxed">
-                  Share this link. Anyone who opens it while signed in joins the
-                  board as a neighbor.
-                </p>
-                <div className="flex items-center gap-2 rounded-card border border-line bg-paper px-3 py-2.5">
-                  <a
-                    href={inviteUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="min-w-0 flex-1 truncate rounded text-sm font-semibold text-terracotta-deep underline decoration-terracotta/40 underline-offset-2 hover:text-terracotta-deep focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-terracotta"
-                    title={inviteUrl}
-                  >
-                    {inviteUrl}
-                  </a>
-                  <CopyButton text={inviteUrl} />
-                </div>
-                <button
-                  type="button"
-                  onClick={rotateLink}
-                  disabled={pending}
-                  className="text-xs font-bold text-ink-faint hover:text-rose-deep focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-terracotta rounded-pill px-1"
-                >
-                  Replace with a new link
-                </button>
-              </Card>
+        {(olderCursor || viewingOlder) && (
+          <nav aria-label="More posts" className="mt-3 flex flex-wrap justify-between gap-2">
+            {viewingOlder ? (
+              <Link href={`/boards/${slug}`} className={`${ACTION_CLASS} font-bold text-terracotta-deep`}>
+                ← Newest posts
+              </Link>
             ) : (
-              <Button
-                type="button"
-                size="sm"
-                variant="ghost"
-                disabled={pending}
-                onClick={createLink}
-              >
-                {pending ? 'Creating…' : 'Create a shareable invite link 🔗'}
-              </Button>
+              <span />
             )}
-          </div>
+            {olderCursor && (
+              <Link
+                href={`/boards/${slug}?before=${encodeURIComponent(olderCursor)}`}
+                className={`${ACTION_CLASS} font-bold text-terracotta-deep`}
+              >
+                Older posts →
+              </Link>
+            )}
+          </nav>
         )}
       </section>
+
+      <BoardMembers
+        boardId={boardId}
+        slug={slug}
+        currentUserId={currentUserId}
+        isModerator={isModerator}
+        isFounder={isFounder}
+        members={members}
+      />
+
+      <BoardSettings
+        boardId={boardId}
+        name={boardName}
+        description={boardDescription}
+        isModerator={isModerator}
+        canDelete={isFounder || (isModerator && !founderPresent)}
+        soleModerator={
+          isModerator && members.filter((member) => member.role === 'moderator').length === 1
+        }
+        memberCount={members.length}
+      />
     </div>
   );
 }
