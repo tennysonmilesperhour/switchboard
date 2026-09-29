@@ -13,6 +13,7 @@ import { ANALYTICS_EVENTS } from '@/lib/analytics/events';
 import type { DeclineNote } from '@/lib/types';
 import { checkRateLimit } from '@/lib/server/rate-limit';
 import { isEventManager } from '@/lib/server/authz';
+import { canAnswer, shareLinkNotice, shareLinkState } from '@/lib/share-link';
 
 export interface RespondResult {
   ok: boolean;
@@ -465,8 +466,23 @@ export async function respondViaShareLink(
     };
   }
   if (outcome === 'not_accepting') {
+    // Name the reason the share page would name for this plan (called off,
+    // already happened, not published), with its code, so the page someone
+    // is looking at and the answer they get back agree. SB-RSVP-CLOSED stays
+    // for a plan that is answerable again by the time it is re-read.
+    const { data: closed } = hostedEventId
+      ? await admin
+          .from('events')
+          .select('status, share_link_active')
+          .eq('id', hostedEventId)
+          .maybeSingle()
+      : { data: null };
+    const state = shareLinkState(closed);
+    const notice = canAnswer(state) ? null : shareLinkNotice(state);
     return {
-      ...failure('SB-RSVP-CLOSED', 'This plan isn’t taking answers right now.'),
+      ...(notice
+        ? failure(notice.code, notice.heading)
+        : failure('SB-RSVP-CLOSED', 'This plan isn’t taking answers right now.')),
       outcome,
     };
   }

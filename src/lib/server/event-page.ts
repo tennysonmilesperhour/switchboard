@@ -38,6 +38,7 @@ import type { PendingParentalApproval } from '@/components/events/ParentalApprov
 import type { AnnouncementView } from '@/components/events/Announcements';
 import type { ThreadCommentView } from '@/components/events/EventThread';
 import type { OptionResult } from '@/components/polls/PollSection';
+import { readyToSendInvitations } from '@/lib/poll-readiness';
 
 export type EventPageInvite = Invite & {
   invitee_name: string;
@@ -101,6 +102,8 @@ export interface EventPageData {
   poll: Poll | null;
   decidedPolls: Poll[];
   pendingPolls: Poll[];
+  /** Whether "Send the invitations" may run; `startInviting` asks the same. */
+  invitationsReady: boolean;
   availability: AvailabilitySnapshot;
   calendarBusy: string[];
   calendarStatus: CalendarStatus | null;
@@ -711,6 +714,7 @@ export async function loadEventPage(
     poll,
     decidedPolls,
     pendingPolls,
+    invitationsReady: readyToSendInvitations(allPolls),
     availability,
     calendarBusy,
     calendarStatus,

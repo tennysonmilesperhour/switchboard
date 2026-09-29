@@ -33,6 +33,8 @@ const mocks = vi.hoisted(() => {
       title: string;
       host_id: string;
       parental_approval?: boolean;
+      status?: string;
+      share_link_active?: boolean;
     }>;
     /** share_token → event id, the way `/i/<token>` resolves a plan. */
     shareTokens: Record<string, string>;
@@ -233,6 +235,66 @@ describe('respondViaShareLink', () => {
       inviteId: 'invite-4',
       eventId: 'event-1',
     });
+  });
+});
+
+describe('respondViaShareLink on a plan that stopped taking answers', () => {
+  /**
+   * The share page names why a plan can't be answered (called off, already
+   * happened) with its own code. The answer used to come back as the generic
+   * SB-RSVP-CLOSED, so the page and the reply disagreed about the same plan.
+   */
+  const defaultRpc = mocks.rpc.getMockImplementation();
+  afterEach(() => {
+    if (defaultRpc) mocks.rpc.mockImplementation(defaultRpc);
+  });
+
+  it.each([
+    ['past', 'SB-LINK-PAST', /already happened/],
+    ['cancelled', 'SB-LINK-CANCELLED', /called off/],
+  ])('reports a %s plan with the code the share page shows', async (status, code, heading) => {
+    mocks.db.user = { id: 'user-5' };
+    mocks.db.profiles['user-5'] = { display_name: 'Sam' };
+    mocks.db.events['event-1'] = {
+      id: 'event-1',
+      title: 'Taco night',
+      host_id: 'host-1',
+      status,
+      share_link_active: true,
+    };
+    mocks.db.shareTokens['share-token'] = 'event-1';
+    mocks.rpc.mockImplementation(async (name: string) =>
+      name === 'rsvp_via_share_token'
+        ? { data: [{ outcome: 'not_accepting' }], error: null }
+        : { data: null, error: null },
+    );
+
+    const result = await respondViaShareLink('share-token', true, 'Sam');
+
+    expect(result).toMatchObject({ ok: false, outcome: 'not_accepting', code });
+    expect(result.error).toMatch(heading);
+  });
+
+  it('keeps SB-RSVP-CLOSED when the plan reads as answerable again', async () => {
+    mocks.db.user = { id: 'user-5' };
+    mocks.db.profiles['user-5'] = { display_name: 'Sam' };
+    mocks.db.events['event-1'] = {
+      id: 'event-1',
+      title: 'Taco night',
+      host_id: 'host-1',
+      status: 'inviting',
+      share_link_active: true,
+    };
+    mocks.db.shareTokens['share-token'] = 'event-1';
+    mocks.rpc.mockImplementation(async (name: string) =>
+      name === 'rsvp_via_share_token'
+        ? { data: [{ outcome: 'not_accepting' }], error: null }
+        : { data: null, error: null },
+    );
+
+    const result = await respondViaShareLink('share-token', true, 'Sam');
+
+    expect(result).toMatchObject({ ok: false, code: 'SB-RSVP-CLOSED' });
   });
 });
 

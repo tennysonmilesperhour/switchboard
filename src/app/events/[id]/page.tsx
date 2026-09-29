@@ -137,6 +137,7 @@ export default async function EventPage({
     poll,
     decidedPolls,
     pendingPolls,
+    invitationsReady,
     availability,
     calendarBusy,
     calendarStatus,
@@ -697,7 +698,7 @@ export default async function EventPage({
         {canManage && (
           <HostControls
             event={event}
-            pollDecided={poll?.phase === 'decided'}
+            pollDecided={invitationsReady}
             isPrimaryHost={isHost}
           />
         )}

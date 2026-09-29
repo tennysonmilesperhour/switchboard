@@ -70,6 +70,8 @@ function lifecycleAdmin(options: {
   updated: Record<string, unknown> | null;
   error?: { message: string } | null;
   current?: Record<string, unknown> | null;
+  /** What a read of the plan's polls returns; decided unless a test says otherwise. */
+  polls?: Array<{ phase: string }>;
 }) {
   const writes: Array<{
     table: string;
@@ -85,7 +87,9 @@ function lifecycleAdmin(options: {
           ? { data: options.updated, error: options.error ?? null }
           : write
             ? { data: null, error: null, count: 0 }
-            : { data: options.current ?? null, error: null, count: 0 };
+            : table === 'polls'
+              ? { data: options.polls ?? [{ phase: 'decided' }], error: null }
+              : { data: options.current ?? null, error: null, count: 0 };
       const builder: Record<string, unknown> = {};
       const record =
         (op: string) =>
@@ -112,6 +116,45 @@ function lifecycleAdmin(options: {
     },
   };
   return { admin, writes };
+}
+
+/**
+ * The caller's session client, answering the two `connections` reads
+ * `addPeopleToEvent` makes for picked ids. `connectedTo` is who the caller
+ * (user-1) has an accepted connection with; RLS would hide everyone else's.
+ */
+function connectionsSession(connectedTo: string[]) {
+  return {
+    rpc: mocks.rpc,
+    from(table: string) {
+      if (table !== 'connections') throw new Error(`Unexpected session read: ${table}`);
+      const filters: Record<string, unknown> = {};
+      let column = '';
+      let ids: string[] = [];
+      const builder: Record<string, unknown> = {
+        select: (selected: string) => {
+          column = selected;
+          return builder;
+        },
+        eq: (key: string, value: unknown) => {
+          filters[key] = value;
+          return builder;
+        },
+        in: (_key: string, values: string[]) => {
+          ids = values;
+          return builder;
+        },
+        then: (resolve: (value: unknown) => unknown) =>
+          resolve({
+            data: filters.status === 'accepted'
+              ? ids.filter((id) => connectedTo.includes(id)).map((id) => ({ [column]: id }))
+              : [],
+            error: null,
+          }),
+      };
+      return builder;
+    },
+  };
 }
 
 /**
@@ -409,6 +452,24 @@ describe('event management actions', () => {
     },
   );
 
+  it.each([
+    ['a poll is still being voted on', [{ phase: 'decided' }, { phase: 'voting' }]],
+    ['no poll has been decided', [{ phase: 'pending' }]],
+    ['the plan has no poll at all', []],
+  ])('startInviting refuses while %s', async (_case, polls) => {
+    // The button is disabled on the page for exactly these cases; a stale tab
+    // or a direct call must meet the same rule rather than send invitations
+    // for a date nobody has settled.
+    const { admin, writes } = lifecycleAdmin({ updated: { id: 'event-1' }, polls });
+    mocks.createAdminClient.mockReturnValue(admin);
+
+    const result = await startInviting('event-1');
+
+    expect(result).toMatchObject({ ok: false });
+    expect(result.error).toContain('still deciding');
+    expect(writes).toHaveLength(0);
+  });
+
   it('confirms an inviting plan and retires the invitations still in motion', async () => {
     const { admin, writes } = lifecycleAdmin({ updated: { id: 'event-1' } });
     mocks.createAdminClient.mockReturnValue(admin);
@@ -526,6 +587,11 @@ describe('event management actions', () => {
       return builder;
     });
     mocks.createAdminClient.mockImplementation(() => ({ from, rpc: adminRpc }));
+    mocks.requireUser.mockResolvedValue({
+      ok: true,
+      supabase: connectionsSession(['person-1', 'person-2']),
+      user: { id: 'user-1' },
+    });
 
     const result = await addPeopleToEvent('event-1', {
       profileIds: ['person-1', 'person-2'],
@@ -538,6 +604,62 @@ describe('event management actions', () => {
     expect(mocks.rpc).not.toHaveBeenCalledWith('are_blocked', expect.anything());
     expect(inserted).toHaveLength(1);
     expect(inserted[0]).toEqual([expect.objectContaining({ invitee_id: 'person-1', status: 'queued' })]);
+  });
+
+  it('skips a picked id that is not one of the caller’s connections', async () => {
+    // The sheet only offers accepted connections; a forged id must not ride
+    // that path onto the guest list. Adding by handle stays the deliberate way
+    // to invite anyone else.
+    const tables: Record<string, unknown[]> = {
+      events: [
+        { id: 'event-1', host_id: 'host-1', status: 'inviting', invite_mode: 'group', starts_at: null },
+      ],
+      profiles: [
+        { id: 'person-1', display_name: 'Alice' },
+        { id: 'stranger-1', display_name: 'Stranger' },
+      ],
+      invites: [],
+    };
+    const inserted: unknown[] = [];
+    const from = vi.fn((table: string) => {
+      const rows = tables[table] ?? [];
+      const builder: Record<string, unknown> = {};
+      const chain = () => builder;
+      Object.assign(builder, {
+        select: chain,
+        eq: chain,
+        in: chain,
+        order: chain,
+        maybeSingle: async () => ({ data: rows[0] ?? null, error: null }),
+        insert: async (payload: unknown) => {
+          inserted.push(payload);
+          return { data: null, error: null };
+        },
+        then: (resolve: (value: unknown) => unknown) =>
+          resolve({ data: rows, error: null }),
+      });
+      return builder;
+    });
+    mocks.createAdminClient.mockImplementation(() => ({
+      from,
+      rpc: vi.fn(async () => ({ data: false, error: null })),
+    }));
+    mocks.requireUser.mockResolvedValue({
+      ok: true,
+      supabase: connectionsSession(['person-1']),
+      user: { id: 'user-1' },
+    });
+
+    const result = await addPeopleToEvent('event-1', {
+      profileIds: ['person-1', 'stranger-1'],
+    });
+
+    expect(result).toMatchObject({ ok: true, added: 1 });
+    expect(result.skipped).toEqual([
+      { entry: 'Stranger', reason: 'not one of your connections' },
+    ]);
+    expect(inserted[0]).toEqual([expect.objectContaining({ invitee_id: 'person-1' })]);
+    expect(JSON.stringify(inserted)).not.toContain('stranger-1');
   });
 
   it('requires cancellation before permanently deleting accepted guests', async () => {

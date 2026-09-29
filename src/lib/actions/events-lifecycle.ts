@@ -31,6 +31,7 @@ import { safeHttpUrl } from '@/lib/security';
 import { toJson } from '@/lib/supabase/json';
 import { hasInviteDetails } from '@/lib/event-details';
 import { cloneEventForReuse } from '@/lib/server/event-clone';
+import { readyToSendInvitations } from '@/lib/poll-readiness';
 import { capacityProblem } from '@/lib/plan-capacity';
 import { sameInstant } from '@/lib/plan-time';
 import {
@@ -686,7 +687,10 @@ export async function scheduleNextOccurrence(eventId: string): Promise<never> {
  * Only from `deciding` — the one status HostControls offers "Send the
  * invitations" for. Without the guard in the WHERE, a stale tab or a direct
  * call moved a cancelled or past plan back to `inviting`, which reopens its
- * share link and restarts its cascade.
+ * share link and restarts its cascade. And only once the group has decided,
+ * the same rule that enables the button (`readyToSendInvitations`): the page
+ * was the only thing enforcing it, so a direct call could send invitations for
+ * a date still being voted on.
  */
 export async function startInviting(eventId: string): Promise<ActionResult> {
   const auth = await requireUser();
@@ -694,6 +698,19 @@ export async function startInviting(eventId: string): Promise<ActionResult> {
   const refusal = managerRefusal(await checkEventManager(auth.user.id, eventId));
   if (refusal) return refusal;
   const admin = createAdminClient();
+  const { data: polls, error: pollError } = await admin
+    .from('polls')
+    .select('phase')
+    .eq('event_id', eventId);
+  if (pollError) {
+    return reportAndFail('SB-PLAN-SAVE', 'event-update', pollError, {
+      eventId,
+      step: 'start-inviting-polls',
+    });
+  }
+  if (!readyToSendInvitations(polls ?? [])) {
+    return validation('The group is still deciding, so the invitations can’t go out yet.');
+  }
   const { data: started, error } = await admin
     .from('events')
     .update({ status: 'inviting' })

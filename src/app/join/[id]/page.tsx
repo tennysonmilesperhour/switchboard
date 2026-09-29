@@ -120,7 +120,16 @@ export default async function JoinPage({
   // ask-to-join button (asking again would just error "already involved").
   let alreadyInvolved = false;
   if (event && user) {
-    const isHost = event.host_id === user.id;
+    // Ask the same row-level policy the event page reads through, rather than
+    // restating it here: if a restated copy ever disagreed with the database,
+    // /events/<id> and /join/<id> would send the viewer back and forth forever.
+    const { data: visible } = await supabase
+      .from('events')
+      .select('id')
+      .eq('id', event.id)
+      .maybeSingle();
+    if (visible) redirect(`/events/${event.id}`);
+
     const { data: existing } = admin
       ? await admin
           .from('invites')
@@ -137,11 +146,6 @@ export default async function JoinPage({
           .eq('cohost_id', user.id)
           .maybeSingle()
       : { data: null };
-    const canViewEvent =
-      isHost ||
-      (existing != null &&
-        (existing.status !== 'queued' || event.status === 'deciding'));
-    if (canViewEvent) redirect(`/events/${event.id}`);
     alreadyInvolved = existing != null || cohost != null;
 
     // A signed-in visitor with no connection to the plan is in the same

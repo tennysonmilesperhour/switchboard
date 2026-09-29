@@ -404,7 +404,11 @@ exactly one source for what it shows, and it is not the profile:
 A direct invite (`inviteConnectionNow`) writes with the service-role client and
 so re-authorizes twice (§5): the caller must manage the event, and must have an
 accepted connection to the target read through *their own* RLS client, with
-`are_blocked` consulted for a block that outlived its connection row.
+`are_blocked` consulted for a block that outlived its connection row. Picked
+ids sent to `addPeopleToEvent` meet the same connection rule: an id that is not
+one of the caller's accepted connections is skipped, so a forged id cannot ride
+the connection picker onto a guest list. Adding anyone else is a deliberate act
+by handle, email, or phone.
 
 Litmus test: *is any contact detail on this page something the viewer did not
 themselves supply?*
