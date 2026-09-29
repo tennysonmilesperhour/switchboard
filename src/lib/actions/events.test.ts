@@ -50,10 +50,69 @@ vi.mock('@/lib/server/observability', () => ({
 import {
   addPeopleToEvent,
   cancelEvent,
+  confirmEvent,
   deleteEventPermanently,
+  markHappened,
+  startInviting,
   updateEventDetails,
 } from './events';
 import { notifyUsers } from '@/lib/server/notify';
+import { capture } from '@/lib/analytics/server';
+import { reportAndFail } from '@/lib/server/observability';
+
+/**
+ * A service-role client for the host lifecycle actions. Every write records its
+ * table, row, and filters, so a test can assert which status a transition was
+ * allowed to start from. `updated` is what the guarded events UPDATE returns
+ * (null = no row matched); `current` is what a follow-up read of the plan sees.
+ */
+function lifecycleAdmin(options: {
+  updated: Record<string, unknown> | null;
+  error?: { message: string } | null;
+  current?: Record<string, unknown> | null;
+}) {
+  const writes: Array<{
+    table: string;
+    row: Record<string, unknown>;
+    filters: Array<[string, ...unknown[]]>;
+  }> = [];
+  const admin = {
+    from(table: string) {
+      let write: (typeof writes)[number] | null = null;
+      const filters: Array<[string, ...unknown[]]> = [];
+      const result = () =>
+        write && table === 'events'
+          ? { data: options.updated, error: options.error ?? null }
+          : write
+            ? { data: null, error: null, count: 0 }
+            : { data: options.current ?? null, error: null, count: 0 };
+      const builder: Record<string, unknown> = {};
+      const record =
+        (op: string) =>
+        (...args: unknown[]) => {
+          filters.push([op, ...args]);
+          return builder;
+        };
+      Object.assign(builder, {
+        update: (row: Record<string, unknown>) => {
+          write = { table, row, filters };
+          writes.push(write);
+          return builder;
+        },
+        select: () => builder,
+        eq: record('eq'),
+        neq: record('neq'),
+        in: record('in'),
+        not: record('not'),
+        lte: record('lte'),
+        maybeSingle: async () => result(),
+        then: (resolve: (value: unknown) => unknown) => resolve(result()),
+      });
+      return builder;
+    },
+  };
+  return { admin, writes };
+}
 
 /**
  * A service-role client just deep enough for `updateEventDetails`: the "before"
@@ -296,10 +355,136 @@ describe('event management actions', () => {
   it('refuses cancellation before any privileged read for a non-manager', async () => {
     mocks.checkEventManager.mockResolvedValue({ ok: true, isManager: false });
 
-    await expect(cancelEvent('event-1', 'Changed plans')).resolves.toBeUndefined();
+    await expect(cancelEvent('event-1', 'Changed plans')).resolves.toMatchObject({
+      ok: false,
+      code: 'SB-PERM-HOST',
+    });
 
     expect(mocks.checkEventManager).toHaveBeenCalledWith('user-1', 'event-1');
     expect(mocks.createAdminClient).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['confirmEvent', confirmEvent],
+    ['startInviting', startInviting],
+    ['markHappened', markHappened],
+  ] as const)('%s tells a non-manager no, instead of doing nothing', async (_name, action) => {
+    mocks.checkEventManager.mockResolvedValue({ ok: true, isManager: false });
+    await expect(action('event-1')).resolves.toMatchObject({ ok: false, code: 'SB-PERM-HOST' });
+
+    mocks.checkEventManager.mockResolvedValue({ ok: false, isManager: false });
+    await expect(action('event-1')).resolves.toMatchObject({ ok: false, code: 'SB-PLAN-AUTHZ' });
+    expect(mocks.createAdminClient).not.toHaveBeenCalled();
+  });
+
+  /**
+   * A stale tab or a direct call used to move a cancelled or past plan back to
+   * `inviting` (or `confirmed`), reopening its share link. The source status is
+   * part of the UPDATE's own WHERE, and a row that no longer matches is a coded
+   * failure rather than a quiet success.
+   */
+  it.each([
+    ['confirmEvent', confirmEvent, 'confirmed', 'inviting'],
+    ['startInviting', startInviting, 'inviting', 'deciding'],
+  ] as const)(
+    '%s only moves a plan from its one valid status',
+    async (_name, action, target, source) => {
+      const { admin, writes } = lifecycleAdmin({ updated: null });
+      mocks.createAdminClient.mockReturnValue(admin);
+
+      const result = await action('event-1');
+
+      expect(result).toMatchObject({ ok: false, code: 'SB-PLAN-SAVE' });
+      expect(result.error).toContain('moved on');
+      expect(writes).toHaveLength(1);
+      expect(writes[0]).toMatchObject({
+        table: 'events',
+        row: { status: target },
+        filters: expect.arrayContaining([
+          ['eq', 'id', 'event-1'],
+          ['eq', 'status', source],
+        ]),
+      });
+      expect(mocks.revalidatePath).not.toHaveBeenCalled();
+    },
+  );
+
+  it('confirms an inviting plan and retires the invitations still in motion', async () => {
+    const { admin, writes } = lifecycleAdmin({ updated: { id: 'event-1' } });
+    mocks.createAdminClient.mockReturnValue(admin);
+
+    await expect(confirmEvent('event-1')).resolves.toEqual({ ok: true });
+
+    expect(writes.map((write) => write.table)).toEqual(['events', 'invites']);
+    expect(mocks.revalidatePath).toHaveBeenCalledWith('/events/event-1');
+  });
+
+  it('reports a failed status write with a code', async () => {
+    const { admin } = lifecycleAdmin({ updated: null, error: { message: 'boom' } });
+    mocks.createAdminClient.mockReturnValue(admin);
+    vi.mocked(reportAndFail).mockResolvedValueOnce({
+      ok: false,
+      code: 'SB-PLAN-SAVE',
+      error: 'Your changes to this plan didn’t save.',
+      fix: null,
+    });
+
+    const result = await startInviting('event-1');
+
+    expect(vi.mocked(reportAndFail)).toHaveBeenCalledWith(
+      'SB-PLAN-SAVE',
+      'event-update',
+      { message: 'boom' },
+      expect.objectContaining({ eventId: 'event-1' }),
+    );
+    expect(result).toMatchObject({ ok: false, code: 'SB-PLAN-SAVE' });
+  });
+
+  it('says so when the server does not agree the plan has started yet', async () => {
+    // The button is offered on the device's clock. A phone running fast used
+    // to get a tap that did nothing at all.
+    const { admin } = lifecycleAdmin({
+      updated: null,
+      current: {
+        status: 'confirmed',
+        starts_at: new Date(Date.now() + 3_600_000).toISOString().replace('.000Z', '+00:00'),
+      },
+    });
+    mocks.createAdminClient.mockReturnValue(admin);
+
+    const result = await markHappened('event-1');
+
+    expect(result).toMatchObject({ ok: false, code: 'SB-PLAN-SAVE' });
+    expect(result.error).toContain('hasn’t started yet');
+  });
+
+  it('treats marking an already-past plan as done, without re-counting it', async () => {
+    const { admin, writes } = lifecycleAdmin({
+      updated: null,
+      current: { status: 'past', starts_at: new Date(Date.now() - 3_600_000).toISOString() },
+    });
+    mocks.createAdminClient.mockReturnValue(admin);
+
+    await expect(markHappened('event-1')).resolves.toEqual({ ok: true });
+    expect(writes).toHaveLength(1);
+    expect(vi.mocked(capture)).not.toHaveBeenCalled();
+  });
+
+  it('does not re-cancel a plan that is already closed', async () => {
+    const { admin, writes } = lifecycleAdmin({ updated: null });
+    mocks.createAdminClient.mockReturnValue(admin);
+
+    const result = await cancelEvent('event-1', 'Rain');
+
+    expect(result).toMatchObject({ ok: false, code: 'SB-PLAN-SAVE' });
+    expect(writes).toHaveLength(1);
+    expect(writes[0].filters).toEqual(
+      expect.arrayContaining([
+        ['neq', 'status', 'cancelled'],
+        ['neq', 'status', 'past'],
+      ]),
+    );
+    expect(vi.mocked(notifyUsers)).not.toHaveBeenCalled();
   });
 
   it('checks blocks against the host through the service-role client and skips blocked members', async () => {

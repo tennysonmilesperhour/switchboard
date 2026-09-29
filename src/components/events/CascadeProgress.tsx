@@ -73,6 +73,29 @@ const REOPENABLE: ReadonlySet<string> = new Set([
   'cancelled',
 ]);
 
+/**
+ * Delivery outcomes that mean this channel did not, and will not, reach them —
+ * the only ones worth a host's alarm. The two sources and their full CHECK sets:
+ *
+ *   invite_delivery_attempts (20260902120000_sms_opt_outs.sql):
+ *     sent, not_configured, invalid_recipient, opted_out, failed
+ *   sms_jobs (20260908234728_sms_consent_and_delivery.sql):
+ *     pending, sending, accepted, queued, sending_provider, sent, delivered,
+ *     undelivered, failed, suppressed, expired, unknown
+ *
+ * Everything else is in flight or landed. Colouring every status but `sent` red
+ * showed an SMS the carrier had confirmed `delivered` as a failure.
+ */
+const DELIVERY_FAILED: ReadonlySet<string> = new Set([
+  'failed',
+  'not_configured',
+  'invalid_recipient',
+  'opted_out',
+  'undelivered',
+  'suppressed',
+  'expired',
+]);
+
 const ROW_TONE: Record<string, string> = {
   sent: 'bg-gold-soft shadow-lift',
   accepted: 'bg-sage-soft',
@@ -271,7 +294,7 @@ export function CascadeProgress({
           {deliveryText && (
             <span
               className={`mt-0.5 block text-[11px] ${
-                invite.deliveries?.some((delivery) => delivery.status !== 'sent')
+                invite.deliveries?.some((delivery) => DELIVERY_FAILED.has(delivery.status))
                   ? 'text-rose-deep'
                   : 'text-ink-faint'
               }`}

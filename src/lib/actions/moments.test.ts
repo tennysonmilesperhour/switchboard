@@ -25,7 +25,13 @@ vi.mock('@/lib/server/observability', () => ({
   })),
 }));
 
-import { acceptMoment, checkIn, expressCuriosity } from './moments';
+import {
+  acceptMoment,
+  checkIn,
+  closeMoment,
+  expressCuriosity,
+  passMoment,
+} from './moments';
 
 function readBuilder(data: unknown) {
   const builder = {
@@ -218,5 +224,110 @@ describe('two accepts at the same moment', () => {
     expect(result).toMatchObject({ ok: true, stage: 'matched', roomId: 'room-1' });
     expect(calls.filter((table) => table === 'rooms')).toHaveLength(1);
     expect(mocks.notifyUsers).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('passMoment', () => {
+  /**
+   * Pass writes through the service role, naming a moment id the browser
+   * chose. It used to check only that the caller owned a live moment, so any
+   * moment id at all could be written into an interest row.
+   */
+  it('refuses a candidate this moment cannot see, and writes nothing', async () => {
+    const { rpc } = arrangePair(false);
+    rpc.mockImplementation(async (name: string) =>
+      name === 'find_shared_moments'
+        ? { data: [], error: null }
+        : { data: false, error: null },
+    );
+
+    const result = await passMoment('moment-mine', 'moment-elsewhere');
+
+    expect(result).toMatchObject({ ok: false, code: 'SB-MOMENT-ACCESS' });
+    expect(mocks.adminFrom).not.toHaveBeenCalledWith('moment_interests');
+  });
+
+  it('refuses after either person blocks', async () => {
+    arrangePair(true);
+
+    const result = await passMoment('moment-mine', 'moment-other');
+
+    expect(result).toMatchObject({ ok: false, code: 'SB-MOMENT-ACCESS' });
+    expect(mocks.adminFrom).not.toHaveBeenCalledWith('moment_interests');
+  });
+
+  it('records the pass for a discoverable candidate', async () => {
+    arrangePair(false);
+    const upsert = vi.fn(async () => ({ error: null }));
+    mocks.adminFrom.mockImplementation((table: string) =>
+      table === 'moment_interests'
+        ? { upsert }
+        : readBuilder({ user_id: 'user-other', place_name: 'Union Station' }),
+    );
+
+    const result = await passMoment('moment-mine', 'moment-other');
+
+    expect(result).toEqual({ ok: true });
+    expect(upsert).toHaveBeenCalledWith(
+      { moment_id: 'moment-mine', other_moment_id: 'moment-other', stage: 'passed' },
+      { onConflict: 'moment_id,other_moment_id' },
+    );
+  });
+
+  it('says so when the pass does not save', async () => {
+    arrangePair(false);
+    mocks.adminFrom.mockImplementation((table: string) =>
+      table === 'moment_interests'
+        ? { upsert: async () => ({ error: { message: 'boom' } }) }
+        : readBuilder({ user_id: 'user-other', place_name: 'Union Station' }),
+    );
+
+    const result = await passMoment('moment-mine', 'moment-other');
+
+    expect(result).toMatchObject({ ok: false, code: 'SB-MOMENT-SAVE' });
+  });
+});
+
+describe('closeMoment', () => {
+  function arrangeClose(error: unknown = null) {
+    const statuses: unknown[] = [];
+    const builder = {
+      update: vi.fn(() => builder),
+      eq: vi.fn(() => builder),
+      in: vi.fn(async (_column: string, values: unknown) => {
+        statuses.push(values);
+        return { error };
+      }),
+    };
+    mocks.requireUser.mockResolvedValue({
+      ok: true,
+      user: { id: 'user-mine' },
+      supabase: { from: vi.fn(() => builder) },
+    });
+    return { builder, statuses };
+  }
+
+  /**
+   * Check out is offered on a matched moment too, and the page keeps showing
+   * a matched check-in until it runs out. Closing only `open` rows made the
+   * button a silent no-op for anyone who had matched.
+   */
+  it('checks out of a matched moment as well as an open one', async () => {
+    const { builder, statuses } = arrangeClose();
+
+    const result = await closeMoment();
+
+    expect(result).toEqual({ ok: true });
+    expect(builder.update).toHaveBeenCalledWith({ status: 'closed' });
+    expect(builder.eq).toHaveBeenCalledWith('user_id', 'user-mine');
+    expect(statuses).toEqual([['open', 'matched']]);
+  });
+
+  it('reports a failed check-out instead of looking like it worked', async () => {
+    arrangeClose({ message: 'boom' });
+
+    const result = await closeMoment();
+
+    expect(result).toMatchObject({ ok: false, code: 'SB-MOMENT-SAVE' });
   });
 });

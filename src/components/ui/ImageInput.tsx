@@ -2,7 +2,8 @@
 
 import { useRef, useState } from 'react';
 import { Icon } from '@/components/ui/Icon';
-import { MAX_UPLOAD_BYTES, uploadImage } from '@/lib/client/upload-image';
+import { MAX_UPLOAD_BYTES, UploadError, uploadImage } from '@/lib/client/upload-image';
+import { errorRef, type ErrorCode } from '@/lib/errors';
 
 export interface ImageInputProps {
   /**
@@ -63,6 +64,7 @@ export function ImageInput({
 
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [errorCode, setErrorCode] = useState<ErrorCode | undefined>();
   const [showUrl, setShowUrl] = useState(false);
   // Instant preview of a just-picked file, so a private-bucket upload (which
   // returns a path, not a loadable URL) still shows the image immediately.
@@ -85,6 +87,7 @@ export function ImageInput({
   async function handleFile(file: File | undefined) {
     if (!file) return;
     setError(null);
+    setErrorCode(undefined);
     if (!file.type.startsWith('image/')) {
       setError('Please choose an image file.');
       return;
@@ -104,6 +107,7 @@ export function ImageInput({
           ? uploadError.message
           : 'Upload failed. Check your connection and try again.',
       );
+      setErrorCode(uploadError instanceof UploadError ? uploadError.code : undefined);
     } finally {
       setUploading(false);
     }
@@ -221,7 +225,14 @@ export function ImageInput({
       ) : null}
 
       {error ? (
-        <p className="mt-2 text-sm font-medium text-rose-deep">{error}</p>
+        <p className="mt-2 text-sm font-medium text-rose-deep">
+          {error}
+          {errorCode && (
+            <span className="ml-1.5 font-mono text-[11px] uppercase tracking-wide opacity-70">
+              {errorRef(errorCode)}
+            </span>
+          )}
+        </p>
       ) : null}
     </div>
   );

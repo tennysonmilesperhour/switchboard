@@ -46,7 +46,14 @@ import {
  */
 
 const MAX_FILES = 4;
-const MAX_UPLOAD_BYTES = 5 * 1024 * 1024;
+/**
+ * All screenshots together, not each one. The host refuses a request body over
+ * ~4.5MB with its own non-JSON 413 before this route runs, so a per-file 5MB cap
+ * promised uploads that could never arrive. 4MB leaves room for the note and
+ * the multipart framing; the checklist page shrinks images to fit it and says
+ * the same number.
+ */
+const MAX_TOTAL_UPLOAD_BYTES = 4 * 1024 * 1024;
 const MAX_BODY_CHARS = 4000;
 const MAX_REPORTER_CHARS = 80;
 const MAX_ITEM_ID_CHARS = 16;
@@ -133,9 +140,10 @@ export async function POST(request: Request) {
     if (!isAcceptableImage(file)) {
       return fail('Screenshots need to be images (PNG, JPG, HEIC, GIF or WebP).', 400);
     }
-    if (file.size > MAX_UPLOAD_BYTES) {
-      return fail('Each screenshot needs to be under 5MB.', 400);
-    }
+  }
+  const totalBytes = files.reduce((sum, file) => sum + file.size, 0);
+  if (totalBytes > MAX_TOTAL_UPLOAD_BYTES) {
+    return fail('Screenshots need to come to under 4MB altogether. Remove one or attach smaller ones.', 400);
   }
 
   const admin = createAdminClient();

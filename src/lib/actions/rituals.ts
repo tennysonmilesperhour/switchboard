@@ -3,7 +3,6 @@
 import { failure, validation, type ActionResult } from '@/lib/errors';
 
 import { revalidatePath } from 'next/cache';
-import { createClient } from '@/lib/supabase/server';
 import { notifyUsers } from '@/lib/server/notify';
 import { checkRateLimit } from '@/lib/server/rate-limit';
 import { requireUser } from '@/lib/server/require-user';
@@ -46,35 +45,46 @@ export async function proposeRitual(
 export async function respondToRitual(
   ritualId: string,
   accept: boolean,
-): Promise<void> {
+): Promise<ActionResult> {
   const auth = await requireUser();
-  if (!auth.ok) return;
+  if (!auth.ok) return auth;
   const { supabase, user } = auth;
   // Only the invited partner may accept/decline - the proposer cannot
   // self-accept their own proposal.
-  await supabase
+  const { error } = await supabase
     .from('rituals')
     .update({ status: accept ? 'active' : 'ended' })
     .eq('id', ritualId)
     .eq('status', 'proposed')
     .eq('partner_id', user.id);
+  if (error) return reportAndFail('SB-RITUAL-SAVE', 'ritual.update', error, { ritualId });
   revalidatePath('/mutual');
   revalidatePath('/');
+  return { ok: true };
 }
 
-export async function pauseRitual(ritualId: string, pause: boolean): Promise<void> {
-  const supabase = await createClient();
-  await supabase
+export async function pauseRitual(ritualId: string, pause: boolean): Promise<ActionResult> {
+  const auth = await requireUser();
+  if (!auth.ok) return auth;
+  const { error } = await auth.supabase
     .from('rituals')
     .update({ status: pause ? 'paused' : 'active' })
     .eq('id', ritualId);
+  if (error) return reportAndFail('SB-RITUAL-SAVE', 'ritual.update', error, { ritualId });
   revalidatePath('/mutual');
   revalidatePath('/');
+  return { ok: true };
 }
 
-export async function endRitual(ritualId: string): Promise<void> {
-  const supabase = await createClient();
-  await supabase.from('rituals').update({ status: 'ended' }).eq('id', ritualId);
+export async function endRitual(ritualId: string): Promise<ActionResult> {
+  const auth = await requireUser();
+  if (!auth.ok) return auth;
+  const { error } = await auth.supabase
+    .from('rituals')
+    .update({ status: 'ended' })
+    .eq('id', ritualId);
+  if (error) return reportAndFail('SB-RITUAL-SAVE', 'ritual.update', error, { ritualId });
   revalidatePath('/mutual');
   revalidatePath('/');
+  return { ok: true };
 }

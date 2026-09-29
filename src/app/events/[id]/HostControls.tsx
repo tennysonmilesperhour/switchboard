@@ -14,8 +14,9 @@ import {
   markHappened,
   startInviting,
 } from '@/lib/actions/events';
-import { uploadAudio } from '@/lib/client/upload-audio';
+import { UploadError, uploadAudio } from '@/lib/client/upload-audio';
 import { hostCanEditInvitees } from '@/lib/share-link';
+import type { ActionResult } from '@/lib/errors';
 import type { SwitchboardEvent } from '@/lib/types';
 
 interface HostControlsProps {
@@ -33,9 +34,14 @@ export function HostControls({ event, pollDecided, isPrimaryHost }: HostControls
   const toast = useToast();
   const confirm = useConfirm();
 
-  function run(action: () => Promise<void>) {
+  // Refresh either way: after a refusal the page should show where the plan
+  // actually stands, which is usually the explanation.
+  function run(action: () => Promise<ActionResult>) {
     startTransition(async () => {
-      await action();
+      const result = await action();
+      if (!result.ok) {
+        toast.error(result.error ?? 'That didn’t go through. Reload and try again.', result.code);
+      }
       router.refresh();
     });
   }
@@ -56,11 +62,18 @@ export function HostControls({ event, pollDecided, isPrimaryHost }: HostControls
         } catch (uploadError) {
           toast.error(
             uploadError instanceof Error ? uploadError.message : 'Could not upload the voice note.',
+            uploadError instanceof UploadError ? uploadError.code : undefined,
           );
           return;
         }
       }
-      await cancelEvent(event.id, reason.trim() || undefined, voiceUrl);
+      const result = await cancelEvent(event.id, reason.trim() || undefined, voiceUrl);
+      if (!result.ok) {
+        // Keep what they wrote, so a retry doesn't mean typing it again.
+        toast.error(result.error ?? 'Could not cancel this plan.', result.code);
+        router.refresh();
+        return;
+      }
       resetCancel();
       router.refresh();
     });

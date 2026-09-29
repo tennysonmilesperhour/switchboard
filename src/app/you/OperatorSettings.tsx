@@ -87,7 +87,7 @@ function ToggleRow({
       const res = await setOperatorSetting(toggle.key, next);
       if (!res.ok) {
         setOn(!next);
-        toast.error('Could not update that setting');
+        toast.error(res.error ?? 'Could not update that setting', res.code);
       } else {
         router.refresh();
       }

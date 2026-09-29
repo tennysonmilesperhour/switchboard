@@ -40,7 +40,7 @@ export function Reflections({
       } else if (res.reason === 'not_ready') {
         toast.info('A little more history first, then this unlocks');
       } else {
-        toast.error('Could not write that reflection');
+        toast.error(res.error ?? 'Could not write that reflection', res.code);
       }
     });
   }

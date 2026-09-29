@@ -268,4 +268,23 @@ describe('parental approval actions', () => {
     expect(mocks.advanceEventCascade).not.toHaveBeenCalled();
     expect(mocks.notifyUsers).not.toHaveBeenCalled();
   });
+
+  it.each([
+    ['event_gone', /plan no longer exists/],
+    ['invite_gone', /invitation .* withdrawn/],
+  ])('tells the guardian a %s link has nothing left to approve', async (outcome, message) => {
+    mocks.adminRpc.mockResolvedValue({ data: { outcome }, error: null });
+    mocks.createAdminClient.mockReturnValue({
+      rpc: mocks.adminRpc,
+      from: vi.fn(() => {
+        throw new Error('Unexpected table read');
+      }),
+    });
+
+    const result = await resolveParentalApproval('stale-token', true);
+
+    expect(result).toMatchObject({ ok: false, outcome, code: 'SB-RSVP-GONE' });
+    expect(result.error).toMatch(message);
+    expect(mocks.advanceEventCascade).not.toHaveBeenCalled();
+  });
 });

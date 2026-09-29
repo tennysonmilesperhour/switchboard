@@ -2,6 +2,10 @@
  * One-tap "add to calendar" links. The .ics download (see the ics route)
  * covers Apple/Outlook; these deep links cover the web calendars people
  * actually tap on a phone. Pure and dependency-free so they're unit-tested.
+ *
+ * These point at third-party calendars. A link back into Switchboard — such as
+ * the personal subscription feed — is built in `src/lib/links.ts`
+ * (`calendarFeedUrl` / `webcalSubscribeUrl`), on its one validated origin.
  */
 
 export interface CalendarEvent {
@@ -46,23 +50,3 @@ export function outlookCalendarUrl(event: CalendarEvent): string {
   return `https://outlook.live.com/calendar/0/deeplink/compose?${params.toString()}`;
 }
 
-/**
- * The personal-plans subscription feed (see `/api/calendar/[token]`), rooted at
- * an explicit origin. Always root a calendar subscription at the STABLE public
- * origin (`NEXT_PUBLIC_APP_URL`), never the request host: a Vercel preview host
- * is both ephemeral (the subscription 404s once the deploy is superseded) and
- * access-protected (calendar apps can't clear the deployment-protection wall),
- * which is what makes "The request for webcal://…failed" appear.
- */
-export function calendarFeedUrl(origin: string, token: string): string {
-  return `${origin.replace(/\/+$/, '')}/api/calendar/${token}`;
-}
-
-/**
- * `webcal://` form of {@link calendarFeedUrl} — the one-tap scheme calendar
- * apps recognize as "subscribe". Derived by swapping only the http(s) scheme so
- * host and path stay byte-identical to the secure feed URL.
- */
-export function webcalSubscribeUrl(origin: string, token: string): string {
-  return calendarFeedUrl(origin, token).replace(/^https?:\/\//i, 'webcal://');
-}

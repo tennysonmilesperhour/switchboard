@@ -167,6 +167,14 @@ migrations do not run as `service_role`; both failed for real people.
 `supabase/tests/service_role_grants.test.sql` asserts the grant for every
 admin-called function — add yours to that list when you add the RPC.
 
+A push subscription is the one place possession is proved by the browser
+itself. `POST /api/push/subscribe` hands a row from a previous account to the
+caller only when the endpoint **and** both keys (`p256dh`, `auth`) match what
+the caller sent: all three are held by the browser that owns the subscription,
+so an attacker who learned an endpoint alone cannot detach it from its owner.
+Sign-out releases the subscription first (`releasePushOnSignOut`), so the next
+person on the device never receives the last one's notifications.
+
 Litmus test: *does this admin-client line trust an id/field from the request
 without proving the caller owns it — and can `service_role` actually execute
 what it calls?*
@@ -426,6 +434,10 @@ host's recovery resend have different authority and must stay separate:
   precedent). Every app read of the table goes through the service-role client
   after its own authorization check; `parental_approval_token_column.test.sql`
   proves the column stays out of reach.
+- **The guardian needs no account.** `/approve/<token>` is in the proxy's
+  public paths: the token is the whole authorization, and the person holding
+  it is usually a parent who has never signed up. Sending them to `/welcome`
+  was a dead end with the invitee's RSVP stuck behind it.
 - **The resolver distrusts even privileged rows.** The token-addressed
   `resolve_parental_approval` function checks that the approval's `event_id`
   equals its invite's `event_id` before mutating either row. A mismatch returns
@@ -637,14 +649,18 @@ than inventing a second access system.
   RLS, so nothing stopped a non-member from checking into a private zone and
   landing in its presence count — the one number that crosses the member
   boundary. A `BEFORE INSERT OR UPDATE` trigger on `moments` enforces
-  `can_view_zone`.
+  `can_view_zone`. The one exemption is a close that leaves `zone_id` as it
+  was (`20260929120000_moment_zone_checkout.sql`): it can only shrink the
+  count, and refusing it both stranded a removed member in a check-in they
+  could not end and rolled back the retention sweep's bulk close for everyone.
 - **A private zone's address is a door, not a 404.**
   `find_private_zone_by_slug` returns the id, the name, and whether you have
   already asked — nothing else, keyed by exact slug, at most one row. It answers
   "does this address exist" for someone who was handed the URL; it cannot be
   used to enumerate private zones or read their contents.
 
-Covered by `supabase/tests/private_zones.test.sql`.
+Covered by `supabase/tests/private_zones.test.sql` and
+`supabase/tests/moment_zone_checkout.test.sql`.
 
 Litmus test: *could someone outside a private zone learn its description, its
 roster, its coordinates, or that anyone is in it?*
@@ -671,7 +687,7 @@ The exception is paid for rather than waved through:
   endpoint's worst case is a spread of addresses, not a loud one.
 - **Server-derived content type** from the validated extension
   (`src/lib/server/image-mime.ts`, now shared with `/api/uploads/image` so the
-  two paths cannot drift), SVG rejected, 5MB and 4-file caps, and a
+  two paths cannot drift), SVG rejected, 4MB combined and 4-file caps, and a
   server-generated object path so a crafted filename cannot traverse or collide.
 - **Every bound is a CHECK constraint too**, not only a guard in the route, so a
   second writer added later inherits them.

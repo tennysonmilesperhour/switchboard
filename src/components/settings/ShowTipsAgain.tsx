@@ -1,9 +1,15 @@
 'use client';
 
 import { useState } from 'react';
-import { GETTING_STARTED_DISMISS_KEY } from '@/components/home/GettingStarted';
+import {
+  GETTING_STARTED_DISMISS_KEY,
+  GETTING_STARTED_RESHOW_KEY,
+} from '@/components/home/GettingStarted';
 
-/** Clears the device-level dismissal so the Home checklist reappears. */
+/**
+ * Clears the device-level dismissal and asks for the Home checklist back, even
+ * when every step is already done (which would otherwise retire it).
+ */
 export function ShowTipsAgain() {
   const [restored, setRestored] = useState(false);
 
@@ -13,6 +19,7 @@ export function ShowTipsAgain() {
       disabled={restored}
       onClick={() => {
         localStorage.removeItem(GETTING_STARTED_DISMISS_KEY);
+        localStorage.setItem(GETTING_STARTED_RESHOW_KEY, '1');
         setRestored(true);
       }}
       className="rounded-pill border border-line px-3.5 py-2 text-sm font-bold text-ink-soft hover:border-terracotta hover:text-terracotta-deep transition-colors disabled:opacity-70"

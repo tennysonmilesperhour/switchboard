@@ -1,6 +1,6 @@
 'use client';
 
-import { useActionState, useEffect, useState } from 'react';
+import { startTransition, useActionState, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { Button } from '@/components/ui/Button';
 import { PasswordInput } from '@/components/ui/PasswordInput';
@@ -116,6 +116,18 @@ export function LoginForm({ next = '/', initialMode = 'signin' }: LoginFormProps
       setMessage('Sign-in could not connect. Check your connection and try again.');
       setStatus('error');
     }
+  }
+
+  // Submit from here rather than letting the `action` prop do it: React resets
+  // a form's uncontrolled fields after every `action` submission, failed ones
+  // included, so "That username is already taken." used to wipe the name,
+  // username, password and both agreements. A prevented submit that starts its
+  // own transition skips that reset, so only the field that was wrong needs
+  // retyping. `action` stays on the form for submits made before hydration.
+  function submitCreate(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const formData = new FormData(event.currentTarget);
+    startTransition(() => createAction(formData));
   }
 
   async function resendConfirmation() {
@@ -308,7 +320,7 @@ export function LoginForm({ next = '/', initialMode = 'signin' }: LoginFormProps
           )}
         </div>
       ) : (
-        <form action={createAction} className="space-y-3">
+        <form action={createAction} onSubmit={submitCreate} className="space-y-3">
           <input type="hidden" name="next" value={next} />
           <label htmlFor="display_name" className="sr-only">
             Your name
@@ -398,9 +410,13 @@ export function LoginForm({ next = '/', initialMode = 'signin' }: LoginFormProps
           </div>
 
           {createState.error ? (
-            <p role="alert" className="text-sm text-rose-deep">
-              {createState.error}
-            </p>
+            <div role="alert" className="text-sm text-rose-deep">
+              <p>{createState.error}</p>
+              {createState.fix ? <p className="mt-1 text-ink-soft">{createState.fix}</p> : null}
+              {createState.code ? (
+                <p className="mt-1 text-xs text-ink-faint">{errorRef(createState.code)}</p>
+              ) : null}
+            </div>
           ) : null}
 
           <Button type="submit" size="lg" className="w-full" disabled={creating}>

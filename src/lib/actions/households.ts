@@ -3,7 +3,6 @@
 import { validation, type ActionResult } from '@/lib/errors';
 
 import { revalidatePath } from 'next/cache';
-import { createClient } from '@/lib/supabase/server';
 import { requireUser } from '@/lib/server/require-user';
 import { reportAndFail } from '@/lib/server/observability';
 
@@ -60,8 +59,13 @@ export async function createHousehold(
   return { ok: true };
 }
 
-export async function deleteHousehold(householdId: string): Promise<void> {
-  const supabase = await createClient();
-  await supabase.from('households').delete().eq('id', householdId);
+export async function deleteHousehold(householdId: string): Promise<ActionResult> {
+  const auth = await requireUser();
+  if (!auth.ok) return auth;
+  const { error } = await auth.supabase.from('households').delete().eq('id', householdId);
+  if (error) {
+    return reportAndFail('SB-HOUSEHOLD-SAVE', 'household.save', error, { householdId });
+  }
   revalidatePath('/people');
+  return { ok: true };
 }

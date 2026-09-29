@@ -1,6 +1,32 @@
 import { downscaleImage } from '@/lib/client/downscale-image';
+import { ERROR_CODES, type ErrorCode } from '@/lib/errors';
 
 export const MAX_UPLOAD_BYTES = 5 * 1024 * 1024;
+
+/**
+ * What `uploadImage` and `uploadAudio` throw. `message` is the sentence to show,
+ * exactly as before, so callers that render `error.message` keep working;
+ * `code` is the registry code the upload route returned for an operational
+ * failure (storage not configured, rate limit, storage write failed), so a
+ * toast can show it: `toast.error(error.message, error.code)`. Validation
+ * refusals ("Please choose an image file.") carry no code.
+ */
+export class UploadError extends Error {
+  readonly code?: ErrorCode;
+
+  constructor(message: string, code?: ErrorCode) {
+    super(message);
+    this.name = 'UploadError';
+    this.code = code;
+  }
+}
+
+/** The route's `code`, if it is one the registry knows; never a raw string. */
+export function uploadErrorCode(value: unknown): ErrorCode | undefined {
+  return typeof value === 'string' && (ERROR_CODES as string[]).includes(value)
+    ? (value as ErrorCode)
+    : undefined;
+}
 
 export async function uploadImage({
   file,
@@ -31,20 +57,24 @@ export async function uploadImage({
   // so there is no JSON error to read. Say what actually happened rather than
   // blaming the connection.
   if (response.status === 413) {
-    throw new Error('That image is too large to upload. Try a smaller photo.');
+    throw new UploadError('That image is too large to upload. Try a smaller photo.');
   }
 
   const body = (await response.json().catch(() => null)) as {
     url?: string;
     path?: string;
     error?: string;
+    code?: string;
   } | null;
 
   // Public buckets return a URL; the private bucket returns a storage path that
   // the render site signs. Either way the caller stores the returned reference.
   const ref = body?.url ?? body?.path;
   if (!response.ok || !ref) {
-    throw new Error(body?.error ?? 'Upload failed. Check your connection and try again.');
+    throw new UploadError(
+      body?.error ?? 'Upload failed. Check your connection and try again.',
+      uploadErrorCode(body?.code),
+    );
   }
 
   return ref;

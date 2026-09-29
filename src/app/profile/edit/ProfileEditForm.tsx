@@ -1,6 +1,6 @@
 'use client';
 
-import { useActionState, useRef, useState } from 'react';
+import { startTransition, useActionState, useRef, useState } from 'react';
 import Link from 'next/link';
 import { Avatar } from '@/components/ui/Avatar';
 import { Button } from '@/components/ui/Button';
@@ -9,7 +9,8 @@ import { SectionHeader } from '@/components/ui/Card';
 import { PlaceSearchInput, type PlacePoint } from '@/components/events/PlaceSearchInput';
 import { SOCIAL_PLATFORMS, SOCIAL_BY_ID } from '@/lib/socials';
 import { updateProfileDetails, type ActionResult } from '@/lib/actions/profile';
-import { MAX_UPLOAD_BYTES, uploadImage } from '@/lib/client/upload-image';
+import { MAX_UPLOAD_BYTES, UploadError, uploadImage } from '@/lib/client/upload-image';
+import { errorRef, type ErrorCode } from '@/lib/errors';
 import type { ProfileLink, ProfileSocial } from '@/lib/types';
 
 const BIO_MAX = 600;
@@ -50,6 +51,7 @@ export function ProfileEditForm(props: ProfileEditInitial) {
 
   const [uploading, setUploading] = useState<null | 'avatar' | 'cover'>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
+  const [uploadErrorCode, setUploadErrorCode] = useState<ErrorCode | undefined>();
 
   const avatarInput = useRef<HTMLInputElement>(null);
   const coverInput = useRef<HTMLInputElement>(null);
@@ -59,9 +61,22 @@ export function ProfileEditForm(props: ProfileEditInitial) {
     { ok: true },
   );
 
+  // Submit from here rather than letting the `action` prop do it: React resets
+  // a form's uncontrolled fields after every `action` submission, failed ones
+  // included, so "That handle is already taken." used to put the old name,
+  // pronouns, tagline, email and phone back — and saving again silently wrote
+  // them. A prevented submit that starts its own transition skips that reset.
+  // `action` stays on the form for submits made before hydration.
+  function submit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const formData = new FormData(event.currentTarget);
+    startTransition(() => formAction(formData));
+  }
+
   async function handleFile(kind: 'avatar' | 'cover', file: File | undefined) {
     if (!file) return;
     setUploadError(null);
+    setUploadErrorCode(undefined);
     if (!file.type.startsWith('image/')) {
       setUploadError('Please choose an image file.');
       return;
@@ -82,6 +97,7 @@ export function ProfileEditForm(props: ProfileEditInitial) {
           ? uploadError.message
           : 'Upload failed. Check your connection and try again.',
       );
+      setUploadErrorCode(uploadError instanceof UploadError ? uploadError.code : undefined);
     } finally {
       setUploading(null);
     }
@@ -115,7 +131,7 @@ export function ProfileEditForm(props: ProfileEditInitial) {
   const cleanSocials = socials.filter((s) => s.value.trim());
 
   return (
-    <form action={formAction} className="space-y-8 pb-4">
+    <form action={formAction} onSubmit={submit} className="space-y-8 pb-4">
       {/* Serialized dynamic collections + media URLs */}
       <input type="hidden" name="avatar_url" value={avatarUrl ?? ''} />
       <input type="hidden" name="cover_url" value={coverUrl ?? ''} />
@@ -210,7 +226,14 @@ export function ProfileEditForm(props: ProfileEditInitial) {
           onChange={(e) => handleFile('cover', e.target.files?.[0])}
         />
         {uploadError ? (
-          <p className="mt-3 text-sm font-medium text-rose-deep">{uploadError}</p>
+          <p className="mt-3 text-sm font-medium text-rose-deep">
+            {uploadError}
+            {uploadErrorCode && (
+              <span className="ml-1.5 font-mono text-[11px] uppercase tracking-wide opacity-70">
+                {errorRef(uploadErrorCode)}
+              </span>
+            )}
+          </p>
         ) : null}
       </section>
 
@@ -471,6 +494,9 @@ export function ProfileEditForm(props: ProfileEditInitial) {
       {!state.ok && state.error ? (
         <p className="rounded-card bg-rose-soft px-4 py-3 text-sm font-medium text-rose-deep">
           {state.error}
+          {state.code ? (
+            <span className="mt-1 block text-xs font-normal text-ink-faint">{errorRef(state.code)}</span>
+          ) : null}
         </p>
       ) : null}
 

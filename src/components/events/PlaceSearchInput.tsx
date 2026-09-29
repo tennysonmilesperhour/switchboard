@@ -87,11 +87,22 @@ export function PlaceSearchInput({
         return;
       }
       setLoading(true);
-      const res = await searchPlaces(query);
+      let found: PlaceResult[] = [];
+      try {
+        const res = await searchPlaces(query);
+        if (res.ok && res.results) found = res.results;
+      } catch {
+        // A dropped connection (or an action id gone stale after a deploy) is a
+        // failed lookup like any other: no suggestions, and the typed text still
+        // saves. Without this the spinner ran until the next keystroke.
+      } finally {
+        // Only the newest lookup owns the spinner; a superseded one finishing
+        // late must not stop a newer one's.
+        if (seq === requestSeq.current) setLoading(false);
+      }
       if (seq !== requestSeq.current) return; // superseded by a newer keystroke
-      setLoading(false);
       setSearched(true);
-      setResults(res.ok && res.results ? res.results : []);
+      setResults(found);
       setActiveIndex(-1);
       setOpen(true);
     }, DEBOUNCE_MS);
@@ -100,6 +111,10 @@ export function PlaceSearchInput({
 
   function pick(place: PlaceResult) {
     skipNextSearch.current = true;
+    // A lookup still in flight answers for text the pick just replaced; retire
+    // it so it can't reopen the list or leave the spinner running.
+    requestSeq.current += 1;
+    setLoading(false);
     onChange(place.label);
     onPointChange({ lat: place.lat, lng: place.lng });
     setResults([]);

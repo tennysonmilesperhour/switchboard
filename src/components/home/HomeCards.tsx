@@ -25,12 +25,16 @@ export function EnergyPrompt({
 
   function log(feeling: Feeling) {
     startTransition(async () => {
-      const result = await logEnergy(eventId, feeling);
-      if (!result.ok) {
+      try {
+        const result = await logEnergy(eventId, feeling);
+        if (!result.ok) {
+          toast.error(result.error ?? 'Could not save that. Try again.', result.code);
+          return;
+        }
+        setDone(true);
+      } catch {
         toast.error('Could not save that. Try again.');
-        return;
       }
-      setDone(true);
     });
   }
 
@@ -207,7 +211,11 @@ export function RitualCard({ ritual }: { ritual: RitualCardData }) {
             onClick={() =>
               startTransition(async () => {
                 try {
-                  await respondToRitual(ritual.id, true);
+                  const result = await respondToRitual(ritual.id, true);
+                  if (!result.ok) {
+                    toast.error(result.error ?? 'Could not respond. Try again.', result.code);
+                    return;
+                  }
                   router.refresh();
                 } catch {
                   toast.error('Could not respond. Try again.');
@@ -224,7 +232,11 @@ export function RitualCard({ ritual }: { ritual: RitualCardData }) {
             onClick={() =>
               startTransition(async () => {
                 try {
-                  await respondToRitual(ritual.id, false);
+                  const result = await respondToRitual(ritual.id, false);
+                  if (!result.ok) {
+                    toast.error(result.error ?? 'Could not respond. Try again.', result.code);
+                    return;
+                  }
                   router.refresh();
                 } catch {
                   toast.error('Could not respond. Try again.');

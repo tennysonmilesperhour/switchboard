@@ -5,6 +5,8 @@ import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
 import { supportEmail } from '@/lib/contact';
 import { AppShell } from '@/components/shell/AppShell';
+import { errorRef } from '@/lib/errors';
+import { SignOutForm } from '@/components/shell/SignOutForm';
 import { Card, SectionHeader } from '@/components/ui/Card';
 import { Avatar } from '@/components/ui/Avatar';
 import { Button } from '@/components/ui/Button';
@@ -27,7 +29,6 @@ import { parseCustomAppearance } from '@/lib/theme-custom';
 import { loadSettingsPage } from '@/lib/server/settings-page';
 import { INTEREST_CATEGORIES, DOWN_TO_GROUP } from '@/lib/interests';
 import {
-  signOut,
   updateInterests,
   updateDiscoverability,
   updateQuietHours,
@@ -163,6 +164,11 @@ export default async function SettingsPage({
                       : contactNotice === 'expired'
                         ? 'That verification link expired. Request a new one.'
                         : 'Email verification could not be completed.'}
+                  {!['verified', 'claimed', 'expired'].includes(contactNotice) && (
+                    <span className="ml-1.5 font-mono text-[11px] uppercase tracking-wide opacity-70">
+                      {errorRef('SB-VERIFY-CHECK')}
+                    </span>
+                  )}
                 </p>
               )}
               <ContactVerification
@@ -478,11 +484,11 @@ export default async function SettingsPage({
             </Card>
           </section>
 
-          <form action={signOut}>
+          <SignOutForm>
             <Button type="submit" variant="ghost" className="w-full">
               Sign out
             </Button>
-          </form>
+          </SignOutForm>
         </div>
       </SettingsSaveProvider>
     </AppShell>

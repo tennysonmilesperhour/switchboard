@@ -49,10 +49,12 @@ export async function addExpense(
 export async function deleteExpense(
   expenseId: string,
   roomId: string,
-): Promise<void> {
+): Promise<ActionResult> {
   const auth = await requireUser();
-  if (!auth.ok) return;
+  if (!auth.ok) return auth;
   const { supabase } = auth;
-  await supabase.from('expenses').delete().eq('id', expenseId);
+  const { error } = await supabase.from('expenses').delete().eq('id', expenseId);
+  if (error) return reportAndFail('SB-EXPENSE-SAVE', 'expense.save', error, { roomId });
   revalidatePath(`/rooms/${roomId}`);
+  return { ok: true };
 }

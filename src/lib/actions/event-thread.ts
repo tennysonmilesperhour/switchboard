@@ -54,7 +54,7 @@ export async function postComment(
   if (!trimmed && !voiceUrl) return validation('Add a message or a voice note.');
   if (trimmed.length > 2000) return validation('That’s a bit long');
   if (voiceUrl && !isValidMediaRef(voiceUrl)) {
-    return validation('That voice note could not be saved.');
+    return failure('SB-THREAD-SAVE', 'That voice note could not be saved.');
   }
   const replyToId = normalized.replyToId?.trim() || null;
   if (replyToId && !UUID_PATTERN.test(replyToId)) {

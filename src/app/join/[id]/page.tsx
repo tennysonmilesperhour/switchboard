@@ -7,11 +7,13 @@ import { reportOperationalError } from '@/lib/server/observability';
 import { formatDateTime } from '@/lib/format';
 import { resolveEventZone } from '@/lib/server/event-zone';
 import { eventSharePath } from '@/lib/links';
+import { inviteOpenGraph, unfurlSummary } from '@/lib/invite-links';
 import {
   canReadPlan,
   canRequestOpenTable,
   shareLinkNotice,
   shareLinkState,
+  unfurlsPlanDetails,
 } from '@/lib/share-link';
 import { errorRef } from '@/lib/errors';
 import { Button } from '@/components/ui/Button';
@@ -28,16 +30,22 @@ export async function generateMetadata({
   const admin = createAdminClient();
   const { data: event } = await admin
     .from('events')
-    .select('title, open_table')
+    .select('id, title, status, share_link_active, description, location_name')
     .eq('id', id)
     .maybeSingle();
-  const title = event?.open_table ? `You’re invited: ${event.title}` : 'You’re invited';
+  // The same decision, and the same card builder, as /i/<token>. This used to
+  // gate on `open_table` alone, so a crawler holding a bare id was told the
+  // title of a draft, cancelled, past, or switched-off plan — none of which
+  // the share link itself will unfurl.
+  const unfurl = unfurlsPlanDetails(shareLinkState(event));
+  const title = event && unfurl ? `You’re invited: ${event.title}` : 'You’re invited';
   return {
     title,
-    openGraph: {
+    openGraph: inviteOpenGraph({
       title,
-      images: event?.open_table ? [`/api/og/event/${id}`] : [],
-    },
+      description: event && unfurl ? unfurlSummary(event) : null,
+      image: event && unfurl ? `/api/og/event/${event.id}` : null,
+    }),
   };
 }
 
@@ -45,10 +53,11 @@ export async function generateMetadata({
  * Public join page reached via a host's shareable invite link. Unlike the
  * event page (which is RLS-locked to the host and already-invited people), this
  * reads through the service-role client so someone who isn't on the plan yet can
- * still see it and ask to join. It only ever reveals a plan the host has opted
- * to share (open_table) — the same title/when/where an event link already
- * unfurls — and asking to join goes through the same request/approve flow as an
- * open table, so the host still approves every person.
+ * still see it and ask to join. To anyone not already on the plan it only ever
+ * reveals a plan the host has opted to share (open_table) whose share link
+ * `canReadPlan` allows — the same answer `/i/<token>` gives — and asking to
+ * join goes through the same request/approve flow as an open table, so the
+ * host still approves every person.
  */
 export default async function JoinPage({
   params,
@@ -154,7 +163,17 @@ export default async function JoinPage({
         ).data
       : null;
 
-  const shareable = Boolean(event?.open_table);
+  // Who may read the plan here. Someone already on it may (see below). Anyone
+  // else needs the host to have opened the table AND a share link that
+  // share-link.ts says is readable — the same answer /i/<token> gives, so the
+  // two pages cannot disagree about a link that is off or a plan still in
+  // draft. `open_table` alone used to be enough, which rendered a switched-off
+  // or unpublished plan to any stranger holding its id.
+  //
+  // In practice a readable link has already forwarded any stranger to
+  // /i/<token> above, so only people already involved reach the plan view
+  // here; asking to join an Open Table happens on Discover.
+  const shareable = Boolean(event?.open_table) && shareReadable;
   const accepting = canRequestOpenTable(event?.status);
   // Why this page has nothing to show, in the plan's own terms rather than one
   // catch-all sentence. Anyone reaching the dead-end branch got here because the

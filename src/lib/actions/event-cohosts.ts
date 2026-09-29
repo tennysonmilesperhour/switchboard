@@ -1,7 +1,7 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
-import { requireUser, requireUserOrRedirect } from '@/lib/server/require-user';
+import { requireUser } from '@/lib/server/require-user';
 import type { ActionResult } from '@/lib/errors';
 import { validation } from '@/lib/errors';
 import { reportAndFail } from '@/lib/server/observability';
@@ -60,15 +60,29 @@ export async function addCoHost(
   return { ok: true };
 }
 
+/**
+ * Primary host takes someone off the co-host list. RLS on event_cohosts is the
+ * gate; a write error is reported rather than dropped, so the panel can say the
+ * co-host is still there instead of refreshing onto an unchanged list.
+ */
 export async function removeCoHost(
   eventId: string,
   cohostId: string,
-): Promise<void> {
-  const { supabase } = await requireUserOrRedirect();
-  await supabase
+): Promise<ActionResult> {
+  const auth = await requireUser();
+  if (!auth.ok) return auth;
+  const { supabase } = auth;
+  const { error } = await supabase
     .from('event_cohosts')
     .delete()
     .eq('event_id', eventId)
     .eq('cohost_id', cohostId);
+  if (error) {
+    return reportAndFail('SB-PLAN-SAVE', 'event-update', error, {
+      eventId,
+      step: 'cohost-remove',
+    });
+  }
   revalidatePath(`/events/${eventId}`);
+  return { ok: true };
 }

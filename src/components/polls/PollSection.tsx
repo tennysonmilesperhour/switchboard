@@ -6,6 +6,7 @@ import { createClient } from '@/lib/supabase/client';
 import { Button } from '@/components/ui/Button';
 import { Card, SectionHeader } from '@/components/ui/Card';
 import { ImageInput } from '@/components/ui/ImageInput';
+import { useConfirm } from '@/components/ui/ConfirmDialog';
 import {
   addSuggestion,
   castVote,
@@ -212,6 +213,7 @@ export function PollSection({
   const [errorCode, setErrorCode] = useState<ErrorCode | null>(null);
   const [pending, startTransition] = useTransition();
   const router = useRouter();
+  const confirm = useConfirm();
 
   // What the rating buttons show.
   //
@@ -418,13 +420,20 @@ export function PollSection({
     });
   }
 
-  function removeIdea(option: PollOption) {
+  // The app's own dialog, not `window.confirm`: some in-app browsers block the
+  // native one outright, it returns false, and Remove silently did nothing.
+  async function removeIdea(option: PollOption) {
     const votes = resultFor(option.id)?.voters ?? 0;
-    const warning =
-      votes > 0
-        ? `Remove “${option.label}”? ${votes} ${votes === 1 ? 'person has' : 'people have'} already rated it.`
-        : `Remove “${option.label}”?`;
-    if (!window.confirm(warning)) return;
+    const ok = await confirm({
+      title: `Remove “${option.label}”?`,
+      body:
+        votes > 0
+          ? `${votes} ${votes === 1 ? 'person has' : 'people have'} already rated it.`
+          : undefined,
+      confirmLabel: 'Remove',
+      danger: true,
+    });
+    if (!ok) return;
     setError('');
     setErrorCode(null);
     startTransition(async () => {

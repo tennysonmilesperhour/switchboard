@@ -1,7 +1,7 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
-import { failure, validation } from '@/lib/errors';
+import { failure, validation, type ActionResult } from '@/lib/errors';
 import { checkRateLimit } from '@/lib/server/rate-limit';
 import { reportAndFail } from '@/lib/server/observability';
 import { requireUser } from '@/lib/server/require-user';
@@ -31,7 +31,7 @@ const REFLECTION_KINDS = new Set<ReflectionKind>(['general', 'relationships', 'd
 export async function setFacetPref(
   facetKey: string,
   patch: { hidden?: boolean; sharedWithConnections?: boolean },
-): Promise<{ ok: boolean }> {
+): Promise<ActionResult> {
   if (!isFacetKey(facetKey)) return validation();
 
   const auth = await requireUser();
@@ -73,7 +73,7 @@ export async function setFacetPref(
 export async function setFacetVerdict(
   facetKey: string,
   verdict: 'confirmed' | 'rejected' | null,
-): Promise<{ ok: boolean }> {
+): Promise<ActionResult> {
   if (!isFacetKey(facetKey)) return validation();
 
   const auth = await requireUser();
@@ -101,7 +101,7 @@ export async function setFacetVerdict(
 export async function setOperatorSetting(
   key: string,
   enabled: boolean,
-): Promise<{ ok: boolean }> {
+): Promise<ActionResult> {
   if (!OPERATOR_KEYS.has(key)) return validation();
 
   const auth = await requireUser();
@@ -131,7 +131,7 @@ export async function setOperatorSetting(
  */
 export async function requestReflection(
   kind: string,
-): Promise<{ ok: boolean; reason?: string }> {
+): Promise<ActionResult & { reason?: string }> {
   const k = kind as ReflectionKind;
   if (!REFLECTION_KINDS.has(k)) return { ...validation(), reason: 'unknown' };
 

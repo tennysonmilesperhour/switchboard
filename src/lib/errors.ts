@@ -531,6 +531,11 @@ const REGISTRY = {
     fix: null,
     actor: 'operator',
   },
+  'SB-PUSH-SAVE': {
+    message: 'Switchboard couldn’t turn on push for this device.',
+    fix: 'Try again. If it keeps failing, reload the page first.',
+    actor: 'reader',
+  },
   'SB-VERIFY-CONFIG': {
     message: 'Phone verification is unavailable because Switchboard’s text service needs setup.',
     fix: null,
@@ -981,6 +986,7 @@ const AREA_CODES: Record<string, ErrorCode> = {
   'mutual.intent': 'SB-MUTUAL-SAVE',
   'mutual.respond': 'SB-MUTUAL-SAVE',
   'ritual.create': 'SB-RITUAL-SAVE',
+  'ritual.update': 'SB-RITUAL-SAVE',
   'room.message': 'SB-ROOM-SAVE',
   'room.task': 'SB-ROOM-SAVE',
   'room.image': 'SB-ROOM-SAVE',
@@ -992,12 +998,14 @@ const AREA_CODES: Record<string, ErrorCode> = {
 
   // Getting into an account
   'auth.resend-confirmation': 'SB-AUTH-RESEND',
+  'auth.signup': 'SB-AUTH-SIGNUP',
   'account.delete': 'SB-AUTH-DELETE',
   'account.export': 'SB-ACCOUNT-EXPORT',
 
   // Best-effort delivery still needs an operator-visible trace when a provider
   // rejects a live subscription for a reason other than "gone".
   'push.send': 'SB-PUSH-SEND',
+  'push.subscribe': 'SB-PUSH-SAVE',
   'notify.record': 'SB-NOTIFY-RECORD',
 
   // Uploads

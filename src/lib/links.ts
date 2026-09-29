@@ -70,6 +70,23 @@ export function appOrigin(): string {
   return origin;
 }
 
+/**
+ * `appOrigin()` for the few places that must never throw: the root layout's
+ * `metadataBase`, `robots.txt` and `sitemap.xml`. A throw there does not stop
+ * one bad link going out — it takes down every page, or the build. So this
+ * returns `undefined` where `appOrigin()` would throw, and the caller omits the
+ * field rather than filling it with a guess (for `metadataBase`, Next.js then
+ * falls back to its own default). Anything that hands a link to a human uses
+ * `appOrigin()` / `absoluteUrl()` and fails loudly instead.
+ */
+export function appOriginOrUndefined(): string | undefined {
+  try {
+    return appOrigin();
+  } catch {
+    return undefined;
+  }
+}
+
 /** Absolute URL for an app-relative path. `path` must start with `/`. */
 export function absoluteUrl(path = ''): string {
   if (path && !path.startsWith('/')) {
@@ -125,6 +142,30 @@ export function boardJoinUrl(code: string): string {
 /** A private zone's shareable join link. Same shape as a board's, same rules. */
 export function zoneJoinUrl(code: string): string {
   return absoluteUrl(`/zones/join/${encodeURIComponent(code)}`);
+}
+
+/**
+ * A person's private calendar feed (`/api/calendar/<token>`), the https URL
+ * they paste into Google/Apple Calendar as a subscription.
+ *
+ * Like every link here it is rooted at the configured origin, never the page's
+ * host. For a calendar that matters twice over: a `*.vercel.app` preview host
+ * is ephemeral (the subscription 404s once the deploy is superseded) and sits
+ * behind deployment protection calendar apps can't clear — the source of
+ * "The request for webcal://…failed". Safe to call from a client component:
+ * `NEXT_PUBLIC_APP_URL` is inlined at build time.
+ */
+export function calendarFeedUrl(calendarToken: string): string {
+  return absoluteUrl(`/api/calendar/${encodeURIComponent(calendarToken)}`);
+}
+
+/**
+ * `webcal://` form of {@link calendarFeedUrl} — the one-tap scheme calendar
+ * apps recognize as "subscribe". Only the http(s) scheme is swapped, so host
+ * and path stay byte-identical to the https feed URL.
+ */
+export function webcalSubscribeUrl(calendarToken: string): string {
+  return calendarFeedUrl(calendarToken).replace(/^https?:\/\//i, 'webcal://');
 }
 
 /**

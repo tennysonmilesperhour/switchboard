@@ -2,10 +2,12 @@
 
 import { useEffect, useState } from 'react';
 import { Switch } from '@/components/ui/Switch';
+import { useToast } from '@/components/ui/Toast';
 import {
   enablePush,
   disablePush,
-  getPushState,
+  getSyncedPushState,
+  PushSaveError,
   type PushState,
 } from '@/lib/client/push';
 
@@ -20,10 +22,11 @@ import {
 export function PushManager({ serverConfigured = true }: { serverConfigured?: boolean }) {
   const [state, setState] = useState<PushState>('default');
   const [busy, setBusy] = useState(false);
+  const toast = useToast();
 
   useEffect(() => {
     let cancelled = false;
-    getPushState().then((next) => {
+    getSyncedPushState().then((next) => {
       if (!cancelled) setState(next);
     });
     return () => {
@@ -35,6 +38,13 @@ export function PushManager({ serverConfigured = true }: { serverConfigured?: bo
     setBusy(true);
     try {
       setState(next ? await enablePush() : await disablePush());
+    } catch (error) {
+      setState(Notification.permission as PushState);
+      if (error instanceof PushSaveError) {
+        toast.error(error.message, error.code);
+      } else {
+        toast.error('Switchboard couldn’t turn on push for this device.', 'SB-PUSH-SAVE');
+      }
     } finally {
       setBusy(false);
     }

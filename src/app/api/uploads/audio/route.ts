@@ -3,6 +3,7 @@ import { createAdminClient, hasAdminCredentials } from '@/lib/supabase/admin';
 import { createClient } from '@/lib/supabase/server';
 import { checkRateLimit } from '@/lib/server/rate-limit';
 import { reportOperationalError } from '@/lib/server/observability';
+import type { ErrorCode } from '@/lib/errors';
 
 // Voice notes are short; keep them small so playback is snappy and storage
 // stays cheap. ~1 min of Opus/webm is well under this.
@@ -28,8 +29,29 @@ const AUDIO_EXTENSIONS: Record<string, string> = {
   x_m4a: 'm4a',
 };
 
+// What we store each of those as. Keyed by the validated extension, never by
+// the client's `file.type`: that string is attacker-supplied, and whatever we
+// store is the Content-Type the signed URL later serves (see image-mime.ts for
+// the same rule on images).
+const AUDIO_MIME: Record<string, string> = {
+  webm: 'audio/webm',
+  ogg: 'audio/ogg',
+  mp3: 'audio/mpeg',
+  m4a: 'audio/mp4',
+  aac: 'audio/aac',
+  wav: 'audio/wav',
+};
+
 function jsonError(message: string, status = 400) {
   return NextResponse.json({ error: message }, { status });
+}
+
+/**
+ * An operational failure: the reader can't tell from the sentence what went
+ * wrong, so it carries its registry code (validation above does not).
+ */
+function jsonFailure(code: ErrorCode, message: string, status: number) {
+  return NextResponse.json({ error: message, code }, { status });
 }
 
 function extensionFor(file: File) {
@@ -50,7 +72,11 @@ export async function POST(request: Request) {
   if (!user) return jsonError('Sign in before uploading a voice note.', 401);
 
   if (!hasAdminCredentials()) {
-    return jsonError('Voice notes are not configured on this server yet.', 503);
+    return jsonFailure(
+      'SB-CONFIG-STORAGE',
+      'Voice notes are not configured on this server yet.',
+      503,
+    );
   }
   if (!(await checkRateLimit(
     `upload:${user.id}`,
@@ -58,7 +84,7 @@ export async function POST(request: Request) {
     60 * 60,
     { failClosed: true },
   ))) {
-    return jsonError('Upload limit reached. Try again later.', 429);
+    return jsonFailure('SB-RATE-LIMIT', 'Upload limit reached. Try again later.', 429);
   }
 
   const formData = await request.formData();
@@ -79,7 +105,8 @@ export async function POST(request: Request) {
 
   const { error: uploadError } = await admin.storage.from(BUCKET).upload(path, bytes, {
     cacheControl: '3600',
-    contentType: file.type || `audio/${ext}`,
+    // From our extension map, never from the client's file.type.
+    contentType: AUDIO_MIME[ext] ?? 'audio/webm',
     upsert: false,
   });
 
@@ -88,8 +115,8 @@ export async function POST(request: Request) {
       userId: user.id,
       bucket: BUCKET,
       bytes: file.size,
-    });
-    return jsonError('Upload failed. Please try again.', 500);
+    }, 'SB-UPLOAD-FAILED');
+    return jsonFailure('SB-UPLOAD-FAILED', 'Upload failed. Please try again.', 500);
   }
 
   // Private bucket: return the storage path (not a public URL). The render site

@@ -3,9 +3,19 @@ import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
 import { AppShell } from '@/components/shell/AppShell';
 import { EmptyState } from '@/components/ui/EmptyState';
+import type { EventStatus } from '@/lib/types';
 import { RoomsInbox, type InboxRoom } from './RoomsInbox';
 
 export const metadata: Metadata = { title: 'Rooms' };
+
+/**
+ * A plan in one of these states has its room filed under Past. Built from
+ * `EventStatus` literals so a status that doesn't exist fails to compile — this
+ * list once said 'completed', which is not a status, and past plans' rooms
+ * never left the active list. (`events.status` is typed `string` in the
+ * generated database types, hence the widening to a string set for lookup.)
+ */
+const ENDED_EVENT_STATUSES: ReadonlySet<string> = new Set<EventStatus>(['cancelled', 'past']);
 
 export default async function RoomsPage() {
   const supabase = await createClient();
@@ -47,7 +57,7 @@ export default async function RoomsPage() {
     const message = latest.get(room.id);
     const activityAt = message?.created_at ?? room.created_at;
     const event = eventByRoom.get(room.id);
-    const past = Boolean(event && ['cancelled', 'completed'].includes(event.status));
+    const past = Boolean(event && ENDED_EVENT_STATUSES.has(event.status));
     return {
       id: room.id,
       kind: room.kind,

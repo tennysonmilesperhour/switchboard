@@ -1,3 +1,5 @@
+import { ANSWERABLE_EVENT_STATUSES } from './share-link';
+
 /** Bare YES is reserved for Twilio opt-in. RSVP always names its invitation. */
 export function parseSmsCommand(body: string): { command: 'YES' | 'NO' | 'CONFIRM' | 'JOIN'; code: string } | null {
   const match = body.trim().match(/^(YES|NO|CONFIRM)\s+([0-9a-f]{12})$/i);
@@ -20,6 +22,7 @@ export function urgentChangeDeadline(previous: string | null, next: string | nul
   return starts.length ? new Date(Math.min(...starts)).toISOString() : undefined;
 }
 
+/** Text subscriptions follow answering: the same statuses a share link can take an answer in. */
 export function canSubscribeGuestSms(status: string, startsAt: string | null, now = Date.now()): boolean {
-  return ['inviting', 'confirmed', 'deciding'].includes(status) && (!startsAt || Date.parse(startsAt) > now);
+  return (ANSWERABLE_EVENT_STATUSES as readonly string[]).includes(status) && (!startsAt || Date.parse(startsAt) > now);
 }

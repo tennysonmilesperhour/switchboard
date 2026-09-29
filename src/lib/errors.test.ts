@@ -180,13 +180,15 @@ describe('coverage across the app', () => {
     // A toast lasts five seconds and cannot be screenshotted at leisure, so the
     // code has to be in the same glance as the message. Any
     // `toast.error(result.error ?? '…')` that drops `result.code` is a failure
-    // the user can see but not report.
+    // the user can see but not report. The result is not always called
+    // `result` (`res`, `outcome`, `saved`), and only matching that one name let
+    // several toasts drop their code unnoticed.
     const dropped: string[] = [];
     for (const { path, text } of ALL_SOURCE) {
       for (const match of text.matchAll(
-        /toast\.error\(\s*result\.error \?\? '[^']*'\s*(,[^)]*)?\)/g,
+        /toast\.error\(\s*(\w+)\.error \?\? '[^']*'\s*(,[^)]*)?\)/g,
       )) {
-        if (!match[1]?.includes('result.code')) {
+        if (!match[2]?.includes(`${match[1]}.code`)) {
           dropped.push(`${path.replace(process.cwd(), '')}: ${match[0].slice(0, 60)}`);
         }
       }

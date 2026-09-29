@@ -248,6 +248,28 @@ export async function createPasswordAccount(
     const email = usesRealEmail
       ? identifier
       : usernameToAuthEmail(identifier);
+
+    if (usesRealEmail) {
+      // Someone whose first confirmation mail never arrived tries signing up
+      // again. GoTrue keeps an unconfirmed account's first password when asked
+      // for another signup link, so carrying on would confirm an account the
+      // password just typed does not open (and rename its handle on the way).
+      // Send them into the account that exists instead.
+      const existingId = await authUserIdByEmail(admin, email);
+      if (existingId) {
+        const { data: existing } = await admin.auth.admin.getUserById(existingId);
+        if (existing.user?.email_confirmed_at) {
+          return validation('That email or username is already taken.');
+        }
+        const resent = await resendEmailConfirmation(email);
+        if (!resent.ok) return resent;
+        return validation(
+          'This email already has an account that was never confirmed, so we sent a fresh sign-in link to it. ' +
+            'Your password is still the one you chose the first time; use “Forgot password?” to set a new one.',
+        );
+      }
+    }
+
     const username = usesRealEmail
       ? await uniqueHandle(emailToHandleCandidate(identifier))
       : normalizeUsername(identifier);
@@ -305,7 +327,7 @@ export async function createPasswordAccount(
       if (/already|registered|exists/i.test(createError.message)) {
         return validation('That email or username is already taken.');
       }
-      return failure('SB-AUTH-SIGNUP', createError.message);
+      return reportAndFail('SB-AUTH-SIGNUP', 'auth.signup', createError);
     }
 
     if (!userId) return failure('SB-AUTH-SIGNUP', 'Could not create that account.');

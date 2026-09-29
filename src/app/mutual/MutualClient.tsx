@@ -142,7 +142,11 @@ export function MutualClient({
     if (!ok) return;
     startTransition(async () => {
       try {
-        await endRitual(ritual.id);
+        const result = await endRitual(ritual.id);
+        if (!result.ok) {
+          toast.error(result.error ?? 'Could not end the ritual. Try again.', result.code);
+          return;
+        }
         router.refresh();
       } catch {
         toast.error('Could not end the ritual. Try again.');
@@ -315,7 +319,11 @@ export function MutualClient({
                     onClick={() =>
                       startTransition(async () => {
                         try {
-                          await pauseRitual(ritual.id, ritual.status === 'active');
+                          const result = await pauseRitual(ritual.id, ritual.status === 'active');
+                          if (!result.ok) {
+                            toast.error(result.error ?? 'Could not update the ritual. Try again.', result.code);
+                            return;
+                          }
                           router.refresh();
                         } catch {
                           toast.error('Could not update the ritual. Try again.');

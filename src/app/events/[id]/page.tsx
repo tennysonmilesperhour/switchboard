@@ -3,7 +3,6 @@ import { after } from 'next/server';
 import { redirect } from 'next/navigation';
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase/server';
-import { createAdminClient, hasAdminCredentials } from '@/lib/supabase/admin';
 import { safeHttpUrl, serializeJsonLd } from '@/lib/security';
 import { advanceEventCascade } from '@/lib/server/cascade-runner';
 import { AppShell } from '@/components/shell/AppShell';
@@ -39,6 +38,7 @@ import { formatDateTime, formatDateTimeRange } from '@/lib/format';
 import { resolveEventZone } from '@/lib/server/event-zone';
 import { googleCalendarUrl } from '@/lib/calendar-links';
 import { eventShareUrl } from '@/lib/links';
+import { inviteOpenGraph } from '@/lib/invite-links';
 import {
   hostCanEditInvitees,
   hostCanEditLine,
@@ -48,22 +48,30 @@ import type { SwitchboardEvent } from '@/lib/types';
 import { normalizePollTopic, pollQuestion } from '@/lib/types';
 import { loadEventPage } from '@/lib/server/event-page';
 
-/** Rich unfurl card for directly-shared event links (iMessage/WhatsApp/Slack). */
+/**
+ * The tab title and card for a plan, for someone allowed to see it.
+ *
+ * Read through the viewer's own session so RLS decides, exactly as it does for
+ * the page body. This used to read with the service-role client for any id and
+ * no caller check, so any signed-in account holding nothing but an event id got
+ * the plan's title, description, time, and place in the tags.
+ * Anyone the plan is not visible to gets a generic title instead; the link a
+ * host actually hands out is `/i/<token>`, which has its own unfurl.
+ */
 export async function generateMetadata({
   params,
 }: {
   params: Promise<{ id: string }>;
 }): Promise<Metadata> {
-  if (!hasAdminCredentials()) return {};
   const { id } = await params;
-  const admin = createAdminClient();
-  const { data: event } = await admin
+  const supabase = await createClient();
+  const { data: event } = await supabase
     .from('events')
     .select('title, description, starts_at, location_name, time_zone, host_id')
     .eq('id', id)
     .maybeSingle();
-  if (!event) return {};
-  const zone = await resolveEventZone(admin, event);
+  if (!event) return { title: 'Plan' };
+  const zone = await resolveEventZone(supabase, event);
   const when = event.starts_at ? formatDateTime(event.starts_at, zone) : null;
   const description =
     event.description?.trim() ||
@@ -71,11 +79,13 @@ export async function generateMetadata({
     'A plan on Switchboard.';
   return {
     title: event.title,
-    openGraph: {
+    // Through the shared builder: a page that sets openGraph replaces the
+    // layout's whole object, so og:type and siteName have to be restated.
+    openGraph: inviteOpenGraph({
       title: event.title,
       description,
-      images: [`/api/og/event/${id}`],
-    },
+      image: `/api/og/event/${id}`,
+    }),
   };
 }
 
@@ -95,8 +105,15 @@ export default async function EventPage({
   // Preserve where they were headed so signing in returns them to this plan.
   if (!user) redirect(`/login?next=${encodeURIComponent(`/events/${id}`)}`);
 
+  const loaded = await loadEventPage(id, user);
+  // RLS makes a missing event and an event this viewer cannot read equivalent.
+  // The join page can safely resolve the public/share-link branch.
+  if (!loaded) redirect(`/join/${id}`);
+
   // Cascade advancement is write-side work; never put it back on the page's
-  // critical path. The cron sweep remains the backstop.
+  // critical path. The cron sweep remains the backstop. Scheduled only once RLS
+  // has shown this viewer the plan, so an arbitrary id in the URL cannot make
+  // the server do service-role work on a plan the caller can't see.
   after(async () => {
     try {
       await advanceEventCascade(id);
@@ -104,11 +121,6 @@ export default async function EventPage({
       // Advancement is best-effort.
     }
   });
-
-  const loaded = await loadEventPage(id, user);
-  // RLS makes a missing event and an event this viewer cannot read equivalent.
-  // The join page can safely resolve the public/share-link branch.
-  if (!loaded) redirect(`/join/${id}`);
   const {
     event,
     eventZone,
@@ -148,6 +160,11 @@ export default async function EventPage({
     cancelVoiceUrl,
     pendingParentalApprovals,
   } = loaded;
+
+  // The RSVP card renders only for an invitation still waiting on an answer.
+  // Its anchor id is handed to the thread from here, so "RSVP to unlock" can
+  // only ever point at a card that is actually on the page.
+  const rsvpAnchorId = myInvite?.status === 'sent' ? `rsvp-${event.id}` : null;
 
   // What the host may still change about the invitation line. Wider than
   // editing the guest list: while a date poll runs nothing has gone out, so the
@@ -295,7 +312,9 @@ export default async function EventPage({
                   : 'That’s the whole point. Want to do it again?'}
               </p>
               <div className="mt-3 flex flex-wrap gap-2">
-                <RunItBackButton eventId={event.id} />
+                {/* Primary host only: `cloneEventForReuse` refuses anyone
+                    else, and a guest's tap just reloaded this page. */}
+                {isHost && <RunItBackButton eventId={event.id} />}
                 <Link
                   href={`/events/${event.id}/capsule`}
                   className="inline-flex items-center gap-1.5 rounded-pill border border-line bg-card px-3.5 py-2 text-xs font-bold text-ink-soft shadow-lift hover:border-terracotta hover:text-terracotta-deep active:scale-[0.98] transition-all"
@@ -311,12 +330,16 @@ export default async function EventPage({
                 🔁 {recurrenceLabel(event.recurrence, event.recurrence_interval_days)}
               </span>
             )}
-            <a
-              href={`/api/events/${event.id}/ics`}
-              className="inline-flex items-center gap-1.5 rounded-pill border border-line bg-card px-3.5 py-2 text-xs font-bold text-ink-soft shadow-lift hover:border-terracotta hover:text-terracotta-deep active:scale-[0.98] transition-all"
-            >
-              📅 Apple / Outlook
-            </a>
+            {/* Same gate as the Google link beside it: the .ics route answers
+                a plan with no start time with a bare 404. */}
+            {calendarEvent && (
+              <a
+                href={`/api/events/${event.id}/ics`}
+                className="inline-flex items-center gap-1.5 rounded-pill border border-line bg-card px-3.5 py-2 text-xs font-bold text-ink-soft shadow-lift hover:border-terracotta hover:text-terracotta-deep active:scale-[0.98] transition-all"
+              >
+                📅 Apple / Outlook
+              </a>
+            )}
             {calendarEvent && (
               <a
                 href={googleCalendarUrl(calendarEvent)}
@@ -411,8 +434,8 @@ export default async function EventPage({
         )}
 
         {/* Invitee RSVP */}
-        {myInvite?.status === 'sent' && (
-          <div id={`rsvp-${event.id}`} className="scroll-mt-20">
+        {myInvite?.status === 'sent' && rsvpAnchorId && (
+          <div id={rsvpAnchorId} className="scroll-mt-20">
           <RsvpCard
             inviteId={myInvite.id}
             questions={questions.map((q) => ({
@@ -534,6 +557,7 @@ export default async function EventPage({
             comments={threadComments}
             hiddenCount={threadGateInfo.hiddenCount}
             blurRows={threadGateInfo.blurRows}
+            rsvpAnchorId={rsvpAnchorId}
           />
         )}
 

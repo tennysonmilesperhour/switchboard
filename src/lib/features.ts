@@ -517,7 +517,7 @@ export const FEATURE_GROUPS: readonly FeatureGroup[] = [
         id: 'community',
         title: 'Community',
         blurb: 'Your boards, the community covenant, and what’s expected of everyone.',
-        where: 'More sheet, and the footer of the welcome page',
+        where: 'Settings → Support and legal → Community, and the footer of the welcome page',
         href: '/community',
       },
     ],

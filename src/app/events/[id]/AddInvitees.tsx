@@ -79,8 +79,14 @@ export function AddInvitees({
   function sendNow(connection: ConnectionOption) {
     setSendingTo(connection.id);
     startTransition(async () => {
-      const result = await inviteConnectionNow(eventId, connection.id);
-      setSendingTo(null);
+      let result: Awaited<ReturnType<typeof inviteConnectionNow>>;
+      try {
+        result = await inviteConnectionNow(eventId, connection.id);
+      } finally {
+        // Cleared even when the call throws, or the button sits on "Sending…"
+        // for good.
+        setSendingTo(null);
+      }
       if (!result.ok) {
         toast.error(result.error ?? 'Could not send that invite.', result.code);
         return;

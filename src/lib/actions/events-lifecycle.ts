@@ -3,10 +3,9 @@ import { imminentChange, urgentChangeDeadline } from '@/lib/sms-commands';
 
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
-import { createClient } from '@/lib/supabase/server';
 import { requireUser, requireUserOrRedirect } from '@/lib/server/require-user';
 import { createAdminClient } from '@/lib/supabase/admin';
-import { checkEventManager } from '@/lib/server/authz';
+import { checkEventManager, type ManagerCheck } from '@/lib/server/authz';
 import {
   advanceEventCascade,
   notifyCurrentInviteWave,
@@ -31,7 +30,7 @@ import { consumeEventOutboundSlot } from '@/lib/server/invite-delivery-limit';
 import { safeHttpUrl } from '@/lib/security';
 import { toJson } from '@/lib/supabase/json';
 import { hasInviteDetails } from '@/lib/event-details';
-import { runItBackCrew } from '@/lib/run-it-back';
+import { cloneEventForReuse } from '@/lib/server/event-clone';
 import { capacityProblem } from '@/lib/plan-capacity';
 import { sameInstant } from '@/lib/plan-time';
 import {
@@ -319,31 +318,85 @@ export async function setEventVisibility(
   revalidatePath(`/events/${eventId}`);
   return { ok: true };
 }
-export async function confirmEvent(eventId: string): Promise<void> {
-  const { user } = await requireUserOrRedirect();
-  const manager = await checkEventManager(user.id, eventId);
-  if (!manager.ok || !manager.isManager) return;
+
+/**
+ * What a host is told when a lifecycle button meets a plan that has already
+ * moved on — a second tab, a co-host, or the cron got there first. Nothing
+ * changed, and reloading shows where the plan actually stands.
+ */
+const PLAN_MOVED_ON =
+  'This plan has moved on since this page loaded, so nothing changed. Reload to see where it stands.';
+
+/**
+ * The refusal for a lifecycle button pressed by someone who is not a manager,
+ * or null to go ahead. Reported as "couldn't check" or "not the host" — never
+ * as silence. Takes the check's result rather than making it, so the
+ * `checkEventManager(` call stays visible in every action that goes on to
+ * create a service-role client.
+ */
+function managerRefusal(manager: ManagerCheck): ActionResult | null {
+  if (!manager.ok) return failure('SB-PLAN-AUTHZ');
+  if (!manager.isManager) {
+    return failure('SB-PERM-HOST', 'Only the host can change this plan.');
+  }
+  return null;
+}
+
+/**
+ * Lock the guest list in. Only from `inviting` — the one status HostControls
+ * offers this button for (`hostCanEditInvitees`). The guard sits in the
+ * UPDATE's own WHERE so a stale tab or a direct call cannot drag a cancelled or
+ * past plan back to life and reopen its share link.
+ */
+export async function confirmEvent(eventId: string): Promise<ActionResult> {
+  const auth = await requireUser();
+  if (!auth.ok) return auth;
+  const refusal = managerRefusal(await checkEventManager(auth.user.id, eventId));
+  if (refusal) return refusal;
   const admin = createAdminClient();
-  await admin.from('events').update({ status: 'confirmed' }).eq('id', eventId);
+  const { data: confirmed, error } = await admin
+    .from('events')
+    .update({ status: 'confirmed' })
+    .eq('id', eventId)
+    .eq('status', 'inviting')
+    .select('id')
+    .maybeSingle();
+  if (error) {
+    return reportAndFail('SB-PLAN-SAVE', 'event-update', error, {
+      eventId,
+      step: 'confirm',
+    });
+  }
+  if (!confirmed) return failure('SB-PLAN-SAVE', PLAN_MOVED_ON);
   // The guest list is locked in — retire anything still in motion so nobody is
   // left in a permanently invisible 'queued'/'sent' limbo the cascade (which
-  // only runs while 'inviting') will never touch again.
-  await admin
+  // only runs while 'inviting') will never touch again. The plan is confirmed
+  // either way, so a failure here is logged rather than reported as one: a
+  // retry would only meet the guard above.
+  const { error: retireError } = await admin
     .from('invites')
     .update({ status: 'cancelled' })
     .eq('event_id', eventId)
     .in('status', ['queued', 'sent', 'requested']);
+  if (retireError) {
+    await reportOperationalError('event-update', retireError, {
+      eventId,
+      step: 'confirm-retire-invites',
+    });
+  }
   revalidatePath(`/events/${eventId}`);
   revalidatePath('/plans');
+  return { ok: true };
 }
 
 /** Host affirms the plan actually happened. Records happened_at, moves the
  *  event to 'past', and retires any invites still in motion. This is what
  *  powers the real-world recap and the one-tap Run It Back. */
-export async function markHappened(eventId: string): Promise<void> {
-  const { user } = await requireUserOrRedirect();
-  const manager = await checkEventManager(user.id, eventId);
-  if (!manager.ok || !manager.isManager) return;
+export async function markHappened(eventId: string): Promise<ActionResult> {
+  const auth = await requireUser();
+  if (!auth.ok) return auth;
+  const refusal = managerRefusal(await checkEventManager(auth.user.id, eventId));
+  if (refusal) return refusal;
   const admin = createAdminClient();
   // Only close a plan whose start time has actually passed. The UI "elapsed"
   // gate is client-controlled — a fast browser clock or a direct call to this
@@ -352,7 +405,7 @@ export async function markHappened(eventId: string): Promise<void> {
   // where it can't be spoofed. maybeSingle() returns null when the row doesn't
   // meet the filter, letting us bail before touching invites or analytics.
   const now = new Date().toISOString();
-  const { data: happened } = await admin
+  const { data: happened, error } = await admin
     .from('events')
     .update({ status: 'past', happened_at: now })
     .eq('id', eventId)
@@ -366,35 +419,73 @@ export async function markHappened(eventId: string): Promise<void> {
     .lte('starts_at', now)
     .select('id')
     .maybeSingle();
-  if (!happened) return;
-  await admin
+  if (error) {
+    return reportAndFail('SB-PLAN-SAVE', 'event-update', error, {
+      eventId,
+      step: 'happened',
+    });
+  }
+  if (!happened) {
+    // Nothing matched. Say which guard it was: the button is shown on the
+    // device's clock, so a phone running fast offers it before the server
+    // agrees the plan has started — and that host deserves a sentence, not a
+    // button that does nothing.
+    const { data: current } = await admin
+      .from('events')
+      .select('status, starts_at')
+      .eq('id', eventId)
+      .maybeSingle();
+    // Already past: a replay of a tap that landed. The outcome they asked for
+    // holds, so this is not a failure.
+    if (current?.status === 'past') return { ok: true };
+    if (current?.status === 'cancelled') {
+      return failure('SB-PLAN-SAVE', 'This plan was called off, so it can’t be marked as happened.');
+    }
+    // As instants: the row reads back as `…+00:00`, `now` is `…Z`.
+    if (current && (!current.starts_at || Date.parse(current.starts_at) > Date.parse(now))) {
+      return failure(
+        'SB-PLAN-SAVE',
+        'This plan hasn’t started yet, so it can’t be marked as happened. Check the date and time on your device, or reload if the plan’s time was changed.',
+      );
+    }
+    return failure('SB-PLAN-SAVE', PLAN_MOVED_ON);
+  }
+  const { error: retireError } = await admin
     .from('invites')
     .update({ status: 'cancelled' })
     .eq('event_id', eventId)
     .in('status', ['queued', 'sent', 'requested']);
+  if (retireError) {
+    await reportOperationalError('event-update', retireError, {
+      eventId,
+      step: 'happened-retire-invites',
+    });
+  }
 
   const { count } = await admin
     .from('invites')
     .select('id', { count: 'exact', head: true })
     .eq('event_id', eventId)
     .eq('status', 'accepted');
-  await capture(user.id, ANALYTICS_EVENTS.planHappened, {
+  await capture(auth.user.id, ANALYTICS_EVENTS.planHappened, {
     event_id: eventId,
     attendee_count: count ?? 0,
   });
 
   revalidatePath(`/events/${eventId}`);
   revalidatePath('/plans');
+  return { ok: true };
 }
 
 export async function cancelEvent(
   eventId: string,
   reason?: string,
   voiceUrl?: string,
-): Promise<void> {
-  const { user } = await requireUserOrRedirect();
-  const manager = await checkEventManager(user.id, eventId);
-  if (!manager.ok || !manager.isManager) return;
+): Promise<ActionResult> {
+  const auth = await requireUser();
+  if (!auth.ok) return auth;
+  const refusal = managerRefusal(await checkEventManager(auth.user.id, eventId));
+  if (refusal) return refusal;
   const admin = createAdminClient();
 
   const cleanReason = reason?.trim().slice(0, 2000) || null;
@@ -402,21 +493,32 @@ export async function cancelEvent(
   const cleanVoiceUrl =
     trimmedVoice && isValidMediaRef(trimmedVoice) ? trimmedVoice : null;
 
-  const { data: event } = await admin
-    .from('events')
-    .select('title, host_id')
-    .eq('id', eventId)
-    .maybeSingle();
-  await admin
+  // The update reads back what the notifications need, and only matches a plan
+  // that is still open — the same two statuses HostControls hides this button
+  // for. A stale tab re-cancelling would otherwise re-send every cancellation
+  // notice and email, and one cancelling a past plan would tell its guests a
+  // plan they already went to was called off.
+  const { data: event, error } = await admin
     .from('events')
     .update({
       status: 'cancelled',
       cancel_reason: cleanReason,
       cancel_voice_url: cleanVoiceUrl,
     })
-    .eq('id', eventId);
+    .eq('id', eventId)
+    .neq('status', 'cancelled')
+    .neq('status', 'past')
+    .select('title, host_id')
+    .maybeSingle();
+  if (error) {
+    return reportAndFail('SB-PLAN-SAVE', 'event-update', error, {
+      eventId,
+      step: 'cancel',
+    });
+  }
+  if (!event) return failure('SB-PLAN-SAVE', PLAN_MOVED_ON);
 
-  const title = event?.title ?? 'the plan';
+  const title = event.title ?? 'the plan';
   // A one-line tail for notifications: the written reason, or a nudge to listen.
   const reasonTail = cleanReason
     ? ` Reason: ${cleanReason}`
@@ -459,7 +561,7 @@ export async function cancelEvent(
     await Promise.all(
       guestEmails.map(async (message) =>
         (await consumeEventOutboundSlot(
-          event?.host_id ?? user.id,
+          event.host_id ?? auth.user.id,
           'cancellation',
         ))
           ? message
@@ -471,14 +573,21 @@ export async function cancelEvent(
 
   // Retire any invite still in motion so the (now belt-and-suspenders) RSVP
   // guard has nothing live to act on.
-  await admin
+  const { error: retireError } = await admin
     .from('invites')
     .update({ status: 'cancelled' })
     .eq('event_id', eventId)
     .in('status', ['queued', 'sent', 'waitlisted', 'requested']);
+  if (retireError) {
+    await reportOperationalError('event-update', retireError, {
+      eventId,
+      step: 'cancel-retire-invites',
+    });
+  }
 
   revalidatePath(`/events/${eventId}`);
   revalidatePath('/plans');
+  return { ok: true };
 }
 
 /**
@@ -522,115 +631,6 @@ export async function deleteEventPermanently(
   revalidatePath('/plans');
   revalidatePath('/');
   return { ok: true };
-}
-
-/**
- * Clone a plan into a fresh one - same crew, same place, carrying the invite
- * mode, visibility, presentation, and recurrence forward. Anyone who said "not
- * my thing" is quietly left off; everyone else keeps their place in the order.
- * `startsAt` lets the caller either leave the new date TBD (Run It Back) or
- * pre-fill the next occurrence (a recurring plan's "Schedule the next one").
- * Returns the new event id, or null if the source can't be cloned by this user.
- */
-async function cloneEventForReuse(
-  userId: string,
-  sourceId: string,
-  startsAt: string | null,
-): Promise<string | null> {
-  const supabase = await createClient();
-  const manager = await checkEventManager(userId, sourceId);
-  if (!manager.ok || !manager.isManager) return null;
-
-  const { data: source } = await supabase
-    .from('events')
-    .select('*')
-    .eq('id', sourceId)
-    .single();
-  if (!source || source.host_id !== userId) return null;
-
-  // Writes go through the service-role client for the same reason as
-  // createEvent: the host can't read back a room they don't yet belong to
-  // under RLS. Ownership is pinned to the authenticated user on every row.
-  const admin = createAdminClient();
-
-  const { data: room } = await admin
-    .from('rooms')
-    .insert({ kind: 'event', title: source.title, created_by: userId })
-    .select('id')
-    .single();
-  if (room) {
-    await admin.from('room_members').insert({ room_id: room.id, member_id: userId });
-  }
-
-  const { data: clone } = await admin
-    .from('events')
-    .insert({
-      host_id: userId,
-      title: source.title,
-      description: source.description,
-      location_name: source.location_name,
-      location_address: source.location_address,
-      starts_at: startsAt,
-      // Same host, same crew — carry the zone so the reused plan renders in the
-      // host's local time even before a new date is picked.
-      time_zone: source.time_zone,
-      capacity: source.capacity,
-      invite_mode: source.invite_mode,
-      open_table: source.open_table,
-      status: 'inviting',
-      show_invite_list: source.show_invite_list,
-      show_accepted: source.show_accepted,
-      show_expired: source.show_expired,
-      cover_url: source.cover_url,
-      theme: source.theme,
-      wishlist_url: source.wishlist_url,
-      // Keep it a standing plan: the clone repeats on the same cadence.
-      recurrence: source.recurrence,
-      recurrence_interval_days: source.recurrence_interval_days,
-      room_id: room?.id ?? null,
-    })
-    .select('id')
-    .single();
-  if (!clone) return null;
-
-  const { data: priorInvites } = await supabase
-    .from('invites')
-    .select('invitee_id, guest_name, guest_contact, position, group_stage, window_minutes, decline_note, status')
-    .eq('event_id', sourceId)
-    .order('position');
-
-  const carryOver = runItBackCrew(priorInvites ?? [], userId);
-  if (carryOver.length > 0) {
-    await admin.from('invites').insert(
-      carryOver.map((i, index) => ({
-        event_id: clone.id,
-        invitee_id: i.invitee_id,
-        guest_name: i.guest_name,
-        guest_contact: i.guest_contact,
-        position: index,
-        group_stage: i.group_stage,
-        window_minutes: i.window_minutes,
-      })),
-    );
-  }
-
-  const { data: questions } = await supabase
-    .from('event_questions')
-    .select('prompt, required, position, kind, options')
-    .eq('event_id', sourceId);
-  if (questions && questions.length > 0) {
-    await admin.from('event_questions').insert(
-      questions.map((q) => ({ ...q, event_id: clone.id })),
-    );
-  }
-
-  try {
-    await advanceEventCascade(clone.id);
-  } catch (cascadeError) {
-    console.error('Failed to start cascade for reused plan', cascadeError);
-  }
-
-  return clone.id as string;
 }
 
 /**
@@ -680,26 +680,43 @@ export async function scheduleNextOccurrence(eventId: string): Promise<never> {
   redirect(cloneId ? `/events/${cloneId}` : `/events/${eventId}`);
 }
 
-/** Host closes voting and moves an AWI event into the inviting phase. */
-export async function startInviting(eventId: string): Promise<void> {
-  const { user } = await requireUserOrRedirect();
-  const manager = await checkEventManager(user.id, eventId);
-  if (!manager.ok || !manager.isManager) return;
+/**
+ * Host closes voting and moves an AWI event into the inviting phase.
+ *
+ * Only from `deciding` — the one status HostControls offers "Send the
+ * invitations" for. Without the guard in the WHERE, a stale tab or a direct
+ * call moved a cancelled or past plan back to `inviting`, which reopens its
+ * share link and restarts its cascade.
+ */
+export async function startInviting(eventId: string): Promise<ActionResult> {
+  const auth = await requireUser();
+  if (!auth.ok) return auth;
+  const refusal = managerRefusal(await checkEventManager(auth.user.id, eventId));
+  if (refusal) return refusal;
   const admin = createAdminClient();
-  const { error } = await admin
+  const { data: started, error } = await admin
     .from('events')
     .update({ status: 'inviting' })
-    .eq('id', eventId);
-  if (!error) {
-    // People can now say "I'm in" through the share link while the date is
-    // still being decided (rsvp_via_share_token accepts `deciding`). The
-    // cascade below only speaks to invites it is sending, so it would never
-    // reach them — and a yes given to a dateless plan has to be answered with
-    // the date when it lands, or the promise the link made goes unkept.
-    await notifyDateSettled(admin, eventId);
-    await advanceEventCascade(eventId);
+    .eq('id', eventId)
+    .eq('status', 'deciding')
+    .select('id')
+    .maybeSingle();
+  if (error) {
+    return reportAndFail('SB-PLAN-SAVE', 'event-update', error, {
+      eventId,
+      step: 'start-inviting',
+    });
   }
+  if (!started) return failure('SB-PLAN-SAVE', PLAN_MOVED_ON);
+  // People can now say "I'm in" through the share link while the date is
+  // still being decided (rsvp_via_share_token accepts `deciding`). The
+  // cascade below only speaks to invites it is sending, so it would never
+  // reach them — and a yes given to a dateless plan has to be answered with
+  // the date when it lands, or the promise the link made goes unkept.
+  await notifyDateSettled(admin, eventId);
+  await advanceEventCascade(eventId);
   revalidatePath(`/events/${eventId}`);
+  return { ok: true };
 }
 
 /** Tell everyone who already accepted that the plan now has a date. */

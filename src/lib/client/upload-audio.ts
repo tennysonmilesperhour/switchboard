@@ -1,3 +1,7 @@
+import { UploadError, uploadErrorCode } from '@/lib/client/upload-image';
+
+export { UploadError };
+
 export interface UploadedVoiceNote {
   /** Storage path in the private bucket; the render site signs it. */
   path: string;
@@ -8,7 +12,8 @@ export interface UploadedVoiceNote {
  * Upload a recorded voice note to the private `media-private` bucket via
  * `/api/uploads/audio`. Returns the storage PATH (voice notes are access-gated,
  * so they are served via short-lived signed URLs, not a public link) plus the
- * duration measured while recording.
+ * duration measured while recording. Throws an {@link UploadError}, whose
+ * `code` carries the route's error code when there is one.
  */
 export async function uploadAudio(
   blob: Blob,
@@ -26,13 +31,23 @@ export async function uploadAudio(
     method: 'POST',
     body: formData,
   });
+  // Same edge case as uploadImage: a body refused at the platform edge for its
+  // size never reaches the route, so there is no JSON to read, and "try again"
+  // would fail the same way.
+  if (response.status === 413) {
+    throw new UploadError('That voice note is too long to upload. Keep it under a minute.');
+  }
   const body = (await response.json().catch(() => null)) as {
     path?: string;
     error?: string;
+    code?: string;
   } | null;
 
   if (!response.ok || !body?.path) {
-    throw new Error(body?.error ?? 'Could not save that voice note. Try again.');
+    throw new UploadError(
+      body?.error ?? 'Could not save that voice note. Try again.',
+      uploadErrorCode(body?.code),
+    );
   }
 
   return { path: body.path, durationSeconds: Math.max(1, Math.round(durationSeconds)) };

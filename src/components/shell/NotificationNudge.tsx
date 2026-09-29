@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from 'react';
 import { Icon } from '@/components/ui/Icon';
-import { enablePush, getPushState, type PushState } from '@/lib/client/push';
+import { enablePush, getPushState, PushSaveError, type PushState } from '@/lib/client/push';
+import { useToast } from '@/components/ui/Toast';
 import { useBottomOverlaySlot } from '@/components/system/BottomOverlaySlot';
 
 const DISMISS_KEY = 'sb-push-nudge-dismissed';
@@ -20,6 +21,7 @@ export function NotificationNudge() {
   const [state, setState] = useState<PushState | null>(null);
   const [dismissed, setDismissed] = useState(true);
   const [busy, setBusy] = useState(false);
+  const toast = useToast();
   const wantsSlot = !dismissed && state === 'default';
   const ownsSlot = useBottomOverlaySlot('notifications', wantsSlot, 30);
 
@@ -45,6 +47,12 @@ export function NotificationNudge() {
       if (next === 'unsupported') {
         // iPhone-in-a-tab and the like — keep the hint, don't nag further.
         localStorage.setItem(DISMISS_KEY, '1');
+      }
+    } catch (error) {
+      if (error instanceof PushSaveError) {
+        toast.error(error.message, error.code);
+      } else {
+        toast.error('Switchboard couldn’t turn on push for this device.', 'SB-PUSH-SAVE');
       }
     } finally {
       setBusy(false);

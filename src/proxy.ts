@@ -8,6 +8,7 @@ import {
 } from '@/lib/auth-bounce';
 import { LEGAL_VERSION } from '@/lib/legal';
 import { buildCsp } from '@/lib/csp';
+import { failure } from '@/lib/errors';
 
 /** Paths reachable without a session. */
 const PUBLIC_PREFIXES = [
@@ -24,6 +25,7 @@ const PUBLIC_PREFIXES = [
   '/rsvp', // guest RSVP links
   '/i', // public per-plan share links (the one a host texts); token-authed
   '/join', // shareable plan links; auth returns here via a validated next path
+  '/approve', // guardian approval links; token-authed, the guardian has no account
   '/verify-contact',
   '/scope-verification', // client-facing checklist, shared by URL; nothing private on it
   '/api/scope-feedback', // the checklist's feedback box; the client has no account by design
@@ -42,6 +44,18 @@ const PUBLIC_PREFIXES = [
 function isPublicPath(pathname: string): boolean {
   return PUBLIC_PREFIXES.some(
     (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`),
+  );
+}
+
+/**
+ * A programmatic request to an API route, as opposed to someone following an
+ * API link in the browser (the calendar download), who is better served by the
+ * sign-in redirect than by a JSON body.
+ */
+function isApiCall(request: NextRequest): boolean {
+  return (
+    request.nextUrl.pathname.startsWith('/api/') &&
+    request.headers.get('sec-fetch-mode') !== 'navigate'
   );
 }
 
@@ -128,6 +142,15 @@ export async function proxy(request: NextRequest) {
   const {
     data: { user },
   } = await supabase.auth.getUser();
+
+  if (!user && !isPublicPath(pathname) && isApiCall(request)) {
+    // A fetch() follows a redirect silently, so sending an expired session's
+    // upload or push POST to /welcome hands the caller a 200 HTML page it reads
+    // as success or as a network fault. Answer in the route's own contract.
+    const res = NextResponse.json(failure('SB-AUTH-EXPIRED'), { status: 401 });
+    res.headers.set('content-security-policy', csp);
+    return res;
+  }
 
   if (!user && !isPublicPath(pathname)) {
     // Preserve the intended deep link so signing in returns the visitor right

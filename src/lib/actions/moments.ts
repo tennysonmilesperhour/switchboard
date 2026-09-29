@@ -77,16 +77,25 @@ export async function checkIn(
   return { ok: true };
 }
 
-export async function closeMoment(): Promise<void> {
+/**
+ * Check out. A matched moment closes too: the page shows a matched check-in
+ * until `available_until`, so closing only `open` rows left someone who had
+ * matched with no way back to the check-in form for hours. The conversation
+ * lives in its own room, and the other person's moment row is theirs, so
+ * closing this one takes nothing away from either side's chat.
+ */
+export async function closeMoment(): Promise<MomentActionResult> {
   const auth = await requireUser();
-  if (!auth.ok) return;
+  if (!auth.ok) return auth;
   const { supabase, user } = auth;
-  await supabase
+  const { error } = await supabase
     .from('moments')
     .update({ status: 'closed' })
     .eq('user_id', user.id)
-    .eq('status', 'open');
+    .in('status', ['open', 'matched']);
+  if (error) return reportAndFail('SB-MOMENT-SAVE', 'moment.update', error);
   revalidatePath('/moments');
+  return { ok: true };
 }
 
 async function ownOpenMoment(momentId: string) {
@@ -471,15 +480,23 @@ export async function reportMomentCandidate(
 export async function passMoment(
   myMomentId: string,
   otherMomentId: string,
-): Promise<void> {
-  const mineResult = await ownOpenMoment(myMomentId);
-  if (!mineResult.ok) return;
-  const admin = createAdminClient();
-  await admin
+): Promise<MomentActionResult> {
+  const mine = await ownOpenMoment(myMomentId);
+  if (!mine.ok) return mine;
+  // The service-role write below names a client-supplied candidate, so it gets
+  // the same proof as every other candidate action: still discoverable from
+  // this caller's own moment, and not blocked either way.
+  const authorization = await authorizeMomentCandidate(mine, otherMomentId);
+  if (!authorization.ok) return authorization.result;
+  const { error } = await authorization.admin
     .from('moment_interests')
     .upsert(
       { moment_id: myMomentId, other_moment_id: otherMomentId, stage: 'passed' },
       { onConflict: 'moment_id,other_moment_id' },
     );
+  if (error) {
+    return reportAndFail('SB-MOMENT-SAVE', 'moment.update', error, { momentId: mine.id });
+  }
   revalidatePath('/moments');
+  return { ok: true };
 }
