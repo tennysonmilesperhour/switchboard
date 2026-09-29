@@ -6,9 +6,10 @@ import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import { requireUser, requireUserOrRedirect } from '@/lib/server/require-user';
 import { failure, validation } from '@/lib/errors';
-import { reportAndFail } from '@/lib/server/observability';
+import { reportAndFail, reportOperationalError } from '@/lib/server/observability';
 import { zoneJoinUrl } from '@/lib/links';
 import { notifyUsers } from '@/lib/server/notify';
+import { createAdminClient } from '@/lib/supabase/admin';
 import { isValidCoordinate } from '@/lib/geo';
 import { zoneSlugBase, zoneSlugCandidate } from '@/lib/zone-slug';
 
@@ -55,8 +56,19 @@ export async function createZone(formData: FormData): Promise<void> {
       longitude: located ? lng : null,
     });
     if (!error) redirect(`/zones/${slug}`);
-    if (error.code !== '23505') break;
+    if (error.code !== '23505') {
+      // Was an unlogged "Could not create the zone" with no code: nothing to
+      // join a screenshot to, and nothing in the logs to find.
+      await reportOperationalError('zone.create', error, {}, 'SB-ZONE-SAVE');
+      redirect('/zones?error=save');
+    }
   }
+  await reportOperationalError(
+    'zone.create',
+    new Error('No free slug after 4 attempts'),
+    { base },
+    'SB-ZONE-SAVE',
+  );
   redirect('/zones?error=save');
 }
 
@@ -158,7 +170,7 @@ export async function rotateZoneInviteLink(
  */
 export async function joinZoneViaCode(
   code: string,
-): Promise<{ ok: boolean; slug?: string }> {
+): Promise<ActionResult & { slug?: string }> {
   const auth = await requireUser();
   if (!auth.ok) return auth;
   const { supabase } = auth;
@@ -186,31 +198,45 @@ export async function requestToJoinZone(
     requester_id: user.id,
     note: note?.trim() ? note.trim().slice(0, 280) : null,
   });
-  // Asking twice is not an error worth showing; the first ask still stands.
+  // Asking twice is not an error worth showing; the first ask still stands,
+  // and its organizers were told then.
   if (error && error.code !== '23505') {
     return reportAndFail('SB-ZONE-SAVE', 'zone.join-request', error);
   }
 
   // Tell whoever can act on it. Organizers and moderators both can.
-  const [{ data: zone }, { data: mods }] = await Promise.all([
-    supabase.from('zones').select('name, organizer_id').eq('id', zoneId).maybeSingle(),
-    supabase
-      .from('zone_members')
-      .select('member_id')
-      .eq('zone_id', zoneId)
-      .eq('role', 'moderator'),
-  ]);
-  const recipients = new Set<string>();
-  if (zone?.organizer_id) recipients.add(zone.organizer_id);
-  for (const mod of mods ?? []) recipients.add(mod.member_id);
-  recipients.delete(user.id);
-  if (recipients.size > 0) {
-    await notifyUsers([...recipients], {
-      kind: 'zone_join_request',
-      title: `Someone asked to join ${zone?.name ?? 'your zone'}`,
-      body: 'Open the zone to let them in or pass.',
-      url: '/zones',
-    });
+  //
+  // The requester is by definition outside the zone, so their own client can
+  // read neither a private zone's row nor its roster: this lookup used to come
+  // back empty every time and nobody was ever told. The service role reads
+  // them instead, authorized by the request this caller just created through
+  // RLS (`requester_id = auth.uid()`), and only for a private zone (asking to
+  // join a public one means nothing). Nothing it reads reaches the requester.
+  if (!error) {
+    const admin = createAdminClient();
+    const [{ data: zone }, { data: mods }] = await Promise.all([
+      admin
+        .from('zones')
+        .select('name, slug, organizer_id, visibility')
+        .eq('id', zoneId)
+        .maybeSingle(),
+      admin.from('zone_members').select('member_id').eq('zone_id', zoneId).eq('role', 'moderator'),
+    ]);
+    const recipients = new Set<string>();
+    if (zone?.visibility === 'private' && zone.organizer_id) recipients.add(zone.organizer_id);
+    for (const mod of zone?.visibility === 'private' ? (mods ?? []) : []) {
+      recipients.add(mod.member_id);
+    }
+    recipients.delete(user.id);
+    if (zone && recipients.size > 0) {
+      await notifyUsers([...recipients], {
+        kind: 'zone_join_request',
+        title: `Someone asked to join ${zone.name}`,
+        body: 'Open the zone to let them in or pass.',
+        // The requests live on the zone's own page, not the zone list.
+        url: `/zones/${zone.slug}`,
+      });
+    }
   }
 
   revalidatePath('/zones');
@@ -272,12 +298,16 @@ export async function removeZoneMember(
   if (!auth.ok) return auth;
   const { supabase } = auth;
 
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from('zone_members')
     .delete()
     .eq('zone_id', zoneId)
-    .eq('member_id', memberId);
+    .eq('member_id', memberId)
+    .select('member_id');
   if (error) return reportAndFail('SB-ZONE-SAVE', 'zone.membership', error);
+  // RLS filters a delete the caller may not make down to zero rows rather
+  // than raising, which read as "removed" while they stayed in the zone.
+  if (!data || data.length === 0) return failure('SB-ZONE-ACCESS');
 
   revalidatePath('/zones');
   return { ok: true };

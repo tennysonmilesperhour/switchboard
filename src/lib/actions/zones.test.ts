@@ -6,16 +6,25 @@ const mocks = vi.hoisted(() => ({
   zoneSelect: vi.fn(),
   zoneUpdate: vi.fn(),
   revalidatePath: vi.fn(),
+  createAdminClient: vi.fn(),
+  notifyUsers: vi.fn(async () => undefined),
 }));
 
 vi.mock('next/cache', () => ({ revalidatePath: mocks.revalidatePath }));
 vi.mock('next/navigation', () => ({ redirect: vi.fn() }));
 vi.mock('@/lib/server/require-user', () => ({ requireUser: mocks.requireUser }));
 vi.mock('@/lib/supabase/server', () => ({ createClient: vi.fn() }));
-vi.mock('@/lib/server/notify', () => ({ notifyUsers: vi.fn() }));
+vi.mock('@/lib/server/notify', () => ({ notifyUsers: mocks.notifyUsers }));
+vi.mock('@/lib/supabase/admin', () => ({ createAdminClient: mocks.createAdminClient }));
 vi.mock('@/lib/server/observability', () => ({ reportAndFail: vi.fn() }));
 
-import { ensureZoneInviteLink, setZoneLocation, setZoneVisibility } from './zones';
+import {
+  ensureZoneInviteLink,
+  removeZoneMember,
+  requestToJoinZone,
+  setZoneLocation,
+  setZoneVisibility,
+} from './zones';
 
 function supabase() {
   return {
@@ -96,5 +105,102 @@ describe('zone actions', () => {
 
     expect(result.ok).toBe(false);
     expect(mocks.zoneUpdate).not.toHaveBeenCalled();
+  });
+});
+
+describe('asking to join a private zone', () => {
+  /** A query builder that resolves to `result` however it is chained. */
+  function chain(result: unknown) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const builder: any = new Proxy(
+      {},
+      {
+        get: (_target, prop) => {
+          if (prop === 'then') {
+            return (resolve: (value: unknown) => unknown) => Promise.resolve(result).then(resolve);
+          }
+          if (prop === 'maybeSingle') return async () => result;
+          return () => builder;
+        },
+      },
+    );
+    return builder;
+  }
+
+  function arrange(insertError: { code: string } | null, visibility = 'private') {
+    const insert = vi.fn(async () => ({ error: insertError }));
+    mocks.requireUser.mockResolvedValue({
+      ok: true,
+      user: { id: 'asker' },
+      // The requester's own client: it can file a request, and nothing more.
+      supabase: { from: () => ({ insert }) },
+    });
+    mocks.createAdminClient.mockReturnValue({
+      from: (table: string) =>
+        chain(
+          table === 'zones'
+            ? {
+                data: { name: 'Offsite', slug: 'offsite', organizer_id: 'organizer', visibility },
+                error: null,
+              }
+            : { data: [{ member_id: 'moderator' }], error: null },
+        ),
+    });
+    return { insert };
+  }
+
+  /**
+   * The requester cannot read a private zone or its roster, so looking the
+   * organizers up through their own client found nobody, every time.
+   */
+  it('tells the organizer and moderators, linking to the zone itself', async () => {
+    arrange(null);
+
+    const result = await requestToJoinZone('zone-1', ' please ');
+
+    expect(result).toEqual({ ok: true });
+    expect(mocks.notifyUsers).toHaveBeenCalledWith(
+      ['organizer', 'moderator'],
+      expect.objectContaining({ kind: 'zone_join_request', url: '/zones/offsite' }),
+    );
+  });
+
+  it('does not tell them again when the same person asks twice', async () => {
+    arrange({ code: '23505' });
+
+    const result = await requestToJoinZone('zone-1');
+
+    expect(result).toEqual({ ok: true });
+    expect(mocks.createAdminClient).not.toHaveBeenCalled();
+    expect(mocks.notifyUsers).not.toHaveBeenCalled();
+  });
+
+  it('tells nobody about a request to join a public zone', async () => {
+    arrange(null, 'public');
+
+    await requestToJoinZone('zone-1');
+
+    expect(mocks.notifyUsers).not.toHaveBeenCalled();
+  });
+});
+
+describe('removing someone from a zone', () => {
+  it('does not call an RLS-refused removal a success', async () => {
+    mocks.requireUser.mockResolvedValue({
+      ok: true,
+      user: { id: 'member' },
+      supabase: {
+        from: () => ({
+          delete: () => ({
+            eq: () => ({ eq: () => ({ select: async () => ({ data: [], error: null }) }) }),
+          }),
+        }),
+      },
+    });
+
+    const result = await removeZoneMember('zone-1', 'someone-else');
+
+    expect(result).toMatchObject({ ok: false, code: 'SB-ZONE-ACCESS' });
+    expect(mocks.revalidatePath).not.toHaveBeenCalled();
   });
 });

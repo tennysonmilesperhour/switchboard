@@ -27,7 +27,10 @@ export default async function JoinBoardPage({
   const result = await joinBoardViaCode(code);
   if (result.ok && result.slug) redirect(`/boards/${result.slug}`);
 
-  const dead = errorFor('SB-BOARD-UNKNOWN');
+  // An unknown or replaced code is the reader's dead end; a lookup that failed
+  // is ours, and saying "this link doesn't match" for it sent people back to
+  // ask for a new link that would have failed the same way.
+  const dead = errorFor(result.code ?? 'SB-BOARD-UNKNOWN');
 
   return (
     <AppShell title="Join board" back="/boards">
@@ -36,7 +39,7 @@ export default async function JoinBoardPage({
           🏘️
         </p>
         <h2 className="mt-3 text-xl font-black text-ink">{dead.message}</h2>
-        <p className="mt-2 text-sm leading-relaxed text-ink-soft">{dead.fix}</p>
+        {dead.fix && <p className="mt-2 text-sm leading-relaxed text-ink-soft">{dead.fix}</p>}
         <p className="mt-3 font-mono text-[11px] uppercase tracking-wide text-ink-faint">
           {errorRef(dead.code)}
         </p>

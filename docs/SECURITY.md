@@ -104,6 +104,12 @@ because `profiles` has no authority column — no `role`, `is_admin`, `rank`,
 - Board membership role and event host/co-host powers already follow this: they
   live in separate tables gated by `is_board_moderator` / `is_event_host`, and
   role changes go through security-definer functions.
+- Verification attaches to what was verified. A venue's `status` is frozen to
+  moderators, but its owner may edit the name, area, perk, and link, so an
+  edit to any of those on a verified venue sends it back to `pending`
+  (`freeze_venue_authority`, `20260929160000_private_place_leaks.sql`).
+  Otherwise one honest claim, once verified, could be renamed into another
+  business and carry the verified perk onto its plans.
 - `authz_hardening.test.sql` has a tripwire that fails CI if an authority-like
   column ever appears on `profiles`. If you trip it, add write protection in the
   same migration — don't just extend the tripwire's allowlist.
@@ -596,6 +602,12 @@ profile:
   action. The action proves the caller owns a live moment, revalidates that the
   candidate is still discoverable, then resolves the target server-side. Once
   mutual consent reveals a profile, the normal profile safety controls apply.
+- **A zone is part of the place.** Matching compares typed place names, so it
+  also requires both moments to be in the same zone (or both in none), and a
+  zone moment only matches someone who can view that zone
+  (`20260929160000_private_place_leaks.sql`). Without that, typing a private
+  zone's name found its members, and two zones sharing a name in different
+  cities matched each other's people.
 
 Litmus test: *does any field or action available before mutual reveal let the
 browser identify the person behind a candidate moment?*
@@ -613,6 +625,10 @@ the one thing that crosses that boundary, and it is fenced the same way as
 - **It returns an integer.** No id, name, headline, coordinate, or experience
   list — nothing that says *who*. Identities at a place still need mutual
   exposure through `find_shared_moments`, which is unchanged.
+- **It answers only for a zone the caller can view.** A private zone's id is
+  handed to anyone holding its address (`find_private_zone_by_slug`), so the
+  count checks `can_view_zone` and is 0 otherwise
+  (`20260929160000_private_place_leaks.sql`).
 - **It excludes the caller**, so a zone can never describe you to yourself in the
   third person, and **honours `are_blocked`** relative to whoever is asking.
 - **Avoids are deliberately not filtered.** Give Space is "warn, never remove";

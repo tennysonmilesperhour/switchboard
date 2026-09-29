@@ -11,6 +11,7 @@ import { EmptyState } from '@/components/ui/EmptyState';
 import { useToast } from '@/components/ui/Toast';
 import { useConfirm, usePrompt } from '@/components/ui/ConfirmDialog';
 import { formatRelative, formatDate } from '@/lib/format';
+import { errorRef, type ErrorCode } from '@/lib/errors';
 import {
   addBoardPost,
   deleteBoardPost,
@@ -181,11 +182,13 @@ export function BoardClient({
   const [date, setDate] = useState('');
   const [listedDays, setListedDays] = useState<number | null>(null);
   const [postError, setPostError] = useState<string | null>(null);
+  const [postErrorCode, setPostErrorCode] = useState<ErrorCode | null>(null);
   const [editingPostId, setEditingPostId] = useState<string | null>(null);
 
   // Invite state.
   const [inviteHandle, setInviteHandle] = useState('');
   const [inviteError, setInviteError] = useState<string | null>(null);
+  const [inviteErrorCode, setInviteErrorCode] = useState<ErrorCode | null>(null);
   const [inviteUrl, setInviteUrl] = useState<string | null>(null);
 
   const memberNames = Object.fromEntries(members.map((m) => [m.id, m.name]));
@@ -194,6 +197,7 @@ export function BoardClient({
     e.preventDefault();
     if (!title.trim()) return;
     setPostError(null);
+    setPostErrorCode(null);
     startTransition(async () => {
       const startsAt = date ? new Date(`${date}T12:00`).toISOString() : null;
       const result = editingPostId
@@ -229,6 +233,7 @@ export function BoardClient({
         router.refresh();
       } else {
         setPostError(result.error ?? 'Could not post that.');
+        setPostErrorCode(result.code ?? null);
       }
     });
   }
@@ -261,6 +266,7 @@ export function BoardClient({
     e.preventDefault();
     if (!inviteHandle.trim()) return;
     setInviteError(null);
+    setInviteErrorCode(null);
     startTransition(async () => {
       const handle = inviteHandle.trim().replace(/^@/, '');
       const result = await inviteToBoard(boardId, inviteHandle);
@@ -270,6 +276,7 @@ export function BoardClient({
         router.refresh();
       } else {
         setInviteError(result.error ?? 'Could not add them.');
+        setInviteErrorCode(result.code ?? null);
       }
     });
   }
@@ -409,7 +416,12 @@ export function BoardClient({
                   </p>
                 </>
               )}
-              {postError && <p className="text-xs text-rose-deep">{postError}</p>}
+              {postError && (
+                <p role="alert" className="text-xs text-rose-deep">
+                  {postError}
+                  {postErrorCode && <span className="ml-2 opacity-70">{errorRef(postErrorCode)}</span>}
+                </p>
+              )}
               <Button
                 type="submit"
                 size="sm"
@@ -671,7 +683,12 @@ export function BoardClient({
             </Button>
           </form>
         )}
-        {inviteError && <p className="text-xs text-rose-deep mt-2">{inviteError}</p>}
+        {inviteError && (
+          <p role="alert" className="text-xs text-rose-deep mt-2">
+            {inviteError}
+            {inviteErrorCode && <span className="ml-2 opacity-70">{errorRef(inviteErrorCode)}</span>}
+          </p>
+        )}
 
         {isModerator && (
           <div className="mt-3">

@@ -279,8 +279,11 @@ export async function expressCuriosity(
   }
 
   // First one-sided curiosity: nudge the other person (no identity revealed)
-  // so they can come reciprocate if they'd like. Once.
-  if (firstTime) {
+  // so they can come reciprocate if they'd like. Once — and never to someone
+  // who already passed on this moment: their Moments page hides a passed
+  // candidate, so "Open Moments to see" would lead them to nothing, and "Not
+  // today" should mean not being asked again today.
+  if (firstTime && reverse?.stage !== 'passed') {
     await notifyUsers([other.user_id], {
       kind: 'moment',
       title: '✨ Someone’s curious',

@@ -883,6 +883,7 @@ const AREA_CODES: Record<string, ErrorCode> = {
   'zone.visibility': 'SB-ZONE-SAVE',
   'zone.location': 'SB-ZONE-SAVE',
   'zone.join': 'SB-ZONE-SAVE',
+  'zone.create': 'SB-ZONE-SAVE',
 
   // Notification inbox
   'notification.read': 'SB-NOTIFY-SAVE',

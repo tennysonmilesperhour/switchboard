@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/Button';
 import { Card, SectionHeader } from '@/components/ui/Card';
 import { claimVenue } from '@/lib/actions/venues';
+import { errorRef, type ErrorCode } from '@/lib/errors';
 
 export interface VenueRow {
   id: string;
@@ -83,6 +84,7 @@ export function VenuePerks({
   const [perk, setPerk] = useState('');
   const [url, setUrl] = useState('');
   const [error, setError] = useState('');
+  const [errorCode, setErrorCode] = useState<ErrorCode | null>(null);
   const [submitted, setSubmitted] = useState(false);
   const [pending, startTransition] = useTransition();
   const router = useRouter();
@@ -213,7 +215,12 @@ export function VenuePerks({
                 aria-label="Venue perk"
                 className="w-full rounded-card border border-line bg-paper px-3 py-2.5 text-sm outline-none focus:border-terracotta"
               />
-              {error && <p role="alert" className="text-xs text-rose-deep">{error}</p>}
+              {error && (
+                <p role="alert" className="text-xs text-rose-deep">
+                  {error}
+                  {errorCode && <span className="ml-2 opacity-70">{errorRef(errorCode)}</span>}
+                </p>
+              )}
               <Button
                 size="sm"
                 variant="secondary"
@@ -222,9 +229,11 @@ export function VenuePerks({
                 onClick={() =>
                   startTransition(async () => {
                     setError('');
+                    setErrorCode(null);
                     const result = await claimVenue(name, area, perk, url);
                     if (!result.ok) {
                       setError(result.error ?? 'Could not submit');
+                      setErrorCode(result.code ?? null);
                       return;
                     }
                     setName('');

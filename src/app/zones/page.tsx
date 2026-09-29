@@ -10,6 +10,7 @@ import { toMapPoint } from '@/lib/geo';
 import { createZone } from '@/lib/actions/zones';
 import { EXPERIENCE_PRESETS } from '@/lib/types';
 import { ZoneLocationField } from './ZoneLocationField';
+import { errorRef } from '@/lib/errors';
 
 export const metadata: Metadata = { title: 'Zones' };
 
@@ -101,6 +102,9 @@ export default async function ZonesPage({
           {error && (
             <p role="alert" className="mb-3 rounded-card bg-rose-soft text-rose-deep text-sm p-3">
               {ERRORS[error] ?? 'Something went wrong.'}
+              {error === 'save' && (
+                <span className="ml-2 text-xs opacity-70">{errorRef('SB-ZONE-SAVE')}</span>
+              )}
             </p>
           )}
           <form action={createZone}>

@@ -22,6 +22,7 @@ import { AnonymousMomentSafetyButtons } from './AnonymousMomentSafetyButtons';
 import { useCurrentLocation } from '@/lib/client/use-current-location';
 import { createClient } from '@/lib/supabase/client';
 import type { MomentCandidate } from '@/lib/moment-candidates';
+import { errorFor, errorRef, type ErrorCode } from '@/lib/errors';
 
 export interface MyMoment {
   id: string;
@@ -46,6 +47,7 @@ export function MomentsClient({
   const [headline, setHeadline] = useState('');
   const [hours, setHours] = useState(2);
   const [error, setError] = useState('');
+  const [errorCode, setErrorCode] = useState<ErrorCode | null>(null);
   const [pending, startTransition] = useTransition();
   const location = useCurrentLocation();
   const router = useRouter();
@@ -214,23 +216,37 @@ export function MomentsClient({
             />
           </div>
 
-          {error && <p role="alert" className="text-sm text-rose-deep">{error}</p>}
+          {error && (
+            <p role="alert" className="text-sm text-rose-deep">
+              {error}
+              {errorCode && <span className="ml-2 text-xs opacity-70">{errorRef(errorCode)}</span>}
+            </p>
+          )}
           <Button
             size="lg"
             className="w-full"
             disabled={pending}
             onClick={() =>
               startTransition(async () => {
-                const result = await checkIn(
-                  place,
-                  experiences,
-                  headline,
-                  hours,
-                  null,
-                  location.point,
-                );
-                if (!result.ok) setError(result.error ?? 'Something went wrong');
-                else router.refresh();
+                setError('');
+                setErrorCode(null);
+                try {
+                  const result = await checkIn(
+                    place,
+                    experiences,
+                    headline,
+                    hours,
+                    null,
+                    location.point,
+                  );
+                  if (!result.ok) {
+                    setError(result.error ?? errorFor('SB-MOMENT-SAVE').message);
+                    setErrorCode(result.code ?? null);
+                  } else router.refresh();
+                } catch {
+                  setError(errorFor('SB-MOMENT-SAVE').message);
+                  setErrorCode('SB-MOMENT-SAVE');
+                }
               })
             }
           >

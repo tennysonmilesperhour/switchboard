@@ -116,7 +116,11 @@ export async function locateMyPlaces(): Promise<LocateResult> {
       .from('moments')
       .select('id, place_name')
       .eq('user_id', user.id)
-      .is('latitude', null),
+      .is('latitude', null)
+      // The map plots only moments that aren't closed; looking up a closed
+      // one spent a scarce, rate-limited lookup on a pin nobody would see and
+      // reported it as "Placed on the map".
+      .neq('status', 'closed'),
   ]);
 
   const now = Date.now();

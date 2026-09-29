@@ -164,7 +164,7 @@ export async function rotateBoardInviteLink(
  */
 export async function joinBoardViaCode(
   code: string,
-): Promise<{ ok: boolean; slug?: string }> {
+): Promise<ActionResult & { slug?: string }> {
   const auth = await requireUser();
   if (!auth.ok) return auth;
   const { supabase } = auth;

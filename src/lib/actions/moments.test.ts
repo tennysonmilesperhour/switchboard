@@ -150,36 +150,71 @@ describe('checkIn bounds', () => {
   });
 });
 
-describe('two accepts at the same moment', () => {
-  /** Each `from(table)` call takes the next queued result for that table. */
-  function queuedAdmin(queues: Record<string, unknown[]>) {
-    const calls: string[] = [];
-    return {
-      calls,
-      admin: {
-        from(table: string) {
-          calls.push(table);
-          const result = { data: (queues[table] ?? []).shift() ?? null, error: null };
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const builder: any = new Proxy(
-            {},
-            {
-              get: (_target, prop) => {
-                if (prop === 'then') {
-                  return (resolve: (value: unknown) => unknown) =>
-                    Promise.resolve(result).then(resolve);
-                }
-                if (prop === 'maybeSingle' || prop === 'single') return async () => result;
-                return () => builder;
-              },
+/** Each `from(table)` call takes the next queued result for that table. */
+function queuedAdmin(queues: Record<string, unknown[]>) {
+  const calls: string[] = [];
+  return {
+    calls,
+    admin: {
+      from(table: string) {
+        calls.push(table);
+        const result = { data: (queues[table] ?? []).shift() ?? null, error: null };
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const builder: any = new Proxy(
+          {},
+          {
+            get: (_target, prop) => {
+              if (prop === 'then') {
+                return (resolve: (value: unknown) => unknown) =>
+                  Promise.resolve(result).then(resolve);
+              }
+              if (prop === 'maybeSingle' || prop === 'single') return async () => result;
+              return () => builder;
             },
-          );
-          return builder;
-        },
+          },
+        );
+        return builder;
       },
-    };
-  }
+    },
+  };
+}
 
+describe('expressCuriosity', () => {
+  it('nudges the other person the first time someone is curious', async () => {
+    arrangePair(false);
+    const { admin } = queuedAdmin({
+      moments: [{ user_id: 'user-other', place_name: 'Union Station' }],
+      moment_interests: [[{ id: 'interest-mine' }], null],
+    });
+    mocks.createAdminClient.mockReturnValue(admin);
+
+    const result = await expressCuriosity('moment-mine', 'moment-other');
+
+    expect(result).toMatchObject({ ok: true, stage: 'curious' });
+    expect(mocks.notifyUsers).toHaveBeenCalledTimes(1);
+    expect(mocks.notifyUsers).toHaveBeenCalledWith(['user-other'], expect.anything());
+  });
+
+  /**
+   * "Not today" hides the candidate from the person who said it, so a nudge
+   * afterwards pointed them at a Moments page with nobody on it.
+   */
+  it('does not nudge someone who already passed on this moment', async () => {
+    arrangePair(false);
+    const { admin } = queuedAdmin({
+      moments: [{ user_id: 'user-other', place_name: 'Union Station' }],
+      moment_interests: [[{ id: 'interest-mine' }], { id: 'interest-theirs', stage: 'passed' }],
+    });
+    mocks.createAdminClient.mockReturnValue(admin);
+
+    const result = await expressCuriosity('moment-mine', 'moment-other');
+
+    expect(result).toMatchObject({ ok: true, stage: 'curious' });
+    expect(mocks.notifyUsers).not.toHaveBeenCalled();
+  });
+});
+
+describe('two accepts at the same moment', () => {
   /**
    * Both people tapped "I'd love to share this moment" together: each call saw
    * the other's acceptance and each opened a room, so the pair got two rooms

@@ -162,7 +162,13 @@ export function LeafletCanvas({
           iconAnchor: [14, 14],
         });
         const pin = leaflet
-          .marker([marker.lat, marker.lng], { icon, zIndexOffset: isSelf ? 1000 : 0 })
+          // `title` gives the keyboard-focusable pin an accessible name; an
+          // emoji-only divIcon otherwise reads as an unlabelled button.
+          .marker([marker.lat, marker.lng], {
+            icon,
+            title: marker.label,
+            zIndexOffset: isSelf ? 1000 : 0,
+          })
           .addTo(group)
           .bindPopup(buildPopup(marker));
         pinsRef.current.set(marker.id, pin);

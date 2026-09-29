@@ -36,7 +36,7 @@ export function ZoneJoinRequest({ zoneId, zoneName, alreadyAsked }: ZoneJoinRequ
         return;
       }
       setAsked(true);
-      toast.success('Asked. You’ll hear when they answer.');
+      toast.success('Asked. You’ll get a notification when they let you in.');
     });
   }
 
@@ -50,8 +50,8 @@ export function ZoneJoinRequest({ zoneId, zoneName, alreadyAsked }: ZoneJoinRequ
       {asked ? (
         <>
           <p className="mx-auto mt-2 max-w-sm text-sm leading-relaxed text-ink-soft">
-            You’ve asked to join. The organizer will see it next time they open
-            the zone, and you’ll get a notification either way.
+            You’ve asked to join. The organizer has been told, and you’ll get
+            a notification when they let you in.
           </p>
           <Link
             href="/zones"
