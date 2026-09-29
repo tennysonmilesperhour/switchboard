@@ -386,7 +386,11 @@ reader can redo it in one command rather than trust this file.
 
 Code can't close these; they need the owner or a dashboard:
 
-- **Production is stale (found 2026-09-03).** switchboardsocial.me still serves
+- ~~**Production is stale (found 2026-09-03).**~~ **Resolved; verified
+  2026-09-29:** Vercel's production deployments follow `main` again (#222,
+  `750ca51`, is live and READY), and production reported no runtime errors in
+  the preceding seven days. The original note follows for history.
+  switchboardsocial.me still serves
   the Sept 1 build (#159) while its database carries every migration through
   #184. #161 disabled Vercel's automatic `main` deploys and the deploy hook that
   replaced them was never created, so nothing has shipped since. The old build
@@ -394,7 +398,10 @@ Code can't close these; they need the owner or a dashboard:
   revoked: adding people to a plan and matchmaker suggestions fail in
   production today. Do a manual production deploy of `main` from the Vercel
   dashboard now, then finish the deploy-hook item below so it cannot recur.
-- **GitHub Actions is not starting runners (since 2026-09-03 04:35 UTC).**
+- ~~**GitHub Actions is not starting runners (since 2026-09-03 04:35 UTC).**~~
+  **Resolved; verified 2026-09-29:** Verify and Authenticated E2E (including
+  pgTAP) ran green on #222. Keep the spending-limit item below so it cannot
+  recur. The original note follows for history.
   Every job on every workflow fails two seconds after creation with no runner
   assigned and zero billable time, on `main` and on PRs, with unchanged
   workflow files. That is the account's Actions spending limit or included
@@ -413,8 +420,11 @@ Code can't close these; they need the owner or a dashboard:
   18:08 UTC.
 - Set a **GitHub Actions budget/spending limit** so exhausted included minutes
   cannot silently stop every workflow late in the month again.
-- Enable **leaked-password protection** in Supabase (last open security
-  advisor).
+- Enable **leaked-password protection** in Supabase (Authentication →
+  Password security). Still disabled on 2026-09-29; the other advisor findings
+  are either deliberate (service-role-only tables with RLS and no policies, the
+  guardian approval token callable signed-out) or fixed in
+  `20260929150000_advisor_hygiene.sql`.
 - **Provider config**: Resend email (`RESEND_API_KEY`/`EMAIL_FROM`), Twilio
   phone verification (all four vars), or set pilot expectations without them.
 - **PostHog source maps**: provision `POSTHOG_API_KEY` and
