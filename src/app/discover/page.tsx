@@ -7,7 +7,7 @@ import {
   PeopleDiscoveryClient,
   type DiscoveryMatch,
 } from './PeopleDiscoveryClient';
-import { OpenTables } from '@/components/events/OpenTables';
+import { OpenTables, type PendingJoinRequest } from '@/components/events/OpenTables';
 import { VenuePerks } from '@/components/venues/VenuePerks';
 import { IntentLaunchpad } from './IntentLaunchpad';
 import { supportEmail } from '@/lib/contact';
@@ -56,6 +56,7 @@ export default async function DiscoverPage({
     peopleResult,
     { data: discoveryMatches },
     { data: myInterests },
+    myRequestsResult,
   ] =
     await Promise.all([
       supabase.rpc('list_open_tables'),
@@ -91,6 +92,16 @@ export default async function DiscoverPage({
         .eq('author_id', user.id)
         .eq('kind', 'discover_connect')
         .eq('status', 'active'),
+      // The reader's own Open Table requests still waiting on a host (G20).
+      // `invites_select` lets an invitee read their own non-queued rows, and
+      // `can_view_event` lets a requester read the plan they asked to join.
+      supabase
+        .from('invites')
+        .select('id, event:events(id, title, starts_at, time_zone)')
+        .eq('invitee_id', user.id)
+        .eq('status', 'requested')
+        .order('created_at', { ascending: false })
+        .limit(10),
     ]);
 
   // A failed lookup must not read as an empty room ("No one in this lane
@@ -105,6 +116,23 @@ export default async function DiscoverPage({
     await reportOperationalError('venue.load', venuesResult.error, {}, 'SB-VENUE-LOAD');
     venuesError = 'SB-VENUE-LOAD';
   }
+  let requestsError: ErrorCode | null = null;
+  if (myRequestsResult.error) {
+    await reportOperationalError('discover.join-requests', myRequestsResult.error, {}, 'SB-INVITE-LOAD');
+    requestsError = 'SB-INVITE-LOAD';
+  }
+  const myRequests: PendingJoinRequest[] = (myRequestsResult.data ?? []).flatMap((row) => {
+    const event = Array.isArray(row.event) ? row.event[0] : row.event;
+    return event
+      ? [{
+          inviteId: row.id,
+          eventId: event.id,
+          title: event.title,
+          startsAt: event.starts_at,
+          timeZone: event.time_zone,
+        }]
+      : [];
+  });
   const people = peopleResult.data;
   const venues = venuesResult.data;
   const interestByTarget = Object.fromEntries(
@@ -154,7 +182,11 @@ export default async function DiscoverPage({
             interests={interestByTarget}
             loadError={peopleError}
           />
-          <OpenTables tables={openTables ?? []} />
+          <OpenTables
+            tables={openTables ?? []}
+            requests={myRequests}
+            requestsError={requestsError}
+          />
         </div>
         <VenuePerks
           venues={venues ?? []}

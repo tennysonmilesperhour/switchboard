@@ -40,6 +40,13 @@ describe('categoryForKind', () => {
     expect(categoryForKind('ritual')).toBe('social');
   });
 
+  it('never lets a toggle hide an answer someone is waiting on', () => {
+    // A host's "not this time" to an Open Table request (G20) is the answer
+    // /join promises; a muted category must not swallow it.
+    expect(categoryForKind('join_declined')).toBeNull();
+    expect(categoryForKind('parental_approval_denied')).toBeNull();
+  });
+
   it('returns null for an unknown kind (treated as always-allowed)', () => {
     expect(categoryForKind('brand_new_kind')).toBeNull();
     expect(categoryForKind('')).toBeNull();

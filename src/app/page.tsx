@@ -27,6 +27,7 @@ import { getReconnectionSuggestions } from '@/lib/server/radar';
 import { formatDateTime, formatRelative } from '@/lib/format';
 import { greetingFor } from '@/lib/greeting';
 import { resolveDefaultSignalCircle } from '@/lib/signal-audience';
+import { localDate, ritualIsDue } from '@/lib/rituals';
 import { ErrorNotice } from '@/components/ui/ErrorNotice';
 import { errorFor, type ErrorCode } from '@/lib/errors';
 import { reportOperationalError } from '@/lib/server/observability';
@@ -224,7 +225,7 @@ export default async function HomePage() {
     supabase
       .from('rituals')
       .select(
-        'id, activity, cadence_days, status, last_planned_at, creator_id, partner_id, creator:profiles!rituals_creator_id_fkey(display_name), partner:profiles!rituals_partner_id_fkey(display_name)',
+        'id, activity, cadence_days, status, due_on, creator_id, partner_id, creator:profiles!rituals_creator_id_fkey(display_name, sabbatical), partner:profiles!rituals_partner_id_fkey(display_name, sabbatical)',
       )
       .or(`creator_id.eq.${user.id},partner_id.eq.${user.id}`)
       .in('status', ['proposed', 'active']),
@@ -293,16 +294,18 @@ export default async function HomePage() {
     }),
   );
 
+  const ritualToday = localDate(profile?.timezone);
   const rituals: RitualCardData[] = (ritualRows ?? [])
     .map((row) => {
       const isMine = row.creator_id === user.id;
       const otherRaw = isMine ? row.partner : row.creator;
+      const meRaw = isMine ? row.creator : row.partner;
       const other = Array.isArray(otherRaw) ? otherRaw[0] : otherRaw;
+      const me = Array.isArray(meRaw) ? meRaw[0] : meRaw;
+      // Due by its stored date in your own zone (D8), and on hold while either
+      // of you is on sabbatical (D6), the same rule the reminder follows.
       const due =
-        row.status === 'active' &&
-        (!row.last_planned_at ||
-          nowMs - new Date(row.last_planned_at).getTime() >
-            row.cadence_days * 86_400_000);
+        !other?.sabbatical && !me?.sabbatical && ritualIsDue(row, ritualToday);
       return {
         id: row.id,
         activity: row.activity,
@@ -312,6 +315,7 @@ export default async function HomePage() {
         status: row.status,
         isMine,
         due,
+        dueOn: row.due_on,
       };
     })
     .filter((ritual) => (ritual.status === 'proposed' && !ritual.isMine) || ritual.due);

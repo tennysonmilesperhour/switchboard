@@ -200,6 +200,7 @@ export type Database = {
           id: string
           kind: string
           location: string | null
+          removed_at: string | null
           starts_at: string | null
           title: string
           updated_at: string | null
@@ -217,6 +218,7 @@ export type Database = {
           id?: string
           kind?: string
           location?: string | null
+          removed_at?: string | null
           starts_at?: string | null
           title: string
           updated_at?: string | null
@@ -234,6 +236,7 @@ export type Database = {
           id?: string
           kind?: string
           location?: string | null
+          removed_at?: string | null
           starts_at?: string | null
           title?: string
           updated_at?: string | null
@@ -1717,6 +1720,7 @@ export type Database = {
           created_at: string
           id: string
           image_url: string | null
+          removed_at: string | null
           room_id: string
           sender_id: string
         }
@@ -1725,6 +1729,7 @@ export type Database = {
           created_at?: string
           id?: string
           image_url?: string | null
+          removed_at?: string | null
           room_id: string
           sender_id: string
         }
@@ -1733,6 +1738,7 @@ export type Database = {
           created_at?: string
           id?: string
           image_url?: string | null
+          removed_at?: string | null
           room_id?: string
           sender_id?: string
         }
@@ -1747,6 +1753,81 @@ export type Database = {
           {
             foreignKeyName: "messages_sender_id_fkey"
             columns: ["sender_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      moderation_actions: {
+        Row: {
+          action: string
+          created_at: string
+          id: string
+          message_id: string | null
+          moderator_id: string | null
+          note: string | null
+          post_id: string | null
+          report_id: string | null
+          subject_id: string | null
+          suspended_until: string | null
+        }
+        Insert: {
+          action: string
+          created_at?: string
+          id?: string
+          message_id?: string | null
+          moderator_id?: string | null
+          note?: string | null
+          post_id?: string | null
+          report_id?: string | null
+          subject_id?: string | null
+          suspended_until?: string | null
+        }
+        Update: {
+          action?: string
+          created_at?: string
+          id?: string
+          message_id?: string | null
+          moderator_id?: string | null
+          note?: string | null
+          post_id?: string | null
+          report_id?: string | null
+          subject_id?: string | null
+          suspended_until?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "moderation_actions_message_id_fkey"
+            columns: ["message_id"]
+            isOneToOne: false
+            referencedRelation: "messages"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "moderation_actions_moderator_id_fkey"
+            columns: ["moderator_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "moderation_actions_post_id_fkey"
+            columns: ["post_id"]
+            isOneToOne: false
+            referencedRelation: "board_posts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "moderation_actions_report_id_fkey"
+            columns: ["report_id"]
+            isOneToOne: false
+            referencedRelation: "user_reports"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "moderation_actions_subject_id_fkey"
+            columns: ["subject_id"]
             isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
@@ -2625,12 +2706,49 @@ export type Database = {
         }
         Relationships: []
       }
+      ritual_reminders: {
+        Row: {
+          due_on: string
+          ritual_id: string
+          sent_at: string
+          user_id: string
+        }
+        Insert: {
+          due_on: string
+          ritual_id: string
+          sent_at?: string
+          user_id: string
+        }
+        Update: {
+          due_on?: string
+          ritual_id?: string
+          sent_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ritual_reminders_ritual_id_fkey"
+            columns: ["ritual_id"]
+            isOneToOne: false
+            referencedRelation: "rituals"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ritual_reminders_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       rituals: {
         Row: {
           activity: string
           cadence_days: number
           created_at: string
           creator_id: string
+          due_on: string | null
           id: string
           last_planned_at: string | null
           partner_id: string
@@ -2641,6 +2759,7 @@ export type Database = {
           cadence_days: number
           created_at?: string
           creator_id: string
+          due_on?: string | null
           id?: string
           last_planned_at?: string | null
           partner_id: string
@@ -2651,6 +2770,7 @@ export type Database = {
           cadence_days?: number
           created_at?: string
           creator_id?: string
+          due_on?: string | null
           id?: string
           last_planned_at?: string | null
           partner_id?: string
@@ -3110,12 +3230,16 @@ export type Database = {
         Row: {
           created_at: string
           id: string
+          message_id: string | null
           reason: string
           reported_id: string
           reporter_id: string
           resolution_note: string | null
           resolved_at: string | null
           resolved_by: string | null
+          snapshot_body: string | null
+          snapshot_image: string | null
+          snapshot_title: string | null
           status: string
           target_id: string | null
           target_kind: string
@@ -3123,12 +3247,16 @@ export type Database = {
         Insert: {
           created_at?: string
           id?: string
+          message_id?: string | null
           reason: string
           reported_id: string
           reporter_id: string
           resolution_note?: string | null
           resolved_at?: string | null
           resolved_by?: string | null
+          snapshot_body?: string | null
+          snapshot_image?: string | null
+          snapshot_title?: string | null
           status?: string
           target_id?: string | null
           target_kind?: string
@@ -3136,17 +3264,28 @@ export type Database = {
         Update: {
           created_at?: string
           id?: string
+          message_id?: string | null
           reason?: string
           reported_id?: string
           reporter_id?: string
           resolution_note?: string | null
           resolved_at?: string | null
           resolved_by?: string | null
+          snapshot_body?: string | null
+          snapshot_image?: string | null
+          snapshot_title?: string | null
           status?: string
           target_id?: string | null
           target_kind?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "user_reports_message_id_fkey"
+            columns: ["message_id"]
+            isOneToOne: false
+            referencedRelation: "messages"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "user_reports_reported_id_fkey"
             columns: ["reported_id"]
@@ -3408,6 +3547,10 @@ export type Database = {
         Args: { p_event: string; p_user: string }
         Returns: boolean
       }
+      can_current_user_add_to_capsule: {
+        Args: { p_event: string }
+        Returns: boolean
+      }
       can_current_user_view_event: {
         Args: { p_event: string }
         Returns: boolean
@@ -3442,6 +3585,17 @@ export type Database = {
           isOneToOne: false
           isSetofReturn: true
         }
+      }
+      claim_ritual_reminders: {
+        Args: { p_limit?: number }
+        Returns: {
+          activity: string
+          due_on: string
+          other_id: string
+          other_name: string
+          ritual_id: string
+          user_id: string
+        }[]
       }
       claim_sms_jobs: {
         Args: never
@@ -3487,6 +3641,7 @@ export type Database = {
         Returns: string
       }
       create_event_atomic: { Args: { p_input: Json }; Returns: string }
+      decline_join_request: { Args: { p_invite: string }; Returns: string }
       delete_hosted_event_permanently: {
         Args: { p_event: string }
         Returns: string
@@ -3659,11 +3814,16 @@ export type Database = {
           reported_handle: string
           reported_id: string
           reported_name: string
+          reported_suspended_until: string
           reporter_id: string
           reporter_name: string
+          room_title: string
           target_body: string
+          target_exists: boolean
           target_id: string
+          target_image: string
           target_kind: string
+          target_removed_at: string
           target_title: string
         }[]
       }
@@ -3692,6 +3852,38 @@ export type Database = {
           perk: string
           url: string
         }[]
+      }
+      list_suspended_accounts: {
+        Args: never
+        Returns: {
+          display_name: string
+          handle: string
+          member_id: string
+          note: string
+          suspended_at: string
+          suspended_until: string
+        }[]
+      }
+      moderate_lift_suspension: {
+        Args: { p_member: string; p_note?: string }
+        Returns: string
+      }
+      moderate_remove_board_post: {
+        Args: { p_note?: string; p_post: string; p_report: string }
+        Returns: string
+      }
+      moderate_remove_room_message: {
+        Args: { p_message: string; p_note?: string; p_report: string }
+        Returns: string
+      }
+      moderate_suspend_account: {
+        Args: {
+          p_days?: number
+          p_member: string
+          p_note?: string
+          p_report: string
+        }
+        Returns: string
       }
       move_queued_invite: {
         Args: { p_invite: string; p_up: boolean }
@@ -3755,6 +3947,10 @@ export type Database = {
       note_give_space_overlap_for: {
         Args: { p_event: string; p_user: string }
         Returns: boolean
+      }
+      note_ritual_planned: {
+        Args: { p_event: string; p_ritual: string }
+        Returns: string
       }
       operator_sweep_status: {
         Args: { p_sweep: string }
@@ -3902,6 +4098,10 @@ export type Database = {
           summary: string
           title: string
         }[]
+      }
+      skip_ritual: {
+        Args: { p_due_on: string; p_ritual: string }
+        Returns: string
       }
       sweep_retention: {
         Args: { p_now?: string }

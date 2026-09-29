@@ -520,7 +520,7 @@ export default async function SettingsPage({
           <section>
             <SectionHeader
               title="Sabbatical"
-              hint="Pause signals, radar, and matchmaking for a while"
+              hint="Step back from the social side for a while"
             />
             <Card>
               {!profileKnown ? <Unavailable /> : (
@@ -535,9 +535,19 @@ export default async function SettingsPage({
                   <span>
                     <span className="font-medium">Take a quiet season</span>
                     <span className="block text-sm text-ink-soft mt-0.5 leading-relaxed">
-                      You’ll stop appearing on friends’ radars, in matchmaking, and
-                      your live signal is cleared. Friends who reach out see your
-                      note instead of silence.
+                      You’ll drop out of friends’ radars, discovery, Mutual and
+                      matchmaking, your live signal is cleared, and rituals stop
+                      reminding you both.
+                    </span>
+                    <span className="block text-sm text-ink-soft mt-1.5 leading-relaxed">
+                      Only plans you’re already in can still notify you: changes,
+                      cancellations, reminders, host updates and messages.
+                      Everything else waits in your inbox.
+                    </span>
+                    <span className="block text-sm text-ink-soft mt-1.5 leading-relaxed">
+                      Friends can still invite you. They see your note on your
+                      profile and when they pick you, and the invitation waits
+                      in your inbox.
                     </span>
                   </span>
                 </label>
@@ -547,8 +557,13 @@ export default async function SettingsPage({
                   maxLength={140}
                   placeholder="Taking a quiet season 🍃"
                   aria-label="Sabbatical note"
+                  aria-describedby="sabbatical-note-hint"
                   className="w-full rounded-card border border-line bg-paper px-3.5 py-2.5 text-sm outline-none focus:border-terracotta"
                 />
+                <p id="sabbatical-note-hint" className="text-xs text-ink-faint">
+                  Your note shows on your profile, and to friends when they pick
+                  you for a plan.
+                </p>
               </SettingsForm>
               )}
             </Card>

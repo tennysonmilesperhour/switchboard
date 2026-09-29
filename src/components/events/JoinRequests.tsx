@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/Button';
 import { Card, SectionHeader } from '@/components/ui/Card';
 import { Avatar } from '@/components/ui/Avatar';
 import { useToast } from '@/components/ui/Toast';
-import { approveJoinRequest, declineJoinRequest } from '@/lib/actions/invites';
+import { approveJoinRequest, declineJoinRequest } from '@/lib/actions/open-table';
 
 export interface JoinRequestRow {
   inviteId: string;
@@ -54,6 +54,11 @@ export function JoinRequests({
       const result = await declineJoinRequest(request.inviteId, eventId);
       if (!result.ok) {
         toast.error(result.error ?? 'Could not decline that request.', result.code);
+      } else if (result.outcome === 'gone') {
+        toast.info('That request was already answered.');
+      } else {
+        // `/join` promises "you'll hear back either way", so they do.
+        toast.info(`We’ll let ${request.name} know it’s not this time.`);
       }
       router.refresh();
     });

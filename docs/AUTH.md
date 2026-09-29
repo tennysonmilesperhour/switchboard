@@ -190,6 +190,22 @@ These were open decisions; the owner accepted the recommendations in
     "already used": mail scanners open links before people do, so the reader may
     be confirmed already.
 
+16. **A moderator can suspend an account (P7, D7), and every way in names it.**
+    The suspension is GoTrue's own ban (`auth.users.banned_until`), set only by
+    `moderate_suspend_account` (docs/SECURITY.md, "Moderation"), so it is the
+    same `user_banned` that finding 4 already maps to `SB-AUTH-SUSPENDED` —
+    there was no new reason to refuse a valid password to add to the table.
+    What changed is the other doors. A session issued before the suspension
+    is signed out by the proxy on its next page load and sent to
+    `/login?error=suspended`; an API call gets a coded 403; a Server Action
+    from an already-open tab is refused by `requireUser` with the same code.
+    A confirmation, magic or recovery link refused for `user_banned` lands on
+    the same sentence instead of "expired or already used", and so does
+    Google sign-in. Everywhere it appears, the page says the account is
+    suspended and gives the support address to write to: nothing the person
+    can press lifts a suspension, so the route out is a person, and a
+    moderator can lift it (or it runs out) from `/moderation`.
+
 Google sign-in failures on `/login` now carry codes too — `SB-OAUTH-DENIED`,
 `SB-OAUTH-EXCHANGE`, `SB-OAUTH-MISSING`, and `SB-OAUTH-START` when the auth
 server will not start the round trip — and `/auth/callback` logs the same code
@@ -203,6 +219,11 @@ it redirects with.
   fails first.
 - `src/lib/errors.test.ts` — every reader-facing failure carries a code, and
   every reader-actionable code carries a real next step.
+- `src/proxy.test.ts`, `src/lib/server/require-user.test.ts` and
+  `src/app/auth/suspended-routes.test.ts` — a suspended account meets
+  `SB-AUTH-SUSPENDED` at every door: a live session's next page load, an API
+  call, a Server Action, an email link and Google sign-in. A suspension that
+  has run out lets the person straight back in.
 - `e2e/authed.spec.ts` — the real journey: sign in, land inside the app. This is
   the test that must never be allowed to sit red again. Its fixtures
   (`e2e/seed.mjs`) derive `LEGAL_VERSION` from source, because a fixture that

@@ -17,10 +17,23 @@ interface RsvpCardProps {
   inviteId: string;
   expiresAtIso: string | null;
   questions?: RsvpQuestion[];
+  /**
+   * The invitee already said no, and the plan is still inviting (D17). The
+   * card offers the yes only — a second no records nothing — behind one tap,
+   * so a no stays settled unless they mean to change it.
+   */
+  reconsider?: boolean;
 }
 
 /** Invitee accept/decline with graceful decline options that teach. */
-export function RsvpCard({ inviteId, expiresAtIso, questions = [] }: RsvpCardProps) {
+export function RsvpCard({
+  inviteId,
+  expiresAtIso,
+  questions = [],
+  reconsider = false,
+}: RsvpCardProps) {
+  // In reconsider mode the yes stays folded away until they ask for it.
+  const [reopened, setReopened] = useState(false);
   const [declining, setDeclining] = useState(false);
   const [declineMessage, setDeclineMessage] = useState('');
   const [error, setError] = useState('');
@@ -54,6 +67,12 @@ export function RsvpCard({ inviteId, expiresAtIso, questions = [] }: RsvpCardPro
           setErrorCode(result.code ?? null);
           return;
         }
+        // The database keeps a no when the plan has moved on since this page
+        // loaded (the list was confirmed), or when the no was a guardian's.
+        if (accept && result.outcome === 'declined') {
+          setError('This plan isn’t taking new answers, so yours stays as it was. Reload to see where it stands.');
+          return;
+        }
         router.refresh();
       } catch {
         // A rejected action never reached the branch above, so the tap read
@@ -64,9 +83,26 @@ export function RsvpCard({ inviteId, expiresAtIso, questions = [] }: RsvpCardPro
     });
   }
 
+  if (reconsider && !reopened) {
+    return (
+      <Card>
+        <p className="font-extrabold text-lg">You said you can’t make it</p>
+        <p className="text-sm text-ink-soft mt-0.5">
+          Plans change. If you can come after all, you can say so while
+          invitations are still going out.
+        </p>
+        <Button variant="secondary" size="sm" className="mt-3" onClick={() => setReopened(true)}>
+          Actually, I can come
+        </Button>
+      </Card>
+    );
+  }
+
   return (
     <Card tone="gold" lifted className="animate-rise">
-      <p className="font-extrabold text-xl tracking-tight">You’re invited 💌</p>
+      <p className="font-extrabold text-xl tracking-tight">
+        {reconsider ? 'Changed your mind? 💛' : 'You’re invited 💌'}
+      </p>
       {expiresAtIso && (
         <p className="text-sm text-ink-soft mt-0.5">
           Respond {formatRelative(expiresAtIso)} - after that the invitation
@@ -109,9 +145,9 @@ export function RsvpCard({ inviteId, expiresAtIso, questions = [] }: RsvpCardPro
             variant="secondary"
             className="flex-1"
             disabled={pending}
-            onClick={() => setDeclining(true)}
+            onClick={() => (reconsider ? setReopened(false) : setDeclining(true))}
           >
-            Can’t make it
+            {reconsider ? 'Never mind' : 'Can’t make it'}
           </Button>
         </div>
       ) : (

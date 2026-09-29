@@ -9,6 +9,8 @@ import { useToast } from '@/components/ui/Toast';
 import { addPeopleToEvent, inviteConnectionNow } from '@/lib/actions/events';
 import { ContactImportControls } from '@/components/ContactImportControls';
 import { InviteeSheet } from '@/components/events/InviteeSheet';
+import { SabbaticalNote } from '@/components/profile/SabbaticalNote';
+import type { SabbaticalStatus } from '@/lib/sabbatical';
 import {
   resolveContactMatches,
   type ContactCandidate,
@@ -20,6 +22,8 @@ export interface ConnectionOption {
   name: string;
   handle: string;
   avatarUrl: string | null;
+  /** Set when they are on sabbatical: their card shows the note (D6). */
+  sabbatical?: SabbaticalStatus | null;
 }
 
 /**
@@ -284,11 +288,15 @@ export function AddInvitees({
                       <span className="block truncate text-sm font-bold text-ink">
                         {connection.name}
                       </span>
-                      {connection.handle && (
+                      {connection.sabbatical ? (
+                        <span className="block truncate text-xs text-ink-faint">
+                          🍃 On sabbatical
+                        </span>
+                      ) : connection.handle ? (
                         <span className="block truncate text-xs text-ink-faint">
                           @{connection.handle}
                         </span>
-                      )}
+                      ) : null}
                     </span>
                   </button>
                   <button
@@ -361,6 +369,14 @@ export function AddInvitees({
           }}
           onClose={() => setOpenConnection(null)}
         >
+          {openConnection.sabbatical ? (
+            <SabbaticalNote
+              name={openConnection.name}
+              status={openConnection.sabbatical}
+              detail="Your invitation will wait in their inbox without a notification, so they may not answer in time."
+              className="mb-3"
+            />
+          ) : null}
           <Button
             type="button"
             className="w-full"

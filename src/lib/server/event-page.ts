@@ -12,6 +12,7 @@ import { threadGate, THREAD_PREVIEW_COUNT } from '@/lib/engine/thread';
 import { formatDateTimeRange } from '@/lib/format';
 import { appOrigin, eventShareUrl, guestRsvpUrl } from '@/lib/links';
 import { likeLiteral } from '@/lib/security';
+import { sabbaticalOf, type SabbaticalStatus } from '@/lib/sabbatical';
 import {
   hostCanEditInvitees,
   hostCanShare,
@@ -41,6 +42,7 @@ import type { ThreadCommentView } from '@/components/events/EventThread';
 import type { OptionResult } from '@/components/polls/PollSection';
 import { readyToSendInvitations } from '@/lib/poll-readiness';
 import { guardianStepFor, type GuardianRequestView } from '@/lib/guardian-approval';
+import { groupAnswersByInvite, type GuestAnswers } from '@/lib/event-answers';
 import {
   cohostCandidates,
   hostGuardianQueue,
@@ -105,6 +107,7 @@ export interface EventPageData {
     name: string;
     handle: string;
     avatarUrl: string | null;
+    sabbatical: SabbaticalStatus | null;
   }>;
   attendees: EventPageAttendee[];
   /**
@@ -136,10 +139,7 @@ export interface EventPageData {
   threadGateInfo: ReturnType<typeof threadGate>;
   threadComments: ThreadCommentView[];
   acceptedCount: number;
-  answersByGuest: Array<{
-    name: string;
-    answers: Array<{ prompt: string; answer: string }>;
-  }>;
+  answersByGuest: GuestAnswers[];
   calendarEvent: {
     title: string;
     description: string | null;
@@ -376,7 +376,7 @@ export async function loadEventPage(
       ? supabase
           .from('connections')
           .select(
-            'requester_id, addressee_id, requester:profiles!connections_requester_id_fkey(id, display_name, handle, avatar_url), addressee:profiles!connections_addressee_id_fkey(id, display_name, handle, avatar_url)',
+            'requester_id, addressee_id, requester:profiles!connections_requester_id_fkey(id, display_name, handle, avatar_url, sabbatical, sabbatical_message), addressee:profiles!connections_addressee_id_fkey(id, display_name, handle, avatar_url, sabbatical, sabbatical_message)',
           )
           .eq('status', 'accepted')
           .or(`requester_id.eq.${user.id},addressee_id.eq.${user.id}`)
@@ -405,7 +405,7 @@ export async function loadEventPage(
       ? admin
           .from('invite_answers')
           .select(
-            'question_id, answer, invite:invites(guest_name, invitee:profiles(display_name))',
+            'invite_id, question_id, answer, invite:invites(guest_name, invitee:profiles(display_name))',
           )
           .in('question_id', [...promptById.keys()])
       : Promise.resolve({ data: [] }),
@@ -519,6 +519,7 @@ export async function loadEventPage(
       name: other.display_name ?? 'Friend',
       handle: other.handle ?? '',
       avatarUrl: other.avatar_url ?? null,
+      sabbatical: sabbaticalOf(other),
     });
   }
 
@@ -600,26 +601,8 @@ export async function loadEventPage(
     }),
   );
 
-  const groupedAnswers = new Map<string, Array<{ prompt: string; answer: string }>>();
-  for (const row of answerResult.data ?? []) {
-    const invite = Array.isArray(row.invite) ? row.invite[0] : row.invite;
-    const profile = invite
-      ? Array.isArray(invite.invitee)
-        ? invite.invitee[0]
-        : invite.invitee
-      : null;
-    const name = profile?.display_name ?? invite?.guest_name ?? 'Guest';
-    const answers = groupedAnswers.get(name) ?? [];
-    answers.push({
-      prompt: promptById.get(row.question_id as string) ?? '',
-      answer: row.answer as string,
-    });
-    groupedAnswers.set(name, answers);
-  }
-  const answersByGuest = [...groupedAnswers.entries()].map(([name, answers]) => ({
-    name,
-    answers,
-  }));
+  // By invitation, never by display name: two guests called Sam are two cards.
+  const answersByGuest = groupAnswersByInvite(answerResult.data ?? [], questions);
 
   const hostCard =
     !isHost && hostProfile && relationship && mutuals

@@ -23,14 +23,38 @@ const mocks = vi.hoisted(() => {
     return chain;
   });
   const userRpc = vi.fn();
+  // Reading one message before reporting it.
+  const messageMaybeSingle = vi.fn();
+  const messageRead = vi.fn(() => {
+    const chain = { eq: vi.fn(() => chain), maybeSingle: messageMaybeSingle };
+    return chain;
+  });
+  const reportInsert = vi.fn();
   const userFrom = vi.fn((table: string) => {
-    if (table === 'messages') return { insert: messageInsert, delete: messageDelete };
+    if (table === 'messages') {
+      return { insert: messageInsert, delete: messageDelete, select: messageRead };
+    }
     if (table === 'room_items') return { delete: userRoomItemsDelete };
+    if (table === 'user_reports') return { insert: reportInsert };
     throw new Error(`Unexpected user table: ${table}`);
   });
+  // Whether a deleted photo is held by a report (the count the admin reads).
+  const reportedPhotoCount = vi.fn();
   const adminFrom = vi.fn((table: string) => {
     if (table === 'rooms') return { select: roomSelect };
     if (table === 'room_items') return { insert: roomItemsInsert };
+    if (table === 'user_reports') {
+      return {
+        select: () => {
+          const chain = {
+            eq: vi.fn(() => chain),
+            then: (resolve: (value: unknown) => unknown) =>
+              Promise.resolve(reportedPhotoCount()).then(resolve),
+          };
+          return chain;
+        },
+      };
+    }
     throw new Error(`Unexpected admin table: ${table}`);
   });
 
@@ -45,6 +69,9 @@ const mocks = vi.hoisted(() => {
     userFrom,
     userRpc,
     adminFrom,
+    messageMaybeSingle,
+    reportInsert,
+    reportedPhotoCount,
     storageRemove: vi.fn(async () => ({ error: null })),
     notifyRoomActivity: vi.fn(async () => undefined),
   };
@@ -80,7 +107,15 @@ vi.mock('@/lib/server/rate-limit', () => ({
   checkRateLimit: mocks.checkRateLimit,
 }));
 
-import { deleteMessage, leaveRoom, sendMessage, sendPhotoMessage } from './rooms';
+import {
+  deleteMessage,
+  leaveRoom,
+  reportRoomMessage,
+  sendMessage,
+  sendPhotoMessage,
+} from './rooms';
+
+const REPORTED = '00000000-0000-0000-0000-0000000000aa';
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -91,6 +126,12 @@ beforeEach(() => {
   mocks.checkRateLimit.mockResolvedValue(true);
   mocks.userRpc.mockResolvedValue({ data: false, error: null });
   mocks.messageDeleteSelect.mockResolvedValue({ data: [], error: null });
+  mocks.reportedPhotoCount.mockReturnValue({ count: 0, error: null });
+  mocks.messageMaybeSingle.mockResolvedValue({
+    data: { id: REPORTED, sender_id: 'user-2' },
+    error: null,
+  });
+  mocks.reportInsert.mockResolvedValue({ error: null });
   mocks.extractItems.mockResolvedValue([
     {
       kind: 'task',
@@ -217,6 +258,109 @@ describe('deleteMessage', () => {
 
     expect(result).toEqual({ ok: true });
     expect(mocks.storageRemove).toHaveBeenCalledWith(['user-1/room-1-abc.jpg']);
+  });
+
+  it('keeps a reported photo in storage, so the moderator can still see it', async () => {
+    mocks.messageDeleteSelect.mockResolvedValue({
+      data: [{ id: MESSAGE, image_url: 'user-1/room-1-abc.jpg' }],
+      error: null,
+    });
+    mocks.reportedPhotoCount.mockReturnValue({ count: 1, error: null });
+
+    const result = await deleteMessage(MESSAGE, 'room-1');
+
+    expect(result).toEqual({ ok: true });
+    expect(mocks.storageRemove).not.toHaveBeenCalled();
+  });
+
+  it('keeps the photo when it cannot tell whether a report holds it', async () => {
+    mocks.messageDeleteSelect.mockResolvedValue({
+      data: [{ id: MESSAGE, image_url: 'user-1/room-1-abc.jpg' }],
+      error: null,
+    });
+    mocks.reportedPhotoCount.mockReturnValue({ count: null, error: { message: 'down' } });
+
+    expect(await deleteMessage(MESSAGE, 'room-1')).toEqual({ ok: true });
+    expect(mocks.storageRemove).not.toHaveBeenCalled();
+  });
+});
+
+describe('reportRoomMessage', () => {
+  it('files a report naming the message, and lets the database attach its contents', async () => {
+    const result = await reportRoomMessage(REPORTED, '  cruel  ');
+
+    expect(result).toEqual({ ok: true });
+    expect(mocks.checkRateLimit).toHaveBeenCalledWith('report:user-1', 10, 3600);
+    expect(mocks.reportInsert).toHaveBeenCalledWith({
+      reporter_id: 'user-1',
+      reported_id: 'user-2',
+      target_kind: 'room_message',
+      message_id: REPORTED,
+      reason: 'cruel',
+    });
+  });
+
+  it('asks for a reason before anything else', async () => {
+    const result = await reportRoomMessage(REPORTED, '   ');
+
+    expect(result.ok).toBe(false);
+    expect(result).not.toHaveProperty('code');
+    expect(mocks.reportInsert).not.toHaveBeenCalled();
+  });
+
+  it('says a message the reporter cannot read is not there', async () => {
+    mocks.messageMaybeSingle.mockResolvedValue({ data: null, error: null });
+
+    const result = await reportRoomMessage(REPORTED, 'cruel');
+
+    expect(result).toMatchObject({ ok: false, code: 'SB-MESSAGE-MISSING' });
+    expect(mocks.reportInsert).not.toHaveBeenCalled();
+  });
+
+  it('does not report your own message', async () => {
+    mocks.messageMaybeSingle.mockResolvedValue({
+      data: { id: REPORTED, sender_id: 'user-1' },
+      error: null,
+    });
+
+    const result = await reportRoomMessage(REPORTED, 'oops');
+
+    expect(result.ok).toBe(false);
+    expect(mocks.reportInsert).not.toHaveBeenCalled();
+  });
+
+  it('treats a second report of the same message as the first', async () => {
+    mocks.reportInsert.mockResolvedValue({ error: { code: '23505', message: 'duplicate' } });
+
+    expect(await reportRoomMessage(REPORTED, 'cruel')).toEqual({ ok: true });
+  });
+
+  it('names a message removed between the read and the report', async () => {
+    mocks.reportInsert.mockResolvedValue({ error: { code: 'P0002', message: 'message not found' } });
+
+    expect(await reportRoomMessage(REPORTED, 'cruel')).toMatchObject({
+      ok: false,
+      code: 'SB-MESSAGE-MISSING',
+    });
+  });
+
+  it('carries its own code when the report does not land', async () => {
+    mocks.reportInsert.mockResolvedValue({ error: { code: 'XX000', message: 'boom' } });
+
+    expect(await reportRoomMessage(REPORTED, 'cruel')).toMatchObject({
+      ok: false,
+      code: 'SB-MESSAGE-REPORT',
+    });
+  });
+
+  it('is throttled with every other report', async () => {
+    mocks.checkRateLimit.mockResolvedValue(false);
+
+    expect(await reportRoomMessage(REPORTED, 'cruel')).toMatchObject({
+      ok: false,
+      code: 'SB-RATE-LIMIT',
+    });
+    expect(mocks.reportInsert).not.toHaveBeenCalled();
   });
 });
 

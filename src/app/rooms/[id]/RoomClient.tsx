@@ -11,12 +11,13 @@ import {
   deleteMessage,
   loadEarlierMessages,
   markRoomRead,
+  reportRoomMessage,
   sendMessage,
   sendPhotoMessage,
   signRoomMessagePhotos,
   toggleTask,
 } from '@/lib/actions/rooms';
-import { blockProfile, reportProfile } from '@/lib/actions/connections';
+import { blockProfile } from '@/lib/actions/connections';
 import { UploadError, uploadImage } from '@/lib/client/upload-image';
 import { formatRelative } from '@/lib/format';
 import type { RoomItemKind } from '@/lib/types';
@@ -374,16 +375,18 @@ export function RoomClient({
     });
   }
 
-  async function reportSender(senderId: string) {
+  // Reports this one message, not just its sender: the moderator sees the
+  // words (and photo) themselves, even if they are deleted later.
+  async function reportMessage(message: RoomMessage) {
     setMenu(null);
     const reason = await askReason({
-      title: `Report ${nameOf(senderId)}?`,
-      body: 'A sentence is plenty. A moderator reads it, and they won’t be told who sent it.',
+      title: `Report this message from ${nameOf(message.sender_id)}?`,
+      body: `A moderator sees the message and your reason, and a sentence is plenty. ${nameOf(message.sender_id)} won’t be told who reported it.`,
       confirmLabel: 'Send report',
     });
     if (!reason) return;
     startTransition(async () => {
-      const result = await reportProfile(senderId, reason);
+      const result = await reportRoomMessage(message.id, reason);
       if (!result.ok) {
         toast.error(result.error ?? 'Could not send the report.', result.code);
         return;
@@ -505,7 +508,11 @@ export function RoomClient({
                   menuOpen={menu === message.id}
                   onToggleMenu={() => setMenu((prev) => (prev === message.id ? null : message.id))}
                   pending={pending}
-                  onReport={!mine ? () => reportSender(message.sender_id) : undefined}
+                  onReport={
+                    !mine && !message.id.startsWith(OPTIMISTIC_PREFIX)
+                      ? () => reportMessage(message)
+                      : undefined
+                  }
                   onBlock={!mine && present ? () => blockSender(message.sender_id) : undefined}
                   onDelete={
                     mine && !message.id.startsWith(OPTIMISTIC_PREFIX)

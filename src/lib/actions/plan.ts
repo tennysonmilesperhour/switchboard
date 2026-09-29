@@ -3,16 +3,23 @@
 import { failure, validation, type ActionResult } from '@/lib/errors';
 
 import { requireUser } from '@/lib/server/require-user';
-import { parsePlan, type ParsedPlan } from '@/lib/ai/plan-parser';
+import { localToday, parsePlan, type ParsedPlan } from '@/lib/ai/plan-parser';
 import { checkRateLimit } from '@/lib/server/rate-limit';
 
 export interface PlanDraft extends Omit<ParsedPlan, 'inviteeNames'> {
   invitees: Array<{ id: string; name: string }>;
 }
 
-/** Voice-first planning: description in, wizard prefill out. */
+/**
+ * Voice-first planning: description in, wizard prefill out.
+ *
+ * `timeZone` is the host's browser zone, so "tomorrow" and "tonight" resolve
+ * to their dates rather than the server's UTC one. It is only ever used to
+ * read a calendar date; an unknown value falls back to UTC.
+ */
 export async function parsePlanDescription(
   text: string,
+  timeZone: string | null = null,
 ): Promise<ActionResult & { draft?: PlanDraft }> {
   const trimmed = text.trim();
   if (!trimmed) return validation('Say or type a plan first');
@@ -45,7 +52,7 @@ export async function parsePlanDescription(
   const parsed = await parsePlan(
     trimmed,
     friends.map((f) => f.name),
-    new Date(),
+    localToday(new Date(), typeof timeZone === 'string' ? timeZone.slice(0, 64) : null),
   );
 
   const invitees = parsed.inviteeNames

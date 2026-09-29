@@ -1,8 +1,35 @@
 import { describe, it, expect } from 'vitest';
-import { extractDate, extractTime, extractMode } from './plan-parser';
+import { extractDate, extractTime, extractMode, localToday, weekdayOf } from './plan-parser';
 
-// A fixed reference point: Wednesday, 2026-07-15, 09:00 local.
-const NOW = new Date(2026, 6, 15, 9, 0, 0);
+// A fixed reference point: Wednesday, 2026-07-15, in the host's own zone.
+const NOW = '2026-07-15';
+
+describe('localToday', () => {
+  // 7pm on Tuesday the 14th in Los Angeles is already 02:00 on Wednesday UTC.
+  const EVENING_IN_LA = new Date('2026-07-15T02:00:00Z');
+
+  it('reads the date in the host’s zone, not the server’s (G26)', () => {
+    expect(localToday(EVENING_IN_LA, 'America/Los_Angeles')).toBe('2026-07-14');
+    expect(localToday(EVENING_IN_LA, 'UTC')).toBe('2026-07-15');
+    expect(localToday(EVENING_IN_LA, 'Asia/Tokyo')).toBe('2026-07-15');
+  });
+
+  it('makes "tonight" and "tomorrow" the host’s', () => {
+    const today = localToday(EVENING_IN_LA, 'America/Los_Angeles');
+    expect(extractDate('drinks tonight', today)).toBe('2026-07-14');
+    expect(extractDate('coffee tomorrow', today)).toBe('2026-07-15');
+  });
+
+  it('falls back to UTC for a missing or unknown zone', () => {
+    expect(localToday(EVENING_IN_LA, null)).toBe('2026-07-15');
+    expect(localToday(EVENING_IN_LA, 'Not/AZone')).toBe('2026-07-15');
+  });
+
+  it('names the weekday for the model’s prompt', () => {
+    expect(weekdayOf('2026-07-15')).toBe('Wednesday');
+    expect(weekdayOf('2026-07-14')).toBe('Tuesday');
+  });
+});
 
 describe('extractDate', () => {
   it('resolves "today" and "tonight" to now', () => {
@@ -19,6 +46,11 @@ describe('extractDate', () => {
     expect(extractDate('lunch on friday', NOW)).toBe('2026-07-17');
     // Wed -> Monday wraps to next week.
     expect(extractDate('hike monday', NOW)).toBe('2026-07-20');
+  });
+
+  it('crosses a month end', () => {
+    expect(extractDate('brunch tomorrow', '2026-07-31')).toBe('2026-08-01');
+    expect(extractDate('dinner friday', '2026-12-30')).toBe('2027-01-01');
   });
 
   it('treats the same weekday as a week out, not today', () => {

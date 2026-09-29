@@ -2,6 +2,7 @@ import { ImageResponse } from 'next/og';
 import { createAdminClient, hasAdminCredentials } from '@/lib/supabase/admin';
 import { resolveEventZone } from '@/lib/server/event-zone';
 import { shareLinkState, unfurlsPlanDetails } from '@/lib/share-link';
+import { ogCoverDataUri } from '@/lib/server/og-cover';
 
 export const runtime = 'nodejs';
 
@@ -21,7 +22,7 @@ export async function GET(
   const admin = createAdminClient();
   const { data: event } = await admin
     .from('events')
-    .select('title, starts_at, location_name, status, share_link_active, time_zone, host_id')
+    .select('title, starts_at, location_name, status, share_link_active, time_zone, host_id, cover_url')
     .eq('id', id)
     .maybeSingle();
 
@@ -50,6 +51,11 @@ export async function GET(
         }).format(new Date(event.starts_at))
       : '';
   const where = shareable && event?.location_name ? event.location_name : '';
+  // The plan's own picture (G23), under the same gate as every other detail:
+  // a plan that isn't being shared unfurls as the generic card, cover and all.
+  const cover = shareable ? await ogCoverDataUri(event?.cover_url) : null;
+  const ink = cover ? '#ffffff' : '#2e2620';
+  const soft = cover ? '#f3ece2' : '#6d5f52';
 
   return new ImageResponse(
     (
@@ -62,11 +68,36 @@ export async function GET(
           justifyContent: 'space-between',
           padding: 72,
           background: '#f7f3ea',
-          color: '#2e2620',
+          color: ink,
           fontFamily: 'Georgia, serif',
+          position: 'relative',
         }}
       >
-        <div style={{ display: 'flex', fontSize: 32, color: '#b0563a' }}>
+        {cover ? (
+          // eslint-disable-next-line @next/next/no-img-element -- rendered by the OG image renderer, not a browser
+          <img
+            src={cover}
+            alt=""
+            width={1200}
+            height={630}
+            style={{ position: 'absolute', top: 0, left: 0, width: 1200, height: 630, objectFit: 'cover' }}
+          />
+        ) : null}
+        {cover ? (
+          // A scrim so the title reads over any picture.
+          <div
+            style={{
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              width: 1200,
+              height: 630,
+              display: 'flex',
+              backgroundImage: 'linear-gradient(to top, rgba(20,14,10,0.82), rgba(20,14,10,0.2))',
+            }}
+          />
+        ) : null}
+        <div style={{ display: 'flex', fontSize: 32, color: cover ? '#ffd9c7' : '#b0563a' }}>
           Switchboard
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
@@ -74,13 +105,13 @@ export async function GET(
             {title.length > 60 ? `${title.slice(0, 57)}…` : title}
           </div>
           {when ? (
-            <div style={{ display: 'flex', fontSize: 34, color: '#6d5f52' }}>
+            <div style={{ display: 'flex', fontSize: 34, color: soft }}>
               {when}
               {where ? ` · ${where}` : ''}
             </div>
           ) : null}
         </div>
-        <div style={{ display: 'flex', fontSize: 26, color: '#9a8a7a' }}>
+        <div style={{ display: 'flex', fontSize: 26, color: cover ? soft : '#9a8a7a' }}>
           Plans without the pressure
         </div>
       </div>

@@ -240,3 +240,42 @@ describe('the daily digest (D16)', () => {
     );
   });
 });
+
+describe('sabbatical (D6)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.stubEnv('NEXT_PUBLIC_VAPID_PUBLIC_KEY', 'public-key');
+    vi.stubEnv('VAPID_PRIVATE_KEY', 'private-key');
+    mocks.profile.sabbatical = true;
+  });
+
+  afterEach(() => {
+    for (const key of Object.keys(mocks.profile)) delete mocks.profile[key];
+    vi.unstubAllEnvs();
+  });
+
+  it('holds the push for anything that is not a plan they are already in', async () => {
+    for (const kind of ['event_invite', 'connection_request', 'match', 'ritual']) {
+      await sendPushToUsers(['user-1'], { title: 'x', body: 'x' }, undefined, { kind });
+    }
+    await sendPushToUsers(['user-1'], { title: 'x', body: 'x' });
+    expect(mocks.sendNotification).not.toHaveBeenCalled();
+  });
+
+  it('still pushes a change or a message from a plan they are in', async () => {
+    await sendPushToUsers(['user-1'], { title: 'Moved', body: 'x' }, 'plans', { kind: 'event_updated' });
+    await sendPushToUsers(['user-1'], { title: 'Hi', body: 'x' }, 'messages', {
+      kind: 'room_message',
+      planRoom: true,
+    });
+    expect(mocks.sendNotification).toHaveBeenCalledTimes(2);
+  });
+
+  it('holds a message from a room that is not a plan’s', async () => {
+    await sendPushToUsers(['user-1'], { title: 'Hi', body: 'x' }, 'messages', {
+      kind: 'room_message',
+      planRoom: false,
+    });
+    expect(mocks.sendNotification).not.toHaveBeenCalled();
+  });
+});

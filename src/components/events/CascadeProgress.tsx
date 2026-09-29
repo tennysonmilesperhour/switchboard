@@ -27,7 +27,7 @@ import {
 } from '@/lib/invite-rhythm';
 import { INVITE_STATUS_LABEL } from '@/lib/invite-status';
 import { inviteExpiresAt } from '@/lib/engine/cascade';
-import { WINDOW_CHOICES } from '@/lib/engine/windows';
+import { EXTEND_CHOICES, WINDOW_CHOICES } from '@/lib/engine/windows';
 import type { Invite, InviteMode } from '@/lib/types';
 import type { InviteStatus } from '@/lib/engine/cascade';
 import { normalizeInviteStatus } from '@/lib/invite-status';
@@ -46,6 +46,12 @@ interface CascadeProgressProps {
   /** Host/co-host view: show per-invite manage controls. */
   eventId?: string;
   editable?: boolean;
+  /**
+   * Whether an invitation that is already out may be given more time (D17,
+   * `hostCanExtendLiveWindow`). Narrower than `editable`: a date poll's line is
+   * editable, but nothing in it has gone out.
+   */
+  canExtend?: boolean;
   /**
    * Contact cards keyed by invite id. Tapping a row opens the person's card,
    * which is how a host reaches an invitee who has no account (see
@@ -108,6 +114,7 @@ export function CascadeProgress({
   mode,
   eventId,
   editable,
+  canExtend,
   people,
 }: CascadeProgressProps) {
   const [pending, startTransition] = useTransition();
@@ -243,6 +250,7 @@ export function CascadeProgress({
         : null;
     const canResend = editable && REOPENABLE.has(invite.status);
     const canReWindow = editable && invite.status === 'queued';
+    const canGiveMoreTime = Boolean(canExtend) && invite.status === 'sent';
     const canRestage = canReWindow && wavesMatter(mode);
     const deliveryText = invite.deliveries
       ?.map((delivery) => {
@@ -365,6 +373,25 @@ export function CascadeProgress({
             {WINDOW_CHOICES.map((c) => (
               <option key={c.windowMinutes} value={c.windowMinutes}>
                 {c.label}
+              </option>
+            ))}
+          </select>
+        )}
+        {canGiveMoreTime && (
+          <select
+            value=""
+            disabled={pending}
+            onChange={(e) => {
+              const add = Number(e.target.value);
+              if (add > 0) doWindow(invite, invite.window_minutes + add);
+            }}
+            aria-label={`Give ${invite.invitee_name} more time to answer`}
+            className="rounded-pill border border-line bg-paper px-2 py-1 text-xs font-medium text-ink outline-none focus:border-terracotta"
+          >
+            <option value="">More time</option>
+            {EXTEND_CHOICES.map((choice) => (
+              <option key={choice.addMinutes} value={choice.addMinutes}>
+                {choice.label}
               </option>
             ))}
           </select>

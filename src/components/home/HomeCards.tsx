@@ -9,7 +9,7 @@ import { Avatar } from '@/components/ui/Avatar';
 import { useToast } from '@/components/ui/Toast';
 import { logEnergy, type Feeling } from '@/lib/actions/energy';
 import { respondToIntroduction } from '@/lib/actions/matchmaker';
-import { respondToRitual } from '@/lib/actions/rituals';
+import { respondToRitual, skipRitual } from '@/lib/actions/rituals';
 
 /* One-tap private reflection after an event. */
 export function EnergyPrompt({
@@ -187,6 +187,8 @@ export interface RitualCardData {
   status: string;
   isMine: boolean;
   due: boolean;
+  /** The due date being nudged about, so Skip moves exactly this one. */
+  dueOn: string | null;
 }
 
 export function RitualCard({ ritual }: { ritual: RitualCardData }) {
@@ -252,19 +254,46 @@ export function RitualCard({ ritual }: { ritual: RitualCardData }) {
   }
 
   if (ritual.status === 'active' && ritual.due) {
+    const dueOn = ritual.dueOn;
     return (
       <Card tone="terracotta">
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3">
           <Avatar name={ritual.otherName} seed={ritual.otherId} size="sm" />
-          <p className="text-sm flex-1">
+          <p className="text-sm flex-1 min-w-[10rem]">
             Time for your <strong>{ritual.activity.toLowerCase()}</strong> ritual
             with <strong>{ritual.otherName}</strong>.
           </p>
-          <Link
-            href={`/events/new?title=${encodeURIComponent(ritual.activity)}&ritual=${ritual.id}&invite=${ritual.otherId}`}
-          >
-            <Button size="sm">Plan it</Button>
-          </Link>
+          <div className="flex items-center gap-1.5">
+            {dueOn && (
+              <Button
+                variant="ghost"
+                size="sm"
+                disabled={pending}
+                onClick={() =>
+                  startTransition(async () => {
+                    try {
+                      const result = await skipRitual(ritual.id, dueOn);
+                      if (!result.ok) {
+                        toast.error(result.error ?? 'Could not skip it. Try again.', result.code);
+                      } else {
+                        toast.success(`Skipped. The next one is due in about ${ritual.cadenceDays} days.`);
+                      }
+                      router.refresh();
+                    } catch {
+                      toast.error('Could not skip it. Try again.');
+                    }
+                  })
+                }
+              >
+                Skip
+              </Button>
+            )}
+            <Link
+              href={`/events/new?title=${encodeURIComponent(ritual.activity)}&ritual=${ritual.id}&invite=${ritual.otherId}`}
+            >
+              <Button size="sm">Plan it</Button>
+            </Link>
+          </div>
         </div>
       </Card>
     );

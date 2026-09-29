@@ -30,11 +30,17 @@ export async function proposeIntroduction(
   // You can only introduce people you're actually connected to — matches the
   // product intent, and stops the endpoint being used to fire push at arbitrary
   // user ids (SB-08).
-  const [{ data: connA }, { data: connB }] = await Promise.all([
+  const [checkA, checkB] = await Promise.all([
     supabase.rpc('is_connected_with', { p_other: personA }),
     supabase.rpc('is_connected_with', { p_other: personB }),
   ]);
-  if (!connA || !connB) {
+  // A check that could not run is not a "no": saying "you're not connected"
+  // would misdiagnose an outage. Fail closed, with the code that says so.
+  const checkError = checkA.error ?? checkB.error;
+  if (checkError) {
+    return reportAndFail('SB-INTRO-SAVE', 'intro.create', checkError, { personA, personB });
+  }
+  if (!checkA.data || !checkB.data) {
     return failure(
       'SB-PERM-DENIED',
       'You can only introduce people you’re connected to.',
@@ -42,11 +48,14 @@ export async function proposeIntroduction(
   }
 
   // Don't propose anyone who's taking a quiet season.
-  const { data: resting } = await supabase
+  const { data: resting, error: restingError } = await supabase
     .from('profiles')
     .select('id')
     .in('id', [personA, personB])
     .eq('sabbatical', true);
+  if (restingError) {
+    return reportAndFail('SB-INTRO-SAVE', 'intro.create', restingError, { personA, personB });
+  }
   if (resting && resting.length > 0) {
     return validation('One of them is on a sabbatical right now.');
   }
@@ -59,6 +68,10 @@ export async function proposeIntroduction(
     note: note.trim().slice(0, 280) || null,
   });
   if (error) {
+    // The insert policy refused the pair: the proposer is no longer connected
+    // to one of them, or the two have blocked each other. Retrying cannot work,
+    // and the reason must not be named — the proposer never learns of a block.
+    if (error.code === '42501') return failure('SB-INTRO-UNAVAILABLE');
     return reportAndFail('SB-INTRO-SAVE', 'intro.create', error, { personA, personB });
   }
 
@@ -78,7 +91,7 @@ export async function proposeIntroduction(
 export async function respondToIntroduction(
   proposalId: string,
   accept: boolean,
-): Promise<ActionResult & { matched: boolean }> {
+): Promise<ActionResult & { matched: boolean; url?: string }> {
   const auth = await requireUser();
   if (!auth.ok) return { ...auth, matched: false };
   const { supabase } = auth;
@@ -88,15 +101,20 @@ export async function respondToIntroduction(
   });
   if (error) {
     return {
-      ...(await reportAndFail('SB-INTRO-SAVE', 'intro.create', error, { proposalId })),
+      ...(await reportAndFail('SB-INTRO-SAVE', 'intro.respond', error, { proposalId })),
       matched: false,
     };
   }
 
-  const matched = data === 'matched';
+  // Only the call that completes the match hears 'matched'; any later answer
+  // on the same intro (a double tap, a stale card) hears 'already_matched', so
+  // the pair are told once.
+  const justMatched = data === 'matched';
+  const matched = justMatched || data === 'already_matched';
+  let url: string | undefined;
   if (matched) {
-    // Both said yes — identities are revealed, so tell both. Previously a
-    // match notified nobody and the whole payoff was silent.
+    // The definer has already confirmed the caller is one of the pair (it
+    // raises for anyone else), which is what authorizes this service-role read.
     const admin = createAdminClient();
     const { data: proposal } = await admin
       .from('matchmaker_proposals')
@@ -104,18 +122,23 @@ export async function respondToIntroduction(
       .eq('id', proposalId)
       .maybeSingle();
     if (proposal?.person_a && proposal?.person_b) {
-      const activity = proposal.activity ? String(proposal.activity).toLowerCase() : null;
-      await notifyUsers([proposal.person_a, proposal.person_b], {
-        kind: 'match',
-        title: '✨ It’s a match',
-        body: activity ? `You both said yes to ${activity}. Say hi!` : 'You both said yes. Say hi!',
-        // "Say hi" has to land somewhere you can. It pointed at /people, which
-        // lists connections, and the two of you are not connected: the match
-        // was on no part of that page.
-        url: proposal.room_id ? `/rooms/${proposal.room_id}` : '/mutual',
-      });
+      // "Say hi" has to land somewhere you can. It pointed at /people, which
+      // lists connections, and the two of you are not connected: the match
+      // was on no part of that page.
+      url = proposal.room_id ? `/rooms/${proposal.room_id}` : '/mutual';
+      if (justMatched) {
+        // Both said yes — identities are revealed, so tell both. Previously a
+        // match notified nobody and the whole payoff was silent.
+        const activity = proposal.activity ? String(proposal.activity).toLowerCase() : null;
+        await notifyUsers([proposal.person_a, proposal.person_b], {
+          kind: 'match',
+          title: '✨ It’s a match',
+          body: activity ? `You both said yes to ${activity}. Say hi!` : 'You both said yes. Say hi!',
+          url,
+        });
+      }
     }
   }
   revalidatePath('/');
-  return { ok: true, matched };
+  return url ? { ok: true, matched, url } : { ok: true, matched };
 }

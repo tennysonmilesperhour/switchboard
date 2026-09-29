@@ -134,6 +134,8 @@ a cookie value you set yourself, or a request body field.
   `user_reports` / `profile_avoids` are owner-scoped by RLS, and `are_blocked()`
   is consulted on discovery, matching, connection requests, mutual intents, and
   facet sharing. A moderation decision that only hides a button is not enforced.
+  What a platform moderator can do about a report (suspend, remove) is in
+  "Moderation" below; every one of those decisions is made in the database.
 - A block reaches the rooms a pair shares (D12,
   `20260930020000_room_blocks_and_controls.sql`). A two-person room (`match`,
   `moment`) becomes read-only for both people: `private.room_closed_by_block`
@@ -154,6 +156,27 @@ a cookie value you set yourself, or a request body field.
   lane compares home points snapped to the same 0.25° cells as the Home density
   check, so a moved home point learns no more than a city-sized cell
   (`20260930042000_discovery_requires_discoverable.sql`).
+- A sabbatical is enforced where it pauses something, not in the page
+  (`20260930080000_sabbatical_mode.sql`, D6). The `mutual_intents` policy
+  refuses an active Mutual or discovery interest from or to someone on
+  sabbatical (withdrawing is always allowed), `rituals_insert` refuses a
+  proposal either way, the ritual reminder claim skips the pair, and texts and
+  emails are dropped at the queue by `private.hold_job_for_sabbatical` unless
+  `private.sabbatical_allows` lets the kind through. The push gate asks
+  `sabbaticalAllows` (`src/lib/sabbatical.ts`), the same list, and
+  `sabbatical.test.ts` fails if the two differ. The note is the owner's own
+  text, shown to others as text only and capped at 140 characters.
+- A standing ritual's terms and schedule are not writable from a session
+  (`20260930081000_ritual_reminders.sql`, D8). `private.guard_ritual_update`
+  lets a session move only the status, only along the ritual's life, and only
+  the invited partner may accept; activity, cadence, `last_planned_at` and
+  `due_on` change only in definer code (`skip_ritual`, `note_ritual_planned`,
+  `create_event_atomic`), and an insert must be a fresh proposal. Before, the
+  proposer could accept their own proposal, and a due date either person could
+  rewrite would have let them make the reminder cron message the other every
+  minute. `ritual_reminders` records one reminder per ritual, due date and
+  person, written in the same statement as the claim, so a reminder is sent at
+  most once.
 - `localStorage` is fine for **preferences** (a dismissed nudge, a UI toggle),
   never for **authorization**.
 
@@ -387,6 +410,27 @@ integrations a deployment has wired up is reconnaissance, not public data.
   into an ended one, and deleting a zone ends the check-ins in it.
 - `supabase/tests/board_moderators.test.sql` — board roles change only through
   `set_board_member_role`, and no board is left without a moderator.
+- `supabase/tests/sabbatical_mode.test.sql` — a sabbatical holds every text and
+  email except from plans the person is in (the inbox row is still written),
+  pauses Mutual both ways without trapping an old intent, and leaves guest
+  texts alone.
+- `supabase/tests/standing_rituals.test.sql` — only the two people see a
+  ritual, only the partner accepts it, the terms and schedule are not
+  session-writable, skipping is theirs alone and moves one cadence ahead, and
+  the reminder claim is once per person per due date, on their own due day,
+  outside quiet hours, never across a block or a sabbatical.
+- `supabase/tests/moderator_actions.test.sql` — only a platform moderator can
+  suspend, lift, or remove a post or message, and only against an open report
+  about it; a room-message report copies the message from the row (a
+  non-member cannot use one to read it); a suspension is enforced on writes;
+  removed content is hidden from members and frozen; nobody can write the
+  audit trail.
+- `supabase/tests/plan_polish.test.sql` — only a host or co-host can turn an
+  Open Table request down, and only one still waiting; a live window only
+  grows, only while the plan is inviting; a no becomes a yes only while the
+  plan is inviting and never over a guardian's no; the browser cannot change a
+  plan's parental approval or recurrence; and only people who went, the host
+  and co-hosts write the Memory Capsule.
 - `supabase/tests/rls_initplan.test.sql`, `foreign_key_indexes.test.sql` and
   `single_permissive_policies.test.sql` — every policy calls `auth.uid()` once
   per statement, every foreign key has a covering index, and no table has two
@@ -423,6 +467,62 @@ to them:
   by `signRoomMessagePhotos`, which re-reads the message through the caller's
   own RLS client first; the page signs everything it renders in one batch.
 
+## Moderation (what a platform moderator can do)
+
+Platform moderators are appointed only by the operator
+(`platform_moderators`, deny-all to users; `20260713170000_moderation_queue.sql`).
+Since P7 (`20260930070000_moderator_actions.sql`, decision D7) they can act on a
+report from `/moderation`, not just record a status:
+
+- **Every action is decided in the database, for the caller and the
+  resource.** `moderate_suspend_account`, `moderate_lift_suspension`,
+  `moderate_remove_board_post` and `moderate_remove_room_message` are the usual
+  private-definer bodies behind invoker wrappers; each re-checks
+  `private.is_platform_moderator(auth.uid())`, and a suspension or removal must
+  name an **open report about exactly that account, post or message**. The
+  server actions (`src/lib/actions/moderation.ts`) run on the moderator's own
+  session client and never use `createAdminClient()`.
+- **A suspension is the auth server's own ban** (`auth.users.banned_until`),
+  which nobody can write from the API. There is one copy of the state, so the
+  three places that read it cannot disagree: GoTrue refuses the password,
+  refresh and email-link grants (sign-in shows `SB-AUTH-SUSPENDED` with the
+  support address, docs/AUTH.md); the proxy signs a live session out to
+  `/login?error=suspended`, and `requireUser` refuses a Server Action from a tab
+  that was already open; and `private.is_suspended` sits in the `messages` and
+  `board_posts` write policies, so an access token issued before the suspension
+  cannot add what a moderator removes for the rest of its lifetime. A moderator
+  cannot suspend themselves or another moderator (moderator authority is the
+  operator's to remove). Open-ended suspensions are stored a century out,
+  because GoTrue has no "forever"; a moderator can lift any suspension early,
+  including one set outside the app, from the same page.
+- **Removal is soft and frozen.** `removed_at` on `board_posts` / `messages`
+  can be set only by the moderator functions (a trigger refuses every other
+  write, including the service role's, unless their transaction-local flag is
+  on — the `set_board_member_role` precedent). The SELECT policies hide removed
+  rows from members, which also stops the author editing or deleting them (an
+  UPDATE or DELETE with a WHERE clause applies the SELECT policy). Removing a
+  message also deletes what it filed into the room's tabs, so a removed photo
+  does not stay up in the Photos tab.
+- **Reports attach what was reported, from the row, never from the reporter.**
+  A `BEFORE INSERT` trigger on `user_reports` copies a room message's body and
+  photo path (and a board post's title and body) into the report and overwrites
+  `reported_id` with the real author. Because the reporter can read their own
+  report, the trigger refuses (`P0002`) a message or post the reporter cannot
+  read: a report is never a way to copy something out of a room or board you
+  are not in. A message report keeps its snapshot after the sender deletes the
+  message (`message_id` is `ON DELETE SET NULL`), and `deleteMessage` leaves a
+  reported photo in storage so the moderator can still see it. The moderation
+  page signs that photo with `signRoomPhotos` after the moderator gate and
+  hands the browser only the signed URL.
+- **Everything is on the record.** `moderation_actions` (who, what, when, which
+  report, the note, how long) is written only by those functions and readable
+  only by moderators; account deletion clears the actor or subject
+  (`ON DELETE SET NULL`) without erasing the decision.
+
+Litmus test: *could anyone but an appointed moderator change what a member
+sees or whether they can sign in, or could a report carry anything the
+reporter could not already read?*
+
 ## Event invitations (consent is not host-writable)
 
 An invitation lets a host ask; it never lets the host answer for somebody
@@ -450,19 +550,54 @@ invites, open-table requests, and share-link RSVP rows:
 - **Editing a live line touches only invitations that have not gone out.**
   `move_queued_invite`, `set_invite_stage` and `set_invite_window` are
   security-definer, host-or-co-host only, and every one of them guards on
-  `status = 'queued'` — the swap under a row lock, the other two in the UPDATE's
-  own `WHERE` so the check and the write cannot come apart. An invitation that
-  has already reached somebody is history: it cannot be reordered, re-waved, or
-  re-timed, and the caller is told so rather than silently changing nothing.
-  `set_invite_stage` additionally bounds the wave to one the plan already has
-  (or the one after it, five at most), because a gap reads to the cascade engine
-  as a stage that has resolved. This is why no broad UPDATE policy on
-  `public.invites` exists. Covered by
-  `supabase/tests/invite_stage_editing.test.sql`.
+  `status = 'queued'` — the swap under a row lock, `set_invite_stage` in the
+  UPDATE's own `WHERE` so the check and the write cannot come apart. An
+  invitation that has already reached somebody is history: it cannot be
+  reordered, re-waved, or re-timed, and the caller is told so rather than
+  silently changing nothing. The one exception is decision D17: while the plan
+  is inviting, `set_invite_window` may give a *sent* invitation **more** time —
+  never less, and never once its window has run out (Resend does that) — with
+  the invite row locked for the check and the write
+  (`20260930060000_plan_polish.sql`). `set_invite_stage` additionally bounds
+  the wave to one the plan already has (or the one after it, five at most),
+  because a gap reads to the cascade engine as a stage that has resolved. This
+  is why no broad UPDATE policy on `public.invites` exists. Covered by
+  `supabase/tests/invite_stage_editing.test.sql` and `plan_polish.test.sql`.
+- **A no can become a yes, but only the invitee's own no (D17).** While the
+  plan is inviting, `respond_to_invite` accepts an answer on a `declined`
+  invitation as well as a `sent` one, through the same capacity check,
+  guardian hold and room membership as a first yes. A no whose latest guardian
+  request was denied is the guardian's, and stays a no. An Open Table request
+  that the host turns down is **deleted**, never kept as `declined`
+  (`decline_join_request`): a kept row would let the person the host turned
+  away say yes to themselves, and `can_view_event` admits any invitee who is
+  not queued.
 
 Litmus test: *can a host name an arbitrary profile/contact and either bypass a
 block, manufacture attendance, or turn one plan into an unbounded message
 sender?*
+
+## What a plan keeps from its creation, and who writes its capsule
+
+- **Parental approval and recurrence are founding rules (D18).** The edit form
+  changes the cover, theme, reminders, Open Table and adds questions, but
+  `events_update` admits the host and every co-host for any column, so a
+  trigger (`events_freeze_founding_rules`, `20260930060000_plan_polish.sql`)
+  refuses a change to `parental_approval`, `recurrence` or
+  `recurrence_interval_days` from the browser roles. Otherwise a co-host could
+  switch off guardian approval straight through the API after minors said yes
+  under it. Server-side roles can still correct a plan.
+- **The Memory Capsule is written by the people who went (G28).** Its insert and
+  update policies require `private.can_add_to_capsule`: an accepted invitation
+  to the plan, or being its host or a co-host. They used to ask only
+  `can_view_event`, which admits anyone who declined or whose invitation
+  expired. Reading is unchanged. The page asks the caller-bound
+  `can_current_user_add_to_capsule`, which cannot be pointed at somebody else.
+
+Covered by `supabase/tests/plan_polish.test.sql`.
+
+Litmus test: *can someone change the rules a plan's guests said yes under, or
+write the record of a night they did not attend?*
 
 ## Contact details on a plan (the invitee card)
 
@@ -1041,7 +1176,12 @@ test can import (Next's proxy file may export only its one function). Adding a
 host to any directive means adding the case there.
 - **OG image route** renders public event metadata (title/time/location) for any
   event id without auth by design (link unfurling). Keep it to non-sensitive
-  fields only.
+  fields only. Since G23 it also draws the plan's cover, under the same
+  `unfurlsPlanDetails` gate, and only a cover uploaded to our own public
+  `media` bucket (`src/lib/server/og-cover.ts`): an unauthenticated route must
+  never fetch an address a host typed. The bytes are size-capped, sniffed as
+  PNG or JPEG, fetched with redirects refused, and handed to the renderer as a
+  data URI.
 - **Legacy public media objects.** Rows created before the private-bucket
   migration still point at public URLs; `signMediaRef` serves them as-is. Run
   `node --env-file-if-exists=.env.local scripts/archive/migrate-legacy-media.mjs`

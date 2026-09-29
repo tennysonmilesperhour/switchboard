@@ -401,6 +401,14 @@ const REGISTRY = {
     fix: null,
     actor: 'operator',
   },
+  // Run it back / Schedule the next one. Anything made before the failure is
+  // removed, so "nothing was sent" is true when the host reads it (G27). It
+  // used to redirect back to the old plan with no word at all.
+  'SB-PLAN-CLONE': {
+    message: 'Switchboard couldn’t set up the new plan.',
+    fix: 'Nothing was sent. Try again in a moment.',
+    actor: 'reader',
+  },
   // The suggestion box clears the moment you submit, so an idea that fails to
   // save leaves a screen identical to one that saved nothing at all: empty box,
   // unchanged list, no explanation. Anyone would read that as "the app ignored
@@ -614,6 +622,15 @@ const REGISTRY = {
     fix: 'Check the file is an image or audio clip under the size limit, then try again.',
     actor: 'reader',
   },
+  // The browser's microphone or recorder failed to start or broke mid-way
+  // (G33). Nothing reached the server, so there is no log line; the code is
+  // what tells a screenshot of it apart from a blocked microphone or an empty
+  // clip.
+  'SB-VOICE-RECORD': {
+    message: 'The recording couldn’t continue: this browser’s microphone or recorder hit an error. Your microphone is off.',
+    fix: 'Try recording again, or write your message instead.',
+    actor: 'reader',
+  },
   'SB-SCOPE-BOARD': {
     message: 'The shared checklist didn’t load.',
     fix: 'Reload the page. Your ticks are saved as you make them.',
@@ -788,8 +805,28 @@ const REGISTRY = {
     fix: 'Try again.',
     actor: 'reader',
   },
+  // The insert policy refused the pair. It never says why: the reason can be a
+  // block between the two, which the person introducing them must not learn.
+  'SB-INTRO-UNAVAILABLE': {
+    message: 'This introduction can’t be made.',
+    fix: 'Try introducing one of them to someone else.',
+    actor: 'reader',
+  },
   'SB-MODERATION-SAVE': {
     message: 'That moderation decision didn’t save.',
+    fix: 'Reload the queue and try again.',
+    actor: 'reader',
+  },
+  // A moderator's suspension or lift did not land. Its own code because it
+  // writes the auth server's ban, not the report: "the queue didn't save" would
+  // point at the wrong half.
+  'SB-MODERATION-SUSPEND': {
+    message: 'That suspension change didn’t save.',
+    fix: 'Reload the queue and check whether the account shows as suspended before trying again.',
+    actor: 'reader',
+  },
+  'SB-MODERATION-REMOVE': {
+    message: 'That removal didn’t save.',
     fix: 'Reload the queue and try again.',
     actor: 'reader',
   },
@@ -811,6 +848,18 @@ const REGISTRY = {
   'SB-ROOM-SAVE': {
     message: 'That room update didn’t save.',
     fix: 'Reload the room and try again.',
+    actor: 'reader',
+  },
+  // Reporting one message. "Not there" covers a message deleted, removed, or in
+  // a room the reporter has left, on purpose: the same rule as SB-POST-MISSING.
+  'SB-MESSAGE-MISSING': {
+    message: 'That message isn’t there any more.',
+    fix: 'It may have been deleted or removed already. Reload the room.',
+    actor: 'reader',
+  },
+  'SB-MESSAGE-REPORT': {
+    message: 'That report didn’t reach the moderators.',
+    fix: 'Try again. If it keeps failing, report the person from their profile instead.',
     actor: 'reader',
   },
   // Reading rooms (the inbox, or scrolling back past the newest messages). Its
@@ -1020,6 +1069,7 @@ const AREA_CODES: Record<string, ErrorCode> = {
   'event.delete': 'SB-PLAN-DELETE',
   'event.delete-room': 'SB-PLAN-DELETE',
   'event.cohost-add': 'SB-PLAN-SAVE',
+  'event.clone': 'SB-PLAN-CLONE',
 
   // Getting invitations out
   'event-initial-delivery': 'SB-INVITE-SEND',
@@ -1158,6 +1208,7 @@ const AREA_CODES: Record<string, ErrorCode> = {
   'contact.verify-check': 'SB-VERIFY-CHECK',
   'discovery.run': 'SB-DISCOVERY-RUN',
   'discover.people': 'SB-PEOPLE-LOAD',
+  'discover.join-requests': 'SB-INVITE-LOAD',
   'energy.save': 'SB-ENERGY-SAVE',
   'event-thread.send': 'SB-THREAD-SAVE',
   'event-thread.delete': 'SB-THREAD-SAVE',
@@ -1173,12 +1224,17 @@ const AREA_CODES: Record<string, ErrorCode> = {
   'location.share': 'SB-LOCATION-SAVE',
   'location.stop': 'SB-LOCATION-SAVE',
   'location.load': 'SB-LOCATION-LOAD',
-  'location.refresh': 'SB-LOCATION-LOAD',
+  'location.refresh': 'SB-LOCATION-SAVE',
   'map.search': 'SB-MAP-LOOKUP',
   'map.reverse': 'SB-MAP-LOOKUP',
   'map.locate': 'SB-MAP-LOOKUP',
   'intro.create': 'SB-INTRO-SAVE',
+  'intro.respond': 'SB-INTRO-SAVE',
   'moderation.resolve': 'SB-MODERATION-SAVE',
+  'moderation.suspend': 'SB-MODERATION-SUSPEND',
+  'moderation.lift': 'SB-MODERATION-SUSPEND',
+  'moderation.remove-post': 'SB-MODERATION-REMOVE',
+  'moderation.remove-message': 'SB-MODERATION-REMOVE',
   'moment.create': 'SB-MOMENT-SAVE',
   'moment.update': 'SB-MOMENT-SAVE',
   'moment.load': 'SB-MOMENT-SAVE',
@@ -1188,6 +1244,12 @@ const AREA_CODES: Record<string, ErrorCode> = {
   'mutual.unmatch': 'SB-MUTUAL-SAVE',
   'ritual.create': 'SB-RITUAL-SAVE',
   'ritual.update': 'SB-RITUAL-SAVE',
+  'ritual.skip': 'SB-RITUAL-SAVE',
+  // Recording that a plan fulfilled a ritual. Logged, never shown: the plan
+  // itself was made either way.
+  'ritual.plan': 'SB-RITUAL-SAVE',
+  // The cron's due-day reminder claim. Never shown; the next tick retries.
+  'ritual.remind': 'SB-NOTIFY-RECORD',
   'room.message': 'SB-ROOM-SAVE',
   'room.task': 'SB-ROOM-SAVE',
   'room.image': 'SB-ROOM-SAVE',
@@ -1196,6 +1258,7 @@ const AREA_CODES: Record<string, ErrorCode> = {
   'room.leave': 'SB-ROOM-SAVE',
   'room.history': 'SB-ROOM-LOAD',
   'room.inbox': 'SB-ROOM-LOAD',
+  'room.report-message': 'SB-MESSAGE-REPORT',
   'signal.activate': 'SB-SIGNAL-SAVE',
   'signal.remove': 'SB-SIGNAL-SAVE',
   'signal.clear': 'SB-SIGNAL-SAVE',

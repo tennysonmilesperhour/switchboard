@@ -4,6 +4,7 @@ import { createClient } from '@/lib/supabase/server';
 import type { InvitationDeliverySummary } from '@/lib/server/cascade-runner';
 import type { EventTheme, InviteMode, RecurrenceKind } from '@/lib/types';
 import type { ErrorCode } from '@/lib/errors';
+import type { NewQuestion } from '@/lib/plan-extras';
 import { validation } from '@/lib/errors';
 import { normalizePhoneNumber } from '@/lib/phone';
 import { isValidCoordinate } from '@/lib/geo';
@@ -43,7 +44,7 @@ export interface CreateEventInput {
   pollResolution: 'host_pick' | 'auto' | 'runoff';
   suggestDeadline: string | null;
   voteDeadline: string | null;
-  /** Whether the ~3h-before reminder sweep should ping this plan's attendees. */
+  /** Whether the reminder sweep (day-before and starting-soon, see `dueReminders`) pings this plan. */
   remindersEnabled: boolean;
   /** Presentation */
   coverUrl?: string | null;
@@ -240,4 +241,17 @@ export interface UpdateEventInput {
   timeZone: string | null;
   capacity: number | null;
   wishlistUrl: string | null;
+  /**
+   * What else may change after creation (decision D18). Omitted means leave
+   * all of it as it is. Parental approval and recurrence are deliberately not
+   * here: they stay as the plan was made.
+   */
+  extras?: {
+    coverUrl: string | null;
+    theme: EventTheme;
+    remindersEnabled: boolean;
+    openTable: boolean;
+    /** Questions to add. Existing ones are never edited or removed here. */
+    newQuestions: NewQuestion[];
+  };
 }

@@ -27,6 +27,14 @@ export default async function CapsulePage({
     .single();
   if (!event) notFound();
 
+  // Who may add a line is the database's rule (G28): people who went, and the
+  // plan's hosts. Asked here only to decide whether to offer the form; if the
+  // question itself fails, the form is offered and the write is still checked.
+  const { data: canAdd, error: canAddError } = await supabase.rpc(
+    'can_current_user_add_to_capsule',
+    { p_event: id },
+  );
+
   const { data: entries } = await supabase
     .from('capsule_entries')
     .select('id, line, photo_url, user_id, created_at, author:profiles(display_name)')
@@ -101,13 +109,19 @@ export default async function CapsulePage({
           </div>
         )}
 
-        <CapsuleForm
-          eventId={id}
-          userId={user.id}
-          initialLine={mine?.line ?? ''}
-          initialPhotoRef={mine?.photo_ref ?? ''}
-          initialPhotoPreview={mine?.photo_url ?? ''}
-        />
+        {canAdd || canAddError ? (
+          <CapsuleForm
+            eventId={id}
+            userId={user.id}
+            initialLine={mine?.line ?? ''}
+            initialPhotoRef={mine?.photo_ref ?? ''}
+            initialPhotoPreview={mine?.photo_url ?? ''}
+          />
+        ) : (
+          <p className="text-plate text-plate-inset text-sm text-ink-faint text-center">
+            The capsule is written by the people who went and the plan’s hosts.
+          </p>
+        )}
       </div>
     </AppShell>
   );

@@ -16,7 +16,7 @@ import type { ActionResult } from '@/lib/errors';
 import { failure, validation } from '@/lib/errors';
 import type { EventStatus, InviteMode } from '@/lib/types';
 import type { TablesInsert } from '@/lib/supabase/database.types';
-import { suggestWindow } from '@/lib/engine/windows';
+import { liveWindowRefusal, suggestWindow } from '@/lib/engine/windows';
 import { parseInviteEntries, type ParsedInviteEntry } from '@/lib/invite-entry';
 import { hostCanEditInvitees } from '@/lib/share-link';
 import { canAddInvitees, MAX_INVITEES_PER_EVENT } from '@/lib/invite-limits';
@@ -711,7 +711,12 @@ export async function setInviteStage(
   return { ok: true };
 }
 
-/** Change the response window on a not-yet-sent invite (host/co-host). */
+/**
+ * Change an invitation's response window (host/co-host). A queued one takes
+ * any window; one already out may only be given more time, while the plan is
+ * inviting (D17). The rules live in `set_invite_window`; a refusal comes back
+ * as the sentence for it, since each names its own way on.
+ */
 export async function setInviteWindow(
   eventId: string,
   inviteId: string,
@@ -730,6 +735,8 @@ export async function setInviteWindow(
     p_minutes: minutes,
   });
   if (error) {
+    const refusal = liveWindowRefusal(error.hint);
+    if (refusal) return validation(refusal);
     return reportAndFail('SB-INVITE-SEND', 'invite.window', error, { eventId, inviteId });
   }
   revalidatePath(`/events/${eventId}`);

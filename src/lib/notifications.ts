@@ -148,7 +148,9 @@ const KIND_TO_CATEGORY: Record<string, NotificationCategory> = {
   ritual: 'social',
   // Left unmapped on purpose, so no toggle can hide an answer someone is
   // waiting on: parental_approval, parental_approval_denied (a guardian's
-  // decision) and venue_review (the outcome of a partner claim).
+  // decision), venue_review (the outcome of a partner claim) and join_declined
+  // (a host's "not this time" to an Open Table request, which /join promises
+  // they will hear either way).
 };
 
 export function categoryForKind(kind: string): NotificationCategory | null {

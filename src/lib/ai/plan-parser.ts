@@ -40,23 +40,66 @@ function pad2(n: number): string {
   return String(n).padStart(2, '0');
 }
 
+/** A calendar date as YYYY-MM-DD, read in UTC (the day arithmetic below is zone-free). */
 function toDateString(d: Date): string {
-  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+  return `${d.getUTCFullYear()}-${pad2(d.getUTCMonth() + 1)}-${pad2(d.getUTCDate())}`;
+}
+
+/**
+ * The date it is for the person describing the plan, as YYYY-MM-DD.
+ *
+ * "Tomorrow" and "tonight" mean the host's tomorrow and tonight. The server
+ * runs in UTC, so reading the date there turned "drinks tonight" said at 7pm in
+ * California into tomorrow's date (G26). The browser sends its zone; a missing
+ * or unrecognised one falls back to UTC rather than failing the draft.
+ */
+export function localToday(now: Date, timeZone: string | null | undefined): string {
+  const format = (zone: string) => {
+    const parts = new Intl.DateTimeFormat('en-US', {
+      timeZone: zone,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).formatToParts(now);
+    const part = (type: string) => parts.find((p) => p.type === type)?.value ?? '';
+    return `${part('year')}-${part('month')}-${part('day')}`;
+  };
+  if (timeZone) {
+    try {
+      return format(timeZone);
+    } catch {
+      // An unknown zone name throws a RangeError; fall through to UTC.
+    }
+  }
+  return format('UTC');
+}
+
+/** YYYY-MM-DD → a Date at UTC midnight, for day arithmetic that no zone can shift. */
+function fromDateString(day: string): Date {
+  const [year, month, date] = day.split('-').map(Number);
+  return new Date(Date.UTC(year, month - 1, date));
+}
+
+/** The weekday name for a YYYY-MM-DD date, for the model's prompt. */
+export function weekdayOf(day: string): string {
+  const name = WEEKDAYS[fromDateString(day).getUTCDay()];
+  return name.charAt(0).toUpperCase() + name.slice(1);
 }
 
 /**
  * Resolve a relative date phrase ("tomorrow", "friday", "next tuesday") against
- * `now`, in `now`'s local zone. Returns YYYY-MM-DD or null. Deterministic — no
- * model, no key required — so "Describe it for me" still fills the date when
- * ANTHROPIC_API_KEY is absent.
+ * `today`, the host's own date (see `localToday`). Returns YYYY-MM-DD or null.
+ * Deterministic — no model, no key required — so "Describe it for me" still
+ * fills the date when ANTHROPIC_API_KEY is absent.
  */
-export function extractDate(text: string, now: Date): string | null {
+export function extractDate(text: string, today: string): string | null {
   const lower = text.toLowerCase();
+  const base = fromDateString(today);
 
-  if (/\btoday\b|\btonight\b/.test(lower)) return toDateString(now);
+  if (/\btoday\b|\btonight\b/.test(lower)) return toDateString(base);
   if (/\btomorrow\b|\btmrw\b/.test(lower)) {
-    const d = new Date(now);
-    d.setDate(d.getDate() + 1);
+    const d = new Date(base);
+    d.setUTCDate(d.getUTCDate() + 1);
     return toDateString(d);
   }
 
@@ -70,11 +113,11 @@ export function extractDate(text: string, now: Date): string | null {
     const re = new RegExp(`\\b(next\\s+)?${WEEKDAYS[i]}\\b`);
     const m = lower.match(re);
     if (!m) continue;
-    const d = new Date(now);
-    let delta = (i - d.getDay() + 7) % 7;
+    const d = new Date(base);
+    let delta = (i - d.getUTCDay() + 7) % 7;
     if (delta === 0) delta = 7; // "monday" said on a Monday means next Monday
     if (m[1]) delta += delta <= 6 ? 7 : 0; // explicit "next"
-    d.setDate(d.getDate() + delta);
+    d.setUTCDate(d.getUTCDate() + delta);
     return toDateString(d);
   }
 
@@ -132,7 +175,7 @@ export function extractMode(text: string): ParsedPlan['mode'] {
 function parseWithRules(
   text: string,
   friendNames: string[],
-  now: Date,
+  today: string,
 ): ParsedPlan {
   const lower = text.toLowerCase();
   const inviteeNames = friendNames.filter((name) => {
@@ -141,7 +184,7 @@ function parseWithRules(
   });
   return {
     title: text.split(/[,.]/)[0].slice(0, 60).trim() || 'New plan',
-    date: extractDate(text, now),
+    date: extractDate(text, today),
     time: extractTime(text),
     locationName: null,
     capacity: null,
@@ -150,12 +193,16 @@ function parseWithRules(
   };
 }
 
+/**
+ * `today` is the host's own date (YYYY-MM-DD, from `localToday`), so a
+ * relative date resolves to the day they meant.
+ */
 export async function parsePlan(
   text: string,
   friendNames: string[],
-  now: Date,
+  today: string,
 ): Promise<ParsedPlan> {
-  if (!aiEnabled()) return parseWithRules(text, friendNames, now);
+  if (!aiEnabled()) return parseWithRules(text, friendNames, today);
 
   try {
     const response = await getClaude().messages.create({
@@ -163,7 +210,7 @@ export async function parsePlan(
       max_tokens: 500,
       system:
         `You turn a spoken or typed plan description into a structured draft. ` +
-        `Today is ${now.toISOString().slice(0, 10)} (${now.toLocaleDateString('en-US', { weekday: 'long' })}). ` +
+        `Today is ${today} (${weekdayOf(today)}). ` +
         `Resolve relative dates ("tomorrow", "Friday") to YYYY-MM-DD. ` +
         `Invitee names must come from this list when they clearly match: ` +
         `${friendNames.join(', ') || '(no friends yet)'}. Keep their stated order; ` +
@@ -176,7 +223,7 @@ export async function parsePlan(
     });
 
     const toolUse = response.content.find((block) => block.type === 'tool_use');
-    if (!toolUse || toolUse.type !== 'tool_use') return parseWithRules(text, friendNames, now);
+    if (!toolUse || toolUse.type !== 'tool_use') return parseWithRules(text, friendNames, today);
     const raw = toolUse.input as Partial<ParsedPlan>;
     return {
       title: raw.title?.slice(0, 80) || 'New plan',
@@ -190,6 +237,6 @@ export async function parsePlan(
       mode: raw.mode ?? 'individual',
     };
   } catch {
-    return parseWithRules(text, friendNames, now);
+    return parseWithRules(text, friendNames, today);
   }
 }

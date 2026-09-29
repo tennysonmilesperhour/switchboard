@@ -184,6 +184,28 @@ export function hostCanEditLine(status: string | null | undefined): boolean {
 }
 
 /**
+ * Can a host or co-host give a live invitation more time (decision D17)?
+ *
+ * Only while invitations are going out. The cascade runs in no other status,
+ * so a longer window anywhere else would change a number and nothing else.
+ * `set_invite_window` holds the same rule for an invitation that has already
+ * gone out; a queued one is re-timed under `hostCanEditLine`, as before.
+ */
+export function hostCanExtendLiveWindow(status: string | null | undefined): boolean {
+  return status === 'inviting';
+}
+
+/**
+ * Can an invitee who said no change their answer from the plan page (D17)?
+ *
+ * The same window as the host's: while invitations are going out. Once the
+ * list is confirmed a no stays a no, as `respond_to_invite` enforces.
+ */
+export function inviteeCanChangeAnswer(status: string | null | undefined): boolean {
+  return status === 'inviting';
+}
+
+/**
  * Can a visitor request a seat through the open-table join page?
  *
  * Both predicates take the generated `string` (see `ShareLinkSubject`) rather

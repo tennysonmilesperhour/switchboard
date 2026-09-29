@@ -10,6 +10,9 @@ import { updateEventDetails } from '@/lib/actions/events';
 import { resolveTimeZone } from '@/lib/client/time-zone';
 import type { SwitchboardEvent } from '@/lib/types';
 import { errorRef, type ErrorCode } from '@/lib/errors';
+import { isEventTheme, normalizeNewQuestions, planExtrasProblem } from '@/lib/plan-extras';
+import { recurrenceLabel } from '@/lib/engine/recurrence';
+import { PlanExtrasFields, type PlanExtrasValue } from './PlanExtrasFields';
 
 const FIELD =
   'w-full rounded-card border border-line bg-card px-4 py-3 text-[15px] text-ink outline-none transition-colors focus:border-terracotta focus:ring-2 focus:ring-terracotta-soft';
@@ -31,7 +34,16 @@ function toIso(local: string): string | null {
   return Number.isNaN(date.getTime()) ? null : date.toISOString();
 }
 
-export function EventEditForm({ event }: { event: SwitchboardEvent }) {
+export function EventEditForm({
+  event,
+  userId,
+  existingQuestions,
+}: {
+  event: SwitchboardEvent;
+  userId: string;
+  /** Prompts already asked, in order. Listed, never edited (D18). */
+  existingQuestions: string[];
+}) {
   const [title, setTitle] = useState(event.title);
   const [description, setDescription] = useState(event.description ?? '');
   // Converting an ISO timestamp to a datetime-local value depends on the
@@ -44,6 +56,13 @@ export function EventEditForm({ event }: { event: SwitchboardEvent }) {
   const [locationAddress, setLocationAddress] = useState(event.location_address ?? '');
   const [capacity, setCapacity] = useState(event.capacity ? String(event.capacity) : '');
   const [wishlistUrl, setWishlistUrl] = useState(event.wishlist_url ?? '');
+  const [extras, setExtras] = useState<PlanExtrasValue>(() => ({
+    coverUrl: event.cover_url ?? '',
+    theme: isEventTheme(event.theme) ? event.theme : 'default',
+    remindersEnabled: event.reminders_enabled,
+    openTable: event.open_table,
+    newQuestions: [],
+  }));
   const [error, setError] = useState<string | null>(null);
   // Set only by a refused save; the field checks above it carry none.
   const [errorCode, setErrorCode] = useState<ErrorCode | null>(null);
@@ -77,6 +96,18 @@ export function EventEditForm({ event }: { event: SwitchboardEvent }) {
       setError(capacityError);
       return;
     }
+    const newQuestions = normalizeNewQuestions(extras.newQuestions);
+    const extrasError = planExtrasProblem({
+      openTable: extras.openTable,
+      capacity: capacity ? Number(capacity) : null,
+      theme: extras.theme,
+      existingQuestions: existingQuestions.length,
+      newQuestions: newQuestions.length,
+    });
+    if (extrasError) {
+      setError(extrasError);
+      return;
+    }
     setError(null);
     startTransition(async () => {
       const result = await updateEventDetails(event.id, {
@@ -89,6 +120,13 @@ export function EventEditForm({ event }: { event: SwitchboardEvent }) {
         timeZone: resolveTimeZone(),
         capacity: capacity ? Number(capacity) : null,
         wishlistUrl: wishlistUrl.trim() || null,
+        extras: {
+          coverUrl: extras.coverUrl.trim() || null,
+          theme: extras.theme,
+          remindersEnabled: extras.remindersEnabled,
+          openTable: extras.openTable,
+          newQuestions,
+        },
       });
       if (!result.ok) {
         setError(result.error ?? 'Could not save your changes.');
@@ -198,6 +236,20 @@ export function EventEditForm({ event }: { event: SwitchboardEvent }) {
         </div>
       </div>
 
+      <PlanExtrasFields
+        userId={userId}
+        value={extras}
+        onChange={setExtras}
+        existingQuestions={existingQuestions}
+        hasCapacity={Boolean(capacity)}
+        fixedRules={[
+          ...(event.parental_approval ? ['parental approval for every yes'] : []),
+          ...(recurrenceLabel(event.recurrence, event.recurrence_interval_days)
+            ? [recurrenceLabel(event.recurrence, event.recurrence_interval_days)!.toLowerCase()]
+            : []),
+        ]}
+      />
+
       {error && (
         <p className="text-plate text-plate-inset text-sm text-rose-deep" role="alert">
           {error}
@@ -210,7 +262,7 @@ export function EventEditForm({ event }: { event: SwitchboardEvent }) {
       )}
 
       <p className="text-plate text-plate-inset text-xs text-ink-faint">
-        Changing the time or place quietly notifies everyone who’s already accepted.
+        Changing the time or place lets everyone who’s already said yes know.
       </p>
 
       <div className="flex gap-2 pt-1">

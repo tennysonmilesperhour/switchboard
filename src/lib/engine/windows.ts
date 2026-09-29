@@ -127,3 +127,34 @@ export function windowForNewInvitee(
 ): number {
   return sharedWindow(windowMinutes) ?? suggestedMinutes;
 }
+
+/**
+ * How much more time a host can give an invitation that is already out
+ * (decision D17). Added to the window it has, never a new total picked from a
+ * list: a live window may only grow (`set_invite_window` refuses anything
+ * else), so "4 hours" chosen for an invitation that already has a day would be
+ * a shortening the database turns away.
+ */
+export const EXTEND_CHOICES = [
+  { addMinutes: HOUR, label: '1 more hour' },
+  { addMinutes: 4 * HOUR, label: '4 more hours' },
+  { addMinutes: DAY, label: '1 more day' },
+  { addMinutes: 3 * DAY, label: '3 more days' },
+] as const;
+
+/**
+ * What a host is told when `set_invite_window` turns down more time for a live
+ * invitation, keyed by the hint the function raises with. Each names the cause
+ * and the way on, so none needs a code; anything else is a real failure and is
+ * reported as one.
+ */
+const LIVE_WINDOW_REFUSALS: Record<string, string> = {
+  window_answered: 'They’ve already answered, so there’s no window left to change.',
+  window_not_inviting: 'Windows can only change while invitations are going out.',
+  window_not_longer: 'An invitation that’s already out can only be given more time.',
+  window_expired: 'Their window has already run out. Resend the invitation to ask them again.',
+};
+
+export function liveWindowRefusal(hint: string | null | undefined): string | null {
+  return hint ? (LIVE_WINDOW_REFUSALS[hint] ?? null) : null;
+}

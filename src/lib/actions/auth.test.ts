@@ -288,6 +288,8 @@ describe('signInWithPasswordIdentifier', () => {
    */
   const BLOCKED: Array<{ supabaseCode: string; code: string }> = [
     { supabaseCode: 'email_not_confirmed', code: 'SB-AUTH-UNCONFIRMED' },
+    // Also what a moderator's suspension is (P7): it is GoTrue's own ban,
+    // so it needs no row of its own (docs/AUTH.md, finding 16).
     { supabaseCode: 'user_banned', code: 'SB-AUTH-SUSPENDED' },
     { supabaseCode: 'over_request_rate_limit', code: 'SB-RATE-LIMIT' },
   ];

@@ -1,11 +1,12 @@
 'use server';
 
-import { validation, type ErrorCode } from '@/lib/errors';
+import { failure, validation, type ErrorCode } from '@/lib/errors';
 
 import { revalidatePath } from 'next/cache';
 import { requireUser } from '@/lib/server/require-user';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { notifyUsers } from '@/lib/server/notify';
+import { checkRateLimit } from '@/lib/server/rate-limit';
 import { appUrl, guestEmailHeaders, looksLikeEmail, sendEmails } from '@/lib/server/email';
 import { reportAndFail } from '@/lib/server/observability';
 
@@ -21,7 +22,8 @@ export interface AnnouncementResult {
 /**
  * Host broadcast to everyone who's in - the calm version of a "text blast".
  * The note lands on the event page, in the Living Room, and as a push to
- * registered attendees / an email to guests. One-way and host-only.
+ * registered attendees / an email to guests. One-way, and only the host and
+ * co-hosts may post.
  */
 export async function postAnnouncement(
   eventId: string,
@@ -35,11 +37,20 @@ export async function postAnnouncement(
   if (!auth.ok) return auth;
   const { supabase, user } = auth;
 
-  // RLS enforces host-only insert; this fails cleanly for non-hosts.
+  // Every post pushes to, and emails, everyone who is in.
+  if (!(await checkRateLimit(`announcement:${user.id}`, 10, 60 * 60))) {
+    return failure('SB-RATE-LIMIT', 'You’ve posted a lot of updates. Give it a while.');
+  }
+
+  // RLS lets only the host and co-hosts insert. That refusal is the answer, not
+  // an outage: retrying cannot change who runs the plan.
   const { error } = await supabase
     .from('announcements')
     .insert({ event_id: eventId, author_id: user.id, body: trimmed });
   if (error) {
+    if (error.code === '42501') {
+      return failure('SB-PERM-DENIED', 'Only the host and co-hosts can post updates to this plan.');
+    }
     return reportAndFail('SB-ANNOUNCEMENT-SAVE', 'announcement.save', error, { eventId });
   }
 
@@ -99,18 +110,21 @@ async function fanOutAnnouncement(
       });
   }
 
-  const emails = accepted
-    .filter((i) => !i.invitee_id && looksLikeEmail(i.guest_contact) && i.guest_token)
-    .map((i) => ({
-      to: i.guest_contact as string,
-      subject: `Update: ${event.title}`,
-      text:
-        `${body}\n\n- from your host on Switchboard\n` +
-        `Event details: ${appUrl(`/rsvp/${i.guest_token}`)}`,
-      headers: guestEmailHeaders(),
-    }));
-  if (emails.length > 0) {
-    await sendEmails(emails);
+  const guests = accepted.filter(
+    (i) => !i.invitee_id && looksLikeEmail(i.guest_contact) && i.guest_token,
+  );
+  if (guests.length > 0) {
+    const signedBy = await announcementSignature(admin, authorId, event.host_id);
+    await sendEmails(
+      guests.map((i) => ({
+        to: i.guest_contact as string,
+        subject: `Update: ${event.title}`,
+        text:
+          `${body}\n\n- from ${signedBy} on Switchboard\n` +
+          `Event details: ${appUrl(`/rsvp/${i.guest_token}`)}`,
+        headers: guestEmailHeaders(),
+      })),
+    );
   }
 
   // Also drop it into the Living Room so the note has a permanent home.
@@ -121,4 +135,24 @@ async function fanOutAnnouncement(
       body: `📣 ${body}`,
     });
   }
+}
+
+/**
+ * Who a guest's email says the update is from. A co-host's note used to be
+ * signed "your host", which put words in the host's mouth. It names whoever
+ * wrote it; with no name to use, only the host's own note says "your host".
+ */
+async function announcementSignature(
+  admin: ReturnType<typeof createAdminClient>,
+  authorId: string,
+  hostId: string,
+): Promise<string> {
+  const { data: author } = await admin
+    .from('profiles')
+    .select('display_name')
+    .eq('id', authorId)
+    .maybeSingle();
+  const name = author?.display_name?.replace(/\s+/g, ' ').trim();
+  if (name) return name;
+  return authorId === hostId ? 'your host' : 'the hosts';
 }

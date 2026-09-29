@@ -564,7 +564,9 @@ export async function updateSabbatical(formData: FormData): Promise<ActionResult
   const { supabase, user } = await requireUserOrRedirect();
 
   const on = formData.get('sabbatical') === 'on';
-  const message = String(formData.get('sabbatical_message') ?? '').trim();
+  // Shown to other people (profile, invite pickers), and capped at 140 by the
+  // database; the field's maxLength is only a hint.
+  const message = String(formData.get('sabbatical_message') ?? '').trim().slice(0, 140);
 
   const { error } = await supabase
     .from('profiles')

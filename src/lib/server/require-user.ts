@@ -2,6 +2,7 @@ import type { User } from '@supabase/supabase-js';
 import { redirect } from 'next/navigation';
 import { failure, type Failure } from '@/lib/errors';
 import { safeNextPath } from '@/lib/security';
+import { isSuspendedUser } from '@/lib/suspension';
 import { createClient } from '@/lib/supabase/server';
 
 type ServerClient = Awaited<ReturnType<typeof createClient>>;
@@ -31,6 +32,13 @@ export async function requireUser(): Promise<
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) return failure('SB-AUTH-REQUIRED');
+  // A session issued before a moderator suspended the account is still a
+  // session. The proxy sends its next page load to /login to say so; an
+  // action sent from a tab that was already open is refused here, with the
+  // same code, rather than being carried out (docs/AUTH.md).
+  if (isSuspendedUser(user)) {
+    return failure('SB-AUTH-SUSPENDED', 'This account is suspended, so nothing can be changed from it.');
+  }
   return { ok: true, supabase, user };
 }
 

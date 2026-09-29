@@ -6,10 +6,9 @@ export {
   markHappened,
   cancelEvent,
   deleteEventPermanently,
-  runItBack,
-  scheduleNextOccurrence,
   startInviting,
 } from '@/lib/actions/events-lifecycle';
+export { runItBack, scheduleNextOccurrence } from '@/lib/actions/event-reuse';
 export {
   lookupInviteeByHandle,
   addPeopleToEvent,

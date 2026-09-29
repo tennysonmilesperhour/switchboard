@@ -24,6 +24,23 @@ export async function proposeRitual(
     return failure('SB-RATE-LIMIT', 'You’ve sent a lot of proposals. Try again later.');
   }
 
+  // A sabbatical pauses rituals both ways (D6). The insert policy refuses it
+  // too; asking first turns that refusal into a sentence instead of a code.
+  const { data: away } = await supabase
+    .from('profiles')
+    .select('id, display_name')
+    .in('id', [user.id, partnerId])
+    .eq('sabbatical', true);
+  if (away?.some((row) => row.id === user.id)) {
+    return validation('Rituals are paused while you’re on sabbatical. End it in Settings to start one.');
+  }
+  const partnerAway = away?.find((row) => row.id === partnerId);
+  if (partnerAway) {
+    return validation(
+      `${partnerAway.display_name || 'Your friend'} is on sabbatical right now. Try again when they’re back.`,
+    );
+  }
+
   const { error } = await supabase.from('rituals').insert({
     creator_id: user.id,
     partner_id: partnerId,
@@ -108,4 +125,39 @@ export async function endRitual(ritualId: string): Promise<ActionResult> {
   revalidatePath('/mutual');
   revalidatePath('/');
   return { ok: true };
+}
+
+/**
+ * Skip the ritual that is due (decision D8): the due date moves one cadence
+ * ahead, for both people, and nobody is told. `dueOn` names the occurrence
+ * being skipped, so a double tap, or both people skipping at once, moves it
+ * once. The database checks the caller is one of the two (`skip_ritual`).
+ */
+export async function skipRitual(ritualId: string, dueOn: string): Promise<ActionResult> {
+  const auth = await requireUser();
+  if (!auth.ok) return auth;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dueOn)) return validation('That ritual date isn’t valid.');
+
+  const { data: outcome, error } = await auth.supabase.rpc('skip_ritual', {
+    p_ritual: ritualId,
+    p_due_on: dueOn,
+  });
+  if (error) return reportAndFail('SB-RITUAL-SAVE', 'ritual.skip', error, { ritualId });
+
+  switch (outcome) {
+    case 'skipped':
+      revalidatePath('/mutual');
+      revalidatePath('/');
+      return { ok: true };
+    case 'already_moved':
+      revalidatePath('/mutual');
+      revalidatePath('/');
+      return validation('That one was already skipped or planned, so nothing else changed.');
+    case 'not_due':
+      return validation('That ritual isn’t due yet, so there’s nothing to skip.');
+    case 'not_active':
+      return validation('That ritual is paused or ended, so there’s nothing to skip.');
+    default:
+      return validation('That ritual isn’t one of yours any more.');
+  }
 }

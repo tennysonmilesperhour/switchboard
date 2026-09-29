@@ -119,27 +119,6 @@ async function noteGiveSpaceOverlap(
   }
 }
 
-/**
- * The same decision, for a person who has no session in this request: the Open
- * Table requester whose join the host has just approved.
- *
- * Service-role, and deliberately narrow — the database function re-checks that
- * `userId` really does hold an accepted invite to `eventId` before it reads or
- * writes anything, so a host cannot use this to learn or plant anything about
- * a guest. Nothing is returned to the caller: the host must not find out what
- * it decided.
- */
-async function noteGiveSpaceOverlapFor(userId: string, eventId: string): Promise<void> {
-  try {
-    await createAdminClient().rpc('note_give_space_overlap_for', {
-      p_user: userId,
-      p_event: eventId,
-    });
-  } catch (error) {
-    await reportOperationalError('give-space.note', error, { eventId });
-  }
-}
-
 export async function respondToInvite(
   inviteId: string,
   accept: boolean,
@@ -246,111 +225,6 @@ export async function respondToInvite(
     outcome: typeof data === 'string' ? data : undefined,
     needsApproval: data === 'pending_approval' || undefined,
   };
-}
-
-/** Open Table: ask to join a friends-of-friends event. */
-export async function requestToJoin(eventId: string): Promise<RespondResult> {
-  const auth = await requireUser();
-  if (!auth.ok) {
-    return failure('SB-RSVP-AUTH', 'Sign in to request to join.');
-  }
-  const { supabase } = auth;
-  // The request_to_join RPC already keys the row on auth.uid(); this app-layer
-  // session check just fails fast (and keeps the admin notify below from firing
-  // for an unauthenticated caller) rather than relying on the RPC alone.
-  const { error } = await supabase.rpc('request_to_join', { p_event: eventId });
-  if (error) return reportAndFail('SB-RSVP-SAVE', 'join.request', error, { eventId });
-
-  // Let the host know a request is waiting — previously this fired nothing at
-  // all, so requests sat unseen until the host happened to open the event.
-  const admin = createAdminClient();
-  const { data: event } = await admin
-    .from('events')
-    .select('id, title, host_id')
-    .eq('id', eventId)
-    .maybeSingle();
-  if (event?.host_id) {
-    await notifyUsers([event.host_id], {
-      kind: 'join_request',
-      title: 'Someone wants in 👋',
-      body: `A new request to join ${event.title} is waiting for your OK.`,
-      url: `/events/${event.id}`,
-    });
-  }
-
-  revalidatePath('/discover');
-  revalidatePath(`/events/${eventId}`);
-  return { ok: true, outcome: 'requested' };
-}
-
-/** Open Table: host approves a join request (capacity-checked in the DB). */
-export async function approveJoinRequest(
-  inviteId: string,
-  eventId: string,
-): Promise<RespondResult> {
-  const auth = await requireUser();
-  if (!auth.ok) return auth;
-  const { supabase } = auth;
-  const { data, error } = await supabase.rpc('approve_join_request', {
-    p_invite: inviteId,
-  });
-  if (error) return reportAndFail('SB-RSVP-SAVE', 'join.approve', error, { inviteId, eventId });
-
-  if (data === 'accepted') {
-    const { data: invite } = await supabase
-      .from('invites')
-      .select('invitee_id, event:events(title)')
-      .eq('id', inviteId)
-      .single();
-    const event = Array.isArray(invite?.event) ? invite?.event[0] : invite?.event;
-    if (invite?.invitee_id) {
-      // Their commitment, completed by someone else's approval. The requester
-      // has no session here, so this runs service-role against their id — and
-      // the function still refuses unless that id now holds an accepted invite
-      // to this exact plan.
-      await noteGiveSpaceOverlapFor(invite.invitee_id, eventId);
-      await notifyUsers([invite.invitee_id], {
-        kind: 'join_approved',
-        title: 'You are in 🎉',
-        body: `The host welcomed you to ${event?.title ?? 'the event'}.`,
-        url: `/events/${eventId}`,
-      });
-    }
-  } else if (data === 'pending_approval') {
-    // The host said yes on a plan that needs a guardian's OK too. The
-    // requester asks their guardian from the plan page, which now shows the
-    // held request with the form to send it.
-    const { data: invite } = await supabase
-      .from('invites')
-      .select('invitee_id, event:events(title)')
-      .eq('id', inviteId)
-      .single();
-    const event = Array.isArray(invite?.event) ? invite?.event[0] : invite?.event;
-    if (invite?.invitee_id) {
-      await notifyUsers([invite.invitee_id], {
-        kind: 'join_approved',
-        title: 'One more step',
-        body: `The host said yes to ${event?.title ?? 'the plan'}. A parent or guardian needs to approve it before it counts.`,
-        url: `/events/${eventId}`,
-      });
-    }
-  }
-  revalidatePath(`/events/${eventId}`);
-  return { ok: true, outcome: typeof data === 'string' ? data : undefined };
-}
-
-export async function declineJoinRequest(
-  inviteId: string,
-  eventId: string,
-): Promise<RespondResult> {
-  const auth = await requireUser();
-  if (!auth.ok) return auth;
-  const { supabase } = auth;
-  // Host-only via RLS delete policy on invites.
-  const { error } = await supabase.from('invites').delete().eq('id', inviteId);
-  if (error) return reportAndFail('SB-RSVP-SAVE', 'join.decline', error, { inviteId, eventId });
-  revalidatePath(`/events/${eventId}`);
-  return { ok: true };
 }
 
 /**

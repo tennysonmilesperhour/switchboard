@@ -9,6 +9,7 @@ import { Icon } from '@/components/ui/Icon';
 import { ConnectButton } from '@/components/profile/ConnectButton';
 import { BlockReportButtons } from '@/components/profile/BlockReportButtons';
 import { GiveSpaceButton } from '@/components/profile/GiveSpaceButton';
+import { SabbaticalNote } from '@/components/profile/SabbaticalNote';
 import { SOCIAL_BY_ID, hrefFor, displayHandle } from '@/lib/socials';
 import {
   getRelationship,
@@ -18,6 +19,7 @@ import {
 import { loadSharedFacets, loadCompatibility } from '@/lib/server/identity';
 import { safeNextPath } from '@/lib/security';
 import { parseProfileLinks, parseProfileSocials } from '@/lib/supabase/json';
+import { sabbaticalOf } from '@/lib/sabbatical';
 
 // Confidence → dot color for a shared read (mirrors the owner's /you view).
 const READ_DOT: Record<string, string> = {
@@ -34,7 +36,7 @@ const READ_CONF_LABEL: Record<string, string> = {
 };
 
 const PROFILE_COLUMNS =
-  'id, display_name, handle, avatar_url, cover_url, bio, tagline, pronouns, location, links, socials, interests, down_to';
+  'id, display_name, handle, avatar_url, cover_url, bio, tagline, pronouns, location, links, socials, interests, down_to, sabbatical, sabbatical_message';
 
 /** Handles are stored bare; tolerate a stray leading @ in the URL. */
 function normalizeHandleParam(raw: string): string {
@@ -139,6 +141,8 @@ export default async function PublicProfilePage({
   const mutualLine =
     relationship.status === 'accepted' ? "You're friends" : describeMutuals(mutuals);
   const backHref = safeNextPath(from, '/people');
+  // D6: people who reach for someone on sabbatical see their note here.
+  const sabbatical = sabbaticalOf(profile);
 
   return (
     <AppShell title={displayName} back={backHref}>
@@ -188,6 +192,15 @@ export default async function PublicProfilePage({
               <p className="mt-3 max-w-sm text-sm leading-relaxed text-ink-soft">{profile.bio}</p>
             ) : null}
 
+            {sabbatical ? (
+              <SabbaticalNote
+                name={displayName}
+                status={sabbatical}
+                detail="Invitations still reach their inbox, without a notification. Mutual and rituals are paused until they’re back."
+                className="mt-4 w-full max-w-sm"
+              />
+            ) : null}
+
             {/* Connect + relationship context */}
             <div className="mt-4 flex flex-col items-center gap-2">
               {blockedByViewer ? (
@@ -204,7 +217,7 @@ export default async function PublicProfilePage({
                     connectionId={relationship.connectionId}
                     size="md"
                   />
-                  {relationship.status === 'accepted' && (
+                  {relationship.status === 'accepted' && !sabbatical && (
                     // Not "Message": Mutual sends nothing unless they
                     // independently pick you back, the same false promise the
                     // radar card on Home was corrected for.

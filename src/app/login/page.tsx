@@ -2,6 +2,8 @@ import Link from 'next/link';
 import type { Metadata } from 'next';
 import { safeNextPath } from '@/lib/security';
 import { errorFor, errorRef, type ErrorCode } from '@/lib/errors';
+import { supportEmail } from '@/lib/contact';
+import { SUSPENDED_LOGIN_ERROR } from '@/lib/suspension';
 import { LoginForm } from './LoginForm';
 
 export const metadata: Metadata = { title: 'Sign in' };
@@ -17,6 +19,10 @@ const ERROR_CODES: Record<string, ErrorCode> = {
   oauth_exchange: 'SB-OAUTH-EXCHANGE',
   oauth_missing_code: 'SB-OAUTH-MISSING',
   auth: 'SB-AUTH-LINK',
+  // A moderator suspended the account: the proxy signs a live session out to
+  // here, and the email-link and Google routes land here when the auth server
+  // refuses them for it.
+  [SUSPENDED_LOGIN_ERROR]: 'SB-AUTH-SUSPENDED',
 };
 
 export default async function LoginPage({
@@ -82,6 +88,17 @@ export default async function LoginPage({
               <>
                 <p>{entry.message}</p>
                 {entry.fix ? <p className="mt-1 text-ink-soft">{entry.fix}</p> : null}
+                {entry.code === 'SB-AUTH-SUSPENDED' ? (
+                  // Nothing on this page can lift a suspension, so the route
+                  // out is a person — the same line the sign-in form shows.
+                  <p className="mt-1 text-ink-soft">
+                    If you think this is a mistake, email{' '}
+                    <a className="font-bold underline" href={`mailto:${supportEmail()}`}>
+                      {supportEmail()}
+                    </a>
+                    .
+                  </p>
+                ) : null}
               </>
             )}
             <p className="mt-1 text-xs text-ink-faint">{errorRef(entry.code)}</p>

@@ -52,9 +52,10 @@ function PhotoContent({ message, mine }: { message: RoomMessage; mine: boolean }
 }
 
 /**
- * One message. Someone else's carries their avatar, which opens Report and
- * Block; your own opens Delete (G30 — the database always allowed a sender to
- * delete their own message, and nothing offered it).
+ * One message. Someone else's carries their avatar, which opens Report message
+ * (the report carries the message itself to a moderator) and Block; your own
+ * opens Delete (G30 — the database always allowed a sender to delete their own
+ * message, and nothing offered it).
  */
 export function MessageBubble({
   message,
@@ -128,7 +129,7 @@ export function MessageBubble({
           <Avatar name={senderName} seed={message.sender_id} size="sm" />
         )}
         {menuOpen && (onReport || onBlock) && (
-          <div className="absolute left-0 top-full z-30 mt-1 min-w-[120px] rounded-card border border-line bg-card p-1 shadow-float">
+          <div className="absolute left-0 top-full z-30 mt-1 min-w-[140px] rounded-card border border-line bg-card p-1 shadow-float">
             {onReport && (
               <button
                 type="button"
@@ -136,7 +137,7 @@ export function MessageBubble({
                 className="w-full rounded-btn px-3 py-1.5 text-left text-xs font-semibold text-ink-faint hover:bg-cream"
                 onClick={onReport}
               >
-                Report
+                Report message
               </button>
             )}
             {onBlock && (

@@ -30,6 +30,7 @@ describe('downToConnect', () => {
     const builder = {
       select: () => builder,
       eq: () => builder,
+      in: () => builder,
       maybeSingle: async () => ({ data: { status: 'matched' }, error: null }),
       upsert,
     };
@@ -45,5 +46,40 @@ describe('downToConnect', () => {
     expect(upsert).not.toHaveBeenCalled();
     expect(mocks.notifyInterestReceived).not.toHaveBeenCalled();
     expect(mocks.notifyUsers).not.toHaveBeenCalled();
+  });
+
+  /**
+   * A sabbatical pauses Mutual both ways (D6). The database refuses it too;
+   * the action says why in a sentence instead of an operational code, and
+   * writes nothing.
+   */
+  it.each([
+    ['me', 'Mutual is paused while you’re on sabbatical'],
+    ['them', 'They’re on sabbatical right now'],
+  ])('refuses while %s is on sabbatical', async (away, message) => {
+    const upsert = vi.fn();
+    const profiles = {
+      select: () => profiles,
+      in: () => profiles,
+      eq: async () => ({ data: [{ id: away }], error: null }),
+    };
+    mocks.requireUser.mockResolvedValue({
+      ok: true,
+      user: { id: 'me' },
+      supabase: {
+        from: (table: string) => {
+          if (table === 'profiles') return profiles;
+          return { upsert };
+        },
+      },
+    });
+
+    const result = await downToConnect('them', 'Coffee');
+
+    expect(result.ok).toBe(false);
+    expect(result.error).toContain(message);
+    expect(result.code).toBeUndefined();
+    expect(upsert).not.toHaveBeenCalled();
+    expect(mocks.notifyInterestReceived).not.toHaveBeenCalled();
   });
 });

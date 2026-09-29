@@ -113,10 +113,16 @@ async function deliverInvitations(
       });
     }
 
-    const { data: route, error: routeError } = invite.invitee_id
-      ? await createAdminClient().from('notification_routes').select('plans').eq('user_id', invite.invitee_id).maybeSingle()
-      : { data: null, error: null };
-    const legacyEmail = !invite.invitee_id || (!routeError && (!route || route.plans === 'existing'));
+    const [{ data: route, error: routeError }, { data: invitee, error: inviteeError }] = invite.invitee_id
+      ? await Promise.all([
+          createAdminClient().from('notification_routes').select('plans').eq('user_id', invite.invitee_id).maybeSingle(),
+          createAdminClient().from('profiles').select('sabbatical').eq('id', invite.invitee_id).maybeSingle(),
+        ])
+      : [{ data: null, error: null }, { data: null, error: null }];
+    // Someone on sabbatical still gets the invitation, in their inbox (D6);
+    // it is not emailed to them, the same as it is not pushed or texted.
+    const legacyEmail = !invite.invitee_id
+      || (!routeError && (!route || route.plans === 'existing') && !inviteeError && !invitee?.sabbatical);
     if (legacyEmail && invite.guest_token && looksLikeEmail(invite.guest_contact)) {
       hasChannel = true;
       if (await consumeEventOutboundSlot(event.host_id, 'invitation')) {

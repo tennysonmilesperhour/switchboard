@@ -7,6 +7,7 @@ import { Icon } from '@/components/ui/Icon';
 import type { CreateEventInput } from '@/lib/actions/events';
 import type { EventTheme, InviteMode } from '@/lib/types';
 import { EVENT_THEMES } from '@/lib/themes';
+import { REMINDER_SCHEDULE_COPY } from '@/lib/plan-extras';
 import { FIELD, MODE_OPTIONS } from './wizard-types';
 import { ResponseWindowPicker } from './ResponseWindowPicker';
 import { PollSeedOptions } from './PollSeedOptions';
@@ -214,8 +215,8 @@ export function StyleStep({
               <span>
                 <span className="font-bold">Send a reminder before it starts ⏰</span>
                 <span className="block text-sm text-ink-soft mt-0.5 leading-relaxed">
-                  A gentle nudge goes to people who said yes a few hours ahead.
-                  Turn this off for a low-key plan that doesn’t need one.
+                  {REMINDER_SCHEDULE_COPY} Turn this off for a low-key plan that
+                  doesn’t need one. You can change it later from Edit plan.
                 </span>
               </span>
             </label>

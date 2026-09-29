@@ -133,4 +133,12 @@ describe('unmutedDigestLines', () => {
   it('treats an unset preference as on, like the per-item push', () => {
     expect(unmutedDigestLines(lines, { notify_plans: null })).toHaveLength(3);
   });
+
+  it('keeps only what plans they are in said, for someone on sabbatical (D6)', () => {
+    const withInvite = [...lines, { kind: 'event_invite', items: 1, latestTitle: null }];
+    expect(
+      unmutedDigestLines(withInvite, { sabbatical: true }).map((line) => line.kind),
+    ).toEqual(['event_updated', 'room_message']);
+    expect(unmutedDigestLines(withInvite, { sabbatical: false })).toHaveLength(4);
+  });
 });

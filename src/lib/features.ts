@@ -103,7 +103,7 @@ export const FEATURE_GROUPS: readonly FeatureGroup[] = [
         id: 'cascade-editing',
         title: 'Change the chain after it’s live',
         blurb:
-          'Reorder who’s up next, resend an invite, or lengthen a window without disturbing anyone who already said yes.',
+          'Reorder who’s up next, resend an invite, or give someone who hasn’t answered yet more time, without disturbing anyone who already said yes.',
         where: 'Your plan’s page → host controls',
         start: { href: '/plans', label: 'Your plans' },
       },
@@ -143,8 +143,8 @@ export const FEATURE_GROUPS: readonly FeatureGroup[] = [
         id: 'rsvp-questions',
         title: 'Ask guests a question',
         blurb:
-          'Collect dietary needs or who’s bringing what as people RSVP. Answers are visible only to you.',
-        where: 'Plan wizard → Basics, answers on your plan’s page',
+          'Collect dietary needs or who’s bringing what as people RSVP, and add another question later. Answers are visible only to you.',
+        where: 'Plan wizard → Basics, or Edit plan to add one; answers on your plan’s page',
         start: { href: '/create', label: 'Start something' },
       },
       {
@@ -160,7 +160,7 @@ export const FEATURE_GROUPS: readonly FeatureGroup[] = [
         title: 'Automatic reminders',
         blurb:
           'A day-before note to people who are in, a nudge to anyone still holding an invite, and a starting-soon ping — all inside quiet hours.',
-        where: 'Plan wizard → Privacy (on by default)',
+        where: 'Plan wizard → Privacy (on by default), or Edit plan to switch them off or on',
         start: { href: '/create', label: 'Start something' },
       },
       {
@@ -176,7 +176,7 @@ export const FEATURE_GROUPS: readonly FeatureGroup[] = [
         title: 'Cover image',
         blurb:
           'Give a plan a picture; it renders on the page and in the preview when the link gets texted around.',
-        where: 'Plan wizard → Basics',
+        where: 'Plan wizard → Basics, or Edit plan to change it',
         start: { href: '/create', label: 'Start something' },
       },
       {
@@ -190,8 +190,8 @@ export const FEATURE_GROUPS: readonly FeatureGroup[] = [
         id: 'open-table',
         title: 'Open Table',
         blurb:
-          'Leave a few seats open to friends-of-friends; they ask to join and you approve, so the guest list still belongs to you.',
-        where: 'Plan wizard → Privacy, requests arrive on the plan page',
+          'Leave a few seats open to friends-of-friends; they ask to join and you approve, so the guest list still belongs to you. Whoever asked hears your answer, yes or no.',
+        where: 'Plan wizard → Privacy or Edit plan; requests arrive on the plan page, and your own wait on Explore',
         href: '/discover',
       },
       {
@@ -229,7 +229,7 @@ export const FEATURE_GROUPS: readonly FeatureGroup[] = [
         id: 'run-it-back',
         title: 'Run it back',
         blurb:
-          'Re-invite the same crew to a fresh plan in one tap, minus anyone who said it wasn’t their thing.',
+          'Start a fresh plan with the same crew and co-hosts in one tap, minus anyone who said it wasn’t their thing. It opens by asking everyone when works.',
         where: 'A past plan’s page → Run it back',
         start: { href: '/plans', label: 'Your plans' },
       },
@@ -396,7 +396,7 @@ export const FEATURE_GROUPS: readonly FeatureGroup[] = [
         id: 'rituals',
         title: 'Standing rituals',
         blurb:
-          'Make a thing a regular thing — monthly dinner, Thursday climbing — and Switchboard reminds you both when it’s due.',
+          'Make a thing a regular thing — monthly dinner, Thursday climbing — and Switchboard reminds you both on the day it’s due. Either of you can plan it or skip that one.',
         where: 'More → Mutual',
         href: '/mutual',
       },
@@ -420,8 +420,8 @@ export const FEATURE_GROUPS: readonly FeatureGroup[] = [
         id: 'block-report',
         title: 'Block and report',
         blurb:
-          'Blocking is enforced across discovery, matching, the map, and rooms — a one-to-one room becomes read-only for both of you, and in a plan’s room neither of you is notified about the other. Both are reachable anywhere you’d actually meet someone, and Settings lists everyone you’ve blocked so you can undo one.',
-        where: 'Profiles, room members, moment reveals, and requests. Your blocked list is in Settings.',
+          'Blocking is enforced across discovery, matching, the map, and rooms — a one-to-one room becomes read-only for both of you, and in a plan’s room neither of you is notified about the other. Reporting a room message or a board post sends a moderator the message or post itself, not just a name, and moderators can take it down or suspend the account. Both are reachable anywhere you’d actually meet someone, and Settings lists everyone you’ve blocked so you can undo one.',
+        where: 'Profiles, a sender’s avatar on their room messages, board posts, moment reveals, and requests. Your blocked list is in Settings.',
         start: { href: '/people', label: 'People' },
       },
       {
@@ -563,7 +563,7 @@ export const FEATURE_GROUPS: readonly FeatureGroup[] = [
         id: 'voice-notes',
         title: 'Voice notes',
         blurb:
-          'Say it instead of typing it — in a plan’s thread, or as the reason when you have to call something off.',
+          'Say it instead of typing it — in a plan’s thread, or as the reason when you have to call something off. A browser that can’t record says so, and you can still write it.',
         where: 'A plan’s page → the comment box, and Cancel this plan',
         start: { href: '/plans', label: 'Your plans' },
       },
@@ -587,7 +587,7 @@ export const FEATURE_GROUPS: readonly FeatureGroup[] = [
         id: 'memory-capsule',
         title: 'Memory capsules',
         blurb:
-          'After it’s over, everyone adds one line and one photo. It stays as the record of the night.',
+          'After it’s over, everyone who went adds one line and one photo. It stays as the record of the night.',
         where: 'A past plan’s page → the capsule',
         start: { href: '/plans', label: 'Your plans' },
       },
@@ -661,7 +661,7 @@ export const FEATURE_GROUPS: readonly FeatureGroup[] = [
         id: 'sabbatical',
         title: 'Sabbatical mode',
         blurb:
-          'One switch pauses the social machinery. People who reach for you see that you’re taking a quiet season, instead of silence.',
+          'One switch takes you out of radar, discovery, Mutual, matchmaking and ritual reminders, and holds every notification except those from plans you’re already in. Your note shows on your profile and to friends picking you for a plan.',
         where: 'Settings → Sabbatical',
         href: '/settings',
       },

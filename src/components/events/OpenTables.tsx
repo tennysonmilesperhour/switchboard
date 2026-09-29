@@ -1,10 +1,13 @@
 'use client';
 
 import { useState, useTransition } from 'react';
+import Link from 'next/link';
 import { Button } from '@/components/ui/Button';
 import { Card, SectionHeader } from '@/components/ui/Card';
+import { ErrorNotice } from '@/components/ui/ErrorNotice';
 import { useToast } from '@/components/ui/Toast';
-import { requestToJoin } from '@/lib/actions/invites';
+import { requestToJoin } from '@/lib/actions/open-table';
+import { errorFor, type ErrorCode } from '@/lib/errors';
 import { formatDateTime } from '@/lib/format';
 
 export interface OpenTableRow {
@@ -21,12 +24,34 @@ export interface OpenTableRow {
   known_via: string | null;
 }
 
-export function OpenTables({ tables }: { tables: OpenTableRow[] }) {
+/** A plan the reader asked to join that the host has not answered yet. */
+export interface PendingJoinRequest {
+  inviteId: string;
+  eventId: string;
+  title: string;
+  startsAt: string | null;
+  timeZone: string | null;
+}
+
+export function OpenTables({
+  tables,
+  requests = [],
+  requestsError = null,
+}: {
+  tables: OpenTableRow[];
+  /**
+   * The reader's own requests still waiting on a host. A table they asked to
+   * join drops out of `list_open_tables` the moment they ask, so without this
+   * the request vanished from the one place they made it.
+   */
+  requests?: PendingJoinRequest[];
+  requestsError?: ErrorCode | null;
+}) {
   const [requested, setRequested] = useState<Set<string>>(new Set());
   const [pending, startTransition] = useTransition();
   const toast = useToast();
 
-  if (tables.length === 0) return null;
+  if (tables.length === 0 && requests.length === 0 && !requestsError) return null;
 
   return (
     <section>
@@ -34,6 +59,40 @@ export function OpenTables({ tables }: { tables: OpenTableRow[] }) {
         title="Open tables near your circle"
         hint="Plans from friends of friends with seats left"
       />
+      {requestsError && (
+        <ErrorNotice
+          className="mb-3"
+          message="Your requests to join didn’t load."
+          fix={errorFor(requestsError).fix}
+          code={requestsError}
+        />
+      )}
+      {requests.length > 0 && (
+        <div className="mb-3 space-y-2">
+          <p className="text-plate text-plate-inset text-xs font-bold uppercase tracking-wide text-ink-soft">
+            Waiting on the host
+          </p>
+          {requests.map((request) => (
+            <Card key={request.inviteId}>
+              <div className="flex items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="font-bold truncate">{request.title}</p>
+                  <p className="text-xs text-ink-soft mt-0.5">
+                    {formatDateTime(request.startsAt, request.timeZone)} · You asked to join. You’ll
+                    hear back either way.
+                  </p>
+                </div>
+                <Link
+                  href={`/events/${request.eventId}`}
+                  className="shrink-0 rounded-pill px-2.5 py-1.5 text-xs font-bold text-terracotta-deep hover:bg-terracotta-soft"
+                >
+                  See the plan
+                </Link>
+              </div>
+            </Card>
+          ))}
+        </div>
+      )}
       <div className="space-y-2.5">
         {tables.map((table) => (
           <Card key={table.event_id} tone="gold" lifted>

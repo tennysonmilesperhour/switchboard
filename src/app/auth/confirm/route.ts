@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient, hasAdminCredentials } from '@/lib/supabase/admin';
 import { safeNextPath } from '@/lib/security';
+import { SUSPENDED_AUTH_CODE, SUSPENDED_LOGIN_PATH } from '@/lib/suspension';
 
 /**
  * Verifies an emailed one-time link (password recovery, email change, signup
@@ -48,6 +49,11 @@ export async function GET(request: Request) {
         }
       }
       return NextResponse.redirect(`${origin}${next}`);
+    }
+    // The link was good and the account is suspended. "Expired or already
+    // used" would be untrue, and a fresh link would be refused the same way.
+    if (error.code === SUSPENDED_AUTH_CODE) {
+      return NextResponse.redirect(`${origin}${SUSPENDED_LOGIN_PATH}`);
     }
   }
 

@@ -10,6 +10,7 @@ import {
   columnForCategory,
   type NotificationCategory,
 } from '@/lib/notifications';
+import { sabbaticalAllows } from '@/lib/sabbatical';
 
 /** Per-endpoint ceiling for a push delivery; web-push aborts the request past it. */
 const WEB_PUSH_TIMEOUT_MS = 10_000;
@@ -26,6 +27,11 @@ export interface NotificationPayload extends PushPayload {
   urgentUntil?: string;
   /** Coarse category, e.g. 'connection_accepted', 'match', 'reminder'. */
   kind: string;
+  /**
+   * A room message from a plan's own room. Someone on sabbatical still hears
+   * those (D6); a match or moment room's messages wait in their inbox.
+   */
+  planRoom?: boolean;
 }
 
 export interface NotificationDeliveryResult {
@@ -79,7 +85,7 @@ export async function notifyUsers(
       url: payload.url,
     },
     categoryForKind(payload.kind) ?? undefined,
-    { kind: payload.kind },
+    { kind: payload.kind, planRoom: payload.planRoom },
   );
   return { recorded: !error };
 }
@@ -100,11 +106,15 @@ export async function notifyRoomActivity(
 ): Promise<void> {
   const admin = createAdminClient();
   const activeThreshold = new Date(Date.now() - 90_000).toISOString();
-  const { data: members } = await admin
-    .from('room_members')
-    .select('member_id, last_read_at, muted')
-    .eq('room_id', roomId)
-    .neq('member_id', senderId);
+  const [{ data: members }, { data: room }] = await Promise.all([
+    admin
+      .from('room_members')
+      .select('member_id, last_read_at, muted')
+      .eq('room_id', roomId)
+      .neq('member_id', senderId),
+    admin.from('rooms').select('kind').eq('id', roomId).maybeSingle(),
+  ]);
+  const planRoom = room?.kind === 'event';
   const candidates = (members ?? [])
     .filter((m) => !m.muted)
     .filter((m) => !m.last_read_at || m.last_read_at < activeThreshold)
@@ -154,6 +164,7 @@ export async function notifyRoomActivity(
         title: `New message in ${roomTitle}`,
         body: 'Open the room to catch up.',
         url: `/rooms/${roomId}`,
+        planRoom,
       });
     }),
   );
@@ -434,9 +445,13 @@ export interface PushOptions {
   /**
    * The notification kind. With it, a recipient who chose the daily digest is
    * skipped for everything but the kinds in `DIGEST_IMMEDIATE_KINDS`; the row
-   * notifyUsers wrote is what the digest later summarises.
+   * notifyUsers wrote is what the digest later summarises. It also decides
+   * whether someone on sabbatical hears it (`sabbaticalAllows`); a push with
+   * no kind does not reach them.
    */
   kind?: string;
+  /** See `NotificationPayload.planRoom`. */
+  planRoom?: boolean;
 }
 
 interface PushSubscriptionRow {
@@ -495,8 +510,9 @@ async function deliverPush(
 
 /**
  * Push to a set of users, silently skipping anyone in quiet hours, who has
- * muted this category, or whose daily digest will carry this kind instead, and
- * pruning dead subscriptions. Never throws - notifications are best-effort.
+ * muted this category, whose daily digest will carry this kind instead, or
+ * whose sabbatical mutes it, and pruning dead subscriptions. Never throws -
+ * notifications are best-effort.
  *
  * `category` gates the push against the recipient's per-category preference
  * (a `notify_*` column on their profile). Omit it — or pass a payload whose
@@ -515,7 +531,7 @@ export async function sendPushToUsers(
   const { data: profiles } = await admin
     .from('profiles')
     .select(
-      'id, quiet_hours_start, quiet_hours_end, timezone, notify_plans, notify_suggestions, notify_reminders, notify_messages, notify_social, digest_enabled',
+      'id, quiet_hours_start, quiet_hours_end, timezone, notify_plans, notify_suggestions, notify_reminders, notify_messages, notify_social, digest_enabled, sabbatical',
     )
     .in('id', userIds);
 
@@ -543,6 +559,9 @@ export async function sendPushToUsers(
     // Someone who asked for one summary a day gets exactly that: this kind
     // is in tomorrow's digest, not on their lock screen now.
     .filter((p) => !heldForDigest(options.kind, p.digest_enabled))
+    // A sabbatical mutes everything but what a plan they are already in says
+    // to them (D6). The inbox row is already written; only the buzz is held.
+    .filter((p) => !p.sabbatical || sabbaticalAllows(options.kind, { planRoom: options.planRoom }))
     .map((p) => p.id);
   if (awake.length === 0) return;
 

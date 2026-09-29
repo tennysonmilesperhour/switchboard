@@ -1,7 +1,6 @@
 'use server';
 import { imminentChange, urgentChangeDeadline } from '@/lib/sms-commands';
 
-import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import { requireUser, requireUserOrRedirect } from '@/lib/server/require-user';
 import { createAdminClient } from '@/lib/supabase/admin';
@@ -16,11 +15,6 @@ import { notifyDateSettled, openDecidingPlan } from '@/lib/server/poll-notices';
 import { capture } from '@/lib/analytics/server';
 import { ANALYTICS_EVENTS } from '@/lib/analytics/events';
 import { isValidMediaRef } from '@/lib/server/media';
-import type { RecurrenceKind } from '@/lib/types';
-import {
-  nextOccurrenceAfter,
-  normalizeCustomInterval,
-} from '@/lib/engine/recurrence';
 import { reportAndFail, reportOperationalError } from '@/lib/server/observability';
 import type { ActionResult } from '@/lib/errors';
 import { failure, validation } from '@/lib/errors';
@@ -30,9 +24,9 @@ import { consumeEventOutboundSlot } from '@/lib/server/invite-delivery-limit';
 import { safeHttpUrl } from '@/lib/security';
 import { toJson } from '@/lib/supabase/json';
 import { hasInviteDetails } from '@/lib/event-details';
-import { cloneEventForReuse } from '@/lib/server/event-clone';
 import { invitationStep, readyToSendInvitations } from '@/lib/poll-readiness';
 import { capacityProblem } from '@/lib/plan-capacity';
+import { normalizeNewQuestions, planExtrasProblem } from '@/lib/plan-extras';
 import { sameInstant } from '@/lib/plan-time';
 import {
   createEventError,
@@ -144,6 +138,13 @@ export async function createEvent(
     await reportOperationalError('event-initial-delivery', cascadeError, { eventId });
   }
 
+  // A plan made from a ritual schedules the next one, whichever of the pair
+  // made it (D8). Best-effort: the plan exists either way.
+  if (input.ritualId) {
+    const { error: ritualError } = await supabase.rpc('note_ritual_planned', { p_ritual: input.ritualId, p_event: eventId });
+    if (ritualError) await reportOperationalError('ritual.plan', ritualError, { eventId });
+  }
+
   // Put the plan on the map. After invite delivery so a geocode can't delay it.
   await persistEventCoordinates(supabase, eventId, input);
 
@@ -162,8 +163,9 @@ export async function createEvent(
 
 /**
  * Host/co-host edit of an already-published plan. Changing the time or place
- * quietly pings everyone who has already accepted so nobody shows up to the
- * old details.
+ * pings everyone who has already accepted so nobody shows up to the old
+ * details. With `extras` it also changes what D18 lets change after creation:
+ * the cover, theme, reminders, Open Table, and new questions.
  */
 export async function updateEventDetails(
   eventId: string,
@@ -203,12 +205,33 @@ export async function updateEventDetails(
   const wishlistUrl = safeHttpUrl(input.wishlistUrl);
 
   const admin = createAdminClient();
-  const { data: before } = await admin
-    .from('events')
-    .select('starts_at, location_name, location_address, title')
-    .eq('id', eventId)
-    .maybeSingle();
+  const [{ data: before }, { data: asked, error: askedError }] = await Promise.all([
+    admin
+      .from('events')
+      .select('starts_at, location_name, location_address, title')
+      .eq('id', eventId)
+      .maybeSingle(),
+    admin.from('event_questions').select('position').eq('event_id', eventId),
+  ]);
   if (!before) return validation('Plan not found.');
+  if (askedError) {
+    return reportAndFail('SB-PLAN-SAVE', 'event-update', askedError, { eventId, step: 'questions-read' });
+  }
+
+  // D18: cover, theme, reminders, Open Table, and questions added (never
+  // edited) may change after creation. Checked before anything is written.
+  const extras = input.extras;
+  const newQuestions = extras ? normalizeNewQuestions(extras.newQuestions) : [];
+  const extrasError = extras
+    ? planExtrasProblem({
+        openTable: extras.openTable,
+        capacity: input.capacity,
+        theme: extras.theme,
+        existingQuestions: (asked ?? []).length,
+        newQuestions: newQuestions.length,
+      })
+    : null;
+  if (extrasError) return validation(extrasError);
 
   // Compared as instants, never as strings. The row comes back from PostgREST
   // as `2026-09-25T02:00:00+00:00` and the form sends `toISOString()`'s
@@ -239,6 +262,15 @@ export async function updateEventDetails(
       ...(input.timeZone ? { time_zone: input.timeZone.slice(0, 64) } : {}),
       capacity: input.capacity,
       wishlist_url: wishlistUrl,
+      ...(extras
+        ? {
+            // Shown on pages guests open, so held to the same scheme check.
+            cover_url: safeHttpUrl(extras.coverUrl),
+            theme: extras.theme,
+            reminders_enabled: extras.remindersEnabled,
+            open_table: extras.openTable,
+          }
+        : {}),
       // The reminder markers describe the time they were sent for. Left set, a
       // plan moved after its day-before note went out never got one for the
       // new date, and one moved later after "starting soon" never got that.
@@ -253,6 +285,25 @@ export async function updateEventDetails(
       { eventId },
       'Could not save your changes. Try again.',
     );
+  }
+
+  // New questions go in after the ones already asked, through the caller's own
+  // session so `event_questions_write` (host or co-host) decides. Anyone who
+  // already said yes is not asked again; the answers start with the next yes.
+  if (newQuestions.length > 0) {
+    const next = Math.max(-1, ...(asked ?? []).map((row) => row.position)) + 1;
+    const { error: questionError } = await auth.supabase
+      .from('event_questions')
+      .insert(newQuestions.map((q, i) => ({ ...q, event_id: eventId, position: next + i })));
+    if (questionError) {
+      return reportAndFail(
+        'SB-PLAN-SAVE',
+        'event-update',
+        questionError,
+        { eventId, step: 'questions' },
+        'Your other changes saved, but the new questions didn’t. Try adding them again.',
+      );
+    }
   }
 
   // Notify accepted guests only when the logistics they'd act on actually change.
@@ -640,53 +691,6 @@ export async function deleteEventPermanently(
   revalidatePath('/plans');
   revalidatePath('/');
   return { ok: true };
-}
-
-/**
- * Run It Back: clone a past plan into a fresh one - same people, same place,
- * new date TBD. Anyone who said "not my thing" is quietly left off; everyone
- * else keeps their place in the order (see `runItBackCrew` for who counts as
- * crew). The new plan is live - invitations go out as it is created - and the
- * host lands on it.
- */
-export async function runItBack(eventId: string): Promise<never> {
-  const { user } = await requireUserOrRedirect();
-
-  // new date TBD - the group can settle it in the room
-  const cloneId = await cloneEventForReuse(user.id, eventId, null);
-  redirect(cloneId ? `/events/${cloneId}` : `/events/${eventId}`);
-}
-
-/**
- * Schedule the next occurrence of a recurring plan: clone the crew forward onto
- * the upcoming date its cadence produces. Host only. If the source doesn't
- * repeat or has no start time to count from, the new date is left TBD.
- */
-export async function scheduleNextOccurrence(eventId: string): Promise<never> {
-  const { supabase, user } = await requireUserOrRedirect();
-  const manager = await checkEventManager(user.id, eventId);
-  if (!manager.ok || !manager.isManager) redirect('/plans');
-
-  const { data: source } = await supabase
-    .from('events')
-    .select('host_id, starts_at, recurrence, recurrence_interval_days')
-    .eq('id', eventId)
-    .single();
-  if (!source || source.host_id !== user.id) redirect('/plans');
-
-  let startsAt: string | null = null;
-  if (source.starts_at && source.recurrence && source.recurrence !== 'none') {
-    const next = nextOccurrenceAfter(
-      new Date(source.starts_at),
-      source.recurrence as RecurrenceKind,
-      normalizeCustomInterval(source.recurrence_interval_days),
-      new Date(),
-    );
-    startsAt = next ? next.toISOString() : null;
-  }
-
-  const cloneId = await cloneEventForReuse(user.id, eventId, startsAt);
-  redirect(cloneId ? `/events/${cloneId}` : `/events/${eventId}`);
 }
 
 /**

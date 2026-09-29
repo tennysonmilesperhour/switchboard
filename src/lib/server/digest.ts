@@ -9,6 +9,7 @@ import {
   columnForCategory,
   type NotificationColumn,
 } from '@/lib/notifications';
+import { sabbaticalAllows } from '@/lib/sabbatical';
 
 /** One line of a digest: "3 new messages", "2 plan updates". */
 export interface DigestLine {
@@ -40,6 +41,7 @@ const KIND_LABEL: Record<string, [one: string, many: string]> = {
   connection_request: ['connection request', 'connection requests'],
   match: ['new match', 'new matches'],
   board_post: ['board post', 'board posts'],
+  ritual: ['ritual update', 'ritual updates'],
 };
 
 const FALLBACK_LABEL: [one: string, many: string] = ['update', 'updates'];
@@ -124,12 +126,18 @@ export function isInDigestWindow(now: Date, hour: number, timeZone: string | nul
  * a muted category must not come back through a side door as "3 plan updates".
  * Default-on like the per-item push: only an explicit `false` mutes, and a
  * kind with no category (never muteable on its own) always stays.
+ *
+ * A sabbatical mutes the same way (D6): only what a plan they are in says to
+ * them stays. The summary counts room messages by kind and cannot tell a
+ * plan's room from a match room, so it keeps them all rather than lose the
+ * plan messages a sabbatical is meant to let through.
  */
 export function unmutedDigestLines(
   lines: DigestLine[],
-  prefs: Partial<Record<NotificationColumn, boolean | null>>,
+  prefs: Partial<Record<NotificationColumn | 'sabbatical', boolean | null>>,
 ): DigestLine[] {
   return lines.filter((line) => {
+    if (prefs.sabbatical && !sabbaticalAllows(line.kind, { planRoom: true })) return false;
     const category = categoryForKind(line.kind);
     return !category || prefs[columnForCategory(category)] !== false;
   });
@@ -251,7 +259,7 @@ export async function sweepDigests(now = new Date()): Promise<DigestSweepSummary
   const { data: people, error: peopleError } = await admin
     .from('profiles')
     .select(
-      'id, digest_hour, digest_sent_at, timezone, notify_plans, notify_suggestions, notify_reminders, notify_messages, notify_social',
+      'id, digest_hour, digest_sent_at, timezone, notify_plans, notify_suggestions, notify_reminders, notify_messages, notify_social, sabbatical',
     )
     .eq('digest_enabled', true);
   // Thrown, so the cron route records a failed sweep rather than "sent: 0".

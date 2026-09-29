@@ -3,6 +3,7 @@ import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
 import { AppShell } from '@/components/shell/AppShell';
 import { paceFromChosenWindows, type WindowPace } from '@/lib/engine/windows';
+import { sabbaticalOf } from '@/lib/sabbatical';
 import { EventWizard } from './EventWizard';
 import type { WizardFriend } from './steps/wizard-types';
 
@@ -49,7 +50,7 @@ export default async function NewEventPage({
     supabase
       .from('connections')
       .select(
-        'requester_id, addressee_id, requester:profiles!connections_requester_id_fkey(id, display_name, handle, avatar_url), addressee:profiles!connections_addressee_id_fkey(id, display_name, handle, avatar_url)',
+        'requester_id, addressee_id, requester:profiles!connections_requester_id_fkey(id, display_name, handle, avatar_url, sabbatical, sabbatical_message), addressee:profiles!connections_addressee_id_fkey(id, display_name, handle, avatar_url, sabbatical, sabbatical_message)',
       )
       .eq('status', 'accepted')
       .or(`requester_id.eq.${user.id},addressee_id.eq.${user.id}`),
@@ -134,6 +135,7 @@ export default async function NewEventPage({
       id: profile.id,
       name: profile.display_name,
       handle: profile.handle ?? '',
+      sabbatical: sabbaticalOf(profile),
     };
   });
 

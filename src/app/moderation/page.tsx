@@ -3,8 +3,10 @@ import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
 import { AppShell } from '@/components/shell/AppShell';
 import { EmptyState } from '@/components/ui/EmptyState';
+import { signRoomPhotos } from '@/lib/server/room-media';
 import { ModerationClient, type OpenReport } from './ModerationClient';
 import { PendingVenuesClient, type PendingVenue } from './PendingVenuesClient';
+import { SuspendedAccountsClient, type SuspendedAccount } from './SuspendedAccountsClient';
 
 export const metadata: Metadata = { title: 'Moderation', robots: { index: false } };
 
@@ -22,23 +24,43 @@ export default async function ModerationPage() {
   );
   if (!isModerator) redirect('/');
 
-  const [{ data: reports, error: reportsError }, { data: venues, error: venuesError }] =
-    await Promise.all([
-      supabase.rpc('list_open_reports'),
-      supabase.rpc('list_pending_venues'),
-    ]);
+  const [
+    { data: reports, error: reportsError },
+    { data: venues, error: venuesError },
+    { data: suspended, error: suspendedError },
+  ] = await Promise.all([
+    supabase.rpc('list_open_reports'),
+    supabase.rpc('list_pending_venues'),
+    supabase.rpc('list_suspended_accounts'),
+  ]);
   // A queue that failed to load must not read as an empty one: "Nothing to
   // review" over a broken RPC tells a moderator everything is handled. Throw
   // to the error boundary, which shows the digest and logs the cause.
-  if (reportsError || venuesError) {
-    throw new Error(
-      `Could not load the moderation queue: ${(reportsError ?? venuesError)?.message ?? 'unknown error'}`,
-    );
+  const loadError = reportsError ?? venuesError ?? suspendedError;
+  if (loadError) {
+    throw new Error(`Could not load the moderation queue: ${loadError.message ?? 'unknown error'}`);
   }
-  const openReports: OpenReport[] = reports ?? [];
-  const pendingVenues: PendingVenue[] = venues ?? [];
 
-  const nothingToReview = openReports.length === 0 && pendingVenues.length === 0;
+  // A reported room photo is a private-bucket path. Sign it here, after the
+  // moderator gate above and the one inside list_open_reports, and hand the
+  // browser only the short-lived URL, never the stored path
+  // (docs/SECURITY.md, "Media privacy").
+  const rows = reports ?? [];
+  const signed = await signRoomPhotos(
+    rows
+      .filter((row) => row.target_kind === 'room_message')
+      .map((row) => ({ key: row.id, ref: row.target_image, ownerId: row.reported_id })),
+  );
+  const openReports: OpenReport[] = rows.map(({ target_image, ...row }) => ({
+    ...row,
+    target_had_image: Boolean(target_image),
+    target_image_src: signed.get(row.id) ?? null,
+  }));
+  const pendingVenues: PendingVenue[] = venues ?? [];
+  const suspendedAccounts: SuspendedAccount[] = suspended ?? [];
+
+  const nothingToReview =
+    openReports.length === 0 && pendingVenues.length === 0 && suspendedAccounts.length === 0;
 
   return (
     <AppShell title="Moderation" back="/settings">
@@ -47,7 +69,7 @@ export default async function ModerationPage() {
           <EmptyState
             emoji="✅"
             title="Nothing to review"
-            body="No open reports or venue claims right now."
+            body="No open reports, venue claims or suspended accounts right now."
           />
         ) : (
           <>
@@ -72,14 +94,32 @@ export default async function ModerationPage() {
               <div>
                 <h2 className="font-display text-xl text-ink">Reports</h2>
                 <p className="text-sm text-ink-faint mt-0.5 leading-relaxed">
-                  Open reports from the community. Resolving records who handled it
-                  and when; dismissing marks it reviewed with no action.
+                  Open reports from the community, with the post or message that was
+                  flagged. You can take it down or suspend the account, then mark the
+                  report actioned; dismissing marks it reviewed with no action. Every
+                  step records who took it and when.
                 </p>
               </div>
               {openReports.length === 0 ? (
                 <p className="text-sm text-ink-faint">No open reports.</p>
               ) : (
                 <ModerationClient reports={openReports} />
+              )}
+            </section>
+
+            <section className="space-y-4">
+              <div>
+                <h2 className="font-display text-xl text-ink">Suspended accounts</h2>
+                <p className="text-sm text-ink-faint mt-0.5 leading-relaxed">
+                  Everyone suspended right now. They are signed out, and signing in
+                  tells them the account is suspended and where to write if they think
+                  it&apos;s a mistake. Lift a suspension here when an appeal holds up.
+                </p>
+              </div>
+              {suspendedAccounts.length === 0 ? (
+                <p className="text-sm text-ink-faint">Nobody is suspended.</p>
+              ) : (
+                <SuspendedAccountsClient accounts={suspendedAccounts} />
               )}
             </section>
           </>

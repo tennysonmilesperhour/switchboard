@@ -307,15 +307,74 @@ export async function deleteMessage(
       .eq('kind', 'photo')
       .eq('url', imageRef);
     if (isOwnRoomPhotoPath(imageRef, user.id) && hasAdminCredentials()) {
-      await createAdminClient()
-        .storage.from(PRIVATE_MEDIA_BUCKET)
-        .remove([imageRef])
-        .catch(() => undefined);
+      const admin = createAdminClient();
+      // A photo someone reported stays in storage: the report holds its path so
+      // a moderator can still see what was sent (docs/SECURITY.md,
+      // "Moderation"). The caller has just proved, through their own RLS
+      // delete, that this path was theirs; the count tells them nothing.
+      const { count, error: reportedError } = await admin
+        .from('user_reports')
+        .select('id', { count: 'exact', head: true })
+        .eq('reported_id', user.id)
+        .eq('snapshot_image', imageRef);
+      if (!reportedError && !count) {
+        await admin.storage.from(PRIVATE_MEDIA_BUCKET).remove([imageRef]).catch(() => undefined);
+      }
     }
   }
 
   revalidatePath(`/rooms/${roomId}`);
   return { ok: true };
+}
+
+/**
+ * Report one message in a room.
+ *
+ * The report attaches the message itself: the database copies its words and
+ * photo from the row (never from here), so a moderator sees what was said even
+ * if the sender deletes it afterwards, and `reported_id` is always its real
+ * sender (20260930070000_moderator_actions.sql). The message is read through
+ * the reporter's own client first, so only a member of the room can report
+ * it, and a stranger probing ids learns nothing.
+ */
+export async function reportRoomMessage(
+  messageId: string,
+  reason: string,
+): Promise<ActionResult> {
+  const cleanReason = reason.trim().slice(0, 500);
+  if (!cleanReason) return validation('Add a short reason.');
+  if (!UUID_RE.test(messageId)) return failure('SB-MESSAGE-MISSING');
+
+  const auth = await requireUser();
+  if (!auth.ok) return auth;
+  const { supabase, user } = auth;
+
+  const { data: message } = await supabase
+    .from('messages')
+    .select('id, sender_id')
+    .eq('id', messageId)
+    .maybeSingle();
+  if (!message) return failure('SB-MESSAGE-MISSING');
+  if (message.sender_id === user.id) return validation('That’s your own message.');
+
+  // The budget every report shares: enough for a bad afternoon, not enough to
+  // flood the queue or mass-target one person.
+  if (!(await checkRateLimit(`report:${user.id}`, 10, 60 * 60))) {
+    return failure('SB-RATE-LIMIT', 'You’ve filed several reports. Try again later.');
+  }
+
+  const { error } = await supabase.from('user_reports').insert({
+    reporter_id: user.id,
+    reported_id: message.sender_id,
+    target_kind: 'room_message',
+    message_id: message.id,
+    reason: cleanReason,
+  });
+  // Filing twice is the same report, not a failure the reporter needs to see.
+  if (!error || error.code === '23505') return { ok: true };
+  // Deleted or removed between the read above and the insert.
+  if (error.code === 'P0002') return failure('SB-MESSAGE-MISSING');
+  return reportAndFail('SB-MESSAGE-REPORT', 'room.report-message', error, { messageId });
 }
 
 /**

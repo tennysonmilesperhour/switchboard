@@ -12,6 +12,7 @@ const mocks = vi.hoisted(() => ({
   sweepSuggestionDeadlines: vi.fn(),
   sweepDuePolls: vi.fn(),
   sweepReminders: vi.fn(),
+  sweepRitualReminders: vi.fn(),
   sweepExpired: vi.fn(),
   sweepDigests: vi.fn(),
 }));
@@ -35,6 +36,9 @@ vi.mock('@/lib/server/poll-runner', () => ({
 vi.mock('@/lib/server/reminders', () => ({
   sweepReminders: mocks.sweepReminders,
 }));
+vi.mock('@/lib/server/ritual-reminders', () => ({
+  sweepRitualReminders: mocks.sweepRitualReminders,
+}));
 vi.mock('@/lib/server/cleanup', () => ({ sweepExpired: mocks.sweepExpired }));
 vi.mock('@/lib/server/digest', () => ({ sweepDigests: mocks.sweepDigests }));
 
@@ -57,6 +61,7 @@ beforeEach(() => {
   mocks.sweepCascades.mockResolvedValue(2);
   mocks.sweepDuePolls.mockResolvedValue(3);
   mocks.sweepReminders.mockResolvedValue(4);
+  mocks.sweepRitualReminders.mockResolvedValue(9);
   mocks.sweepExpired.mockResolvedValue({
     signalsDeleted: 5,
     momentsClosed: 6,
@@ -90,6 +95,7 @@ describe('cron overlap leases', () => {
       suggestionsClosed: 1,
       pollsResolved: 3,
       remindersSent: 4,
+      ritualRemindersSent: 9,
       signalsDeleted: 5,
       momentsClosed: 6,
       liveLocationsDeleted: 7,
@@ -98,6 +104,7 @@ describe('cron overlap leases', () => {
     expect(mocks.sweepSuggestionDeadlines).toHaveBeenCalledTimes(1);
     expect(mocks.sweepDuePolls).toHaveBeenCalledTimes(1);
     expect(mocks.sweepReminders).toHaveBeenCalledTimes(1);
+    expect(mocks.sweepRitualReminders).toHaveBeenCalledTimes(1);
     expect(mocks.sweepExpired).toHaveBeenCalledTimes(1);
     expect(mocks.finishCronSweep).toHaveBeenCalledTimes(1);
   });

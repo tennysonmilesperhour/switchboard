@@ -17,7 +17,7 @@ import { HostCard } from '@/components/events/HostCard';
 import { JoinRequests } from '@/components/events/JoinRequests';
 import { ParentalApprovalManager } from '@/components/events/ParentalApprovalManager';
 import { GuardianApprovalStep } from '@/components/events/GuardianApprovalStep';
-import { RsvpCard } from '@/components/events/RsvpCard';
+import { MyInviteCard } from '@/components/events/MyInviteCard';
 import { Announcements } from '@/components/events/Announcements';
 import { EventThread } from '@/components/events/EventThread';
 import { VoiceNote } from '@/components/ui/VoiceNote';
@@ -34,7 +34,6 @@ import { CoHostManager } from './CoHostManager';
 import { AddInvitees } from './AddInvitees';
 import { InviteLink } from './InviteLink';
 import { PrivacyAccess } from './PrivacyAccess';
-import { inviteExpiresAt } from '@/lib/engine/cascade';
 import { asInviteMode, inviteListHint, inviteListTitle } from '@/lib/invite-rhythm';
 import { formatDateTime, formatDateTimeRange } from '@/lib/format';
 import { resolveEventZone } from '@/lib/server/event-zone';
@@ -44,6 +43,7 @@ import { inviteOpenGraph } from '@/lib/invite-links';
 import {
   hostCanEditInvitees,
   hostCanEditLine,
+  hostCanExtendLiveWindow,
   hostCanShare,
 } from '@/lib/share-link';
 import type { Poll, SwitchboardEvent } from '@/lib/types';
@@ -451,30 +451,15 @@ export default async function EventPage({
           />
         )}
 
-        {/* Invitee RSVP */}
-        {myInvite?.status === 'sent' && rsvpAnchorId && (
-          <div id={rsvpAnchorId} className="scroll-mt-20">
-          <RsvpCard
-            inviteId={myInvite.id}
-            questions={questions.map((q) => ({
-              id: q.id,
-              prompt: q.prompt,
-              required: q.required,
-              kind: q.kind === 'choice' ? 'choice' : 'text',
-              options: q.options,
-            }))}
-            expiresAtIso={
-              inviteExpiresAt({
-                id: myInvite.id,
-                position: myInvite.position,
-                groupStage: myInvite.group_stage,
-                status: myInvite.status,
-                windowMinutes: myInvite.window_minutes,
-                sentAt: myInvite.sent_at,
-              })?.toISOString() ?? null
-            }
+        {/* The viewer's own invitation, whatever state it is in. */}
+        {myInvite && (
+          <MyInviteCard
+            invite={myInvite}
+            eventStatus={event.status}
+            questions={questions}
+            rsvpAnchorId={rsvpAnchorId}
+            guardianDenied={Boolean(guardianStep)}
           />
-          </div>
         )}
         {/* A yes held for a guardian, or one a guardian turned down. The step
             lives on the invite, so it is here whenever they come back. */}
@@ -485,22 +470,6 @@ export default async function EventPage({
             request={guardianStep.request}
             canSend
           />
-        )}
-        {myInvite?.status === 'accepted' && (
-          <Card tone="sage" lifted>
-            <p className="font-extrabold text-lg text-sage-deep">You’re in ✓</p>
-            <p className="text-sm text-ink-soft mt-0.5">
-              See you there. The room has the details.
-            </p>
-          </Card>
-        )}
-        {myInvite?.status === 'waitlisted' && (
-          <Card tone="gold" lifted>
-            <p className="font-extrabold text-lg">You’re on the waitlist</p>
-            <p className="text-sm text-ink-soft mt-0.5">
-              If a spot opens up, you’ll be the first to know.
-            </p>
-          </Card>
         )}
 
         {/* When everyone is free. Above the poll on purpose: it is the input to
@@ -602,7 +571,7 @@ export default async function EventPage({
             <SectionHeader title="RSVP answers" hint="Only you can see these" />
             <ul className="space-y-2">
               {answersByGuest.map((guest) => (
-                <li key={guest.name} className="rounded-card bg-cream px-3.5 py-3">
+                <li key={guest.inviteId} className="rounded-card bg-cream px-3.5 py-3">
                   <p className="text-sm font-bold text-ink">{guest.name}</p>
                   <dl className="mt-1.5 space-y-1">
                     {guest.answers.map((qa, i) => (
@@ -686,6 +655,7 @@ export default async function EventPage({
               mode={inviteMode}
               eventId={event.id}
               editable={lineEditable}
+              canExtend={canManage && hostCanExtendLiveWindow(event.status)}
               people={inviteeCards}
             />
           </section>

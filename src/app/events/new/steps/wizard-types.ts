@@ -1,11 +1,14 @@
 import type { InviteMode } from '@/lib/types';
 import type { WizardStepKey } from '@/lib/wizard-steps';
 import type { ContactMatch } from '@/lib/actions/connections';
+import type { SabbaticalStatus } from '@/lib/sabbatical';
 
 export interface WizardFriend {
   id: string;
   name: string;
   handle: string;
+  /** Set when they are on sabbatical: the picker shows their note (D6). */
+  sabbatical?: SabbaticalStatus | null;
 }
 
 export interface WizardHousehold {

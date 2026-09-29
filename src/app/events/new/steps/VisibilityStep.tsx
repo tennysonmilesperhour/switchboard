@@ -2,6 +2,7 @@
 
 import type { Dispatch, SetStateAction } from 'react';
 import { Card } from '@/components/ui/Card';
+import { REMINDER_SCHEDULE_COPY } from '@/lib/plan-extras';
 
 interface VisibilityStepProps {
   showInviteList: boolean;
@@ -56,7 +57,7 @@ export function VisibilityStep({
               },
               {
                 label: 'Send reminder nudges',
-                hint: 'Switchboard can nudge invited people before the plan starts.',
+                hint: REMINDER_SCHEDULE_COPY,
                 value: remindersEnabled,
                 set: setRemindersEnabled,
               },
