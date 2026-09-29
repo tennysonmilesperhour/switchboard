@@ -17,6 +17,7 @@ import {
 } from '@/lib/auth-identity';
 import { createClient } from '@/lib/supabase/client';
 import { COMMUNITY_COVENANT_SUMMARY } from '@/lib/legal';
+import { supportEmail } from '@/lib/contact';
 
 type Mode = 'signin' | 'create';
 type Status = 'idle' | 'submitting' | 'error';
@@ -249,6 +250,18 @@ export function LoginForm({ next = '/', initialMode = 'signin' }: LoginFormProps
             >
               <p>{message}</p>
               {fix ? <p className="mt-1 text-ink-soft">{fix}</p> : null}
+              {code === 'SB-AUTH-SUSPENDED' ? (
+                // Nothing on this form can lift a suspension, so the next step
+                // is a person (docs/AUTH.md: every blocked state needs a route
+                // out the reader can reach from here).
+                <p className="mt-1 text-ink-soft">
+                  If you think this is a mistake, email{' '}
+                  <a className="font-bold underline" href={`mailto:${supportEmail()}`}>
+                    {supportEmail()}
+                  </a>
+                  .
+                </p>
+              ) : null}
               {code ? (
                 <p className="mt-1 text-xs text-ink-faint">{errorRef(code)}</p>
               ) : null}

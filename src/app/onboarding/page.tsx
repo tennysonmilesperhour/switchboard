@@ -3,6 +3,8 @@ import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
 import { safeNextPath } from '@/lib/security';
 import { OnboardingForm } from './OnboardingForm';
+import { errorRef } from '@/lib/errors';
+import { SignOutForm } from '@/components/shell/SignOutForm';
 
 export const metadata: Metadata = { title: 'Set up your profile' };
 
@@ -53,6 +55,11 @@ export default async function OnboardingPage({
       {error ? (
         <p role="alert" className="mt-4 rounded-card bg-rose-soft text-rose-deep text-sm p-3">
           {ERROR_MESSAGES[error] ?? 'Something went wrong.'}
+          {error === 'save' || !ERROR_MESSAGES[error] ? (
+            <span className="mt-1 block font-mono text-[11px] uppercase tracking-wide opacity-70">
+              {errorRef('SB-PROFILE-SAVE')}
+            </span>
+          ) : null}
         </p>
       ) : null}
       <OnboardingForm
@@ -61,6 +68,18 @@ export default async function OnboardingPage({
         next={nextPath}
         error={error}
       />
+      {/* Every protected route funnels here until this form is saved, so the
+          bottom bar's Settings — and its Sign out — is out of reach. Someone
+          who signed in on the wrong account, or can't agree to the terms,
+          still needs a way out (docs/AUTH.md: no state is a dead end). */}
+      <SignOutForm>
+        <button
+          type="submit"
+          className="mt-6 w-full text-center text-sm font-bold text-ink-faint hover:text-ink"
+        >
+          Not you? Sign out
+        </button>
+      </SignOutForm>
     </div>
   );
 }

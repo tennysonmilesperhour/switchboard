@@ -82,6 +82,13 @@ test('does not report verified if the phone changed during verification', async 
   expect(await confirmPhoneContact('123456')).toMatchObject({ ok: false, error: expect.stringContaining('changed') });
   expect(mocks.revalidate).not.toHaveBeenCalled();
 });
+test('a code stops working after repeated misses, even the right one', async () => {
+  // The attempts column was written on every miss and never read.
+  request = { data: { normalized_value: '+15555550100', code_hash: createHmac('sha256', 'test-secret').update('user-1:+15555550100:123456').digest('hex'), attempts: 5, expires_at: new Date(Date.now()+600000).toISOString() }, error: null };
+  expect(await confirmPhoneContact('123456')).toMatchObject({ ok: false, error: expect.stringContaining('Request a new code') });
+  expect(queries.some((q) => q.table === 'profile_contacts')).toBe(false);
+  expect(mocks.revalidate).not.toHaveBeenCalled();
+});
 test('code lookup errors are not reported as expired codes', async () => {
   request = { data: null, error: { message: 'database unavailable' } };
   expect(await confirmPhoneContact('123456')).toMatchObject({ code: 'SB-VERIFY-CHECK' });

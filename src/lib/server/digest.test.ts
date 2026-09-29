@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 
-import { digestBody, isDigestHour, isDueForDigest } from '@/lib/server/digest';
+import {
+  digestBody,
+  isDigestHour,
+  isDueForDigest,
+  unmutedDigestLines,
+} from '@/lib/server/digest';
 
 describe('digestBody', () => {
   it('says nothing at all when there is nothing to say', () => {
@@ -17,7 +22,7 @@ describe('digestBody', () => {
   });
 
   it('uses the singular for one', () => {
-    expect(digestBody([{ kind: 'invite', items: 1, latestTitle: null }])).toBe(
+    expect(digestBody([{ kind: 'event_invite', items: 1, latestTitle: null }])).toBe(
       '1 invitation',
     );
   });
@@ -26,10 +31,33 @@ describe('digestBody', () => {
     expect(
       digestBody([
         { kind: 'room_message', items: 2, latestTitle: null },
-        { kind: 'invite', items: 1, latestTitle: null },
-        { kind: 'rsvp', items: 4, latestTitle: null },
+        { kind: 'event_invite', items: 1, latestTitle: null },
+        { kind: 'rsvp_accepted', items: 4, latestTitle: null },
       ]),
     ).toBe('2 new messages, 1 invitation and 4 answers');
+  });
+
+  it('names the kinds notifyUsers actually writes', () => {
+    // It used to be keyed by names no sender used, so a real day read
+    // "2 updates, 1 update and 3 updates".
+    expect(
+      digestBody([
+        { kind: 'event_comment', items: 2, latestTitle: null },
+        { kind: 'poll_suggestion', items: 1, latestTitle: null },
+        { kind: 'event_updated', items: 3, latestTitle: null },
+      ]),
+    ).toBe('2 new comments, 1 new idea and 3 plan updates');
+  });
+
+  it('counts kinds that read the same together', () => {
+    expect(
+      digestBody([
+        { kind: 'event_updated', items: 1, latestTitle: null },
+        { kind: 'event_date_set', items: 2, latestTitle: null },
+        { kind: 'something_new', items: 1, latestTitle: null },
+        { kind: 'something_else', items: 1, latestTitle: null },
+      ]),
+    ).toBe('3 plan updates and 2 updates');
   });
 
   it('falls back to a plain word for a kind it does not know', () => {
@@ -55,6 +83,13 @@ describe('isDigestHour', () => {
     expect(isDigestHour(NOON_UTC, 12, null)).toBe(true);
   });
 
+  it('reads an unknown zone as UTC instead of throwing out of the sweep', () => {
+    // The zone is client-supplied; a RangeError here stopped every digest
+    // after that person's row.
+    expect(() => isDigestHour(NOON_UTC, 12, 'Not/AZone')).not.toThrow();
+    expect(isDigestHour(NOON_UTC, 12, 'Not/AZone')).toBe(true);
+  });
+
   it('handles midnight without treating hour 0 as unset', () => {
     expect(isDigestHour(new Date('2026-08-18T00:00:00Z'), 0, 'UTC')).toBe(true);
   });
@@ -77,5 +112,25 @@ describe('isDueForDigest', () => {
     // 20h rather than 24h so a digest at 08:00 is not skipped because
     // yesterday's went out at 08:05.
     expect(isDueForDigest(NOW, '2026-08-17T08:05:00Z')).toBe(true);
+  });
+});
+
+describe('unmutedDigestLines', () => {
+  const lines = [
+    { kind: 'event_updated', items: 2, latestTitle: null },
+    { kind: 'room_message', items: 3, latestTitle: null },
+    { kind: 'something_new', items: 1, latestTitle: null },
+  ];
+
+  it('leaves out a category the person muted, so it cannot return as a summary', () => {
+    expect(
+      unmutedDigestLines(lines, { notify_plans: false, notify_messages: true }).map(
+        (line) => line.kind,
+      ),
+    ).toEqual(['room_message', 'something_new']);
+  });
+
+  it('treats an unset preference as on, like the per-item push', () => {
+    expect(unmutedDigestLines(lines, { notify_plans: null })).toHaveLength(3);
   });
 });

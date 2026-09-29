@@ -21,6 +21,9 @@ import { safeNextPath } from '@/lib/security';
 
 export type ContactKind = 'email' | 'phone';
 
+/** Wrong guesses one texted code survives before a new one must be requested. */
+const MAX_PHONE_CODE_ATTEMPTS = 5;
+
 export interface ContactVerificationResult {
   ok: boolean;
   error?: string;
@@ -216,6 +219,12 @@ export async function confirmPhoneContact(code: string): Promise<ContactVerifica
   if (!verificationSecret()) return failure('SB-VERIFY-CONFIG');
   if (!request || !request.code_hash || new Date(request.expires_at).getTime() <= Date.now()) {
     return validation('That code expired. Request a new one.');
+  }
+  // The counter below was written on every miss and never read, so a code's
+  // only guess limit was the per-user rate window, which a patient caller can
+  // straddle. Burn the code after a handful of misses instead.
+  if (request.attempts >= MAX_PHONE_CODE_ATTEMPTS) {
+    return validation('Too many wrong codes. Request a new code.');
   }
 
   const submittedHash = phoneCodeHash(user.id, request.normalized_value, cleaned);

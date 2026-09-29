@@ -1,6 +1,8 @@
 /* Switchboard service worker — web push + PWA installability + offline shell. */
 
-const CACHE = 'switchboard-v3';
+// Bumped when cached entries must be dropped: v4 purges any failed responses
+// v3 could have stored (see the static-asset branch below).
+const CACHE = 'switchboard-v4';
 // Static, non-user-specific assets safe to cache. Authenticated page HTML is
 // NEVER cached (it's per-user); navigations are network-first with a generic
 // offline fallback, so one user can't be served another's cached content.
@@ -55,8 +57,13 @@ self.addEventListener('fetch', (event) => {
         (cached) =>
           cached ||
           fetch(request).then((response) => {
-            const copy = response.clone();
-            caches.open(CACHE).then((cache) => cache.put(request, copy)).catch(() => {});
+            // Cache-first never revisits an entry, so storing a 404 or 500
+            // (a chunk requested mid-deploy) would serve that failure for this
+            // URL until the cache name changes.
+            if (response.ok) {
+              const copy = response.clone();
+              caches.open(CACHE).then((cache) => cache.put(request, copy)).catch(() => {});
+            }
             return response;
           }),
       ),
@@ -85,7 +92,9 @@ self.addEventListener('push', (event) => {
   event.waitUntil(
     self.registration.showNotification(payload.title, {
       body: payload.body,
-      icon: '/icons/icon.svg',
+      // Raster: Android Chrome does not render an SVG notification icon and
+      // falls back to a generic glyph.
+      icon: '/icons/icon-192.png',
       badge: '/icons/icon.svg',
       data: { url: payload.url },
     }),

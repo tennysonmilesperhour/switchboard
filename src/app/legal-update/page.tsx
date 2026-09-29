@@ -5,6 +5,9 @@ import { acceptLatestTerms } from '@/lib/actions/profile';
 import { LEGAL_VERSION } from '@/lib/legal';
 import { safeNextPath } from '@/lib/security';
 import { Button } from '@/components/ui/Button';
+import { SignOutForm } from '@/components/shell/SignOutForm';
+import { errorRef } from '@/lib/errors';
+import { supportEmail } from '@/lib/contact';
 
 export const metadata = { title: 'Review updated terms' };
 
@@ -49,6 +52,11 @@ export default async function LegalUpdatePage({
             {error === 'agreement'
               ? 'Confirm the age and terms statement to continue.'
               : 'We could not save your acceptance. Please try again.'}
+            {error !== 'agreement' ? (
+              <span className="mt-1 block font-mono text-[11px] uppercase tracking-wide opacity-70">
+                {errorRef('SB-PROFILE-SAVE')}
+              </span>
+            ) : null}
           </p>
         )}
         <form action={acceptLatestTerms} className="mt-6 space-y-5">
@@ -64,6 +72,21 @@ export default async function LegalUpdatePage({
           </label>
           <Button type="submit" size="lg" className="w-full">Continue</Button>
         </form>
+        {/* The proxy sends every app route here until this is accepted, which
+            puts Settings (sign out, delete account) out of reach. Someone who
+            is under 18 or won't accept needs a way out from this page itself. */}
+        <p className="mt-5 text-xs leading-relaxed text-ink-faint">
+          Not accepting? You can sign out, or email{' '}
+          <a className="font-bold underline" href={`mailto:${supportEmail()}`}>
+            {supportEmail()}
+          </a>{' '}
+          to have your account and data deleted.
+        </p>
+        <SignOutForm>
+          <Button type="submit" variant="ghost" className="mt-2 w-full">
+            Sign out
+          </Button>
+        </SignOutForm>
       </div>
     </main>
   );

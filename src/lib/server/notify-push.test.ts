@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => {
   const route = { plans: 'existing', reminders: 'existing' };
+  const routeRead: { error: { message: string } | null } = { error: null };
   const sendNotification = vi.fn();
   const setVapidDetails = vi.fn();
   const reportOperationalError = vi.fn(async () => undefined);
@@ -9,6 +10,7 @@ const mocks = vi.hoisted(() => {
 
   return {
     route,
+    routeRead,
     sendNotification,
     setVapidDetails,
     reportOperationalError,
@@ -30,7 +32,16 @@ vi.mock('@/lib/server/observability', () => ({
 vi.mock('@/lib/supabase/admin', () => ({
   createAdminClient: () => ({
     from: (table: string) => {
-      if (table === 'notification_routes') return { select: () => ({ in: async () => ({ data: [{ user_id: 'user-1', ...mocks.route }], error: null }) }) };
+      if (table === 'notification_routes') {
+        return {
+          select: () => ({
+            in: async () =>
+              mocks.routeRead.error
+                ? { data: null, error: mocks.routeRead.error }
+                : { data: [{ user_id: 'user-1', ...mocks.route }], error: null },
+          }),
+        };
+      }
       if (table === 'profiles') {
         return {
           select: () => ({
@@ -137,4 +148,28 @@ it('channel selection suppresses push for SMS and email preferences', async () =
   await sendPushToUsers(['user-1'], { title: 'Plan', body: 'Changed' }, 'plans');
   expect(mocks.sendNotification).not.toHaveBeenCalled();
   mocks.route.plans = 'existing';
+});
+
+it('an unreadable route skips the push and reports it instead of throwing into the caller', async () => {
+  // Every domain action awaits notifyUsers after its own write committed, so a
+  // throw here used to turn a saved RSVP into an error screen.
+  vi.stubEnv('NEXT_PUBLIC_VAPID_PUBLIC_KEY', 'public-key');
+  vi.stubEnv('VAPID_PRIVATE_KEY', 'private-key');
+  mocks.sendNotification.mockClear();
+  mocks.reportOperationalError.mockClear();
+  mocks.routeRead.error = { message: 'relation unavailable' };
+  try {
+    await expect(
+      sendPushToUsers(['user-1'], { title: 'Plan', body: 'Changed' }, 'plans'),
+    ).resolves.toBeUndefined();
+    expect(mocks.sendNotification).not.toHaveBeenCalled();
+    expect(mocks.reportOperationalError).toHaveBeenCalledWith(
+      'push.send',
+      mocks.routeRead.error,
+      { stage: 'routes', category: 'plans' },
+    );
+  } finally {
+    mocks.routeRead.error = null;
+    vi.unstubAllEnvs();
+  }
 });

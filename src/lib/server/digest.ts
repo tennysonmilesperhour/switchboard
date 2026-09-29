@@ -1,5 +1,10 @@
 import { createAdminClient } from '@/lib/supabase/admin';
 import { sendPushToUsers } from '@/lib/server/notify';
+import {
+  categoryForKind,
+  columnForCategory,
+  type NotificationColumn,
+} from '@/lib/notifications';
 
 /** One line of a digest: "3 new messages", "2 plan updates". */
 export interface DigestLine {
@@ -8,20 +13,32 @@ export interface DigestLine {
   latestTitle: string | null;
 }
 
-/** How each notification kind reads in a summary. */
+/**
+ * How each notification kind reads in a summary. Keyed by the `kind` values
+ * notifyUsers() actually writes (see `KIND_TO_CATEGORY` in
+ * `@/lib/notifications`). This used to be keyed by names no sender used
+ * (`invite`, `rsvp`, `plan_update`), so every row but room messages fell to
+ * the fallback and a digest read "2 updates, 1 update and 3 updates".
+ */
 const KIND_LABEL: Record<string, [one: string, many: string]> = {
   room_message: ['new message', 'new messages'],
-  invite: ['invitation', 'invitations'],
-  rsvp: ['answer', 'answers'],
+  event_comment: ['new comment', 'new comments'],
+  photo: ['new photo', 'new photos'],
+  event_invite: ['invitation', 'invitations'],
+  rsvp_accepted: ['answer', 'answers'],
+  rsvp_declined_note: ['note from a guest', 'notes from guests'],
+  join_request: ['request to join', 'requests to join'],
   poll_opened: ['question to weigh in on', 'questions to weigh in on'],
-  suggestion_added: ['new idea', 'new ideas'],
-  plan_update: ['plan update', 'plan updates'],
+  poll_suggestion: ['new idea', 'new ideas'],
+  event_updated: ['plan update', 'plan updates'],
+  event_date_set: ['plan update', 'plan updates'],
+  announcement: ['host announcement', 'host announcements'],
+  connection_request: ['connection request', 'connection requests'],
+  match: ['new match', 'new matches'],
+  board_post: ['board post', 'board posts'],
 };
 
-function describe(line: DigestLine): string {
-  const [one, many] = KIND_LABEL[line.kind] ?? ['update', 'updates'];
-  return `${line.items} ${line.items === 1 ? one : many}`;
-}
+const FALLBACK_LABEL: [one: string, many: string] = ['update', 'updates'];
 
 /**
  * The digest body for one person, or null when there is nothing to say.
@@ -29,11 +46,24 @@ function describe(line: DigestLine): string {
  * Null rather than "nothing new today" on purpose: a digest that arrives to
  * report an empty day is precisely the interruption this feature exists to
  * remove, and it is the thing that teaches people to mute it.
+ *
+ * Kinds that read the same are counted together, so two kinds of plan change
+ * (or two kinds nobody labelled yet) say "3 plan updates" once rather than
+ * "1 plan update and 2 plan updates".
  */
 export function digestBody(lines: DigestLine[]): string | null {
-  const real = lines.filter((line) => line.items > 0);
-  if (real.length === 0) return null;
-  const parts = real.map(describe);
+  const totals = new Map<string, { label: [string, string]; items: number }>();
+  for (const line of lines) {
+    if (line.items <= 0) continue;
+    const label = KIND_LABEL[line.kind] ?? FALLBACK_LABEL;
+    const entry = totals.get(label[1]) ?? { label, items: 0 };
+    entry.items += line.items;
+    totals.set(label[1], entry);
+  }
+  if (totals.size === 0) return null;
+  const parts = [...totals.values()].map(
+    ({ label: [one, many], items }) => `${items} ${items === 1 ? one : many}`,
+  );
   if (parts.length === 1) return parts[0];
   return `${parts.slice(0, -1).join(', ')} and ${parts[parts.length - 1]}`;
 }
@@ -47,14 +77,40 @@ export function digestBody(lines: DigestLine[]): string | null {
  * arbitrarily.
  */
 export function isDigestHour(now: Date, hour: number, timeZone: string | null): boolean {
-  const local = Number(
-    new Intl.DateTimeFormat('en-US', {
-      hour: 'numeric',
-      hour12: false,
-      timeZone: timeZone ?? 'UTC',
-    }).format(now),
-  );
+  const format = (zone: string) =>
+    Number(
+      new Intl.DateTimeFormat('en-US', {
+        hour: 'numeric',
+        hourCycle: 'h23',
+        timeZone: zone,
+      }).format(now),
+    );
+  let local: number;
+  try {
+    local = format(timeZone ?? 'UTC');
+  } catch {
+    // `profiles.timezone` arrives from a client form, and Intl throws a
+    // RangeError on a zone it doesn't know. Uncaught, one such row aborted the
+    // hourly sweep for everyone after it; it reads as UTC instead.
+    local = format('UTC');
+  }
   return local === hour;
+}
+
+/**
+ * Drop the kinds whose category this person muted. The digest is a push, and
+ * a muted category must not come back through a side door as "3 plan updates".
+ * Default-on like the per-item push: only an explicit `false` mutes, and a
+ * kind with no category (never muteable on its own) always stays.
+ */
+export function unmutedDigestLines(
+  lines: DigestLine[],
+  prefs: Partial<Record<NotificationColumn, boolean | null>>,
+): DigestLine[] {
+  return lines.filter((line) => {
+    const category = categoryForKind(line.kind);
+    return !category || prefs[columnForCategory(category)] !== false;
+  });
 }
 
 /**
@@ -81,7 +137,9 @@ export async function sweepDigests(now = new Date()): Promise<number> {
 
   const { data: people } = await admin
     .from('profiles')
-    .select('id, digest_hour, digest_sent_at, timezone')
+    .select(
+      'id, digest_hour, digest_sent_at, timezone, notify_plans, notify_suggestions, notify_reminders, notify_messages, notify_social',
+    )
     .eq('digest_enabled', true);
 
   let sent = 0;
@@ -92,11 +150,14 @@ export async function sweepDigests(now = new Date()): Promise<number> {
 
     const { data: rows } = await admin.rpc('digest_items', { p_user: person.id });
     const body = digestBody(
-      (rows ?? []).map((row: { kind: string; items: number; latest_title: string | null }) => ({
-        kind: row.kind,
-        items: row.items,
-        latestTitle: row.latest_title,
-      })),
+      unmutedDigestLines(
+        (rows ?? []).map((row: { kind: string; items: number; latest_title: string | null }) => ({
+          kind: row.kind,
+          items: row.items,
+          latestTitle: row.latest_title,
+        })),
+        person,
+      ),
     );
 
     // Stamp regardless of whether there was anything to say. Otherwise a quiet
@@ -117,9 +178,10 @@ export async function sweepDigests(now = new Date()): Promise<number> {
         body,
         url: '/notifications',
       },
-      // Rides the existing per-category preference rather than inventing a
-      // second mute: someone who muted plans should not be sent a summary of
-      // their plans through a side door.
+      // No single category: the body is already filtered to the categories
+      // this person has not muted (`unmutedDigestLines` above), which is how
+      // the digest rides the existing per-category preference rather than
+      // inventing a second mute.
       undefined,
     );
     sent += 1;

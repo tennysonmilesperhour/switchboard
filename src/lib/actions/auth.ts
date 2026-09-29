@@ -598,6 +598,17 @@ export async function requestPasswordReset(
   const normalized = normalizeIdentifier(identifier);
   const generic: AuthActionResult = { ok: true, identifier: normalized };
   if (!normalized) return validation('Enter your email or username.');
+  // With no mail provider nothing can ever be sent, so "we'll send
+  // instructions" would send the reader to wait on an inbox forever. This is a
+  // property of the deployment, not of any account, so saying it reveals
+  // nothing about who has one (docs/AUTH.md: a link they never received is
+  // not a route out).
+  if (!emailEnabled()) {
+    return failure(
+      'SB-CONFIG-EMAIL',
+      'Password recovery email isn’t set up on this server, so a reset link can’t be sent.',
+    );
+  }
 
   try {
     if (!(await checkRateLimit(

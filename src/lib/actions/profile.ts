@@ -70,6 +70,11 @@ export async function acceptLatestTerms(formData: FormData): Promise<void> {
     .select('legal_terms_version')
     .maybeSingle();
   if (error || saved?.legal_terms_version !== LEGAL_VERSION) {
+    // The page shows SB-PROFILE-SAVE for this; log it under the same code so a
+    // screenshot of the loop is joinable to its cause.
+    await reportOperationalError('profile-save', error ?? {
+      message: 'legal_terms_version did not read back after a successful upsert',
+    }, { userId: user.id, step: 'legal-terms' });
     redirect(`/legal-update?error=save&next=${encodeURIComponent(nextPath)}`);
   }
   redirect(nextPath);
@@ -119,6 +124,22 @@ function parseSocials(raw: string): ProfileSocial[] {
     if (socials.length >= MAX_SOCIALS) break;
   }
   return socials;
+}
+
+/**
+ * The browser's IANA zone, or UTC. The field is client-supplied, and quiet
+ * hours, the digest hour and the greeting all hand it to Intl, which throws on
+ * a zone it doesn't recognise.
+ */
+function knownTimeZone(raw: string): string {
+  const zone = raw.trim().slice(0, 64);
+  if (!zone) return 'UTC';
+  try {
+    new Intl.DateTimeFormat('en-US', { timeZone: zone });
+    return zone;
+  } catch {
+    return 'UTC';
+  }
 }
 
 function nullableText(raw: FormDataEntryValue | null, max: number): string | null {
@@ -257,7 +278,7 @@ export async function completeOnboarding(formData: FormData): Promise<void> {
     handle,
     interests,
     down_to: downTo,
-    timezone: String(formData.get('timezone') || 'UTC'),
+    timezone: knownTimeZone(String(formData.get('timezone') || '')),
     onboarded: true,
     legal_terms_version: LEGAL_VERSION,
     legal_terms_accepted_at: new Date().toISOString(),
@@ -282,7 +303,13 @@ export async function completeOnboarding(formData: FormData): Promise<void> {
     .single();
 
   if (profileError || !savedProfile?.onboarded) {
-    onboardingError(profileError?.code === '23505' ? 'handle_taken' : 'save');
+    if (profileError?.code === '23505') onboardingError('handle_taken');
+    // Nothing was logged here, so "Something went wrong saving your profile"
+    // was undiagnosable. The page shows SB-PROFILE-SAVE; so does this line.
+    await reportOperationalError('onboarding', profileError ?? {
+      message: 'onboarded did not read back after a successful upsert',
+    }, { userId: user.id });
+    onboardingError('save');
   }
 
   // Starter circles - reused across signals, visibility, and invite lists.
@@ -574,6 +601,16 @@ export async function updateQuietHours(formData: FormData): Promise<ActionResult
   const rawEnd = formData.get('quiet_end');
   const start = rawStart === '' || rawStart === null ? null : Number(rawStart);
   const end = rawEnd === '' || rawEnd === null ? null : Number(rawEnd);
+  // A window needs both ends. With one side Off, push treated quiet hours as
+  // off entirely while SMS filled the missing side with its 10pm/8am default,
+  // so the two channels went quiet at different times; equal ends are an
+  // empty window. Both saved "successfully" and did nothing anyone chose.
+  if ((start === null) !== (end === null)) {
+    return validation('Choose both a start and an end for quiet hours, or set both to Off.');
+  }
+  if (start !== null && start === end) {
+    return validation('Quiet hours need to start and end at different times.');
+  }
 
   const { error } = await supabase
     .from('profiles')

@@ -7,6 +7,7 @@ import { Card, SectionHeader } from '@/components/ui/Card';
 import { NotificationsFeed } from './NotificationsFeed';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { formatDateTime, formatRelative } from '@/lib/format';
+import { pendingInvitesInOrder } from '@/lib/home-focus';
 
 export const metadata: Metadata = { title: 'Notifications' };
 
@@ -25,15 +26,15 @@ export default async function NotificationsPage() {
     { data: recentNotifications },
     { count: unreadCount },
   ] = await Promise.all([
-    // Only invites the user can still act on: an unanswered invite to an event
-    // that already started would otherwise sit in "Waiting on you" forever with
-    // no way to clear it.
+    // Filtered by `pendingInvitesInOrder` below, the same rule Home uses. A
+    // database `starts_at >= now` filter here dropped every plan still polling
+    // for its date (starts_at is null), which is answerable and was the one
+    // invitation the inbox never showed.
     supabase
       .from('invites')
-      .select('id, event:events!inner(id, title, starts_at, time_zone)')
+      .select('id, event:events(id, title, starts_at, time_zone)')
       .eq('invitee_id', user.id)
-      .eq('status', 'sent')
-      .gte('event.starts_at', new Date().toISOString()),
+      .eq('status', 'sent'),
     supabase
       .from('matches')
       .select('id, activity, room_id, created_at, user_a, user_b')
@@ -73,7 +74,10 @@ export default async function NotificationsPage() {
       .is('read_at', null),
   ]);
 
-  const invites = pendingInvites ?? [];
+  // Only invites the user can still act on: an unanswered invite to an event
+  // that already started would otherwise sit in "Waiting on you" forever with
+  // no way to clear it. Soonest first, undated plans last.
+  const invites = pendingInvitesInOrder(pendingInvites, new Date());
   const matchList = matches ?? [];
   const announcementList = announcements ?? [];
   const requestList = connectionRequests ?? [];
@@ -111,11 +115,9 @@ export default async function NotificationsPage() {
                 hint="Invitations you haven’t answered yet"
               />
               <div className="space-y-2">
-                {invites.map((invite) => {
-                  const event = Array.isArray(invite.event) ? invite.event[0] : invite.event;
-                  if (!event) return null;
+                {invites.map(({ id, event }) => {
                   return (
-                    <Link key={invite.id} href={`/events/${event.id}`} className="block group">
+                    <Link key={id} href={`/events/${event.id}`} className="block group">
                       <Card tone="gold" className="group-hover:shadow-lift transition-shadow">
                         <p className="font-medium">{event.title}</p>
                         <p className="text-xs text-ink-soft mt-0.5">

@@ -412,7 +412,14 @@ export async function sendPushToUsers(
   const { data: routes, error: routeError } = routedCategory
     ? await admin.from('notification_routes').select('user_id, plans, reminders').in('user_id', userIds)
     : { data: [], error: null };
-  if (routeError) throw new Error('Notification routing unavailable');
+  // Never throw: every domain action awaits this after its own write has
+  // committed, so a throw here turned a saved RSVP or cancellation into an
+  // error screen. Skip the push rather than guess a route — pushing to someone
+  // who chose SMS or email is a duplicate they asked not to get.
+  if (routeError) {
+    await reportOperationalError('push.send', routeError, { stage: 'routes', category: routedCategory });
+    return;
+  }
   const routeByUser = new Map((routes ?? []).map(r => [r.user_id, r]));
   const awake = (profiles ?? [])
     .filter(p => !routedCategory || ['existing', 'push'].includes(routeByUser.get(p.id)?.[routedCategory] ?? 'existing'))

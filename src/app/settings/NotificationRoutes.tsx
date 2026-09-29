@@ -2,7 +2,7 @@
 import { useState, useTransition } from 'react';
 import { updateNotificationRoutes } from '@/lib/actions/sms-preferences';
 
-export function NotificationRoutes({ initial, urgent, smsEnabled, emailVerified }: { initial: { plans: string; reminders: string } | null; urgent: boolean; smsEnabled: boolean; emailVerified: boolean }) {
+export function NotificationRoutes({ initial, urgent, smsEnabled, emailVerified, emailAvailable = true, pushAvailable = true }: { initial: { plans: string; reminders: string } | null; urgent: boolean; smsEnabled: boolean; emailVerified: boolean; /** False when this deployment has no mail provider (or VAPID keys, for push): choosing that channel alone would silence the others and deliver nothing. */ emailAvailable?: boolean; pushAvailable?: boolean }) {
   const [plans, setPlans] = useState(initial?.plans ?? 'existing');
   const [reminders, setReminders] = useState(initial?.reminders ?? 'existing');
   const [allowUrgent, setAllowUrgent] = useState(urgent);
@@ -13,9 +13,9 @@ export function NotificationRoutes({ initial, urgent, smsEnabled, emailVerified 
     <p className="text-sm text-ink-soft">Choose one external channel for each category to avoid duplicate alerts. Everything stays in your in-app inbox. Email arrives immediately; SMS and push follow quiet hours. Existing settings keeps your current combination.</p>
     {([['plans', 'Invitations and plan updates', plans, setPlans], ['reminders', 'Event reminders', reminders, setReminders]] as const).map(([key, label, value, change]) => <label key={key} className="block text-sm font-medium">{label}
       <select className="mt-1 block w-full rounded-card border border-line bg-paper px-3 py-2" value={value} disabled={pending} onChange={event => change(event.target.value)}>
-        <option value="existing">Existing settings</option><option value="push">Push only</option>
+        <option value="existing">Existing settings</option><option value="push" disabled={!pushAvailable}>Push only{!pushAvailable ? ' — not available on this server' : ''}</option>
         <option value="sms" disabled={!smsEnabled}>SMS only{!smsEnabled ? ' — subscribe above first' : ''}</option>
-        <option value="email" disabled={!emailVerified}>Email only{!emailVerified ? ' — verify email first' : ''}</option>
+        <option value="email" disabled={!emailVerified || !emailAvailable}>Email only{!emailAvailable ? ' — not available on this server' : !emailVerified ? ' — verify email first' : ''}</option>
         <option value="in_app">In-app inbox only</option>
       </select>
     </label>)}

@@ -26,6 +26,9 @@ export function NotificationNudge() {
   const ownsSlot = useBottomOverlaySlot('notifications', wantsSlot, 30);
 
   useEffect(() => {
+    // Without the VAPID key, enablePush() answers 'unsupported' before asking
+    // anything, so "Turn on" would silently hide the prompt and change nothing.
+    if (!process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY) return;
     let cancelled = false;
     getPushState().then((next) => {
       if (cancelled) return;

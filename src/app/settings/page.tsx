@@ -4,6 +4,7 @@ import type { Metadata } from 'next';
 import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
 import { supportEmail } from '@/lib/contact';
+import { emailEnabled } from '@/lib/server/email';
 import { AppShell } from '@/components/shell/AppShell';
 import { errorRef } from '@/lib/errors';
 import { SignOutForm } from '@/components/shell/SignOutForm';
@@ -87,6 +88,7 @@ export default async function SettingsPage({
   const { data: notificationRoutes } = await supabase.from('notification_routes').select('plans, reminders').eq('user_id', user.id).maybeSingle();
   const currentSmsPreferences = smsPreferences && smsPreferences.phone === privateProfile?.contact_phone ? smsPreferences : null;
   const calendarToken = privateProfile?.calendar_token ?? null;
+  const pushConfigured = Boolean(process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY && process.env.VAPID_PRIVATE_KEY);
 
   const interests: string[] = profile?.interests ?? [];
   const downTo: string[] = profile?.down_to ?? [];
@@ -311,13 +313,13 @@ export default async function SettingsPage({
             <Card>
               <div className="divide-y divide-line">
                 <div className="pb-5">
-                  <PushManager serverConfigured={Boolean(process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY && process.env.VAPID_PRIVATE_KEY)} />
+                  <PushManager serverConfigured={pushConfigured} />
                 </div>
 
                 <div className="py-5">
                   <NotificationPreferences initial={notificationPrefs} />
                   <SmsPreferences key={`${privateProfile?.contact_phone}:${phoneVerified}`} initial={currentSmsPreferences} verified={phoneVerified} />
-                  <NotificationRoutes initial={notificationRoutes} urgent={currentSmsPreferences?.urgent_changes ?? false} smsEnabled={Boolean(currentSmsPreferences?.enabled && phoneVerified)} emailVerified={emailVerified} />
+                  <NotificationRoutes initial={notificationRoutes} urgent={currentSmsPreferences?.urgent_changes ?? false} smsEnabled={Boolean(currentSmsPreferences?.enabled && phoneVerified)} emailVerified={emailVerified} emailAvailable={emailEnabled()} pushAvailable={pushConfigured} />
                   <DigestPreference
                     enabled={profile?.digest_enabled ?? false}
                     hour={profile?.digest_hour ?? 8}

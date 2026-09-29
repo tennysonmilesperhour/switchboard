@@ -149,6 +149,7 @@ const mocks = vi.hoisted(() => {
     backedOff: false,
   }));
   const hasAdminCredentials = vi.fn(() => true);
+  const emailEnabled = vi.fn(() => true);
 
   return {
     db,
@@ -162,6 +163,7 @@ const mocks = vi.hoisted(() => {
     checkRateLimit,
     guardAuthAttempt,
     hasAdminCredentials,
+    emailEnabled,
   };
 });
 
@@ -208,7 +210,7 @@ vi.mock('@/lib/server/email', async (importActual) => {
     sendEmailWithResult: mocks.sendEmailWithResult,
     // A configured provider is the precondition these tests are about; without
     // this they'd all short-circuit on the operator failure instead.
-    emailEnabled: () => true,
+    emailEnabled: mocks.emailEnabled,
   };
 });
 
@@ -233,6 +235,7 @@ function seed(state: {
 afterEach(() => {
   vi.clearAllMocks();
   mocks.hasAdminCredentials.mockReturnValue(true);
+  mocks.emailEnabled.mockReturnValue(true);
   mocks.checkRateLimit.mockResolvedValue(true);
   mocks.guardAuthAttempt.mockResolvedValue({ allowed: true, backedOff: false });
   mocks.signInWithPassword.mockResolvedValue({
@@ -648,6 +651,24 @@ describe('requestPasswordReset', () => {
       expect.objectContaining({ type: 'recovery', email: 'victim@example.com' }),
     );
     expect(mocks.sendEmailWithResult.mock.calls[0][0].to).toBe('victim@example.com');
+  });
+
+  it('says recovery email is not set up instead of promising a link that cannot come', async () => {
+    // docs/AUTH.md: a link they never received is not a route out. The answer
+    // depends on the deployment, not the account, so it reveals nothing.
+    mocks.emailEnabled.mockReturnValue(false);
+    seed({
+      profiles: [{ id: 'u1', handle: 'alice', contact_email: 'alice@example.com' }],
+      authUsers: { u1: { email: 'alice@example.com' } },
+    });
+
+    const known = await requestPasswordReset('alice@example.com');
+    const unknown = await requestPasswordReset('nobody@example.com');
+
+    expect(known).toMatchObject({ ok: false, code: 'SB-CONFIG-EMAIL' });
+    expect(unknown).toEqual(known);
+    expect(mocks.generateLink).not.toHaveBeenCalled();
+    expect(mocks.sendEmailWithResult).not.toHaveBeenCalled();
   });
 
   it('reveals nothing and sends nothing for an unknown account', async () => {
