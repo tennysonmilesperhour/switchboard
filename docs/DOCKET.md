@@ -6,6 +6,11 @@ from working sessions. Newest thinking lives here so nothing evaporates.
 > Legend: ✅ shipped · 🛠️ queued to build · 🎨 in design / workshop · 💭 idea ·
 > 🔧 ops (needs the owner or a dashboard, not code)
 
+> **2026-09-29:** a completeness audit of every catalogued feature produced
+> [`COMPLETION-PLAN-2026-09.md`](COMPLETION-PLAN-2026-09.md), the ordered list
+> of what is left to finish shipped features. New work that finishes an existing
+> feature belongs there; new features still belong here.
+
 > **2026-09-02:** the numbered work from the September 1 audit is complete.
 > The [audit](archive/AUDIT-2026-09-01.md) and its
 > [remediation plan](archive/REMEDIATION-PLAN-2026-09-01.md) are historical;

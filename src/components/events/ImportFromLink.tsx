@@ -3,6 +3,8 @@
 import { useState, useTransition } from 'react';
 import { Button } from '@/components/ui/Button';
 import { importEventFromLink, type ImportResult } from '@/lib/actions/import';
+import { errorRef, type ErrorCode } from '@/lib/errors';
+import { resolveTimeZone } from '@/lib/client/time-zone';
 
 /**
  * Paste a Partiful / Luma / Facebook / Apple-Invites / Eventbrite link and pull
@@ -16,16 +18,21 @@ export function ImportFromLink({
   const [url, setUrl] = useState('');
   const [open, setOpen] = useState(false);
   const [error, setError] = useState('');
+  const [errorCode, setErrorCode] = useState<ErrorCode | null>(null);
   const [pending, startTransition] = useTransition();
 
   function run() {
     const value = url.trim();
     if (!value) return;
     setError('');
+    setErrorCode(null);
     startTransition(async () => {
-      const result = await importEventFromLink(value);
+      const result = await importEventFromLink(value, resolveTimeZone()).catch(
+        (): ImportResult => ({ ok: false, code: 'SB-IMPORT-READ' }),
+      );
       if (!result.ok) {
         setError(result.error ?? 'We couldn’t import that link.');
+        setErrorCode(result.code ?? null);
         return;
       }
       onImport(result);
@@ -71,7 +78,16 @@ export function ImportFromLink({
           {pending ? 'Reading…' : 'Import'}
         </Button>
       </div>
-      {error && <p className="text-xs text-rose-deep">{error}</p>}
+      {error && (
+        <p role="alert" className="text-xs text-rose-deep">
+          {error}
+          {errorCode && (
+            <span className="ml-1.5 font-mono text-[11px] uppercase tracking-wide text-ink-faint">
+              {errorRef(errorCode)}
+            </span>
+          )}
+        </p>
+      )}
     </div>
   );
 }

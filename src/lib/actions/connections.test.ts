@@ -9,6 +9,7 @@ const mocks = vi.hoisted(() => ({
   connectionInsert: vi.fn(),
   connectionUpdate: vi.fn(),
   circleMemberDelete: vi.fn(),
+  householdMemberDelete: vi.fn(),
   notifyUsers: vi.fn(),
   revalidatePath: vi.fn(),
 }));
@@ -55,6 +56,20 @@ function supabase() {
           select: () => ({ eq: async () => ({ data: [{ id: 'circle-1' }] }) }),
         };
       }
+      if (table === 'households') {
+        return {
+          select: () => ({ eq: async () => ({ data: [{ id: 'household-1' }] }) }),
+        };
+      }
+      if (table === 'household_members') {
+        return {
+          delete: () => ({
+            in: (_column: string, ids: string[]) => ({
+              eq: (_c: string, member: string) => mocks.householdMemberDelete(ids, member),
+            }),
+          }),
+        };
+      }
       if (table === 'circle_members') {
         return {
           delete: () => ({
@@ -83,6 +98,7 @@ beforeEach(() => {
   mocks.connectionInsert.mockResolvedValue({ error: null });
   mocks.connectionUpdate.mockResolvedValue({ data: { requester_id: THEM }, error: null });
   mocks.circleMemberDelete.mockResolvedValue({ error: null });
+  mocks.householdMemberDelete.mockResolvedValue({ error: null });
 });
 
 describe('connection safety actions', () => {
@@ -119,6 +135,7 @@ describe('connection safety actions', () => {
     expect(filter).toContain(`requester_id.eq.${ME},addressee_id.eq.${THEM}`);
     expect(filter).toContain(`requester_id.eq.${THEM},addressee_id.eq.${ME}`);
     expect(mocks.circleMemberDelete).toHaveBeenCalledWith(['circle-1'], THEM);
+    expect(mocks.householdMemberDelete).toHaveBeenCalledWith(['household-1'], THEM);
   });
 
   it('refuses a malformed id before writing a block', async () => {

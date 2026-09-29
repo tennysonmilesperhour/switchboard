@@ -22,6 +22,7 @@ import { closesIntoRunoff, nextWeight, type Weight } from '@/lib/engine/scoring'
 import { errorFor, errorRef, type ErrorCode } from '@/lib/errors';
 import { formatDateTime } from '@/lib/format';
 import type { Poll, PollOption } from '@/lib/types';
+import { pollOptionLabel } from './option-label';
 
 export interface OptionResult {
   option_id: string;
@@ -36,7 +37,10 @@ interface PollSectionProps {
   options: PollOption[];
   results: OptionResult[];
   myVotes: Record<string, Weight>;
+  /** Host or co-host: both run the decision, and the actions accept both. */
   isHost: boolean;
+  /** The question this poll asks, as the chain above it names it. */
+  question: string;
   eventId: string;
   /** Whose ideas the Edit and Remove controls belong to. */
   currentUserId: string;
@@ -186,6 +190,7 @@ export function PollSection({
   results,
   myVotes,
   isHost,
+  question,
   eventId,
   currentUserId,
   timeZone,
@@ -425,7 +430,7 @@ export function PollSection({
   async function removeIdea(option: PollOption) {
     const votes = resultFor(option.id)?.voters ?? 0;
     const ok = await confirm({
-      title: `Remove “${option.label}”?`,
+      title: `Remove “${pollOptionLabel(option.label, timeZone)}”?`,
       body:
         votes > 0
           ? `${votes} ${votes === 1 ? 'person has' : 'people have'} already rated it.`
@@ -479,7 +484,7 @@ export function PollSection({
   return (
     <section aria-labelledby="poll-heading">
       <SectionHeader
-        title="What should we do?"
+        title={question}
         hint={
           poll.phase === 'decided'
             ? winner
@@ -521,7 +526,9 @@ export function PollSection({
           <p className="text-xs uppercase tracking-wide text-sage-deep font-extrabold">
             The plan
           </p>
-          <p className="font-extrabold text-3xl tracking-tight mt-1">{winner.label}</p>
+          <p className="font-extrabold text-3xl tracking-tight mt-1">
+            {pollOptionLabel(winner.label, timeZone)}
+          </p>
           {winner.detail && (
             <p className="text-sm text-ink-soft mt-1">{winner.detail}</p>
           )}
@@ -602,7 +609,9 @@ export function PollSection({
               <Card className={isWinner ? 'border-sage border-2' : ''}>
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0 flex-1">
-                    <p className="font-bold break-words">{option.label}</p>
+                    <p className="font-bold break-words">
+                      {pollOptionLabel(option.label, timeZone)}
+                    </p>
                     {option.detail && (
                       <p className="text-xs text-ink-faint mt-0.5 whitespace-pre-wrap">{option.detail}</p>
                     )}
@@ -625,7 +634,11 @@ export function PollSection({
                 </div>
 
                 {votingOpen && (
-                  <div className="flex gap-2 mt-3" role="group" aria-label={`Rate ${option.label}`}>
+                  <div
+                    className="flex gap-2 mt-3"
+                    role="group"
+                    aria-label={`Rate ${pollOptionLabel(option.label, timeZone)}`}
+                  >
                     {WEIGHT_BUTTONS.map((button) => (
                       <button
                         // Deliberately never disabled. `pending` is one flag for
@@ -658,12 +671,12 @@ export function PollSection({
                 )}
 
                 {canEdit(option) && (
-                  <div className="mt-2 flex gap-3">
+                  <div className="mt-1 flex gap-4">
                     <button
                       type="button"
                       disabled={pending}
                       onClick={() => beginEdit(option)}
-                      className="text-xs text-ink-faint hover:text-ink disabled:opacity-40"
+                      className="inline-flex min-h-11 items-center text-xs text-ink-faint hover:text-ink disabled:opacity-40"
                     >
                       Edit
                     </button>
@@ -671,7 +684,7 @@ export function PollSection({
                       type="button"
                       disabled={pending}
                       onClick={() => removeIdea(option)}
-                      className="text-xs text-ink-faint hover:text-rose-deep disabled:opacity-40"
+                      className="inline-flex min-h-11 items-center text-xs text-ink-faint hover:text-rose-deep disabled:opacity-40"
                     >
                       Remove
                     </button>
@@ -721,7 +734,7 @@ export function PollSection({
             type="button"
             onClick={() => setShowExtras((v) => !v)}
             aria-expanded={showExtras}
-            className="mt-2 text-xs font-medium text-ink-faint underline decoration-line underline-offset-2 hover:text-ink"
+            className="mt-1 inline-flex min-h-11 items-center text-xs font-medium text-ink-faint underline decoration-line underline-offset-2 hover:text-ink"
           >
             {showExtras ? 'Hide details' : 'Add details: description, link, or photo'}
           </button>

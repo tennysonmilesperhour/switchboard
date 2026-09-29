@@ -51,13 +51,34 @@ export async function respondToRitual(
   const { supabase, user } = auth;
   // Only the invited partner may accept/decline - the proposer cannot
   // self-accept their own proposal.
-  const { error } = await supabase
+  const { data: updated, error } = await supabase
     .from('rituals')
     .update({ status: accept ? 'active' : 'ended' })
     .eq('id', ritualId)
     .eq('status', 'proposed')
-    .eq('partner_id', user.id);
+    .eq('partner_id', user.id)
+    .select('creator_id, activity');
   if (error) return reportAndFail('SB-RITUAL-SAVE', 'ritual.update', error, { ritualId });
+  // Zero rows is not a success: it was already answered, or they called it
+  // off first. Saying "done" left the card on screen doing nothing.
+  const ritual = updated?.[0];
+  if (!ritual) return validation('That ritual was already answered or called off.');
+
+  // The proposer was told "waiting on them" and never heard the answer. A yes
+  // is worth telling them; a no stays quiet, like every other no here.
+  if (accept) {
+    const { data: me } = await supabase
+      .from('profiles')
+      .select('display_name')
+      .eq('id', user.id)
+      .maybeSingle();
+    await notifyUsers([ritual.creator_id], {
+      kind: 'ritual',
+      title: 'It’s a ritual 🔁',
+      body: `${me?.display_name ?? 'Your friend'} is in for "${ritual.activity}" as a regular thing.`,
+      url: '/mutual',
+    });
+  }
   revalidatePath('/mutual');
   revalidatePath('/');
   return { ok: true };

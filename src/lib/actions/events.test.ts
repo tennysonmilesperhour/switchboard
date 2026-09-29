@@ -343,6 +343,34 @@ describe('event management actions', () => {
     );
   });
 
+  /**
+   * The reminder markers describe the time they were sent for. A plan moved
+   * after its day-before note went out has to be reminded about the new date,
+   * and fixing a typo must not re-send one.
+   */
+  it('re-arms the reminders only when the time moves', async () => {
+    const start = new Date(Date.now() + 3 * 86_400_000);
+    start.setUTCSeconds(0, 0);
+    const stored = start.toISOString().replace('.000Z', '+00:00');
+
+    const moved = editAdmin({ starts_at: stored, location_name: 'Mei Wei' });
+    mocks.createAdminClient.mockReturnValue(moved.admin);
+    await updateEventDetails('event-1', {
+      ...EDIT,
+      startsAt: new Date(start.getTime() + 86_400_000).toISOString(),
+    });
+    expect(moved.updates[0]).toMatchObject({
+      reminded_day_before_at: null,
+      reminded_soon_at: null,
+    });
+
+    const wordsOnly = editAdmin({ starts_at: stored, location_name: 'Mei Wei' });
+    mocks.createAdminClient.mockReturnValue(wordsOnly.admin);
+    await updateEventDetails('event-1', { ...EDIT, startsAt: start.toISOString() });
+    expect(wordsOnly.updates[0]).not.toHaveProperty('reminded_day_before_at');
+    expect(wordsOnly.updates[0]).not.toHaveProperty('reminded_soon_at');
+  });
+
   it('refuses an edit that ends the plan before it starts', async () => {
     const start = new Date(Date.now() + 86_400_000);
     const result = await updateEventDetails('event-1', {

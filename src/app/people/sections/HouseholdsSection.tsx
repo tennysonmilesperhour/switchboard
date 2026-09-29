@@ -44,9 +44,17 @@ export function HouseholdsSection({
                   className="flex items-center gap-3 rounded-card bg-cream px-3.5 py-3 text-sm"
                 >
                   <span className="text-lg" aria-hidden>{household.emoji}</span>
-                  <span className="font-bold flex-1">{household.name}</span>
-                  <span className="text-xs text-ink-faint">
-                    {household.memberCount} {household.memberCount === 1 ? 'person' : 'people'}
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate font-bold">{household.name}</span>
+                    {/* Names, not just a count: there is no other way to see
+                        who a household will invite. */}
+                    <span className="block truncate text-xs text-ink-faint">
+                      {(household.memberIds ?? [])
+                        .map((id) => friends.find((f) => f.id === id)?.name.split(' ')[0])
+                        .filter(Boolean)
+                        .join(', ') ||
+                        `${household.memberCount} ${household.memberCount === 1 ? 'person' : 'people'}`}
+                    </span>
                   </span>
                   <button
                     type="button"

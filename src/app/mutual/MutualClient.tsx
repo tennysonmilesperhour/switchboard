@@ -13,7 +13,7 @@ import { Icon } from '@/components/ui/Icon';
 import { useToast } from '@/components/ui/Toast';
 import { useConfirm } from '@/components/ui/ConfirmDialog';
 import { downToConnect, withdrawIntent } from '@/lib/actions/mutual';
-import { endRitual, pauseRitual, proposeRitual } from '@/lib/actions/rituals';
+import { endRitual, pauseRitual, proposeRitual, respondToRitual } from '@/lib/actions/rituals';
 import { formatRelative } from '@/lib/format';
 import { ACTIVITY_PRESETS } from '@/lib/types';
 
@@ -128,6 +128,19 @@ export function MutualClient({
       setActivities([]);
       setPeople([]);
       setJustMatched(anyMatch);
+      router.refresh();
+    });
+  }
+
+  // The ritual notification links here, so the answer has to be here too: it
+  // used to say "waiting on you (see Home)" and offer nothing to press.
+  function answer(ritual: RitualRow, accept: boolean) {
+    startTransition(async () => {
+      const result = await respondToRitual(ritual.id, accept);
+      if (!result.ok) {
+        toast.error(result.error ?? 'Could not respond. Try again.', result.code);
+        return;
+      }
       router.refresh();
     });
   }
@@ -305,12 +318,22 @@ export function MutualClient({
                     {ritual.status === 'proposed'
                       ? ritual.isMine
                         ? ' · waiting on them'
-                        : ' · waiting on you (see Home)'
+                        : ' · waiting on you'
                       : ritual.status === 'paused'
                         ? ' · paused'
                         : ''}
                   </span>
                 </span>
+                {ritual.status === 'proposed' && !ritual.isMine && (
+                  <Button
+                    size="sm"
+                    variant="accept"
+                    disabled={pending}
+                    onClick={() => answer(ritual, true)}
+                  >
+                    Love it
+                  </Button>
+                )}
                 {ritual.status !== 'proposed' && (
                   <button
                     type="button"
@@ -338,9 +361,13 @@ export function MutualClient({
                   type="button"
                   className="rounded-pill px-2 py-1 text-xs text-ink-faint hover:text-rose-deep focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-terracotta"
                   disabled={pending}
-                  onClick={() => end(ritual)}
+                  onClick={() =>
+                    ritual.status === 'proposed' && !ritual.isMine
+                      ? answer(ritual, false)
+                      : end(ritual)
+                  }
                 >
-                  End
+                  {ritual.status === 'proposed' && !ritual.isMine ? 'Not now' : 'End'}
                 </button>
               </li>
             ))}

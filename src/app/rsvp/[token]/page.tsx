@@ -1,6 +1,7 @@
 import { canSubscribeGuestSms } from '@/lib/sms-commands';
 import { normalizePhoneNumber } from '@/lib/phone';
 import type { Metadata } from 'next';
+import Link from 'next/link';
 import { createAdminClient, hasAdminCredentials } from '@/lib/supabase/admin';
 import { getUser } from '@/lib/supabase/server';
 import { reportOperationalError } from '@/lib/server/observability';
@@ -8,6 +9,8 @@ import { safeHttpUrl, serializeJsonLd } from '@/lib/security';
 import { inviteOpenGraph, unfurlSummary } from '@/lib/invite-links';
 import { errorFor, errorRef } from '@/lib/errors';
 import { resolveEventZone } from '@/lib/server/event-zone';
+import { shareLinkNotice } from '@/lib/share-link';
+import { ErrorNotice } from '@/components/ui/ErrorNotice';
 import { InvitePlanDetails } from '@/components/events/InvitePlanDetails';
 import { RsvpSignInGate } from '@/components/events/RsvpSignInGate';
 import { GuestRsvpClient } from './GuestRsvpClient';
@@ -151,6 +154,16 @@ export default async function GuestRsvpPage({
   // profile zone for plans created before the zone was captured on the event.
   const zone = admin ? await resolveEventZone(admin, event) : null;
   const gone = errorFor('SB-RSVP-GONE');
+  // A plan that was called off or has already happened. Cancelling leaves
+  // accepted invites as they were, so without this an accepted guest opening
+  // their link after the host called it off read "You're in! See you there."
+  // with add-to-calendar buttons, and an unanswered one was offered a sign-in
+  // to answer a plan that can't take answers. Same copy and codes as the share
+  // link gives for the same two states.
+  const closedNotice =
+    event?.status === 'cancelled' || event?.status === 'past'
+      ? shareLinkNotice(event.status, host?.display_name)
+      : null;
 
   // schema.org/Event JSON-LD so the guest link unfurls richly and is machine
   // readable, matching the host event page.
@@ -228,7 +241,24 @@ export default async function GuestRsvpPage({
                 dangerouslySetInnerHTML={{ __html: serializeJsonLd(jsonLd) }}
               />
             )}
-            {!user && invite.status === 'sent' ? (
+            {closedNotice ? (
+              <div className="mt-8 rounded-card bg-cream px-4 py-3.5">
+                <ErrorNotice
+                  message={closedNotice.heading}
+                  fix={closedNotice.body}
+                  code={closedNotice.code}
+                />
+                {/* Their own plan page still has the thread and the capsule. */}
+                {user && invite.invitee_id === user.id && (
+                  <Link
+                    href={`/events/${invite.event_id}`}
+                    className="mt-2 inline-flex min-h-11 items-center text-sm font-bold text-terracotta-deep"
+                  >
+                    Open the plan
+                  </Link>
+                )}
+              </div>
+            ) : !user && invite.status === 'sent' ? (
               // Still answerable, nobody signed in: the gate replaces the
               // buttons and carries them back here once they're in.
               <RsvpSignInGate next={`/rsvp/${token}`} hostName={host?.display_name ?? undefined} />

@@ -19,15 +19,11 @@ import { addExpense, deleteExpense } from '@/lib/actions/expenses';
 import { UploadError, uploadImage } from '@/lib/client/upload-image';
 import { errorRef, type ActionResult } from '@/lib/errors';
 import { formatRelative } from '@/lib/format';
+import { safeHttpUrl } from '@/lib/security';
 import type { RoomItemKind } from '@/lib/types';
+import { mergeRoomMessages, type RoomMessage } from './room-messages';
 
-export interface RoomMessage {
-  id: string;
-  sender_id: string;
-  body: string;
-  image_url: string | null;
-  created_at: string;
-}
+export type { RoomMessage } from './room-messages';
 
 export interface RoomItemRow {
   id: string;
@@ -105,6 +101,13 @@ export function RoomClient({
   expenses,
 }: RoomClientProps) {
   const [messages, setMessages] = useState<RoomMessage[]>(initialMessages);
+  // A refresh hands down a new server read; fold it in rather than ignoring it,
+  // so messages the realtime channel missed appear (see mergeRoomMessages).
+  const [seenServerRead, setSeenServerRead] = useState(initialMessages);
+  if (seenServerRead !== initialMessages) {
+    setSeenServerRead(initialMessages);
+    setMessages((current) => mergeRoomMessages(current, initialMessages));
+  }
   const [tab, setTab] = useState<TabKey>('chat');
   const [draft, setDraft] = useState('');
   const [pending, startTransition] = useTransition();
@@ -137,6 +140,8 @@ export function RoomClient({
     const onVisibility = () => {
       if (document.visibilityState === 'visible') {
         markRoomRead(roomId).catch(() => undefined);
+        // Realtime does not replay what arrived while the phone was asleep.
+        router.refresh();
       }
     };
     document.addEventListener('visibilitychange', onVisibility);
@@ -144,7 +149,7 @@ export function RoomClient({
       clearInterval(interval);
       document.removeEventListener('visibilitychange', onVisibility);
     };
-  }, [roomId]);
+  }, [roomId, router]);
 
   async function onPickPhoto(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -209,6 +214,7 @@ export function RoomClient({
   // Live messages via Supabase Realtime.
   useEffect(() => {
     const supabase = createClient();
+    let joined = false;
     const channel = supabase
       .channel(`room-${roomId}`)
       .on(
@@ -255,7 +261,13 @@ export function RoomClient({
         },
         () => router.refresh(),
       )
-      .subscribe();
+      .subscribe((status) => {
+        // A rejoin after a dropped socket fires SUBSCRIBED again; whatever was
+        // sent in the gap is not replayed, so re-read the room.
+        if (status !== 'SUBSCRIBED') return;
+        if (joined) router.refresh();
+        joined = true;
+      });
     return () => {
       supabase.removeChannel(channel);
     };
@@ -404,6 +416,8 @@ export function RoomClient({
                             prev === message.sender_id ? null : message.sender_id,
                           )
                         }
+                        aria-label={`Options for ${memberNames[message.sender_id] ?? 'this person'}`}
+                        aria-expanded={memberMenu === message.sender_id}
                         className="rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-terracotta"
                       >
                         <Avatar
@@ -543,6 +557,7 @@ export function RoomClient({
               onChange={(e) => setDraft(e.target.value)}
               placeholder="Message…"
               aria-label="Message"
+              maxLength={4000}
               className="flex-1 rounded-pill border border-line bg-card px-4 py-2.5 text-[15px] outline-none focus:border-terracotta"
             />
             <Button type="submit" size="sm" disabled={!draft.trim()}>
@@ -597,9 +612,9 @@ export function RoomClient({
                         {memberNames[expense.payer_id] ?? 'Someone'} paid ·{' '}
                         {formatRelative(expense.created_at)}
                       </p>
-                      {expense.settle_url && (
+                      {safeHttpUrl(expense.settle_url) && (
                         <a
-                          href={expense.settle_url}
+                          href={safeHttpUrl(expense.settle_url) ?? undefined}
                           target="_blank"
                           rel="noopener noreferrer"
                           className="text-xs font-medium text-terracotta-deep underline underline-offset-2 mt-1 inline-block"

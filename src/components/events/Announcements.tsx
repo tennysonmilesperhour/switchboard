@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/Button';
 import { Card, SectionHeader } from '@/components/ui/Card';
 import { postAnnouncement } from '@/lib/actions/announcements';
 import { formatRelative } from '@/lib/format';
+import { errorFor, errorRef, type ErrorCode } from '@/lib/errors';
 
 export interface AnnouncementView {
   id: string;
@@ -30,6 +31,7 @@ export function Announcements({
 }: AnnouncementsProps) {
   const [body, setBody] = useState('');
   const [error, setError] = useState('');
+  const [errorCode, setErrorCode] = useState<ErrorCode | null>(null);
   const [pending, startTransition] = useTransition();
   const router = useRouter();
 
@@ -39,14 +41,21 @@ export function Announcements({
     const trimmed = body.trim();
     if (!trimmed) return;
     setError('');
+    setErrorCode(null);
     startTransition(async () => {
-      const result = await postAnnouncement(eventId, trimmed);
-      if (!result.ok) {
-        setError(result.error ?? 'Something went wrong');
-        return;
+      try {
+        const result = await postAnnouncement(eventId, trimmed);
+        if (!result.ok) {
+          setError(result.error ?? 'Something went wrong');
+          setErrorCode(result.code ?? null);
+          return;
+        }
+        setBody('');
+        router.refresh();
+      } catch {
+        setError(errorFor('SB-ANNOUNCEMENT-SAVE').message);
+        setErrorCode('SB-ANNOUNCEMENT-SAVE');
       }
-      setBody('');
-      router.refresh();
     });
   }
 
@@ -70,7 +79,16 @@ export function Announcements({
             placeholder="Door code is 4321 · running 10 late · bring a jacket…"
             className="w-full rounded-card border border-line bg-paper px-3.5 py-2.5 text-sm outline-none transition-colors focus:border-terracotta focus:ring-2 focus:ring-terracotta-soft resize-none"
           />
-          {error && <p role="alert" className="text-sm text-rose-deep mt-1.5">{error}</p>}
+          {error && (
+            <p role="alert" className="text-sm text-rose-deep mt-1.5">
+              {error}
+              {errorCode && (
+                <span className="ml-1.5 font-mono text-[11px] uppercase tracking-wide text-ink-faint">
+                  {errorRef(errorCode)}
+                </span>
+              )}
+            </p>
+          )}
           <div className="mt-2 flex items-center justify-between gap-2">
             <span className="text-xs text-ink-faint">
               {canReach > 0

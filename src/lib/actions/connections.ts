@@ -443,6 +443,21 @@ export async function blockProfile(profileId: string): Promise<ConnectionResult>
       .in('circle_id', circleIds)
       .eq('member_id', profileId);
   }
+  // Households are the same kind of curated group and were missed: a blocked
+  // person stayed filed in yours, and was silently back in it (and in every
+  // household invite) if you ever reconnected. household_members is owner-only.
+  const { data: myHouseholds } = await supabase
+    .from('households')
+    .select('id')
+    .eq('owner_id', user.id);
+  const householdIds = (myHouseholds ?? []).map((household) => household.id);
+  if (householdIds.length > 0) {
+    await supabase
+      .from('household_members')
+      .delete()
+      .in('household_id', householdIds)
+      .eq('member_id', profileId);
+  }
   revalidatePath('/people');
   return { ok: true };
 }

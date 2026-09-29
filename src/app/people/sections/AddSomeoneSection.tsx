@@ -8,6 +8,7 @@ import { SectionHeader } from '@/components/ui/Card';
 import { ShareButton } from '@/components/ui/ShareButton';
 import { ContactImportControls } from '@/components/ContactImportControls';
 import type { ContactCandidate, ContactMatch } from '@/lib/actions/connections';
+import { errorRef } from '@/lib/errors';
 import type { PeopleMessage } from './types';
 
 interface AddSomeoneSectionProps {
@@ -71,6 +72,11 @@ export function AddSomeoneSection({
             className={`text-sm mt-2 ${message.tone === 'error' ? 'text-rose-deep' : 'text-sage-deep'}`}
           >
             {message.text}
+            {message.code && (
+              <span className="ml-1.5 font-mono text-[11px] uppercase tracking-wide opacity-70">
+                {errorRef(message.code)}
+              </span>
+            )}
           </p>
         )}
 

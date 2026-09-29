@@ -78,6 +78,12 @@ export function FriendsSection({
                       <p className="text-xs font-bold uppercase tracking-wide text-ink-faint mb-2.5">
                         Circles
                       </p>
+                      {circles.length === 0 && (
+                        <p className="text-sm text-ink-faint">
+                          No circles yet. Make one under Your circles below, then
+                          sort people into it here.
+                        </p>
+                      )}
                       <div className="flex flex-wrap gap-2">
                         {circles.map((circle) => {
                           const inCircle = friend.circleIds.includes(circle.id);

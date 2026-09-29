@@ -110,4 +110,13 @@ describe('sendMessage', () => {
       },
     ]);
   });
+
+  it('refuses a message past the 4,000-character column limit before inserting', async () => {
+    const result = await sendMessage('room-1', 'x'.repeat(4001));
+
+    expect(result.ok).toBe(false);
+    // Validation, not an operational code: retrying the same text cannot work.
+    expect(result).not.toHaveProperty('code');
+    expect(mocks.messageInsert).not.toHaveBeenCalled();
+  });
 });

@@ -71,6 +71,11 @@ export async function cloneEventForReuse(
       cover_url: source.cover_url,
       theme: source.theme,
       wishlist_url: source.wishlist_url,
+      // The host's rules for who may come and how they're reminded carry over
+      // with the crew. Leaving these to the column defaults quietly dropped a
+      // youth plan's guardian approval on every Run it back.
+      parental_approval: source.parental_approval,
+      reminders_enabled: source.reminders_enabled,
       // Keep it a standing plan: the clone repeats on the same cadence.
       recurrence: source.recurrence,
       recurrence_interval_days: source.recurrence_interval_days,

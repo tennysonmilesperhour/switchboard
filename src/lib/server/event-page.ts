@@ -11,6 +11,7 @@ import type { CalendarStatus } from '@/lib/actions/calendar-sync';
 import { threadGate, THREAD_PREVIEW_COUNT } from '@/lib/engine/thread';
 import { formatDateTimeRange } from '@/lib/format';
 import { appOrigin, eventShareUrl, guestRsvpUrl } from '@/lib/links';
+import { likeLiteral } from '@/lib/security';
 import {
   hostCanEditInvitees,
   hostCanShare,
@@ -186,7 +187,7 @@ export async function loadEventPage(
         .from('venues')
         .select('name, perk')
         .eq('status', 'verified')
-        .ilike('name', event.location_name.trim())
+        .ilike('name', likeLiteral(event.location_name.trim()))
         .limit(1)
         .maybeSingle<{ name: string; perk: string }>()
     : Promise.resolve({ data: null as { name: string; perk: string } | null });

@@ -312,6 +312,12 @@ integrations a deployment has wired up is reconnaissance, not public data.
   `zone_presence` counts only other, live, unblocked people in its own zone.
 - `supabase/tests/invite_blocks.test.sql` — event invite inserts honor blocks,
   cap each plan at 100 rows, and never let a host write an accepted RSVP.
+- `supabase/tests/matchmaker_blocks.test.sql` — a matchmaker intro can never
+  pair two people who have blocked each other, and an intro sent before a
+  block closes instead of opening a shared room.
+- `supabase/tests/private_place_leaks.test.sql` — a private zone's headcount
+  and its members' moments stay invisible to non-members, same-named zones do
+  not cross-match, and editing a verified venue sends it back to review.
 - `supabase/tests/client_feedback.test.sql` — the unauthenticated feedback
   intake stays write-only, its bucket stays private, and its bounds hold.
 - `supabase/tests/scope_progress.test.sql` — the shared checklist board is

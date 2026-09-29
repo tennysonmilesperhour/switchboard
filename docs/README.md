@@ -18,6 +18,7 @@ files are historical evidence, never a source of current product truth.
 | [`DESIGN-SYSTEM.md`](DESIGN-SYSTEM.md) | The shipped visual system: tokens, type, and component conventions. |
 | [`NAMING.md`](NAMING.md) | Canonical user-facing names and the decisions behind them. |
 | [`analytics.md`](analytics.md) | Every tracked analytics event and the anonymity guardrail. |
+| [`COMPLETION-PLAN-2026-09.md`](COMPLETION-PLAN-2026-09.md) | The step-by-step plan to finish every shipped feature, from the September 29 completeness audit, with the decisions each step needs. |
 | [`DOCKET.md`](DOCKET.md) | The living backlog: strategy, queued builds, design threads, and carried residuals. |
 | [`INNOVATIONS.md`](INNOVATIONS.md) | Unshipped ideas only; shipped features are removed. |
 | [`POSTHOG_SOURCEMAPS.md`](POSTHOG_SOURCEMAPS.md) | How to upload production source maps to PostHog and verify the result. |

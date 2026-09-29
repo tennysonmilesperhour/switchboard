@@ -14,6 +14,7 @@ import { resolveTimeZone } from '@/lib/client/time-zone';
 import { hasInviteDetails } from '@/lib/event-details';
 import { planEnd } from '@/lib/plan-time';
 import { capacityProblem } from '@/lib/plan-capacity';
+import type { ErrorCode } from '@/lib/errors';
 
 import { useInviteeDraft } from './use-invitee-draft';
 import { BasicsStep } from './steps/BasicsStep';
@@ -82,6 +83,9 @@ export function EventWizard({
   /** Where a back we asked for should land, read once by the popstate handler. */
   const backTarget = useRef<number | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(initialError);
+  // Beside a failed publish, so "it wouldn't send" is a diagnosis. Validation
+  // refusals ("Add at least one person") carry none.
+  const [submitCode, setSubmitCode] = useState<ErrorCode | null>(null);
 
   // Basics
   const [title, setTitle] = useState(initialTitle);
@@ -375,6 +379,7 @@ export function EventWizard({
   async function submit() {
     setSubmitting(true);
     setSubmitError(null);
+    setSubmitCode(null);
     try {
       const result = await createEvent({
         title,
@@ -425,11 +430,15 @@ export function EventWizard({
       setSubmitError(
         result.error ?? 'Something went wrong creating your plan. Please try again.',
       );
+      setSubmitCode(result.code ?? null);
     } catch {
+      // A lost response can't say whether the publish committed, so don't
+      // claim it didn't: a blind retry would invite everyone twice.
       setSubmitting(false);
       setSubmitError(
-        'Something went wrong creating your plan. Please try again.',
+        'We couldn’t confirm your plan was created. Check your calendar before sending it again.',
       );
+      setSubmitCode('SB-PLAN-CREATE');
     }
   }
 
@@ -449,7 +458,7 @@ export function EventWizard({
     <WizardFrame
       steps={steps}
       step={activeStep} stepComplete={stepComplete} goToStep={goToStep}
-      submitError={submitError} submitting={submitting} enablePoll={enablePoll}
+      submitError={submitError} submitCode={submitCode} submitting={submitting} enablePoll={enablePoll}
       submit={submit}
     >
       {current === 'basics' && (

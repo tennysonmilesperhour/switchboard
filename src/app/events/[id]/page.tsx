@@ -25,6 +25,7 @@ import { ScheduleNextButton } from '@/components/events/ScheduleNextButton';
 import { PollSection } from '@/components/polls/PollSection';
 import { PollChain } from '@/components/polls/PollChain';
 import { FollowUpComposer } from '@/components/polls/FollowUpComposer';
+import { pollOptionLabel } from '@/components/polls/option-label';
 import { AvailabilityGrid } from '@/components/events/AvailabilityGrid';
 import { recurrenceLabel } from '@/lib/engine/recurrence';
 import { HostControls } from './HostControls';
@@ -44,7 +45,7 @@ import {
   hostCanEditLine,
   hostCanShare,
 } from '@/lib/share-link';
-import type { SwitchboardEvent } from '@/lib/types';
+import type { Poll, SwitchboardEvent } from '@/lib/types';
 import { normalizePollTopic, pollQuestion } from '@/lib/types';
 import { loadEventPage } from '@/lib/server/event-page';
 
@@ -171,6 +172,18 @@ export default async function EventPage({
   // editing the guest list: while a date poll runs nothing has gone out, so the
   // order is still a draft and the database already accepts the edit.
   const lineEditable = canManage && hostCanEditLine(event.status);
+
+  // The question a poll asks. The wizard's own poll is created with no topic
+  // or title, which `pollQuestion` reads as the generic follow-up ("One more
+  // thing") — right for a queued extra, wrong for the plan's first question.
+  const questionFor = (row: Poll) =>
+    !row.parent_poll_id && !row.title?.trim() && row.topic === 'custom'
+      ? 'What should we do?'
+      : pollQuestion(row);
+
+  // A plan that has happened already offers Run it back and the capsule in its
+  // "It happened" card; the page-level copies below would repeat them.
+  const happenedCard = event.status === 'past' && Boolean(event.happened_at);
 
   const statusLabel: Record<SwitchboardEvent['status'], string> = {
     draft: 'Draft',
@@ -369,7 +382,7 @@ export default async function EventPage({
                 ❋ Room
               </Link>
             )}
-            {event.starts_at && new Date(event.starts_at) < new Date() && (
+            {!happenedCard && event.starts_at && new Date(event.starts_at) < new Date() && (
               <Link
                 href={`/events/${event.id}/capsule`}
                 className="inline-flex items-center gap-1.5 rounded-pill border border-line bg-card px-3.5 py-2 text-xs font-bold text-ink-soft shadow-lift hover:border-terracotta hover:text-terracotta-deep active:scale-[0.98] transition-all"
@@ -487,7 +500,7 @@ export default async function EventPage({
               counts={availability.counts}
               responders={availability.responders}
               eligiblePeople={availability.eligiblePeople}
-              isHost={isHost}
+              isHost={canManage}
               pollId={poll && poll.phase !== 'decided' ? poll.id : null}
               busySlots={calendarBusy}
               calendarUsable={calendarStatus?.usable ?? false}
@@ -503,15 +516,16 @@ export default async function EventPage({
             <PollChain
               decided={decidedPolls.map((row) => ({
                 id: row.id,
-                question: pollQuestion(row),
-                winner:
-                  allDecidedWinners[row.id] ?? null,
+                question: questionFor(row),
+                winner: allDecidedWinners[row.id]
+                  ? pollOptionLabel(allDecidedWinners[row.id], event.time_zone)
+                  : null,
               }))}
               pending={pendingPolls.map((row) => ({
                 id: row.id,
-                question: pollQuestion(row),
+                question: questionFor(row),
               }))}
-              activeQuestion={pollQuestion(poll)}
+              activeQuestion={questionFor(poll)}
               activeDecided={poll.phase === 'decided'}
               eventId={event.id}
               isHost={canManage}
@@ -521,7 +535,11 @@ export default async function EventPage({
               options={options}
               results={results}
               myVotes={myVotes}
-              isHost={isHost}
+              // Host or co-host: every poll action authorizes both, and so does
+              // the database. Passing the primary-host flag hid Lock, Close and
+              // Choose this from the co-hosts the feature hands those powers to.
+              isHost={canManage}
+              question={questionFor(poll)}
               eventId={event.id}
               currentUserId={user.id}
               timeZone={event.time_zone}
@@ -541,7 +559,9 @@ export default async function EventPage({
         {/* Host broadcasts */}
         <Announcements
           eventId={event.id}
-          isHost={isHost}
+          // Co-hosts post too: the insert policy is is_event_host and the
+          // fan-out already tells the host when a co-host writes.
+          isHost={canManage}
           canReach={acceptedCount ?? 0}
           announcements={announcements}
         />
@@ -727,6 +747,7 @@ export default async function EventPage({
 
         {/* Run it back: a one-off plan the host can re-clone once it's behind them. */}
         {isHost &&
+          !happenedCard &&
           (!event.recurrence || event.recurrence === 'none') &&
           (event.status === 'past' ||
             event.status === 'cancelled' ||

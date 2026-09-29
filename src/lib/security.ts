@@ -99,3 +99,14 @@ export function csvCell(value: string | null | undefined): string {
   }
   return /[",\n\r]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v;
 }
+
+/**
+ * Match untrusted text literally inside a SQL `LIKE`/`ILIKE` pattern.
+ *
+ * `%` and `_` are wildcards there, so a host who typed `%` as a plan's place
+ * matched every verified venue and was shown some unrelated business's perk.
+ * Backslash is PostgreSQL's default escape character, so it is escaped first.
+ */
+export function likeLiteral(value: string): string {
+  return value.replace(/[\\%_]/g, (char) => `\\${char}`);
+}

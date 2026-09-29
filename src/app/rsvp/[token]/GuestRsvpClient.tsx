@@ -100,9 +100,11 @@ export function GuestRsvpClient({
   ) {
     if (accept && !requiredAnswered(questions, answers)) {
       setError('Please answer the required questions');
+      setCode(null);
       return;
     }
     setError('');
+    setCode(null);
     startTransition(async () => {
       const result = await respondToGuestInvite(
         token,
@@ -117,6 +119,7 @@ export function GuestRsvpClient({
         // treat 'auth_required' as this invitation's new status.
         setSignInNeeded(result.outcome === 'auth_required');
         setError(result.error ?? 'Something went wrong');
+        setCode(result.code ?? null);
         if (result.outcome && result.outcome !== 'auth_required') setStatus(result.outcome);
         return;
       }
@@ -311,6 +314,11 @@ export function GuestRsvpClient({
       {error && (
         <p role="alert" className="text-sm text-rose-deep mb-3">
           {error}
+          {code && (
+            <span className="ml-1.5 font-mono text-[11px] uppercase tracking-wide text-ink-faint">
+              {errorRef(code)}
+            </span>
+          )}
           {signInNeeded && (
             <>
               {' '}

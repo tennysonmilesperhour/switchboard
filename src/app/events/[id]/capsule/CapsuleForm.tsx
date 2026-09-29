@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { ImageInput } from '@/components/ui/ImageInput';
 import { addCapsuleEntry } from '@/lib/actions/capsules';
+import { errorRef, type ErrorCode } from '@/lib/errors';
 
 export function CapsuleForm({
   eventId,
@@ -25,6 +26,7 @@ export function CapsuleForm({
   const [line, setLine] = useState(initialLine);
   const [photoRef, setPhotoRef] = useState(initialPhotoRef);
   const [error, setError] = useState('');
+  const [errorCode, setErrorCode] = useState<ErrorCode | null>(null);
   const [pending, startTransition] = useTransition();
   const router = useRouter();
 
@@ -53,16 +55,29 @@ export function CapsuleForm({
           label="photo"
           aspect="video"
         />
-        {error && <p role="alert" className="text-xs text-rose-deep">{error}</p>}
+        {error && (
+          <p role="alert" className="text-xs text-rose-deep">
+            {error}
+            {errorCode && (
+              <span className="ml-1.5 font-mono text-[11px] uppercase tracking-wide text-ink-faint">
+                {errorRef(errorCode)}
+              </span>
+            )}
+          </p>
+        )}
         <Button
           size="sm"
           className="w-full"
           disabled={pending || !line.trim()}
           onClick={() =>
             startTransition(async () => {
+              setError('');
+              setErrorCode(null);
               const result = await addCapsuleEntry(eventId, line, photoRef);
-              if (!result.ok) setError(result.error ?? 'Could not save');
-              else router.refresh();
+              if (!result.ok) {
+                setError(result.error ?? 'Could not save');
+                setErrorCode(result.code ?? null);
+              } else router.refresh();
             })
           }
         >

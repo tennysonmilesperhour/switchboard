@@ -94,7 +94,7 @@ export default async function PublicProfilePage({
   // viewer's own client: `profile_avoids` is RLS-scoped to the avoider, so this
   // can only ever return the viewer's own row — the avoided person cannot learn
   // they are on it, which is the invariant the whole feature rests on.
-  const [relationship, mutuals, avoid] = await Promise.all([
+  const [relationship, mutuals, avoid, ownBlock] = await Promise.all([
     getRelationship(supabase, user.id, profile.id),
     hasAdminCredentials()
       ? getMutualConnections(createAdminClient(), user.id, profile.id)
@@ -105,7 +105,17 @@ export default async function PublicProfilePage({
       .eq('avoider_id', user.id)
       .eq('avoided_id', profile.id)
       .maybeSingle(),
+    // Only the viewer's own block, never theirs: profile_blocks is RLS-scoped to
+    // the blocker. After blocking from here the page used to look unchanged,
+    // and its "Add friend" then failed with a "try again" that never works.
+    supabase
+      .from('profile_blocks')
+      .select('blocked_id')
+      .eq('blocker_id', user.id)
+      .eq('blocked_id', profile.id)
+      .maybeSingle(),
   ]);
+  const blockedByViewer = Boolean(ownBlock.data);
 
   // Revealed-preference facets this person opted into sharing. The RPC itself
   // gates on an accepted connection, so this is empty for anyone else; the
@@ -180,29 +190,44 @@ export default async function PublicProfilePage({
 
             {/* Connect + relationship context */}
             <div className="mt-4 flex flex-col items-center gap-2">
-              <div className="flex items-center gap-2">
-                <ConnectButton
-                  targetId={profile.id}
-                  name={displayName}
-                  status={relationship.status}
-                  connectionId={relationship.connectionId}
-                  size="md"
-                />
-                {relationship.status === 'accepted' && (
-                  <Link
-                    href={`/mutual?person=${profile.id}`}
-                    className="inline-flex items-center gap-1.5 rounded-pill border border-line bg-card px-4 py-2 text-sm font-bold text-ink shadow-sm transition-colors hover:bg-cream"
-                  >
-                    <Icon name="chat" size={16} />
-                    Message
-                  </Link>
-                )}
-              </div>
+              {blockedByViewer ? (
+                <p className="max-w-xs text-sm text-ink-soft">
+                  You’ve blocked {displayName}. They won’t find you in discovery or
+                  on the map, and can’t connect with you until you unblock them.
+                </p>
+              ) : (
+                <div className="flex items-center gap-2">
+                  <ConnectButton
+                    targetId={profile.id}
+                    name={displayName}
+                    status={relationship.status}
+                    connectionId={relationship.connectionId}
+                    size="md"
+                  />
+                  {relationship.status === 'accepted' && (
+                    // Not "Message": Mutual sends nothing unless they
+                    // independently pick you back, the same false promise the
+                    // radar card on Home was corrected for.
+                    <Link
+                      href={`/mutual?person=${profile.id}`}
+                      className="inline-flex items-center gap-1.5 rounded-pill border border-line bg-card px-4 py-2 text-sm font-bold text-ink shadow-sm transition-colors hover:bg-cream"
+                    >
+                      <Icon name="sparkle" size={16} />
+                      Down to connect
+                    </Link>
+                  )}
+                </div>
+              )}
 
               {/* Give space: reachable for anyone, not just people you are
-                  connected to. Warn, never remove — see GiveSpaceButton. */}
+                  connected to — a block does not keep them off a plan someone
+                  else hosts. Warn, never remove — see GiveSpaceButton. */}
               <GiveSpaceButton targetId={profile.id} avoided={Boolean(avoid.data)} />
-              <BlockReportButtons targetId={profile.id} name={displayName} />
+              <BlockReportButtons
+                targetId={profile.id}
+                name={displayName}
+                blocked={blockedByViewer}
+              />
               {mutualLine ? (
                 <p className="flex items-center gap-1.5 text-xs font-semibold text-ink-soft">
                   <Icon name="users" size={14} className="text-ink-faint" />

@@ -9,6 +9,7 @@ import { capacityProblem } from '@/lib/plan-capacity';
 import { updateEventDetails } from '@/lib/actions/events';
 import { resolveTimeZone } from '@/lib/client/time-zone';
 import type { SwitchboardEvent } from '@/lib/types';
+import { errorRef, type ErrorCode } from '@/lib/errors';
 
 const FIELD =
   'w-full rounded-card border border-line bg-card px-4 py-3 text-[15px] text-ink outline-none transition-colors focus:border-terracotta focus:ring-2 focus:ring-terracotta-soft';
@@ -44,12 +45,15 @@ export function EventEditForm({ event }: { event: SwitchboardEvent }) {
   const [capacity, setCapacity] = useState(event.capacity ? String(event.capacity) : '');
   const [wishlistUrl, setWishlistUrl] = useState(event.wishlist_url ?? '');
   const [error, setError] = useState<string | null>(null);
+  // Set only by a refused save; the field checks above it carry none.
+  const [errorCode, setErrorCode] = useState<ErrorCode | null>(null);
   const [pending, startTransition] = useTransition();
   const router = useRouter();
   const toast = useToast();
 
   function submit(e: React.FormEvent) {
     e.preventDefault();
+    setErrorCode(null);
     if (!title.trim()) {
       setError('Give your plan a name.');
       return;
@@ -88,6 +92,7 @@ export function EventEditForm({ event }: { event: SwitchboardEvent }) {
       });
       if (!result.ok) {
         setError(result.error ?? 'Could not save your changes.');
+        setErrorCode(result.code ?? null);
         return;
       }
       toast.success('Plan updated.');
@@ -193,7 +198,16 @@ export function EventEditForm({ event }: { event: SwitchboardEvent }) {
         </div>
       </div>
 
-      {error && <p className="text-plate text-plate-inset text-sm text-rose-deep" role="alert">{error}</p>}
+      {error && (
+        <p className="text-plate text-plate-inset text-sm text-rose-deep" role="alert">
+          {error}
+          {errorCode && (
+            <span className="ml-1.5 font-mono text-[11px] uppercase tracking-wide text-ink-faint">
+              {errorRef(errorCode)}
+            </span>
+          )}
+        </p>
+      )}
 
       <p className="text-plate text-plate-inset text-xs text-ink-faint">
         Changing the time or place quietly notifies everyone who’s already accepted.

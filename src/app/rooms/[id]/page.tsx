@@ -45,11 +45,14 @@ export default async function RoomPage({
         .from('room_members')
         .select('member_id, profile:profiles(display_name)')
         .eq('room_id', id),
+      // The newest 200, not the oldest: ascending + limit returned the first
+      // 200 ever sent, so a busy room opened on a months-old conversation and
+      // never showed anything said after message 200. Reversed below.
       supabase
         .from('messages')
         .select('id, sender_id, body, image_url, created_at')
         .eq('room_id', id)
-        .order('created_at', { ascending: true })
+        .order('created_at', { ascending: false })
         .limit(200),
       supabase
         .from('room_items')
@@ -75,7 +78,7 @@ export default async function RoomPage({
         roomId={room.id}
         currentUserId={user.id}
         memberNames={memberNames}
-        initialMessages={messages ?? []}
+        initialMessages={(messages ?? []).reverse()}
         items={(items ?? []).map((item) => ({ ...item, kind: roomItemKind(item.kind) }))}
         expenses={expenses ?? []}
       />

@@ -34,6 +34,12 @@ export async function createHousehold(
     allowed = requested.filter((id) => connectedIds.has(id));
   }
 
+  // Nobody selected is a current connection (e.g. unfriended since the page
+  // loaded): an empty household invites nobody, so don't create one.
+  if (allowed.length === 0) {
+    return validation('Pick at least one person you’re connected to.');
+  }
+
   const { data: household, error } = await supabase
     .from('households')
     .insert({ owner_id: user.id, name: trimmed })
@@ -47,13 +53,19 @@ export async function createHousehold(
     );
   }
 
-  if (allowed.length > 0) {
-    await supabase.from('household_members').insert(
-      allowed.map((memberId) => ({
-        household_id: household.id,
-        member_id: memberId,
-      })),
-    );
+  const { error: membersError } = await supabase.from('household_members').insert(
+    allowed.map((memberId) => ({
+      household_id: household.id,
+      member_id: memberId,
+    })),
+  );
+  // An ignored failure here reported "Household created." for a household with
+  // nobody in it. Undo the shell and say it didn't save.
+  if (membersError) {
+    await supabase.from('households').delete().eq('id', household.id);
+    return reportAndFail('SB-HOUSEHOLD-SAVE', 'household.save', membersError, {
+      householdId: household.id,
+    });
   }
   revalidatePath('/people');
   return { ok: true };

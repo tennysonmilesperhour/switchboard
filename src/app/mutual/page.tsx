@@ -53,8 +53,26 @@ export default async function MutualPage({
     const profile = Array.isArray(other) ? other[0] : other;
     return { id: profile.id, name: profile.display_name, handle: profile.handle ?? '' };
   });
-  const friendName = (id: string) =>
-    friends.find((f) => f.id === id)?.name ?? 'Someone';
+  // A match is not always with a connection: a matchmaker intro pairs two
+  // people who were never connected, and Discover matches strangers by
+  // design. Naming only from the friend list showed every one of those as
+  // "Someone" on the one page that exists to list your matches.
+  const otherIds = new Set<string>();
+  for (const match of matches ?? []) {
+    otherIds.add(match.user_a === user.id ? match.user_b : match.user_a);
+  }
+  for (const ritual of ritualRows ?? []) {
+    otherIds.add(ritual.creator_id === user.id ? ritual.partner_id : ritual.creator_id);
+  }
+  const unknownIds = [...otherIds].filter((id) => !friends.some((f) => f.id === id));
+  const { data: others } = unknownIds.length
+    ? await supabase.from('profiles').select('id, display_name').in('id', unknownIds)
+    : { data: [] };
+  const names = new Map<string, string>([
+    ...(others ?? []).map((row): [string, string] => [row.id, row.display_name]),
+    ...friends.map((f): [string, string] => [f.id, f.name]),
+  ]);
+  const friendName = (id: string) => names.get(id) || 'Someone';
 
   const myIntents: MyIntent[] = (intents ?? []).map((intent) => ({
     id: intent.id,

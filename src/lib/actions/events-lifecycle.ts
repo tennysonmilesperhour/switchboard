@@ -232,6 +232,10 @@ export async function updateEventDetails(
       ...(input.timeZone ? { time_zone: input.timeZone.slice(0, 64) } : {}),
       capacity: input.capacity,
       wishlist_url: wishlistUrl,
+      // The reminder markers describe the time they were sent for. Left set, a
+      // plan moved after its day-before note went out never got one for the
+      // new date, and one moved later after "starting soon" never got that.
+      ...(whenChanged ? { reminded_day_before_at: null, reminded_soon_at: null } : {}),
     })
     .eq('id', eventId);
   if (error) {

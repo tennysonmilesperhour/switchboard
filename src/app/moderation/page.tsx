@@ -22,10 +22,19 @@ export default async function ModerationPage() {
   );
   if (!isModerator) redirect('/');
 
-  const [{ data: reports }, { data: venues }] = await Promise.all([
-    supabase.rpc('list_open_reports'),
-    supabase.rpc('list_pending_venues'),
-  ]);
+  const [{ data: reports, error: reportsError }, { data: venues, error: venuesError }] =
+    await Promise.all([
+      supabase.rpc('list_open_reports'),
+      supabase.rpc('list_pending_venues'),
+    ]);
+  // A queue that failed to load must not read as an empty one: "Nothing to
+  // review" over a broken RPC tells a moderator everything is handled. Throw
+  // to the error boundary, which shows the digest and logs the cause.
+  if (reportsError || venuesError) {
+    throw new Error(
+      `Could not load the moderation queue: ${(reportsError ?? venuesError)?.message ?? 'unknown error'}`,
+    );
+  }
   const openReports: OpenReport[] = reports ?? [];
   const pendingVenues: PendingVenue[] = venues ?? [];
 

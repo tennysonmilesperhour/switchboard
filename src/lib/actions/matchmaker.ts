@@ -4,7 +4,7 @@ import { failure, validation, type ActionResult } from '@/lib/errors';
 
 import { revalidatePath } from 'next/cache';
 import { createAdminClient } from '@/lib/supabase/admin';
-import { notifyUsers, sendPushToUsers } from '@/lib/server/notify';
+import { notifyUsers } from '@/lib/server/notify';
 import { checkRateLimit } from '@/lib/server/rate-limit';
 import { requireUser } from '@/lib/server/require-user';
 import { reportAndFail } from '@/lib/server/observability';
@@ -62,15 +62,15 @@ export async function proposeIntroduction(
     return reportAndFail('SB-INTRO-SAVE', 'intro.create', error, { personA, personB });
   }
 
-  await sendPushToUsers(
-    [personA, personB],
-    {
-      title: 'A friend thinks you two would hit it off',
-      body: `Someone you both know suggested ${cleanActivity.toLowerCase()}. Only revealed if you both say yes.`,
-      url: '/',
-    },
-    'social',
-  );
+  // Recorded, not push-only: someone who never enabled push (or was in quiet
+  // hours) otherwise heard nothing and could only stumble on the Home card.
+  // Names nobody, so the durable row reveals no more than the push did.
+  await notifyUsers([personA, personB], {
+    kind: 'match',
+    title: 'A friend thinks you two would hit it off',
+    body: `Someone you both know suggested ${cleanActivity.toLowerCase()}. Only revealed if you both say yes.`,
+    url: '/',
+  });
   revalidatePath('/people');
   return { ok: true };
 }
@@ -100,7 +100,7 @@ export async function respondToIntroduction(
     const admin = createAdminClient();
     const { data: proposal } = await admin
       .from('matchmaker_proposals')
-      .select('person_a, person_b, activity')
+      .select('person_a, person_b, activity, room_id')
       .eq('id', proposalId)
       .maybeSingle();
     if (proposal?.person_a && proposal?.person_b) {
@@ -109,7 +109,10 @@ export async function respondToIntroduction(
         kind: 'match',
         title: '✨ It’s a match',
         body: activity ? `You both said yes to ${activity}. Say hi!` : 'You both said yes. Say hi!',
-        url: '/people',
+        // "Say hi" has to land somewhere you can. It pointed at /people, which
+        // lists connections, and the two of you are not connected: the match
+        // was on no part of that page.
+        url: proposal.room_id ? `/rooms/${proposal.room_id}` : '/mutual',
       });
     }
   }

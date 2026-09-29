@@ -12,6 +12,9 @@ import { notifyRoomActivity } from '@/lib/server/notify';
 import { reportAndFail } from '@/lib/server/observability';
 import { checkRateLimit } from '@/lib/server/rate-limit';
 
+/** Mirrors the CHECK on `messages.body`. */
+const MAX_MESSAGE_LENGTH = 4000;
+
 async function notifyRoom(roomId: string, senderId: string): Promise<void> {
   const admin = createAdminClient();
   const { data: room } = await admin
@@ -28,6 +31,12 @@ export async function sendMessage(
 ): Promise<ActionResult> {
   const trimmed = body.trim();
   if (!trimmed) return validation('Empty message');
+  // messages.body is CHECKed at 4000 characters. Past that the insert failed
+  // as an operational SB-ROOM-SAVE telling the sender to reload and retry,
+  // which could never work.
+  if (trimmed.length > MAX_MESSAGE_LENGTH) {
+    return validation('That message is too long. Keep it under 4,000 characters, or split it in two.');
+  }
 
   const auth = await requireUser();
   if (!auth.ok) return auth;

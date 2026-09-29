@@ -233,7 +233,7 @@ export function PeopleClient({
                 ? 'You’re connected. They had already asked you.'
                 : 'Request sent.',
             }
-          : { tone: 'error', text: result.error ?? 'Something went wrong' },
+          : { tone: 'error', text: result.error ?? 'Something went wrong', code: result.code },
       );
       if (result.ok) setIdentifier('');
       router.refresh();
@@ -393,14 +393,17 @@ export function PeopleClient({
   function submitMatch() {
     startTransition(async () => {
       const result = await proposeIntroduction(matchA, matchB, matchActivity, matchNote);
-      if (result.ok) {
-        setMatchStatus('Introduction sent, quietly. 🤫');
-        setMatchA('');
-        setMatchB('');
-        setMatchNote('');
-      } else {
-        setMatchStatus(result.error ?? 'Something went wrong');
+      if (!result.ok) {
+        // A failure used to land in the green "sent" status line, without its
+        // code, so a refused intro read as a quiet success.
+        setMatchStatus('');
+        toast.error(result.error ?? 'Could not send that introduction.', result.code);
+        return;
       }
+      setMatchStatus('Introduction sent, quietly. 🤫');
+      setMatchA('');
+      setMatchB('');
+      setMatchNote('');
       router.refresh();
     });
   }

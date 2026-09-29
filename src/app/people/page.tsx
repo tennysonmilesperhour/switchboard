@@ -3,7 +3,6 @@ import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
 import { appInviteUrl } from '@/lib/links';
 import { AppShell } from '@/components/shell/AppShell';
-import { EmptyState } from '@/components/ui/EmptyState';
 import { FindableNudge } from '@/components/profile/FindableNudge';
 import { loadFindability } from '@/lib/server/findability';
 import { PeopleClient } from './PeopleClient';
@@ -100,6 +99,7 @@ export default async function PeoplePage() {
     name: row.name,
     emoji: row.emoji,
     memberCount: (row.household_members ?? []).length,
+    memberIds: (row.household_members ?? []).map((member) => member.member_id),
   }));
 
   // Built here, not in the client: the origin is a deployment fact, and
@@ -111,38 +111,26 @@ export default async function PeoplePage() {
   // them. Rendered above the search that fails for exactly this reason.
   const findability = await loadFindability();
 
+  // Alphabetical, so a long list is scannable. The query has no order of its
+  // own, which left friends in whatever order the rows happened to come back.
+  friends.sort((a, b) => a.name.localeCompare(b.name));
+
+  // PeopleClient renders its own "Your people live here" empty state; this page
+  // used to render a second copy of it above the form whenever the list was
+  // empty, so a brand-new account saw the same card twice.
   return (
     <AppShell title="People">
-      {friends.length === 0 && incoming.length === 0 && outgoing.length === 0 ? (
-        <div className="space-y-6">
-          <FindableNudge state={findability} />
-          <EmptyState
-            emoji="☺"
-            title="Your people live here"
-            body="Connect by handle, email, phone, or selected contacts. Then circles, signals, and Mutual Mode all come alive."
-          />
-          <PeopleClient
-            friends={friends}
-            incoming={incoming}
-            outgoing={outgoing}
-            circles={circleRows}
-            households={households}
-            inviteUrl={inviteUrl}
-          />
-        </div>
-      ) : (
-        <div className="space-y-6">
-          <FindableNudge state={findability} />
-          <PeopleClient
-            friends={friends}
-            incoming={incoming}
-            outgoing={outgoing}
-            circles={circleRows}
-            households={households}
-            inviteUrl={inviteUrl}
-          />
-        </div>
-      )}
+      <div className="space-y-6">
+        <FindableNudge state={findability} />
+        <PeopleClient
+          friends={friends}
+          incoming={incoming}
+          outgoing={outgoing}
+          circles={circleRows}
+          households={households}
+          inviteUrl={inviteUrl}
+        />
+      </div>
     </AppShell>
   );
 }
