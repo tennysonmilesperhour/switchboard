@@ -5,32 +5,41 @@ import { Icon } from '@/components/ui/Icon';
 import { useToast } from '@/components/ui/Toast';
 import { useConfirm } from '@/components/ui/ConfirmDialog';
 import { regenerateCalendarToken } from '@/lib/actions/profile';
-import { calendarFeedUrl, webcalSubscribeUrl } from '@/lib/calendar-links';
-
-// The stable public origin, inlined at build time. A calendar subscription must
-// point here, not at the request host: a Vercel preview host is ephemeral (the
-// feed 404s once the deploy is superseded) and sits behind deployment
-// protection that calendar apps can't clear — the source of "The request for
-// webcal://…failed". Falls back to the live origin only when it isn't set (dev).
-const CONFIGURED_ORIGIN = (process.env.NEXT_PUBLIC_APP_URL ?? '').replace(/\/+$/, '');
+import { failure } from '@/lib/errors';
+import { calendarFeedUrl, webcalSubscribeUrl } from '@/lib/links';
 
 /** Subscribe-to-your-plans control: a personal, revocable calendar feed URL.
- *  URLs are built at click time so nothing origin-dependent renders on the
- *  server (avoids a hydration mismatch). */
+ *
+ *  Both URLs come from `src/lib/links.ts`, rooted at the configured public
+ *  origin — never the page's host, which may be an ephemeral, access-protected
+ *  preview that calendar apps can't subscribe to. When that origin isn't
+ *  configured the builder throws, and the reader sees the coded failure instead
+ *  of a link that would silently stop working. */
 export function CalendarSubscribe({ token }: { token: string }) {
   const [pending, startTransition] = useTransition();
   const toast = useToast();
   const confirm = useConfirm();
 
-  const origin = () => CONFIGURED_ORIGIN || window.location.origin;
+  /** Build a feed URL, or show SB-CONFIG-ORIGIN and return null. */
+  function buildUrl(build: (calendarToken: string) => string): string | null {
+    try {
+      return build(token);
+    } catch {
+      const missing = failure('SB-CONFIG-ORIGIN');
+      toast.error(missing.error, missing.code);
+      return null;
+    }
+  }
 
   function subscribe() {
     // webcal:// prompts most calendar apps to subscribe directly.
-    window.location.href = webcalSubscribeUrl(origin(), token);
+    const url = buildUrl(webcalSubscribeUrl);
+    if (url) window.location.href = url;
   }
 
   async function copyLink() {
-    const url = calendarFeedUrl(origin(), token);
+    const url = buildUrl(calendarFeedUrl);
+    if (!url) return;
     try {
       await navigator.clipboard.writeText(url);
       toast.success('Calendar link copied.');
@@ -50,7 +59,7 @@ export function CalendarSubscribe({ token }: { token: string }) {
     startTransition(async () => {
       const result = await regenerateCalendarToken();
       if (!result.ok) {
-        toast.error('Could not reset the link. Try again.');
+        toast.error(result.error ?? 'Could not reset the link. Try again.', result.code);
         return;
       }
       toast.success('Calendar link reset.');

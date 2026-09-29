@@ -2,8 +2,12 @@
 
 import { useState, useTransition } from 'react';
 import { Button } from '@/components/ui/Button';
+import { ErrorNotice } from '@/components/ui/ErrorNotice';
 import { Icon } from '@/components/ui/Icon';
-import { resolveParentalApproval } from '@/lib/actions/parental-approval';
+import {
+  resolveParentalApproval,
+  type ResolveApprovalResult,
+} from '@/lib/actions/parental-approval';
 
 interface ApproveClientProps {
   token: string;
@@ -12,7 +16,7 @@ interface ApproveClientProps {
 }
 
 export function ApproveClient({ token, eventTitle, guardianName }: ApproveClientProps) {
-  const [result, setResult] = useState<{ outcome?: string; error?: string } | null>(null);
+  const [result, setResult] = useState<ResolveApprovalResult | null>(null);
   const [pending, startTransition] = useTransition();
 
   function handle(approve: boolean) {
@@ -59,12 +63,18 @@ export function ApproveClient({ token, eventTitle, guardianName }: ApproveClient
     );
   }
 
-  if (result && !result.outcome) {
+  // Every failure lands here, including the ones that carry an outcome (a
+  // link for a plan or invitation that has since gone). Keying on a missing
+  // outcome sent those back to the Approve/Deny buttons with no message.
+  if (result && !result.ok) {
     return (
       <div className="mx-auto max-w-md px-4 py-16 text-center">
         <div className="rounded-card bg-rose-soft p-6">
-          <p className="text-lg font-bold text-rose-deep">Something went wrong</p>
-          <p className="text-sm text-ink-soft mt-2">{result.error ?? 'Please try again.'}</p>
+          <ErrorNotice
+            message={result.error ?? 'Something went wrong.'}
+            fix={result.fix ?? 'Please try again.'}
+            code={result.code}
+          />
         </div>
       </div>
     );

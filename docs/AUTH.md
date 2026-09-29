@@ -143,20 +143,34 @@ also live in the proxy.
     `profile_contacts`; `profiles.contact_email` is never a recovery authority.
     Regression tests prove that changing that profile field cannot redirect
     either flow.
+11. **Signing up again with an unconfirmed email kept the first password.** The
+    natural move after a lost confirmation mail is to create the account
+    again. GoTrue answers a second signup link for an unconfirmed address by
+    keeping the first password (it cannot know the second request is the same
+    person), and `uniqueHandle` saw the account's own handle as taken and
+    renamed it `alex2`. The reader confirmed, then the password they had just
+    chosen reported "did not work". `createPasswordAccount` now checks
+    `auth_user_id_by_email` first: an unconfirmed account gets a fresh sign-in
+    link through `resendEmailConfirmation` and a sentence saying which password
+    is live; a confirmed one is refused before any link is minted.
+12. **Onboarding stuck on "Saving…" after any refused save.** Errors come back
+    as `/onboarding?error=…`, which keeps the form mounted, and its submitting
+    flag was never reset. The button now reads the form's own pending state,
+    and an error about a step-one field returns the reader to step one.
 
 ### Open decisions — not changed here
 
 These need a product or security call rather than a unilateral fix.
 
-11. **Username sign-in silently breaks without service-role credentials.**
+13. **Username sign-in silently breaks without service-role credentials.**
    `resolveIdentifierEmails` resolves a handle to its real login email via the
    admin client. Without it, it falls back to the synthetic
    `<handle>@users.switchboard.local`, which is wrong for anyone who signed up
    with an email — so their username stops working. Production has the
    credentials; a misconfigured deployment fails silently.
-12. **Username-only accounts have no recovery path** (see §2 above). Consider
+14. **Username-only accounts have no recovery path** (see §2 above). Consider
     prompting for a recovery email during onboarding.
-13. **`/auth/confirm` drops `next` when a link fails**, so an expired link taken
+15. **`/auth/confirm` drops `next` when a link fails**, so an expired link taken
     from a deep link loses the destination. Cosmetic next to the rest.
 
 ## Guards (keep them green)

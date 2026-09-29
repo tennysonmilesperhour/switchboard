@@ -16,7 +16,8 @@ import { requireUser } from '@/lib/server/require-user';
 import { checkRateLimit } from '@/lib/server/rate-limit';
 import { appUrl, sendEmailWithResult } from '@/lib/server/email';
 import { smsEnabled, sendSmsWithResult } from '@/lib/server/sms';
-import { reportAndFail } from '@/lib/server/observability';
+import { reportAndFail, reportOperationalError } from '@/lib/server/observability';
+import { safeNextPath } from '@/lib/security';
 
 export type ContactKind = 'email' | 'phone';
 
@@ -252,19 +253,45 @@ export async function confirmPhoneContact(code: string): Promise<ContactVerifica
   return { ok: true, message: 'Phone number verified.' };
 }
 
+/**
+ * The verify-contact page for this token, optionally explaining why it could
+ * not be used. Every refusal below lands somewhere that says what is true and
+ * what to do next, rather than on a generic "that did not work".
+ */
+function verifyContactPath(token: string, reason?: 'other-account'): string {
+  const params = new URLSearchParams({ token });
+  if (reason) params.set('reason', reason);
+  return safeNextPath(`/verify-contact?${params.toString()}`, '/settings');
+}
+
 export async function confirmEmailContact(formData: FormData): Promise<never> {
   const auth = await requireUser();
   const token = String(formData.get('token') ?? '');
-  if (!auth.ok || token.length < 32) redirect('/login?error=auth');
+  // The session can end while the page sits open. Sign in and come straight
+  // back to this link — not "That sign-in attempt did not work", which
+  // describes an attempt the reader never made.
+  if (!auth.ok) redirect(`/login?next=${encodeURIComponent(verifyContactPath(token))}`);
+  // The page explains a truncated link; there is nothing to look up.
+  if (token.length < 32) redirect(verifyContactPath(token));
 
   const admin = createAdminClient();
-  const { data: request } = await admin
+  // Found by the unguessable token alone, then checked against the caller
+  // before anything is written. Filtering on the signed-in account up front
+  // made a link opened in a different account read as "expired", which sent
+  // the reader off to request links that would fail the same way.
+  const { data: request, error: readError } = await admin
     .from('contact_verification_requests')
-    .select('normalized_value, expires_at')
-    .eq('user_id', auth.user.id)
+    .select('user_id, normalized_value, expires_at')
     .eq('kind', 'email')
     .eq('token_hash', tokenHash(token))
     .maybeSingle();
+  if (readError) {
+    await reportOperationalError('contact.verify-check', readError, { kind: 'email' });
+    redirect('/settings?contact=error');
+  }
+  if (request && request.user_id !== auth.user.id) {
+    redirect(verifyContactPath(token, 'other-account'));
+  }
   if (!request || new Date(request.expires_at).getTime() <= Date.now()) {
     redirect('/settings?contact=expired');
   }
@@ -276,7 +303,9 @@ export async function confirmEmailContact(formData: FormData): Promise<never> {
     .eq('kind', 'email')
     .eq('normalized_value', request.normalized_value);
   if (error) {
-    redirect(error.code === '23505' ? '/settings?contact=claimed' : '/settings?contact=error');
+    if (error.code === '23505') redirect('/settings?contact=claimed');
+    await reportOperationalError('contact.verify-check', error, { kind: 'email' });
+    redirect('/settings?contact=error');
   }
   await admin
     .from('contact_verification_requests')

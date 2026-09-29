@@ -3,9 +3,9 @@ import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
 import { AppShell } from '@/components/shell/AppShell';
+import { SignOutForm } from '@/components/shell/SignOutForm';
 import { Avatar } from '@/components/ui/Avatar';
 import { Icon, type IconName } from '@/components/ui/Icon';
-import { signOut } from '@/lib/actions/profile';
 import { SOCIAL_BY_ID, hrefFor, displayHandle } from '@/lib/socials';
 import { buildVCard, qrSvg } from '@/lib/vcard';
 import type { SwitchboardEvent } from '@/lib/types';
@@ -397,7 +397,7 @@ export default async function ProfilePage() {
           </div>
         </section>
 
-        <form action={signOut}>
+        <SignOutForm>
           <button
             type="submit"
             className="flex w-full items-center justify-center gap-2 rounded-btn border border-line py-3 text-sm font-bold text-ink-soft hover:bg-cream"
@@ -405,7 +405,7 @@ export default async function ProfilePage() {
             <Icon name="logout" size={18} />
             Sign out
           </button>
-        </form>
+        </SignOutForm>
       </div>
     </AppShell>
   );

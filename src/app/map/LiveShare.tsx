@@ -238,64 +238,113 @@ export function LiveShare({
   async function start(nextVisibility: LocationVisibility = visibility) {
     if (!supported) return;
     setBusy(true);
-    navigator.geolocation.getCurrentPosition(
-      async (pos) => {
-        const point = { lat: pos.coords.latitude, lng: pos.coords.longitude };
-        const result = await shareLocation({
-          lat: point.lat,
-          lng: point.lng,
-          accuracyM: pos.coords.accuracy ?? null,
-          headline: note,
-          visibility: nextVisibility,
-          hours: 2,
-        });
-        setBusy(false);
-        if (!result.ok) {
-          toast.error(result.error ?? 'Could not start sharing.', result.code);
-          return;
-        }
-        lastPoint.current = point;
-        setApproxPoint(point);
-        setSharing(true);
-        setVisibility(nextVisibility);
-        setExpiresAt(result.expiresAt ?? null);
-        onSelfChange(point);
-        onShareStart(point);
-        startWatch();
-        startPoll();
-      },
-      (error) => {
-        setBusy(false);
-        toast.error(geoErrorMessage(error));
-      },
-      GEO_OPTIONS,
-    );
+    try {
+      navigator.geolocation.getCurrentPosition(
+        async (pos) => {
+          try {
+            const point = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+            const result = await shareLocation({
+              lat: point.lat,
+              lng: point.lng,
+              accuracyM: pos.coords.accuracy ?? null,
+              headline: note,
+              visibility: nextVisibility,
+              hours: 2,
+            });
+            if (!result.ok) {
+              toast.error(result.error ?? 'Could not start sharing.', result.code);
+              return;
+            }
+            lastPoint.current = point;
+            setApproxPoint(point);
+            setSharing(true);
+            setVisibility(nextVisibility);
+            setExpiresAt(result.expiresAt ?? null);
+            onSelfChange(point);
+            onShareStart(point);
+            startWatch();
+            startPoll();
+          } catch {
+            toast.error('Could not start sharing. Try again.', 'SB-LOCATION-SAVE');
+          } finally {
+            setBusy(false);
+          }
+        },
+        (error) => {
+          setBusy(false);
+          toast.error(geoErrorMessage(error));
+        },
+        GEO_OPTIONS,
+      );
+    } catch {
+      // If the call itself throws, neither callback runs; don't leave the
+      // button stuck on "Turning on…".
+      setBusy(false);
+      toast.error('Could not read your location.');
+    }
   }
 
+  // The share only ends on screen once the server has deleted it. Ending it
+  // locally first told someone whose Stop had failed that they were off the
+  // map while the server went on showing them to everyone nearby.
   async function stop() {
     setBusy(true);
     clearTimers();
-    const result = await stopSharingLocation();
-    setBusy(false);
-    endShareLocally(false);
-    if (!result.ok) toast.error(result.error ?? 'Could not stop sharing.', result.code);
+    let ended = false;
+    try {
+      const result = await stopSharingLocation();
+      if (!result.ok) {
+        toast.error(result.error ?? 'Could not stop sharing.', result.code);
+        return;
+      }
+      ended = true;
+      endShareLocally(false);
+    } catch {
+      toast.error('Could not stop sharing. Try again.', 'SB-LOCATION-SAVE');
+    } finally {
+      setBusy(false);
+      // Still live on the server, so still live here: Stop stays available.
+      if (!ended) {
+        startWatch();
+        startPoll();
+      }
+    }
   }
 
   // Re-share with a new visibility scope without interrupting the live loop.
+  //
+  // Shown at once, and put back if the server refuses: a rate-limited request
+  // used to leave "Connections only" highlighted while the stored row still
+  // showed this person to anyone sharing nearby. Busy for the round trip, so a
+  // second tap (or Stop, whose delete this upsert could otherwise undo) waits.
   async function changeVisibility(next: LocationVisibility) {
+    const previous = visibility;
     setVisibility(next);
     if (!sharing) return;
     const point = lastPoint.current;
     if (!point) return;
-    const result = await shareLocation({
-      lat: point.lat,
-      lng: point.lng,
-      headline: note,
-      visibility: next,
-      hours: 2,
-    });
-    if (result.ok) setExpiresAt(result.expiresAt ?? expiresAt);
-    void pollNearby();
+    setBusy(true);
+    try {
+      const result = await shareLocation({
+        lat: point.lat,
+        lng: point.lng,
+        headline: note,
+        visibility: next,
+        hours: 2,
+      });
+      if (!result.ok) {
+        setVisibility(previous);
+        toast.error(result.error ?? 'Could not change who can see you.', result.code);
+        return;
+      }
+      setExpiresAt(result.expiresAt ?? expiresAt);
+      void pollNearby();
+    } catch {
+      setVisibility(previous);
+      toast.error('Could not change who can see you. Try again.', 'SB-LOCATION-SAVE');
+    } finally {
+      setBusy(false);
+    }
   }
 
   if (!supported) {
@@ -361,8 +410,9 @@ export function LiveShare({
               key={value}
               type="button"
               onClick={() => changeVisibility(value)}
+              disabled={busy}
               aria-pressed={visibility === value}
-              className={`rounded-pill border px-3 py-1.5 text-xs font-bold transition-colors ${
+              className={`rounded-pill border px-3 py-1.5 text-xs font-bold transition-colors disabled:opacity-60 ${
                 visibility === value
                   ? 'border-terracotta bg-terracotta-soft text-terracotta-deep'
                   : 'border-line bg-card text-ink-faint hover:text-ink-soft'

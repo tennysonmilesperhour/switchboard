@@ -1,11 +1,20 @@
 'use client';
 
 import { useState } from 'react';
+import { unstable_rethrow } from 'next/navigation';
 import { Button } from '@/components/ui/Button';
 import { updatePassword } from '@/lib/actions/auth';
 import { deleteAccount, exportMyData } from '@/lib/actions/account';
 import { PASSWORD_MIN_LENGTH } from '@/lib/auth-identity';
+import { failure, type ErrorCode } from '@/lib/errors';
 import { useConfirm } from '@/components/ui/ConfirmDialog';
+
+/** A server action that threw instead of answering — a dropped connection, or a
+ *  page left open across a deploy — still gets its code, not a stuck button. */
+function interrupted(code: ErrorCode, what: string): string {
+  const result = failure(code, `${what} Check your connection, reload the page, and try again.`);
+  return `${result.error} · ${result.code}`;
+}
 
 export function AccountControls({ hostedPlanCount = 0 }: { hostedPlanCount?: number }) {
   const confirm = useConfirm();
@@ -17,14 +26,19 @@ export function AccountControls({ hostedPlanCount = 0 }: { hostedPlanCount?: num
   async function changePassword(event: React.FormEvent) {
     event.preventDefault();
     setPending('password');
-    const result = await updatePassword(password);
-    setPending(null);
-    setMessage(
-      result.ok
-        ? 'Password updated.'
-        : [result.error ?? 'Could not update password.', result.code].filter(Boolean).join(' · '),
-    );
-    if (result.ok) setPassword('');
+    try {
+      const result = await updatePassword(password);
+      setMessage(
+        result.ok
+          ? 'Password updated.'
+          : [result.error ?? 'Could not update password.', result.code].filter(Boolean).join(' · '),
+      );
+      if (result.ok) setPassword('');
+    } catch {
+      setMessage(interrupted('SB-AUTH-RESET', 'Your password wasn’t changed.'));
+    } finally {
+      setPending(null);
+    }
   }
 
   async function removeAccount(event: React.FormEvent) {
@@ -39,21 +53,37 @@ export function AccountControls({ hostedPlanCount = 0 }: { hostedPlanCount?: num
       danger: true,
     })) return;
     setPending('delete');
-    const result = await deleteAccount(confirmation);
-    setPending(null);
-    if (!result.ok) {
-      setMessage(
-        [result.error ?? 'Could not delete account.', result.code]
-          .filter(Boolean)
-          .join(' · '),
-      );
+    try {
+      const result = await deleteAccount(confirmation);
+      setPending(null);
+      if (!result.ok) {
+        setMessage(
+          [result.error ?? 'Could not delete account.', result.code]
+            .filter(Boolean)
+            .join(' · '),
+        );
+      }
+    } catch (error) {
+      // A successful delete redirects to /welcome, which Next delivers to this
+      // call as a rejection while it navigates. Let it through and leave
+      // "Deleting..." up; anything else is a real interruption.
+      unstable_rethrow(error);
+      setPending(null);
+      setMessage(interrupted('SB-AUTH-DELETE', 'Switchboard didn’t confirm the deletion.'));
     }
   }
 
   async function downloadData() {
     setPending('export');
-    const result = await exportMyData();
-    setPending(null);
+    let result: Awaited<ReturnType<typeof exportMyData>>;
+    try {
+      result = await exportMyData();
+    } catch {
+      setMessage(interrupted('SB-ACCOUNT-EXPORT', 'Your data download wasn’t prepared.'));
+      return;
+    } finally {
+      setPending(null);
+    }
     if (!result.ok) {
       setMessage(
         [result.error ?? 'Could not prepare your data.', result.code]

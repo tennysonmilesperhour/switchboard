@@ -266,7 +266,14 @@ export function MomentsClient({
             onClick={() =>
               startTransition(async () => {
                 try {
-                  await closeMoment();
+                  const result = await closeMoment();
+                  if (!result.ok) {
+                    toast.error(result.error ?? 'Could not check out. Try again.', result.code);
+                    return;
+                  }
+                  if (myMoment.status === 'matched') {
+                    toast.success('Checked out. Your conversation stays open in Rooms.');
+                  }
                   router.refresh();
                 } catch {
                   toast.error('Could not check out. Try again.');
@@ -379,7 +386,11 @@ export function MomentsClient({
                           onClick={() =>
                             startTransition(async () => {
                               try {
-                                await passMoment(myMoment.id, candidate.id);
+                                const result = await passMoment(myMoment.id, candidate.id);
+                                if (!result.ok) {
+                                  toast.error(result.error ?? 'Could not pass. Try again.', result.code);
+                                  return;
+                                }
                                 router.refresh();
                               } catch {
                                 toast.error('Could not pass. Try again.');
@@ -444,7 +455,11 @@ export function MomentsClient({
                           onClick={() =>
                             startTransition(async () => {
                               try {
-                                await passMoment(myMoment.id, candidate.id);
+                                const result = await passMoment(myMoment.id, candidate.id);
+                                if (!result.ok) {
+                                  toast.error(result.error ?? 'Could not pass. Try again.', result.code);
+                                  return;
+                                }
                                 router.refresh();
                               } catch {
                                 toast.error('Could not pass. Try again.');

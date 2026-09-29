@@ -7,6 +7,7 @@ import { Avatar } from '@/components/ui/Avatar';
 import { useToast } from '@/components/ui/Toast';
 import { useConfirm } from '@/components/ui/ConfirmDialog';
 import { addCoHost, removeCoHost } from '@/lib/actions/events';
+import { errorRef, type ErrorCode } from '@/lib/errors';
 
 interface CoHostManagerProps {
   eventId: string;
@@ -17,6 +18,8 @@ interface CoHostManagerProps {
 export function CoHostManager({ eventId, cohosts }: CoHostManagerProps) {
   const [handle, setHandle] = useState('');
   const [error, setError] = useState<string | null>(null);
+  // Only operational failures carry one; "No one with that handle." does not.
+  const [errorCode, setErrorCode] = useState<ErrorCode | null>(null);
   const [pending, startTransition] = useTransition();
   const router = useRouter();
   const toast = useToast();
@@ -32,7 +35,11 @@ export function CoHostManager({ eventId, cohosts }: CoHostManagerProps) {
     if (!ok) return;
     startTransition(async () => {
       try {
-        await removeCoHost(eventId, cohost.id);
+        const result = await removeCoHost(eventId, cohost.id);
+        if (!result.ok) {
+          toast.error(result.error ?? 'Could not remove that co-host. Try again.', result.code);
+          return;
+        }
         router.refresh();
       } catch {
         toast.error('Could not remove that co-host. Try again.');
@@ -45,6 +52,7 @@ export function CoHostManager({ eventId, cohosts }: CoHostManagerProps) {
     const value = handle.trim();
     if (!value) return;
     setError(null);
+    setErrorCode(null);
     startTransition(async () => {
       const result = await addCoHost(eventId, value);
       if (result.ok) {
@@ -52,6 +60,7 @@ export function CoHostManager({ eventId, cohosts }: CoHostManagerProps) {
         router.refresh();
       } else {
         setError(result.error ?? 'Could not add that co-host.');
+        setErrorCode(result.code ?? null);
       }
     });
   }
@@ -101,7 +110,16 @@ export function CoHostManager({ eventId, cohosts }: CoHostManagerProps) {
           Add
         </Button>
       </form>
-      {error && <p className="text-plate text-plate-inset text-xs text-rose-deep mt-2">{error}</p>}
+      {error && (
+        <p className="text-plate text-plate-inset text-xs text-rose-deep mt-2">
+          {error}
+          {errorCode && (
+            <span className="ml-1.5 font-mono text-[11px] uppercase tracking-wide text-ink-faint">
+              {errorRef(errorCode)}
+            </span>
+          )}
+        </p>
+      )}
     </section>
   );
 }

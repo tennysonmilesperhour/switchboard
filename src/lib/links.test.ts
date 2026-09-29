@@ -2,11 +2,14 @@ import { describe, test, expect, afterEach, vi } from 'vitest';
 import {
   appInviteUrl,
   appOrigin,
+  appOriginOrUndefined,
   absoluteUrl,
+  calendarFeedUrl,
   eventSharePath,
   eventShareUrl,
   guestRsvpUrl,
   boardJoinUrl,
+  webcalSubscribeUrl,
 } from './links';
 
 /**
@@ -146,5 +149,58 @@ describe('appInviteUrl', () => {
   test('fails loudly in production rather than emitting a bare path', () => {
     setEnv(undefined, 'production');
     expect(() => appInviteUrl()).toThrow(/NEXT_PUBLIC_APP_URL/);
+  });
+});
+
+describe('appOriginOrUndefined', () => {
+  // The root layout's metadataBase, robots.txt and sitemap.xml read the origin
+  // on every page or at build time. A throw there takes the whole app down, so
+  // this accessor must degrade to "no origin" — never to a guessed host.
+  test('returns the configured origin', () => {
+    setEnv('https://switchboardsocial.me/', 'production');
+    expect(appOriginOrUndefined()).toBe('https://switchboardsocial.me');
+  });
+
+  test('returns undefined, not a throw or localhost, when unset in production', () => {
+    setEnv(undefined, 'production');
+    expect(appOriginOrUndefined()).toBeUndefined();
+  });
+
+  test('returns undefined when malformed in production', () => {
+    setEnv('switchboardsocial.me', 'production');
+    expect(appOriginOrUndefined()).toBeUndefined();
+  });
+});
+
+describe('calendar subscription links', () => {
+  const TOKEN = 'd9793867-2963-4c92-bad0-6a2ea04f895f';
+
+  test('roots the feed at the configured origin', () => {
+    setEnv('https://switchboardsocial.me/', 'production');
+    expect(calendarFeedUrl(TOKEN)).toBe(
+      `https://switchboardsocial.me/api/calendar/${TOKEN}`,
+    );
+  });
+
+  test('webcal swaps only the scheme, preserving host and path', () => {
+    setEnv('https://switchboardsocial.me', 'production');
+    expect(webcalSubscribeUrl(TOKEN)).toBe(
+      `webcal://switchboardsocial.me/api/calendar/${TOKEN}`,
+    );
+  });
+
+  test('also rewrites a plain-http origin (e.g. local dev)', () => {
+    setEnv('http://localhost:3000', 'development');
+    expect(webcalSubscribeUrl(TOKEN)).toBe(
+      `webcal://localhost:3000/api/calendar/${TOKEN}`,
+    );
+  });
+
+  test('fails loudly in production rather than rooting at the page host', () => {
+    // The old builder took any origin and the settings page fed it
+    // window.location.origin, so a preview host became a dead subscription.
+    setEnv(undefined, 'production');
+    expect(() => calendarFeedUrl(TOKEN)).toThrow(/NEXT_PUBLIC_APP_URL/);
+    expect(() => webcalSubscribeUrl(TOKEN)).toThrow(/NEXT_PUBLIC_APP_URL/);
   });
 });

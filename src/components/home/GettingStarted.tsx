@@ -1,11 +1,16 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import Link from 'next/link';
 import { Card } from '@/components/ui/Card';
 import { Icon } from '@/components/ui/Icon';
 
 export const GETTING_STARTED_DISMISS_KEY = 'sb-getting-started-dismissed';
+/**
+ * Set by Settings' "show tips again". Brings the card back even when every step
+ * is already done, which on its own retires it; dismissing clears it again.
+ */
+export const GETTING_STARTED_RESHOW_KEY = 'sb-getting-started-reshow';
 
 interface GettingStartedProps {
   friendDone: boolean;
@@ -18,29 +23,39 @@ interface GettingStartedProps {
    * keep this card on screen forever.
    */
   findableDone: boolean;
+  /**
+   * What takes this slot once every step is done (Home passes the passport
+   * line), so there is still exactly one guidance card. Shown instead of the
+   * checklist unless the reader asked for the tips back.
+   */
+  whenDone?: ReactNode;
 }
 
 /**
  * The one first-run guidance card on Home: four live steps computed from real
  * data, so it checks itself off and retires when everything is done. Dismissal
  * is a device preference (the `sb-*` localStorage convention, never
- * authorization); Settings offers a "show tips again" reset.
+ * authorization); Settings offers a "show tips again" reset, which brings the
+ * card back even for someone who has finished every step.
  */
 export function GettingStarted({
   friendDone,
   planDone,
   signalDone,
   findableDone,
+  whenDone = null,
 }: GettingStartedProps) {
   // Start hidden; the effect reveals it only after checking storage, which
   // also avoids any SSR/client hydration mismatch.
   const [dismissed, setDismissed] = useState(true);
+  const [reshow, setReshow] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
     void Promise.resolve().then(() => {
       if (!cancelled) {
         setDismissed(localStorage.getItem(GETTING_STARTED_DISMISS_KEY) === '1');
+        setReshow(localStorage.getItem(GETTING_STARTED_RESHOW_KEY) === '1');
       }
     });
     return () => {
@@ -48,11 +63,17 @@ export function GettingStarted({
     };
   }, []);
 
-  if (dismissed || (friendDone && planDone && signalDone && findableDone)) return null;
+  const allDone = friendDone && planDone && signalDone && findableDone;
+  // Every step done retires the checklist, unless Settings asked for it back:
+  // "It'll be on Home next visit" used to be untrue for exactly the people
+  // most likely to press it.
+  if (dismissed || (allDone && !reshow)) return allDone ? whenDone : null;
 
   function dismiss() {
     localStorage.setItem(GETTING_STARTED_DISMISS_KEY, '1');
+    localStorage.removeItem(GETTING_STARTED_RESHOW_KEY);
     setDismissed(true);
+    setReshow(false);
   }
 
   const items: Array<{

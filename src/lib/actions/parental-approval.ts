@@ -334,12 +334,19 @@ export async function resolveParentalApproval(
   const outcome = typeof row.outcome === 'string' ? row.outcome : undefined;
   const eventTitle = typeof row.event_title === 'string' ? row.event_title : undefined;
 
-  if (
-    outcome === 'not_found' ||
-    outcome === 'event_gone' ||
-    outcome === 'invite_gone' ||
-    outcome === 'invite_mismatch'
-  ) {
+  if (outcome === 'event_gone' || outcome === 'invite_gone') {
+    return {
+      ...failure(
+        'SB-RSVP-GONE',
+        outcome === 'event_gone'
+          ? 'This plan no longer exists, so there is nothing left to approve.'
+          : 'The invitation this approval was for has been withdrawn.',
+      ),
+      outcome,
+    };
+  }
+
+  if (outcome === 'not_found' || outcome === 'invite_mismatch') {
     return {
       ...failure('SB-LINK-UNKNOWN', 'This approval link is not valid.'),
       outcome,

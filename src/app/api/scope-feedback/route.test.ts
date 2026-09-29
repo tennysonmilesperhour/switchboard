@@ -196,13 +196,34 @@ describe('POST /api/scope-feedback', () => {
       const form = withBody();
       form.append(
         'screenshots',
-        new File([new Uint8Array(5 * 1024 * 1024 + 1)], 'huge.png', {
+        new File([new Uint8Array(4 * 1024 * 1024 + 1)], 'huge.png', {
           type: 'image/png',
         }),
       );
       const response = await post(form);
 
       expect(response.status).toBe(400);
+      expect(mocks.upload).not.toHaveBeenCalled();
+    });
+
+    it('caps the screenshots together, under the host’s request-body limit', async () => {
+      // The host rejects a body over ~4.5MB before the route runs, with a
+      // non-JSON 413. Four files that were each under a per-file cap could add
+      // up past it, so the cap is on the total — and the refusal is JSON the
+      // page can show, not a page it cannot parse.
+      const form = withBody();
+      for (let i = 0; i < 2; i += 1) {
+        form.append(
+          'screenshots',
+          new File([new Uint8Array(2 * 1024 * 1024 + 1)], `s${i}.png`, { type: 'image/png' }),
+        );
+      }
+      const response = await post(form);
+
+      expect(response.status).toBe(400);
+      expect(await response.json()).toEqual({
+        error: expect.stringMatching(/under 4MB altogether/),
+      });
       expect(mocks.upload).not.toHaveBeenCalled();
     });
 

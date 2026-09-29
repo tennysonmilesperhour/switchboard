@@ -16,12 +16,25 @@ import { errorFor, errorRef, type ErrorCode } from '@/lib/errors';
 const BUDGETS = ['Free', '$', '$$', '$$$'];
 const VIBES = ['Relaxed', 'Adventurous', 'Cozy', 'Lively', 'Quiet'];
 
-export function DiscoverClient({ defaultInterests }: { defaultInterests: string[] }) {
+export function DiscoverClient({
+  defaultInterests,
+  focusInterest = null,
+}: {
+  defaultInterests: string[];
+  /**
+   * One interest to build ideas around, from `/discover?q=` — the You page
+   * links each "still waiting for a first outing" tag here with the promise of
+   * "a low-key way in". So it narrows the ask to that interest and starts the
+   * vibe at Relaxed; both stay editable.
+   */
+  focusInterest?: string | null;
+}) {
+  const [focus, setFocus] = useState<string | null>(focusInterest);
   const [location, setLocation] = useState('');
   const [distance, setDistance] = useState(15);
   const [when, setWhen] = useState('');
   const [budget, setBudget] = useState('$$');
-  const [vibes, setVibes] = useState<string[]>([]);
+  const [vibes, setVibes] = useState<string[]>(focusInterest ? ['Relaxed'] : []);
   const [groupSize, setGroupSize] = useState<string>(DEFAULT_GROUP_SIZE);
   const [openToMeeting, setOpenToMeeting] = useState(false);
   const [suggestions, setSuggestions] = useState<Suggestion[] | null>(null);
@@ -43,7 +56,7 @@ export function DiscoverClient({ defaultInterests }: { defaultInterests: string[
           groupSize,
           openToMeeting,
           vibes,
-          interests: defaultInterests,
+          interests: focus ? [focus] : defaultInterests,
         });
         if (!result.ok) {
           setError(result.error ?? errorFor('SB-DISCOVERY-RUN').message);
@@ -62,6 +75,21 @@ export function DiscoverClient({ defaultInterests }: { defaultInterests: string[
         title="Find something to do"
         hint="Describe the vibe - Switchboard curates a few great fits"
       />
+
+      {focus && (
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-card bg-terracotta-soft px-3.5 py-2.5">
+          <p className="text-sm text-terracotta-deep">
+            Low-key ways into <strong className="font-bold">{focus}</strong>
+          </p>
+          <button
+            type="button"
+            onClick={() => setFocus(null)}
+            className="text-xs font-semibold text-terracotta-deep underline underline-offset-2"
+          >
+            Use all my interests
+          </button>
+        </div>
+      )}
 
       <form
         className="space-y-4"

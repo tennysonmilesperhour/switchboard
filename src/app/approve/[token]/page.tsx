@@ -1,4 +1,6 @@
 import type { Metadata } from 'next';
+import { ErrorNotice } from '@/components/ui/ErrorNotice';
+import { errorFor } from '@/lib/errors';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { ApproveClient } from './ApproveClient';
 
@@ -21,9 +23,10 @@ export default async function ApprovalPage({
     .maybeSingle();
 
   if (!approval) {
+    const { fix } = errorFor('SB-LINK-UNKNOWN');
     return (
       <div className="mx-auto max-w-md px-4 py-16 text-center">
-        <p className="text-lg font-bold">This link isn&rsquo;t valid</p>
+        <ErrorNotice message="This approval link is not valid." fix={fix} code="SB-LINK-UNKNOWN" />
       </div>
     );
   }

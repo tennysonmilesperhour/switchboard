@@ -1,6 +1,5 @@
 import type { MetadataRoute } from 'next';
-
-const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000';
+import { appOriginOrUndefined } from '@/lib/links';
 
 /**
  * Allow crawling of the public marketing/legal surface; disallow the
@@ -8,6 +7,9 @@ const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000';
  * session-only anyway, but stating it keeps private routes out of indexes.
  */
 export default function robots(): MetadataRoute.Robots {
+  // The sitemap must be an absolute URL on the validated origin (links.ts); with
+  // none configured, the line is omitted rather than pointing crawlers at a guess.
+  const appUrl = appOriginOrUndefined();
   return {
     rules: {
       userAgent: '*',
@@ -32,6 +34,6 @@ export default function robots(): MetadataRoute.Robots {
         '/features',
       ],
     },
-    sitemap: `${appUrl}/sitemap.xml`,
+    ...(appUrl ? { sitemap: `${appUrl}/sitemap.xml` } : {}),
   };
 }

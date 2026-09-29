@@ -59,6 +59,7 @@ export default async function OnboardingPage({
         initialName={profile?.display_name ?? ''}
         initialHandle={profile?.handle ?? ''}
         next={nextPath}
+        error={error}
       />
     </div>
   );

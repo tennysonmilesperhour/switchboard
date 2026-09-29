@@ -213,6 +213,7 @@ vi.mock('@/lib/server/email', async (importActual) => {
 });
 
 import {
+  createPasswordAccount,
   requestPasswordReset,
   resendEmailConfirmation,
   signInWithPasswordIdentifier,
@@ -364,6 +365,49 @@ describe('signInWithPasswordIdentifier', () => {
     });
 
     expect(result).toEqual({ ok: true });
+  });
+});
+
+describe('createPasswordAccount with an address that already has an account', () => {
+  function signupForm(identifier: string) {
+    const form = new FormData();
+    form.set('display_name', 'Alice');
+    form.set('identifier', identifier);
+    form.set('password', 'a-brand-new-password');
+    form.set('terms_agreement', 'on');
+    form.set('community_agreement', 'on');
+    return form;
+  }
+
+  it('sends an unconfirmed account a fresh sign-in link instead of a signup link its new password cannot open', async () => {
+    seed({
+      profiles: [{ id: 'u1', handle: 'alice', contact_email: 'alice@example.com' }],
+      authUsers: { u1: { email: 'alice@example.com', email_confirmed_at: null } },
+    });
+
+    const result = await createPasswordAccount({ ok: false }, signupForm('alice@example.com'));
+
+    expect(result.ok).toBe(false);
+    expect(result.error).toMatch(/never confirmed/);
+    expect(result.error).toMatch(/password is still the one you chose the first time/);
+    expect(result.code).toBeUndefined();
+    expect(mocks.generateLink).toHaveBeenCalledTimes(1);
+    expect(mocks.generateLink).toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'magiclink', email: 'alice@example.com' }),
+    );
+    expect(mocks.sendEmailWithResult).toHaveBeenCalledTimes(1);
+  });
+
+  it('refuses a confirmed address without minting any link', async () => {
+    seed({
+      authUsers: { u1: { email: 'alice@example.com', email_confirmed_at: '2026-01-01T00:00:00Z' } },
+    });
+
+    const result = await createPasswordAccount({ ok: false }, signupForm('alice@example.com'));
+
+    expect(result).toEqual({ ok: false, error: 'That email or username is already taken.' });
+    expect(mocks.generateLink).not.toHaveBeenCalled();
+    expect(mocks.sendEmailWithResult).not.toHaveBeenCalled();
   });
 });
 

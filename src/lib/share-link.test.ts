@@ -241,6 +241,32 @@ describe('TypeScript and SQL agree on who can answer', () => {
     expect([...sqlStatuses].sort()).toEqual([...ANSWERABLE_EVENT_STATUSES].sort());
   });
 
+  it('matches every status tuple inside handle_sms_command', () => {
+    // Text replies and text subscriptions answer the same question in SQL, and
+    // `canSubscribeGuestSms` asks ANSWERABLE_EVENT_STATUSES in TypeScript, so
+    // the /rsvp page and the inbound SMS handler cannot disagree either.
+    const dir = join(process.cwd(), 'supabase', 'migrations');
+    const withFunction = readdirSync(dir)
+      .filter((name) => name.endsWith('.sql'))
+      .sort()
+      .filter((name) =>
+        readFileSync(join(dir, name), 'utf8').includes('function private.handle_sms_command'),
+      );
+    expect(withFunction.length, 'no migration defines handle_sms_command').toBeGreaterThan(0);
+
+    const sql = readFileSync(join(dir, withFunction[withFunction.length - 1]), 'utf8');
+    const start = sql.indexOf('function private.handle_sms_command');
+    const end = sql.indexOf('\ncreate ', start);
+    const body = sql.slice(start, end === -1 ? undefined : end);
+    const guards = [...body.matchAll(/\be\.status\s+not\s+in\s*\(([^)]*)\)/gi)];
+    expect(guards.length, 'could not find the status guards in handle_sms_command').toBeGreaterThan(0);
+
+    for (const guard of guards) {
+      const sqlStatuses = [...guard[1].matchAll(/'([a-z_]+)'/g)].map((m) => m[1]);
+      expect([...sqlStatuses].sort()).toEqual([...ANSWERABLE_EVENT_STATUSES].sort());
+    }
+  });
+
   it('derives canAnswer from that same set', () => {
     for (const status of ALL_STATUSES) {
       const answerable = canAnswer(shareLinkState({ status, share_link_active: true }));

@@ -13,7 +13,20 @@ import { IntentLaunchpad } from './IntentLaunchpad';
 
 export const metadata: Metadata = { title: 'Explore' };
 
-export default async function DiscoverPage() {
+/** Long enough for any interest tag; short enough to keep a hand-edited URL sane. */
+const MAX_FOCUS_LENGTH = 60;
+
+export default async function DiscoverPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ q?: string | string[] }>;
+}) {
+  // `?q=<interest>` is how the You page's "still waiting for a first outing"
+  // tags arrive: it seeds the idea generator with that one interest. Untrusted,
+  // so it is trimmed, capped, and only ever rendered as text.
+  const { q } = await searchParams;
+  const focusInterest =
+    (Array.isArray(q) ? q[0] : q)?.trim().slice(0, MAX_FOCUS_LENGTH) || null;
   const supabase = await createClient();
   const {
     data: { user },
@@ -79,7 +92,11 @@ export default async function DiscoverPage() {
         {/* Ideas first: it is what Explore is named for, and the door on
             /create that leads here promises "browse ideas". */}
         <div id="brainstorm" className="scroll-mt-20">
-          <DiscoverClient defaultInterests={profile?.interests ?? []} />
+          <DiscoverClient
+            key={focusInterest ?? ''}
+            defaultInterests={profile?.interests ?? []}
+            focusInterest={focusInterest}
+          />
         </div>
         <div id="browse" className="scroll-mt-20 space-y-8">
           <PeopleDiscoveryClient

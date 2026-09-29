@@ -16,7 +16,8 @@ import {
 } from '@/lib/actions/rooms';
 import { blockProfile, reportProfile } from '@/lib/actions/connections';
 import { addExpense, deleteExpense } from '@/lib/actions/expenses';
-import { uploadImage } from '@/lib/client/upload-image';
+import { UploadError, uploadImage } from '@/lib/client/upload-image';
+import { errorRef, type ActionResult } from '@/lib/errors';
 import { formatRelative } from '@/lib/format';
 import type { RoomItemKind } from '@/lib/types';
 
@@ -111,7 +112,9 @@ export function RoomClient({
   const [expenseDesc, setExpenseDesc] = useState('');
   const [expenseAmount, setExpenseAmount] = useState('');
   const [expenseUrl, setExpenseUrl] = useState('');
-  const [expenseError, setExpenseError] = useState<string | null>(null);
+  const [expenseError, setExpenseError] = useState<Pick<ActionResult, 'error' | 'code'> | null>(
+    null,
+  );
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const [memberMenu, setMemberMenu] = useState<string | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -172,7 +175,10 @@ export function RoomClient({
         router.refresh(); // pick up the filed Photos-tab item
       }
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Could not send the photo.');
+      toast.error(
+        err instanceof Error ? err.message : 'Could not send the photo.',
+        err instanceof UploadError ? err.code : undefined,
+      );
     } finally {
       setUploadingPhoto(false);
     }
@@ -188,7 +194,11 @@ export function RoomClient({
     if (!ok) return;
     startTransition(async () => {
       try {
-        await deleteExpense(expenseId, roomId);
+        const result = await deleteExpense(expenseId, roomId);
+        if (!result.ok) {
+          toast.error(result.error ?? 'Could not delete the expense. Try again.', result.code);
+          return;
+        }
         router.refresh();
       } catch {
         toast.error('Could not delete the expense. Try again.');
@@ -272,12 +282,23 @@ export function RoomClient({
     };
     setMessages((current) => [...current, optimistic]);
     startTransition(async () => {
-      const result = await sendMessage(roomId, body);
-      if (!result.ok) {
+      // On failure the placeholder goes and the text goes back in the box —
+      // and the reader is told why, so a vanished message isn't a mystery.
+      const unsend = () => {
         setMessages((current) => current.filter((m) => m.id !== optimistic.id));
         setDraft(body);
-      } else {
+      };
+      try {
+        const result = await sendMessage(roomId, body);
+        if (!result.ok) {
+          unsend();
+          toast.error(result.error ?? 'Your message didn’t send. Try again.', result.code);
+          return;
+        }
         router.refresh(); // pick up any auto-filed items
+      } catch {
+        unsend();
+        toast.error('Your message didn’t send. Check your connection and try again.');
       }
     });
   }
@@ -319,7 +340,7 @@ export function RoomClient({
         setExpenseUrl('');
         router.refresh();
       } else {
-        setExpenseError(result.error ?? 'Could not add that.');
+        setExpenseError({ error: result.error ?? 'Could not add that.', code: result.code });
       }
     });
   }
@@ -639,7 +660,14 @@ export function RoomClient({
               />
             </div>
             {expenseError && (
-              <p className="text-xs text-rose-deep">{expenseError}</p>
+              <p className="text-xs text-rose-deep">
+                {expenseError.error}
+                {expenseError.code && (
+                  <span className="ml-1.5 font-mono text-[11px] uppercase tracking-wide opacity-70">
+                    {errorRef(expenseError.code)}
+                  </span>
+                )}
+              </p>
             )}
             <Button
               type="submit"

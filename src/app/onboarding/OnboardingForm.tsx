@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import { useFormStatus } from 'react-dom';
 import { completeOnboarding } from '@/lib/actions/profile';
 import { Button } from '@/components/ui/Button';
 import { InterestPicker } from '@/components/profile/InterestPicker';
@@ -12,7 +13,12 @@ interface OnboardingFormProps {
   initialName: string;
   initialHandle: string;
   next?: string;
+  /** The `?error=` the last submission came back with. */
+  error?: string;
 }
+
+/** Errors about fields on step 1, which step 2 cannot show or fix. */
+const STEP_ONE_ERRORS = new Set(['name', 'handle', 'handle_taken', 'agreement']);
 
 /**
  * One form, two light steps. Everything stays mounted (hidden, not unmounted)
@@ -20,9 +26,21 @@ interface OnboardingFormProps {
  * step 1 holds all the `required` inputs, so `reportValidity()` gates the
  * Continue button without touching the optional step-2 pickers.
  */
-export function OnboardingForm({ initialName, initialHandle, next = '/' }: OnboardingFormProps) {
-  const [submitting, setSubmitting] = useState(false);
+export function OnboardingForm({
+  initialName,
+  initialHandle,
+  next = '/',
+  error,
+}: OnboardingFormProps) {
   const [step, setStep] = useState<1 | 2>(1);
+  // A failed save redirects back here with only the query string changed, so
+  // this component stays mounted. Return to the step that holds the field the
+  // error names instead of leaving the reader on step 2, unable to see it.
+  const [seenError, setSeenError] = useState(error);
+  if (error !== seenError) {
+    setSeenError(error);
+    if (error && STEP_ONE_ERRORS.has(error)) setStep(1);
+  }
   const formRef = useRef<HTMLFormElement>(null);
   // Normalize the handle to lowercase as it's typed so the validated value
   // matches what the user sees. The `lowercase` CSS class only changes the
@@ -53,7 +71,6 @@ export function OnboardingForm({ initialName, initialHandle, next = '/' }: Onboa
     <form
       ref={formRef}
       action={completeOnboarding}
-      onSubmit={() => setSubmitting(true)}
       className="mt-6 space-y-6"
     >
       <input type="hidden" name="next" value={next} />
@@ -71,6 +88,8 @@ export function OnboardingForm({ initialName, initialHandle, next = '/' }: Onboa
             id="display_name"
             name="display_name"
             required
+            pattern=".*\S.*"
+            title="Add your name."
             defaultValue={initialName}
             placeholder="Alex Rivera"
             className="w-full rounded-card border border-line bg-card px-4 py-3 outline-none focus:border-terracotta transition-colors"
@@ -176,9 +195,7 @@ export function OnboardingForm({ initialName, initialHandle, next = '/' }: Onboa
           />
         </fieldset>
 
-        <Button type="submit" size="lg" className="w-full" disabled={submitting}>
-          {submitting ? 'Saving…' : 'Start connecting'}
-        </Button>
+        <SubmitButton />
         <button
           type="button"
           onClick={() => setStep(1)}
@@ -188,5 +205,18 @@ export function OnboardingForm({ initialName, initialHandle, next = '/' }: Onboa
         </button>
       </div>
     </form>
+  );
+}
+
+/**
+ * Pending comes from the form's own submission, so it clears when the action
+ * settles (including a redirect back with an error) rather than sticking.
+ */
+function SubmitButton() {
+  const { pending } = useFormStatus();
+  return (
+    <Button type="submit" size="lg" className="w-full" disabled={pending}>
+      {pending ? 'Saving…' : 'Start connecting'}
+    </Button>
   );
 }

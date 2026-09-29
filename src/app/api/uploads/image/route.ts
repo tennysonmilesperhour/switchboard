@@ -4,6 +4,7 @@ import { createClient } from '@/lib/supabase/server';
 import { checkRateLimit } from '@/lib/server/rate-limit';
 import { reportOperationalError } from '@/lib/server/observability';
 import { IMAGE_MIME, imageExtensionFor } from '@/lib/server/image-mime';
+import type { ErrorCode } from '@/lib/errors';
 
 const MAX_UPLOAD_BYTES = 5 * 1024 * 1024;
 // `media-private` is the access-gated bucket (capsule photos); the rest are
@@ -13,6 +14,14 @@ const ALLOWED_BUCKETS = new Set(['media', 'avatars', 'covers', 'media-private'])
 
 function jsonError(message: string, status = 400) {
   return NextResponse.json({ error: message }, { status });
+}
+
+/**
+ * An operational failure: the reader can't tell from the sentence what went
+ * wrong, so it carries its registry code (validation above does not).
+ */
+function jsonFailure(code: ErrorCode, message: string, status: number) {
+  return NextResponse.json({ error: message, code }, { status });
 }
 
 function cleanPathPart(value: string, fallback: string) {
@@ -34,7 +43,11 @@ export async function POST(request: Request) {
   if (!user) return jsonError('Sign in before uploading images.', 401);
 
   if (!hasAdminCredentials()) {
-    return jsonError('Image uploads are not configured on this server yet.', 503);
+    return jsonFailure(
+      'SB-CONFIG-STORAGE',
+      'Image uploads are not configured on this server yet.',
+      503,
+    );
   }
   if (!(await checkRateLimit(
     `upload:${user.id}`,
@@ -42,7 +55,7 @@ export async function POST(request: Request) {
     60 * 60,
     { failClosed: true },
   ))) {
-    return jsonError('Upload limit reached. Try again later.', 429);
+    return jsonFailure('SB-RATE-LIMIT', 'Upload limit reached. Try again later.', 429);
   }
 
   const formData = await request.formData();
@@ -81,8 +94,8 @@ export async function POST(request: Request) {
       userId: user.id,
       bucket,
       bytes: file.size,
-    });
-    return jsonError('Upload failed. Please try again.', 500);
+    }, 'SB-UPLOAD-FAILED');
+    return jsonFailure('SB-UPLOAD-FAILED', 'Upload failed. Please try again.', 500);
   }
 
   // Private bucket: return the path only (served later via a signed URL).

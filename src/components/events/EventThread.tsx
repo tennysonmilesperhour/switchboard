@@ -9,7 +9,8 @@ import { Avatar } from '@/components/ui/Avatar';
 import { VoiceRecorder, type RecordedClip } from '@/components/ui/VoiceRecorder';
 import { VoiceNote } from '@/components/ui/VoiceNote';
 import { postComment, deleteComment } from '@/lib/actions/event-thread';
-import { uploadAudio } from '@/lib/client/upload-audio';
+import { UploadError, uploadAudio } from '@/lib/client/upload-audio';
+import { errorRef, type ErrorCode } from '@/lib/errors';
 import { formatRelative } from '@/lib/format';
 
 export interface ThreadCommentView {
@@ -37,6 +38,13 @@ interface EventThreadProps {
   hiddenCount: number;
   /** Placeholder rows to draw under the preview (locked viewers only). */
   blurRows: number;
+  /**
+   * The id of this page's RSVP card, or null when there isn't one. Only an
+   * invitation still waiting on an answer gets that card, so a waitlisted,
+   * declined, expired, or uninvited viewer has nothing to jump to — and an
+   * "RSVP to unlock" button that scrolls nowhere is a dead end.
+   */
+  rsvpAnchorId: string | null;
 }
 
 /**
@@ -52,20 +60,21 @@ export function EventThread({
   comments,
   hiddenCount,
   blurRows,
+  rsvpAnchorId,
 }: EventThreadProps) {
   const [body, setBody] = useState('');
   const [clip, setClip] = useState<RecordedClip | null>(null);
   // The message being answered. Chosen with a Reply button; shown as a quote
   // above the box so the writer can see what they are replying to.
   const [replyTo, setReplyTo] = useState<ThreadCommentView | null>(null);
-  const [error, setError] = useState('');
+  const [error, setError] = useState<{ message: string; code?: ErrorCode } | null>(null);
   const [pending, startTransition] = useTransition();
   const router = useRouter();
   const composerRef = useRef<HTMLTextAreaElement>(null);
 
   function startReply(comment: ThreadCommentView) {
     setReplyTo(comment);
-    setError('');
+    setError(null);
     // Bring the box to the reader and put the cursor in it: the composer sits
     // above the list, so a tap on Reply far down would otherwise change
     // nothing on screen.
@@ -78,7 +87,7 @@ export function EventThread({
   function send() {
     const trimmed = body.trim();
     if (!trimmed && !clip) return;
-    setError('');
+    setError(null);
     startTransition(async () => {
       let voiceUrl: string | undefined;
       let voiceDurationSeconds: number | undefined;
@@ -88,9 +97,11 @@ export function EventThread({
           voiceUrl = uploaded.path;
           voiceDurationSeconds = uploaded.durationSeconds;
         } catch (uploadError) {
-          setError(
-            uploadError instanceof Error ? uploadError.message : 'Could not upload the voice note.',
-          );
+          setError({
+            message:
+              uploadError instanceof Error ? uploadError.message : 'Could not upload the voice note.',
+            code: uploadError instanceof UploadError ? uploadError.code : undefined,
+          });
           return;
         }
       }
@@ -101,7 +112,7 @@ export function EventThread({
         replyToId: replyTo?.id ?? null,
       });
       if (!result.ok) {
-        setError(result.error ?? 'Something went wrong');
+        setError({ message: result.error ?? 'Something went wrong', code: result.code });
         return;
       }
       setBody('');
@@ -115,7 +126,7 @@ export function EventThread({
     startTransition(async () => {
       const result = await deleteComment(eventId, commentId);
       if (!result.ok) {
-        setError(result.error ?? 'Something went wrong');
+        setError({ message: result.error ?? 'Something went wrong', code: result.code });
         return;
       }
       router.refresh();
@@ -172,7 +183,12 @@ export function EventThread({
           />
           {error && (
             <p role="alert" className="text-sm text-rose-deep mt-1.5">
-              {error}
+              {error.message}
+              {error.code && (
+                <span className="ml-1.5 font-mono text-[11px] uppercase tracking-wide opacity-70">
+                  {errorRef(error.code)}
+                </span>
+              )}
             </p>
           )}
           <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
@@ -298,15 +314,23 @@ export function EventThread({
                 🔒 {hiddenCount} more{' '}
                 {hiddenCount === 1 ? 'comment' : 'comments'} in the thread
               </p>
-              <p className="text-sm text-ink-soft mt-0.5">
-                RSVP to read the whole conversation and add your take.
-              </p>
-              <Link
-                href={`#rsvp-${eventId}`}
-                className="inline-flex items-center justify-center gap-2 rounded-btn font-bold mt-3 px-4 py-2 text-sm bg-terracotta text-white hover:bg-terracotta-deep transition-colors"
-              >
-                RSVP to unlock
-              </Link>
+              {rsvpAnchorId ? (
+                <>
+                  <p className="text-sm text-ink-soft mt-0.5">
+                    RSVP to read the whole conversation and add your take.
+                  </p>
+                  <Link
+                    href={`#${rsvpAnchorId}`}
+                    className="inline-flex items-center justify-center gap-2 rounded-btn font-bold mt-3 px-4 py-2 text-sm bg-terracotta text-white hover:bg-terracotta-deep transition-colors"
+                  >
+                    RSVP to unlock
+                  </Link>
+                </>
+              ) : (
+                <p className="text-sm text-ink-soft mt-0.5">
+                  The whole conversation is open to everyone who’s going.
+                </p>
+              )}
             </Card>
           </div>
         </div>
@@ -316,7 +340,9 @@ export function EventThread({
       {!unlocked && hiddenCount === 0 && !hasPreview && (
         <Card tone="gold" className="text-center">
           <p className="text-sm text-ink-soft">
-            RSVP to join the thread and add your take.
+            {rsvpAnchorId
+              ? 'RSVP to join the thread and add your take.'
+              : 'The thread opens to everyone who’s going.'}
           </p>
         </Card>
       )}

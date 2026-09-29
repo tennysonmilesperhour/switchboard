@@ -154,7 +154,11 @@ export function PeopleClient({
     if (!ok) return;
     startTransition(async () => {
       try {
-        await deleteHousehold(household.id);
+        const result = await deleteHousehold(household.id);
+        if (!result.ok) {
+          toast.error(result.error ?? 'Could not delete the household. Try again.', result.code);
+          return;
+        }
         router.refresh();
       } catch {
         toast.error('Could not delete the household. Try again.');

@@ -349,21 +349,24 @@ export default async function HomePage() {
         )}
 
         {/* Exactly one guidance card. Once first-run setup retires, the
-            passport takes its place rather than stacking another explainer. */}
-        {gettingStartedDone ? (
-          <PassportCard
-            earned={passportSummary.earned}
-            total={passportSummary.total}
-            nextLabel={passportSummary.next?.label ?? null}
-          />
-        ) : (
-          <GettingStarted
-            friendDone={hasConnections}
-            planDone={upcoming.length > 0}
-            signalDone={(mySignals?.length ?? 0) > 0}
-            findableDone={findableDone}
-          />
-        )}
+            passport takes its place rather than stacking another explainer.
+            The checklist stays mounted even then, because Settings' "show
+            tips again" can bring it back for someone who finished it. */}
+        <GettingStarted
+          friendDone={hasConnections}
+          planDone={upcoming.length > 0}
+          signalDone={(mySignals?.length ?? 0) > 0}
+          findableDone={findableDone}
+          whenDone={
+            gettingStartedDone ? (
+              <PassportCard
+                earned={passportSummary.earned}
+                total={passportSummary.total}
+                nextLabel={passportSummary.next?.label ?? null}
+              />
+            ) : null
+          }
+        />
 
         {/* The product doors follow what needs attention now. A new account
             gets the three useful ones; Mutual and I'm free arrive with the

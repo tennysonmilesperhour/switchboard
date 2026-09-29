@@ -106,7 +106,7 @@ function FacetCard({ facet }: { facet: DisplayFacet }) {
       const res = await setFacetPref(facet.key, { sharedWithConnections: next });
       if (!res.ok) {
         setShared(!next);
-        toast.error('Could not update sharing');
+        toast.error(res.error ?? 'Could not update sharing', res.code);
       } else {
         toast.success(next ? 'Shared with your connections' : 'Back to private');
       }
@@ -116,7 +116,7 @@ function FacetCard({ facet }: { facet: DisplayFacet }) {
   function hide() {
     startTransition(async () => {
       const res = await setFacetPref(facet.key, { hidden: true });
-      if (!res.ok) toast.error('Could not hide this');
+      if (!res.ok) toast.error(res.error ?? 'Could not hide this', res.code);
     });
   }
 
@@ -128,7 +128,7 @@ function FacetCard({ facet }: { facet: DisplayFacet }) {
       const res = await setFacetVerdict(facet.key, value);
       if (!res.ok) {
         setVerdict(verdict);
-        toast.error('Could not save that');
+        toast.error(res.error ?? 'Could not save that', res.code);
       } else if (value === 'confirmed') {
         toast.success('Noted - that’s you');
       }
@@ -246,7 +246,7 @@ function SetAsideRow({ facet }: { facet: DisplayFacet }) {
       const res = rejected
         ? await setFacetVerdict(facet.key, null)
         : await setFacetPref(facet.key, { hidden: false });
-      if (!res.ok) toast.error('Could not restore this');
+      if (!res.ok) toast.error(res.error ?? 'Could not restore this', res.code);
     });
   }
 
@@ -287,7 +287,7 @@ function FacetEvidence({ facet, open }: { facet: DisplayFacet; open: boolean }) 
               {aspirational.map((tag) => (
                 <Link
                   key={tag}
-                  href={`/discover?q=${encodeURIComponent(tag)}`}
+                  href={`/discover?q=${encodeURIComponent(tag)}#brainstorm`}
                   className="group inline-flex items-center gap-1 rounded-pill bg-terracotta-soft px-3 py-1 text-xs font-semibold text-terracotta-deep hover:bg-terracotta hover:text-white"
                 >
                   {tag}

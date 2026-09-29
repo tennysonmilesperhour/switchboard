@@ -20,6 +20,7 @@ import {
 import { APP_UNFURL_DESCRIPTION } from '@/lib/invite-links';
 import { reportOperationalError } from '@/lib/server/observability';
 import { BottomOverlayProvider } from '@/components/system/BottomOverlaySlot';
+import { appOriginOrUndefined } from '@/lib/links';
 
 const workSans = Work_Sans({
   subsets: ['latin'],
@@ -27,13 +28,16 @@ const workSans = Work_Sans({
   variable: '--font-work',
 });
 
+const METADATA_ORIGIN = appOriginOrUndefined();
+
 export const metadata: Metadata = {
   // Resolve relative OG/Twitter image URLs (e.g. /api/og/event/[id]) against the
   // deployment's real origin so shared links unfurl with the right host instead
-  // of localhost / the wrong vercel.app domain.
-  metadataBase: new URL(
-    process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000',
-  ),
+  // of localhost / the wrong vercel.app domain. The validated origin from
+  // links.ts, via the accessor that cannot throw: this runs for every page, so a
+  // misconfigured origin must not crash them all. When it is missing or
+  // malformed this is undefined and Next.js falls back to its own default.
+  metadataBase: METADATA_ORIGIN ? new URL(METADATA_ORIGIN) : undefined,
   title: {
     default: 'Switchboard - plans without pressure',
     template: '%s · Switchboard',
