@@ -119,17 +119,20 @@ export function ZoneAccess({
     });
   }
 
-  function remove(member: Member) {
+  async function remove(member: Member) {
+    // Ask before the transition starts. Updates made inside an async
+    // transition are held until the whole action settles, so a dialog opened
+    // in there never paints and the action waits on an answer nobody can give.
+    const ok = await confirm({
+      title: `Remove ${member.display_name}?`,
+      body: isPrivate
+        ? 'They lose access to this zone and any check-in here ends. They can ask to come back once, after 30 days, or you can send them the invite link.'
+        : 'Any check-in they have here ends. The zone is public, so they can still find it.',
+      confirmLabel: 'Remove',
+      danger: true,
+    });
+    if (!ok) return;
     startTransition(async () => {
-      const ok = await confirm({
-        title: `Remove ${member.display_name}?`,
-        body: isPrivate
-          ? 'They lose access to this zone and any check-in here ends. They can ask to come back once, after 30 days, or you can send them the invite link.'
-          : 'Any check-in they have here ends. The zone is public, so they can still find it.',
-        confirmLabel: 'Remove',
-        danger: true,
-      });
-      if (!ok) return;
       const result = await removeZoneMember(zoneId, member.member_id);
       if (!result.ok) {
         toast.error(result.error ?? 'Could not remove them.', result.code);

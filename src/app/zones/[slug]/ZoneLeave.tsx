@@ -25,17 +25,20 @@ export function ZoneLeave({
   const confirm = useConfirm();
   const router = useRouter();
 
-  function leave() {
+  async function leave() {
+    // Ask before the transition starts. Updates made inside an async
+    // transition are held until the whole action settles, so a dialog opened
+    // in there never paints and the action waits on an answer nobody can give.
+    const ok = await confirm({
+      title: `Leave ${zoneName}?`,
+      body: isPrivate
+        ? 'You’ll stop seeing who’s here, and any check-in here ends. You can ask to come back, or use an invite link.'
+        : 'Any check-in here ends. The zone stays public, so you can come back any time.',
+      confirmLabel: 'Leave zone',
+      danger: true,
+    });
+    if (!ok) return;
     startTransition(async () => {
-      const ok = await confirm({
-        title: `Leave ${zoneName}?`,
-        body: isPrivate
-          ? 'You’ll stop seeing who’s here, and any check-in here ends. You can ask to come back, or use an invite link.'
-          : 'Any check-in here ends. The zone stays public, so you can come back any time.',
-        confirmLabel: 'Leave zone',
-        danger: true,
-      });
-      if (!ok) return;
       const result = await leaveZone(zoneId);
       if (!result.ok) {
         toast.error(result.error ?? 'Could not leave the zone.', result.code);

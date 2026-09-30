@@ -53,6 +53,41 @@ export function emailEnabled(): boolean {
   return Boolean(process.env.RESEND_API_KEY && process.env.EMAIL_FROM);
 }
 
+export const RESEND_ENDPOINT = 'https://api.resend.com/emails';
+
+const LOOPBACK_HOSTS = new Set(['127.0.0.1', 'localhost', '[::1]']);
+const RESEND_HOST = new URL(RESEND_ENDPOINT).hostname;
+
+/**
+ * Where Resend-format mail is posted: `RESEND_API_URL` when it is usable,
+ * otherwise Resend itself. Usable means one of two places, with no
+ * credentials, query or fragment of its own:
+ *
+ * - Resend's own host over https (a different path on it), or
+ * - a loopback address, which is what the browser suite runs in front of the
+ *   local stack's mail catcher (e2e/mail-relay.ts) so sign-up and password
+ *   reset can be walked end to end.
+ *
+ * Nothing else, not even another https host: the API key travels with every
+ * request, so a typo or a tampered setting must never send it to a server
+ * nobody chose. Anything else falls back to Resend.
+ */
+export function resendEndpoint(raw: string | null | undefined): string {
+  const value = raw?.trim();
+  if (!value) return RESEND_ENDPOINT;
+  try {
+    const url = new URL(value);
+    if (url.username || url.password || url.search || url.hash) return RESEND_ENDPOINT;
+    if (url.protocol === 'https:' && url.hostname === RESEND_HOST) return url.toString();
+    if ((url.protocol === 'http:' || url.protocol === 'https:') && LOOPBACK_HOSTS.has(url.hostname)) {
+      return url.toString();
+    }
+    return RESEND_ENDPOINT;
+  } catch {
+    return RESEND_ENDPOINT;
+  }
+}
+
 /**
  * Send one email. Never throws; returns whether it was actually dispatched.
  * Skips silently (returning false) when the address is unusable or the
@@ -76,7 +111,7 @@ export async function sendEmailWithResult(
 
   const signal = AbortSignal.timeout(PROVIDER_TIMEOUT_MS);
   try {
-    const response = await fetch('https://api.resend.com/emails', {
+    const response = await fetch(resendEndpoint(process.env.RESEND_API_URL), {
       method: 'POST',
       signal,
       headers: {

@@ -103,15 +103,18 @@ export function BoardSettings({
     });
   }
 
-  function leave() {
+  async function leave() {
+    // Ask before the transition starts. Updates made inside an async
+    // transition are held until the whole action settles, so a dialog opened
+    // in there never paints and the action waits on an answer nobody can give.
+    const ok = await confirm({
+      title: `Leave ${initialName}?`,
+      body: 'You’ll stop seeing its posts. A moderator can add you back, or you can rejoin with an invite link.',
+      confirmLabel: 'Leave board',
+      danger: true,
+    });
+    if (!ok) return;
     startTransition(async () => {
-      const ok = await confirm({
-        title: `Leave ${initialName}?`,
-        body: 'You’ll stop seeing its posts. A moderator can add you back, or you can rejoin with an invite link.',
-        confirmLabel: 'Leave board',
-        danger: true,
-      });
-      if (!ok) return;
       const result = await leaveBoard(boardId);
       if (!result.ok) {
         toast.error(result.error ?? 'Could not leave the board.', result.code);
@@ -122,15 +125,18 @@ export function BoardSettings({
     });
   }
 
-  function remove() {
+  async function remove() {
+    // Ask before the transition starts. Updates made inside an async
+    // transition are held until the whole action settles, so a dialog opened
+    // in there never paints and the action waits on an answer nobody can give.
+    const ok = await confirm({
+      title: `Delete ${initialName}?`,
+      body: `Every post goes, and all ${memberCount} ${memberCount === 1 ? 'neighbor loses' : 'neighbors lose'} access. This can’t be undone.`,
+      confirmLabel: 'Delete board',
+      danger: true,
+    });
+    if (!ok) return;
     startTransition(async () => {
-      const ok = await confirm({
-        title: `Delete ${initialName}?`,
-        body: `Every post goes, and all ${memberCount} ${memberCount === 1 ? 'neighbor loses' : 'neighbors lose'} access. This can’t be undone.`,
-        confirmLabel: 'Delete board',
-        danger: true,
-      });
-      if (!ok) return;
       const result = await deleteBoard(boardId);
       if (!result.ok) {
         toast.error(result.error ?? 'Could not delete the board.', result.code);

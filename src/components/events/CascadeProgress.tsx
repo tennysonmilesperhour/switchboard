@@ -123,19 +123,22 @@ export function CascadeProgress({
   const toast = useToast();
   const confirm = useConfirm();
 
-  function doRemove(invite: HostInvite) {
+  async function doRemove(invite: HostInvite) {
     if (!eventId) return;
+    const live = invite.status === 'sent' || invite.status === 'queued';
+    // Ask before the transition starts. Updates made inside an async
+    // transition are held until the whole action settles, so a dialog opened
+    // in there never paints and the action waits on an answer nobody can give.
+    const ok = await confirm({
+      title: `Remove ${invite.invitee_name}?`,
+      body: live
+        ? 'They’ll be taken out of the invitation flow.'
+        : 'This clears them from the flow. You can always add them again.',
+      confirmLabel: 'Remove',
+      danger: true,
+    });
+    if (!ok) return;
     startTransition(async () => {
-      const live = invite.status === 'sent' || invite.status === 'queued';
-      const ok = await confirm({
-        title: `Remove ${invite.invitee_name}?`,
-        body: live
-          ? 'They’ll be taken out of the invitation flow.'
-          : 'This clears them from the flow. You can always add them again.',
-        confirmLabel: 'Remove',
-        danger: true,
-      });
-      if (!ok) return;
       const result = await removeInvite(eventId, invite.id);
       if (!result.ok) {
         toast.error(result.error ?? 'Could not remove that invite.', result.code);

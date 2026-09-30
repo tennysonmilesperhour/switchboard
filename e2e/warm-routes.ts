@@ -27,6 +27,13 @@ const ROUTES = [
   '/scope-verification',
   '/api/scope-progress',
   '/api/scope-feedback',
+  // Public routes the authenticated journeys reach from an emailed link or a
+  // scheduler rather than by navigating (accounts and plan-lifecycle specs).
+  // Unauthenticated, each answers without side effects: the confirm route
+  // redirects to /login and the cron route refuses without its secret.
+  '/reset-password',
+  '/auth/confirm',
+  '/api/cron/cascade',
 ];
 
 const COMPILE_TIMEOUT_MS = 120_000;

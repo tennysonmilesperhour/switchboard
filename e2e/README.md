@@ -16,6 +16,20 @@ Two tiers:
   wizard's final Review step, including keyboard and pointer reordering. Runs
   only with `E2E_DB=1` against a local app and local Supabase, and never sends
   the test draft's invitations.
+- **`places.spec.ts`** — Explore, the map and its layer toggles, public and
+  private zones (create, search, ask to join, let in, leave), moments (check in
+  and out) and boards (create, post, add a neighbour who posts and leaves).
+- **`accounts.spec.ts`** — email and username sign-up through the form to
+  Home, password reset from the emailed link, the legal-update funnel, and
+  account deletion from Settings (after which sign-in is refused as it should
+  be). Each journey makes its own throwaway account.
+- **`plan-lifecycle.spec.ts`** — a cascade response window running out and the
+  next person being invited, a group decision closing at its deadline, and a
+  co-host using a host control. The deadline is moved into the past with the
+  service role; the real cron sweep does the rest.
+
+`support.ts` holds what the last three share: the session cache, the
+service-role client for arranging state, Mailpit reads, and the cron call.
 
 ## Running the authenticated tests locally
 
@@ -40,12 +54,31 @@ Two tiers:
    E2E_DB=1 npm run e2e     # Playwright starts `npm run dev` itself
    ```
 
+The places, accounts and plan-lifecycle journeys need three more things, set
+the same in the shell that starts the app and the one that runs Playwright:
+
+```bash
+export CRON_SECRET=e2e-local-cron-secret            # lets a journey run the minute sweep
+export RESEND_API_KEY=e2e-local-relay                # turns the app's email on…
+export EMAIL_FROM='Switchboard E2E <e2e@switchboard.test>'
+export RESEND_API_URL=http://127.0.0.1:54380/emails  # …and points it at the relay
+```
+
+The app sends its own mail through Resend's API, so GoTrue never puts anything
+in the local Mailpit by itself. With a loopback `RESEND_API_URL`, Playwright's
+global setup (`e2e/mail-relay.ts`) listens there for the run and hands each
+message to Mailpit (`http://127.0.0.1:54324`, or `E2E_MAILPIT_URL`), where the
+journeys read the link back. The app accepts plain http only on loopback.
+Without these the journeys fail up front saying which one is missing, rather
+than timing out.
+
 ## In CI
 
 The **Authenticated E2E** job in `.github/workflows/ci.yml` does all of the
-above on every PR: `supabase start`, `node e2e/seed.mjs`, build, then
-`npx playwright test e2e/authed.spec.ts e2e/invite-links.spec.ts` with
-`E2E_DB=1`.
+above on every PR: `supabase start`, `node e2e/seed.mjs`, build, then every
+authenticated spec with `E2E_DB=1`. The job sets the four variables above at
+job level, with the same test-only values, so the build, the server and the
+specs agree.
 
 ## Fixtures owe the product its rules
 
@@ -67,6 +100,14 @@ takes the whole suite down — and never at the rule. Twice now:
   ninth got `SB-RATE-LIMIT` instead of a session. `login()` now drives the form
   once per identifier and reuses the cookies, so the suite stops spending a
   protection that belongs to real people.
+
+  The hard limit is now per connection: 30 sign-ins per 10 minutes and 12
+  sign-ups per hour (`src/lib/server/auth-rate-limit.ts`), and every journey
+  here comes from the same address. `support.ts` shares a seeded user's session
+  across the run's workers, and the account journeys make fresh accounts, so a
+  full authenticated run spends about 14 sign-ins and 2 sign-ups. Two runs back
+  to back fit; a third inside ten minutes may meet `SB-RATE-LIMIT`. Reset the
+  database, or wait, rather than raise the limit.
 
 When you add a requirement to a flow these tests walk, add it to the fixture in
 the same change — and assert it where it can say what it is.

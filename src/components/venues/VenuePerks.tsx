@@ -111,18 +111,21 @@ function ClaimCard({ claim, supportEmail }: { claim: VenueClaim; supportEmail: s
     });
   }
 
-  function withdraw() {
+  async function withdraw() {
+    // Ask before the transition starts. Updates made inside an async
+    // transition are held until the whole action settles, so a dialog opened
+    // in there never paints and the action waits on an answer nobody can give.
+    const ok = await confirm({
+      title: `Withdraw ${claim.name}?`,
+      body:
+        claim.status === 'verified'
+          ? 'The perk stops showing to groups straight away. You can claim the venue again later.'
+          : 'The claim is removed. You can submit it again later.',
+      confirmLabel: 'Withdraw',
+      danger: true,
+    });
+    if (!ok) return;
     startTransition(async () => {
-      const ok = await confirm({
-        title: `Withdraw ${claim.name}?`,
-        body:
-          claim.status === 'verified'
-            ? 'The perk stops showing to groups straight away. You can claim the venue again later.'
-            : 'The claim is removed. You can submit it again later.',
-        confirmLabel: 'Withdraw',
-        danger: true,
-      });
-      if (!ok) return;
       const result = await withdrawVenueClaim(claim.id);
       if (!result.ok) {
         toast.error(result.error ?? 'Could not withdraw that claim.', result.code);

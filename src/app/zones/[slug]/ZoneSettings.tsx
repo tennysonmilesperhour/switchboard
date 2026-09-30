@@ -70,15 +70,18 @@ export function ZoneSettings({
     });
   }
 
-  function remove() {
+  async function remove() {
+    // Ask before the transition starts. Updates made inside an async
+    // transition are held until the whole action settles, so a dialog opened
+    // in there never paints and the action waits on an answer nobody can give.
+    const ok = await confirm({
+      title: `Delete ${initialName}?`,
+      body: 'Everyone loses access, and anyone checked in here is checked out. This can’t be undone.',
+      confirmLabel: 'Delete zone',
+      danger: true,
+    });
+    if (!ok) return;
     startTransition(async () => {
-      const ok = await confirm({
-        title: `Delete ${initialName}?`,
-        body: 'Everyone loses access, and anyone checked in here is checked out. This can’t be undone.',
-        confirmLabel: 'Delete zone',
-        danger: true,
-      });
-      if (!ok) return;
       const result = await deleteZone(zoneId);
       if (!result.ok) {
         toast.error(result.error ?? 'Could not delete the zone.', result.code);
