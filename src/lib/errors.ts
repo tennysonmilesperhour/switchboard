@@ -382,6 +382,11 @@ const REGISTRY = {
     fix: 'Reload the page.',
     actor: 'reader',
   },
+  'SB-PLAN-OPEN': {
+    message: 'This plan couldn’t be opened right now.',
+    fix: 'Reload the page. The plan and your place in it are unchanged.',
+    actor: 'reader',
+  },
   'SB-PLAN-DELETE': {
     message: 'This plan couldn’t be deleted.',
     fix: 'Try again in a moment.',
@@ -1043,6 +1048,7 @@ const AREA_CODES: Record<string, ErrorCode> = {
 
   // Plans
   'plans.load': 'SB-PLAN-LOAD',
+  'event-page.load': 'SB-PLAN-OPEN',
   'plans.invited-events': 'SB-PLAN-LOAD',
   'event-create': 'SB-PLAN-CREATE',
   'event-update': 'SB-PLAN-SAVE',

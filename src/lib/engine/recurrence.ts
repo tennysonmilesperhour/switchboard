@@ -128,6 +128,10 @@ export function nextOccurrence(
  * The first occurrence strictly after `after`, rolling forward from `from` as
  * many steps as needed. Used by "Schedule the next one" so a plan that already
  * happened lands on the upcoming slot, not a date in the past.
+ *
+ * Null when the guard runs out first (a daily plan ~17 months behind): the
+ * caller then asks for a date. Returning the last step reached handed "Schedule
+ * the next one" a past date, and it sent invitations for it.
  */
 export function nextOccurrenceAfter(
   from: Date,
@@ -139,9 +143,13 @@ export function nextOccurrenceAfter(
   if (!next) return null;
   // Guard bounds the loop well past any realistic gap (≈10 years of weekly).
   for (let guard = 0; next.getTime() <= after.getTime() && guard < 520; guard++) {
-    const step = nextOccurrence(next, kind, intervalDays);
+    // Months are counted from the original date, not from the last step: a
+    // clamped step (Jan 31 → Feb 28) used to become the new anchor, so a plan
+    // on the 31st slid to the 28th for good.
+    const step: Date | null =
+      kind === 'monthly' ? addMonths(from, guard + 2) : nextOccurrence(next, kind, intervalDays);
     if (!step) break;
     next = step;
   }
-  return next;
+  return next.getTime() > after.getTime() ? next : null;
 }

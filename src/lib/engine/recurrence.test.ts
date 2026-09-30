@@ -61,6 +61,23 @@ describe('nextOccurrenceAfter', () => {
       nextOccurrenceAfter(start, 'monthly', null, now)?.toISOString(),
     ).toBe('2026-06-15T00:00:00.000Z');
   });
+
+  test('a plan on the 31st comes back to the 31st after a short month', () => {
+    const start = new Date('2026-01-31T09:00:00Z');
+    const now = new Date('2026-03-15T00:00:00Z');
+    // Stepping from the clamped Feb 28 used to land on Mar 28 and stay there.
+    expect(
+      nextOccurrenceAfter(start, 'monthly', null, now)?.toISOString(),
+    ).toBe('2026-03-31T09:00:00.000Z');
+  });
+
+  test('never returns a date at or before `after`, even when the guard runs out', () => {
+    // 521 daily steps from June 2024 still end in November 2025.
+    const start = new Date('2024-06-01T18:00:00Z');
+    const now = new Date('2026-09-30T12:00:00Z');
+    expect(nextOccurrenceAfter(start, 'daily', null, now)).toBeNull();
+    expect(nextOccurrenceAfter(start, 'custom', 1, now)).toBeNull();
+  });
 });
 
 describe('normalizeCustomInterval', () => {

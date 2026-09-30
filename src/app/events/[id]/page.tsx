@@ -7,6 +7,8 @@ import { safeHttpUrl, serializeJsonLd } from '@/lib/security';
 import { advanceEventCascade } from '@/lib/server/cascade-runner';
 import { AppShell } from '@/components/shell/AppShell';
 import { Card, SectionHeader } from '@/components/ui/Card';
+import { ErrorNotice } from '@/components/ui/ErrorNotice';
+import { errorFor } from '@/lib/errors';
 import { PlanCard, planColor } from '@/components/ui/PlanCard';
 import { themeColor } from '@/lib/themes';
 import { CopyButton } from '@/components/ui/CopyButton';
@@ -48,7 +50,7 @@ import {
 } from '@/lib/share-link';
 import type { Poll, SwitchboardEvent } from '@/lib/types';
 import { normalizePollTopic, pollQuestion } from '@/lib/types';
-import { loadEventPage } from '@/lib/server/event-page';
+import { EVENT_PAGE_UNAVAILABLE, loadEventPage } from '@/lib/server/event-page';
 
 /**
  * The tab title and card for a plan, for someone allowed to see it.
@@ -108,6 +110,16 @@ export default async function EventPage({
   if (!user) redirect(`/login?next=${encodeURIComponent(`/events/${id}`)}`);
 
   const loaded = await loadEventPage(id, user);
+  if (loaded === EVENT_PAGE_UNAVAILABLE) {
+    const failure = errorFor('SB-PLAN-OPEN');
+    return (
+      <AppShell title="Plan" back="/plans">
+        <Card tone="cream">
+          <ErrorNotice message={failure.message} fix={failure.fix} code="SB-PLAN-OPEN" />
+        </Card>
+      </AppShell>
+    );
+  }
   // RLS makes a missing event and an event this viewer cannot read equivalent.
   // The join page can safely resolve the public/share-link branch.
   if (!loaded) redirect(`/join/${id}`);

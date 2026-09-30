@@ -41,6 +41,7 @@ import type { AnnouncementView } from '@/components/events/Announcements';
 import type { ThreadCommentView } from '@/components/events/EventThread';
 import type { OptionResult } from '@/components/polls/PollSection';
 import { readyToSendInvitations } from '@/lib/poll-readiness';
+import { reportOperationalError } from '@/lib/server/observability';
 import { guardianStepFor, type GuardianRequestView } from '@/lib/guardian-approval';
 import { groupAnswersByInvite, type GuestAnswers } from '@/lib/event-answers';
 import {
@@ -153,6 +154,9 @@ export interface EventPageData {
   cancelVoiceUrl: string | null;
 }
 
+/** The plan exists for this viewer or not, but the read itself failed. */
+export const EVENT_PAGE_UNAVAILABLE = 'unavailable' as const;
+
 /**
  * Load the event detail page without its old twenty-query waterfall.
  *
@@ -165,15 +169,22 @@ export interface EventPageData {
 export async function loadEventPage(
   id: string,
   user: User,
-): Promise<EventPageData | null> {
+): Promise<EventPageData | null | typeof EVENT_PAGE_UNAVAILABLE> {
   const supabase = await createClient();
-  const { data: eventWithHost } = await supabase
+  const { data: eventWithHost, error: eventError } = await supabase
     .from('events')
     .select(
       '*, host:profiles!events_host_id_fkey(id, display_name, handle, avatar_url, tagline, timezone)',
     )
     .eq('id', id)
     .single<EventWithHost>();
+  // No row (PGRST116) is how RLS answers "not yours to see", and the page sends
+  // that viewer to /join. Any other error is the database failing: sending a
+  // host to /join then told them they had lost their own plan.
+  if (eventError && eventError.code !== 'PGRST116') {
+    await reportOperationalError('event-page.load', eventError, { eventId: id }, 'SB-PLAN-OPEN');
+    return EVENT_PAGE_UNAVAILABLE;
+  }
   if (!eventWithHost) return null;
 
   const { host: hostRaw, ...eventFields } = eventWithHost;
@@ -528,15 +539,21 @@ export async function loadEventPage(
     : (attendeeResult.data ?? []);
   const attendees: EventPageAttendee[] = attendeeRows.map((row) => {
     const profile = Array.isArray(row.invitee) ? row.invitee[0] : row.invitee;
+    // A guest added by email or phone has that address as their "name". Only
+    // the host's side may show it; a guest reads "Guest", as `event_invite_list`
+    // does. Contacts and RSVP tokens are host-only (docs/SECURITY.md).
+    const rawGuestName = row.guest_name?.trim() ?? '';
+    const guestNameIsContact =
+      rawGuestName === (row.guest_contact?.trim() ?? '') || looksLikeContactString(rawGuestName);
     return {
       id: row.invitee_id ?? row.id,
       inviteId: row.id as string,
       inviteeId: (row.invitee_id as string | null) ?? null,
-      name: profile?.display_name ?? row.guest_name ?? 'Guest',
+      name: profile?.display_name ?? (canManage || !guestNameIsContact ? row.guest_name : null) ?? 'Guest',
       handle: (profile?.handle as string | null) ?? null,
       avatarUrl: (profile?.avatar_url as string | null) ?? null,
-      guestToken: (row.guest_token as string | null) ?? null,
-      guestContact: (row.guest_contact as string | null) ?? null,
+      guestToken: canManage ? ((row.guest_token as string | null) ?? null) : null,
+      guestContact: canManage ? ((row.guest_contact as string | null) ?? null) : null,
       status: row.status as Invite['status'],
     };
   });
