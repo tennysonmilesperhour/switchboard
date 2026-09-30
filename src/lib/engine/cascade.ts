@@ -15,7 +15,15 @@ export type InviteStatus =
   | 'cancelled'
   | 'waitlisted'
   /** Open-table join request awaiting host approval. */
-  | 'requested';
+  | 'requested'
+  /**
+   * A yes on a guardian-approval plan, held until a guardian approves it
+   * (20260930011000_guardian_hold.sql). It is not `accepted`, so it takes no
+   * seat in `spotsRemaining`; it is not `sent`, so it neither blocks the line
+   * nor expires; and it is not retired when the plan fills — the guardian's
+   * answer decides it, re-checking capacity then.
+   */
+  | 'pending_approval';
 
 export interface CascadeInvite {
   id: string;

@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useTransition } from 'react';
+import { useState, useTransition } from 'react';
 import { Button } from '@/components/ui/Button';
 import { Card, SectionHeader } from '@/components/ui/Card';
 import { useConfirm } from '@/components/ui/ConfirmDialog';
@@ -12,6 +12,7 @@ import {
   markAllNotificationsRead,
   markNotificationRead,
 } from '@/lib/actions/notifications';
+import { loadOlderNotifications } from '@/lib/actions/notification-history';
 
 export interface FeedNotification {
   id: string;
@@ -34,30 +35,75 @@ export interface FeedNotification {
  * these" (clear — the list empties). Both report what happened; the mark-read
  * call used to throw its result away, so a failure looked exactly like a
  * success that hadn't refreshed yet.
+ *
+ * The page renders the newest page; "Show older" appends the rest a page at a
+ * time. Older pages live here rather than in the URL, and every action below
+ * keeps them in step with what it did, so a mark-read or a clear never leaves
+ * a stale older row looking unread.
  */
 export function NotificationsFeed({
   notifications,
   totalUnread,
+  hasOlder = false,
 }: {
   notifications: FeedNotification[];
   totalUnread: number;
+  hasOlder?: boolean;
 }) {
   const [pending, startTransition] = useTransition();
+  const [loading, startLoading] = useTransition();
+  const [older, setOlder] = useState<FeedNotification[]>([]);
+  const [moreAvailable, setMoreAvailable] = useState(hasOlder);
   const confirm = useConfirm();
   const toast = useToast();
+
+  // The newest page is re-rendered by the server after every action, so an
+  // older row can reappear in it; show each notification once.
+  const newestIds = new Set(notifications.map((n) => n.id));
+  const shown = [...notifications, ...older.filter((n) => !newestIds.has(n.id))];
 
   function markOne(notification: FeedNotification) {
     if (notification.read_at) return;
     startTransition(async () => {
       const result = await markNotificationRead(notification.id);
-      if (!result.ok) toast.error(result.error ?? 'Could not update that.', result.code);
+      if (!result.ok) {
+        toast.error(result.error ?? 'Could not update that.', result.code);
+        return;
+      }
+      const now = new Date().toISOString();
+      setOlder((rows) =>
+        rows.map((row) => (row.id === notification.id ? { ...row, read_at: now } : row)),
+      );
     });
   }
 
   function markAll() {
     startTransition(async () => {
       const result = await markAllNotificationsRead();
-      if (!result.ok) toast.error(result.error ?? 'Could not mark those as read.', result.code);
+      if (!result.ok) {
+        toast.error(result.error ?? 'Could not mark those as read.', result.code);
+        return;
+      }
+      const now = new Date().toISOString();
+      setOlder((rows) => rows.map((row) => ({ ...row, read_at: row.read_at ?? now })));
+    });
+  }
+
+  function showOlder() {
+    const last = shown[shown.length - 1];
+    if (!last) return;
+    startLoading(async () => {
+      try {
+        const result = await loadOlderNotifications(last.created_at, last.id);
+        if (!result.ok) {
+          toast.error(result.error ?? 'Could not load older notifications.', result.code);
+          return;
+        }
+        setOlder((rows) => [...rows, ...(result.notifications ?? [])]);
+        setMoreAvailable(Boolean(result.hasMore));
+      } catch {
+        toast.error('Could not load older notifications. Try again.', 'SB-NOTIFY-LOAD');
+      }
     });
   }
 
@@ -71,7 +117,12 @@ export function NotificationsFeed({
     if (!confirmed) return;
     startTransition(async () => {
       const result = await clearNotifications();
-      if (!result.ok) toast.error(result.error ?? 'Could not clear those.', result.code);
+      if (!result.ok) {
+        toast.error(result.error ?? 'Could not clear those.', result.code);
+        return;
+      }
+      setOlder([]);
+      setMoreAvailable(false);
     });
   }
 
@@ -110,7 +161,7 @@ export function NotificationsFeed({
         }
       />
       <div className="space-y-2">
-        {notifications.map((n) => {
+        {shown.map((n) => {
           const unread = !n.read_at;
           const card = (
             <Card
@@ -173,6 +224,19 @@ export function NotificationsFeed({
           return <div key={n.id}>{card}</div>;
         })}
       </div>
+      {moreAvailable && (
+        <div className="mt-3 flex justify-center">
+          <Button
+            type="button"
+            size="sm"
+            variant="secondary"
+            disabled={loading}
+            onClick={showOlder}
+          >
+            {loading ? 'Loading…' : 'Show older'}
+          </Button>
+        </div>
+      )}
     </section>
   );
 }

@@ -8,6 +8,7 @@ import { safeFetchText } from '@/lib/server/safe-fetch';
 import { isFetchableUrl } from '@/lib/net-guard';
 import { reportAndFail } from '@/lib/server/observability';
 import { parseEvent, isoToDateTimeParts } from '@/lib/import-event';
+import { isValidTimeZone } from '@/lib/server/event-zone';
 
 export interface ImportResult {
   ok: boolean;
@@ -26,12 +27,36 @@ export interface ImportResult {
 const MAX_BYTES = 1_500_000; // don't slurp huge pages
 
 /**
+ * The wizard's date and time fields for an imported start, in the host's zone.
+ *
+ * A start with an offset ("…T19:00:00-07:00", what Luma and Eventbrite publish)
+ * is an instant, so it is shown in the host's own zone; formatting it here used
+ * the server's UTC and a 7pm Pacific plan arrived as 2am the next day. A start
+ * with no offset is already a wall-clock time and is taken literally.
+ */
+function wizardStart(
+  startISO: string | undefined,
+  timeZone: string | null | undefined,
+): { date?: string; time?: string } {
+  if (!startISO) return {};
+  const instant = /(?:Z|[+-]\d{2}:?\d{2})$/i.test(startISO);
+  if (!instant && /^\d{4}-\d{2}-\d{2}/.test(startISO)) {
+    return { date: startISO.slice(0, 10), time: startISO.slice(11, 16) || undefined };
+  }
+  return isoToDateTimeParts(startISO, isValidTimeZone(timeZone) ? timeZone : undefined);
+}
+
+/**
  * Import a plan the user made elsewhere: fetch the link they paste and pull out
  * the event via schema.org/Event JSON-LD, Open Graph, or an .ics. User-initiated
  * migration of their own event - not scraping - so it's gated behind auth and
  * rate-limited, and only ever returns fields to prefill the wizard.
  */
-export async function importEventFromLink(rawUrl: string): Promise<ImportResult> {
+export async function importEventFromLink(
+  rawUrl: string,
+  /** The host's own zone, from the browser, so an imported time reads as theirs. */
+  timeZone?: string | null,
+): Promise<ImportResult> {
   const auth = await requireUser();
   if (!auth.ok) return auth;
   const { user } = auth;
@@ -80,7 +105,7 @@ export async function importEventFromLink(rawUrl: string): Promise<ImportResult>
     return validation('We couldn’t find an event on that page.');
   }
 
-  const { date, time } = isoToDateTimeParts(parsed.startISO);
+  const { date, time } = wizardStart(parsed.startISO, timeZone);
   return {
     ok: true,
     title: parsed.title,

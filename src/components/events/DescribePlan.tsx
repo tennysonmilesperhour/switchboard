@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { Icon } from '@/components/ui/Icon';
 import { parsePlanDescription, type PlanDraft } from '@/lib/actions/plan';
+import { resolveTimeZone } from '@/lib/client/time-zone';
 import {
   collectTranscript,
   dictationErrorMessage,
@@ -146,7 +147,8 @@ export function DescribePlan({ onDraft }: { onDraft: (draft: PlanDraft) => void 
 
   function parse() {
     startTransition(async () => {
-      const result = await parsePlanDescription(text);
+      // The host's zone, so "tomorrow" is their tomorrow and not the server's.
+      const result = await parsePlanDescription(text, resolveTimeZone());
       if (!result.ok || !result.draft) {
         setError(result.error ?? 'Could not draft that. Try adding a bit more detail.');
         return;
@@ -165,7 +167,7 @@ export function DescribePlan({ onDraft }: { onDraft: (draft: PlanDraft) => void 
         className="w-full rounded-card border border-dashed border-line bg-cream px-4 py-3.5 text-sm text-ink-soft hover:border-terracotta hover:text-terracotta-deep hover:bg-terracotta-soft active:scale-[0.99] transition-all text-left"
       >
         <span className="font-bold text-terracotta-deep">✨ Or just describe it:</span>{' '}
-        “Coffee tomorrow morning, try Alex first, then Jordan, 20-minute windows”
+        “Coffee tomorrow at 9am, try Alex first, then Jordan”
       </button>
     );
   }
@@ -188,7 +190,7 @@ export function DescribePlan({ onDraft }: { onDraft: (draft: PlanDraft) => void 
           if (listening) stopDictation();
         }}
         rows={3}
-        placeholder="Dinner Friday at 7, invite Sam, Priya, and Marcus one at a time…"
+        placeholder="Dinner Friday at 7pm, invite Sam, Priya, and Marcus one at a time…"
         className="mt-2 w-full rounded-card border border-line bg-card px-3.5 py-2.5 text-sm outline-none focus:border-terracotta resize-none"
       />
       {error && <p role="alert" className="text-xs text-rose-deep mt-1.5">{error}</p>}

@@ -3,6 +3,7 @@
 import type { ReactNode } from 'react';
 import { Button } from '@/components/ui/Button';
 import { canJumpTo, previousStep } from '@/lib/wizard-steps';
+import { errorRef, type ErrorCode } from '@/lib/errors';
 import { STEP_META, type WizardStepKey } from './wizard-types';
 
 interface WizardFrameProps {
@@ -12,6 +13,8 @@ interface WizardFrameProps {
   stepComplete: boolean[];
   goToStep: (step: number) => void;
   submitError: string | null;
+  /** The failed publish's code, when it was an operational failure. */
+  submitCode?: ErrorCode | null;
   submitting: boolean;
   enablePoll: boolean;
   submit: () => Promise<void>;
@@ -24,6 +27,7 @@ export function WizardFrame({
   stepComplete,
   goToStep,
   submitError,
+  submitCode = null,
   submitting,
   enablePoll,
   submit,
@@ -110,6 +114,11 @@ export function WizardFrame({
           className="rounded-card bg-rose-soft text-rose-deep text-sm font-semibold p-3.5"
         >
           {submitError}
+          {submitCode && (
+            <span className="ml-1.5 font-mono text-[11px] font-normal uppercase tracking-wide text-ink-faint">
+              {errorRef(submitCode)}
+            </span>
+          )}
         </p>
       )}
 

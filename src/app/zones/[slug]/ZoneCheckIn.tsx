@@ -7,6 +7,7 @@ import { Chip } from '@/components/ui/Chip';
 import { checkIn } from '@/lib/actions/moments';
 import { EXPERIENCE_PRESETS } from '@/lib/types';
 import { useCurrentLocation } from '@/lib/client/use-current-location';
+import { errorRef, type ErrorCode } from '@/lib/errors';
 
 export function ZoneCheckIn({
   zoneId,
@@ -21,6 +22,7 @@ export function ZoneCheckIn({
   const [headline, setHeadline] = useState('');
   const [hours, setHours] = useState(3);
   const [error, setError] = useState('');
+  const [errorCode, setErrorCode] = useState<ErrorCode | null>(null);
   const [pending, startTransition] = useTransition();
   const location = useCurrentLocation();
   const router = useRouter();
@@ -67,7 +69,9 @@ export function ZoneCheckIn({
           id="zone-hours"
           type="range"
           min={1}
-          max={12}
+          // `checkIn` caps a check-in at 8 hours; a 12 here promised hours the
+          // server silently took away.
+          max={8}
           value={hours}
           onChange={(e) => setHours(Number(e.target.value))}
           className="w-full accent-terracotta"
@@ -102,13 +106,20 @@ export function ZoneCheckIn({
         )}
         {location.error && <span className="text-xs text-ink-faint">{location.error}</span>}
       </div>
-      {error && <p role="alert" className="text-sm text-rose-deep">{error}</p>}
+      {error && (
+        <p role="alert" className="text-sm text-rose-deep">
+          {error}
+          {errorCode && <span className="ml-2 text-xs opacity-70">{errorRef(errorCode)}</span>}
+        </p>
+      )}
       <Button
         size="lg"
         className="w-full"
         disabled={pending || selected.length === 0}
         onClick={() =>
           startTransition(async () => {
+            setError('');
+            setErrorCode(null);
             const result = await checkIn(
               zoneName,
               selected,
@@ -119,6 +130,7 @@ export function ZoneCheckIn({
             );
             if (!result.ok) {
               setError(result.error ?? 'Could not check in');
+              setErrorCode(result.code ?? null);
               return;
             }
             router.push('/moments');

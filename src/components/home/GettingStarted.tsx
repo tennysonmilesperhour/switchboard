@@ -4,6 +4,7 @@ import { useEffect, useState, type ReactNode } from 'react';
 import Link from 'next/link';
 import { Card } from '@/components/ui/Card';
 import { Icon } from '@/components/ui/Icon';
+import { clearDeviceFlag, readDeviceFlag, writeDeviceFlag } from '@/components/system/device-storage';
 
 export const GETTING_STARTED_DISMISS_KEY = 'sb-getting-started-dismissed';
 /**
@@ -54,8 +55,8 @@ export function GettingStarted({
     let cancelled = false;
     void Promise.resolve().then(() => {
       if (!cancelled) {
-        setDismissed(localStorage.getItem(GETTING_STARTED_DISMISS_KEY) === '1');
-        setReshow(localStorage.getItem(GETTING_STARTED_RESHOW_KEY) === '1');
+        setDismissed(readDeviceFlag(GETTING_STARTED_DISMISS_KEY) === '1');
+        setReshow(readDeviceFlag(GETTING_STARTED_RESHOW_KEY) === '1');
       }
     });
     return () => {
@@ -70,8 +71,8 @@ export function GettingStarted({
   if (dismissed || (allDone && !reshow)) return allDone ? whenDone : null;
 
   function dismiss() {
-    localStorage.setItem(GETTING_STARTED_DISMISS_KEY, '1');
-    localStorage.removeItem(GETTING_STARTED_RESHOW_KEY);
+    writeDeviceFlag(GETTING_STARTED_DISMISS_KEY, '1');
+    clearDeviceFlag(GETTING_STARTED_RESHOW_KEY);
     setDismissed(true);
     setReshow(false);
   }

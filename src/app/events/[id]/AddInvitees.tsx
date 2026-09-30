@@ -9,6 +9,8 @@ import { useToast } from '@/components/ui/Toast';
 import { addPeopleToEvent, inviteConnectionNow } from '@/lib/actions/events';
 import { ContactImportControls } from '@/components/ContactImportControls';
 import { InviteeSheet } from '@/components/events/InviteeSheet';
+import { SabbaticalNote } from '@/components/profile/SabbaticalNote';
+import type { SabbaticalStatus } from '@/lib/sabbatical';
 import {
   resolveContactMatches,
   type ContactCandidate,
@@ -20,6 +22,8 @@ export interface ConnectionOption {
   name: string;
   handle: string;
   avatarUrl: string | null;
+  /** Set when they are on sabbatical: their card shows the note (D6). */
+  sabbatical?: SabbaticalStatus | null;
 }
 
 /**
@@ -148,7 +152,7 @@ export function AddInvitees({
     setError(null);
     setContactsNote(null);
     try {
-      const matches = await resolveContactMatches(contacts);
+      const { matches, error: lookupError, code } = await resolveContactMatches(contacts);
       const invitable = matches
         .filter((match) => match.connectionStatus !== 'self')
         .filter((match) => Boolean(inviteTargetFor(match)))
@@ -156,7 +160,10 @@ export function AddInvitees({
       setContactMatches(invitable);
       const onApp = invitable.filter((match) => match.profile).length;
       setContactsNote(
-        invitable.length === 0
+        // A rate-limited lookup is not "no matches": say so, with its code (G7).
+        lookupError
+          ? `${lookupError}${code ? ` ${code}` : ''}`
+          : invitable.length === 0
           ? 'None of those contacts can be added yet - no matching accounts or numbers.'
           : onApp === 0
             ? `${invitable.length} ${invitable.length === 1 ? 'contact' : 'contacts'} can be added by text.`
@@ -281,11 +288,15 @@ export function AddInvitees({
                       <span className="block truncate text-sm font-bold text-ink">
                         {connection.name}
                       </span>
-                      {connection.handle && (
+                      {connection.sabbatical ? (
+                        <span className="block truncate text-xs text-ink-faint">
+                          🍃 On sabbatical
+                        </span>
+                      ) : connection.handle ? (
                         <span className="block truncate text-xs text-ink-faint">
                           @{connection.handle}
                         </span>
-                      )}
+                      ) : null}
                     </span>
                   </button>
                   <button
@@ -358,6 +369,14 @@ export function AddInvitees({
           }}
           onClose={() => setOpenConnection(null)}
         >
+          {openConnection.sabbatical ? (
+            <SabbaticalNote
+              name={openConnection.name}
+              status={openConnection.sabbatical}
+              detail="Your invitation will wait in their inbox without a notification, so they may not answer in time."
+              className="mb-3"
+            />
+          ) : null}
           <Button
             type="button"
             className="w-full"

@@ -1,5 +1,17 @@
 import { describe, it, expect } from 'vitest';
-import { serializeJsonLd, safeNextPath, csvCell, safeHttpUrl } from './security';
+import { serializeJsonLd, safeNextPath, csvCell, safeHttpUrl, likeLiteral } from './security';
+
+describe('likeLiteral', () => {
+  it('escapes LIKE wildcards and the escape character itself', () => {
+    expect(likeLiteral('%')).toBe('\\%');
+    expect(likeLiteral('a_b')).toBe('a\\_b');
+    expect(likeLiteral('back\\slash')).toBe('back\\\\slash');
+  });
+
+  it('leaves ordinary place names unchanged', () => {
+    expect(likeLiteral('Corner Cafe')).toBe('Corner Cafe');
+  });
+});
 
 describe('serializeJsonLd', () => {
   it('produces valid JSON that round-trips', () => {

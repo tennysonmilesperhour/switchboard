@@ -2,7 +2,7 @@
 --
 -- A member removed from a private zone must still be able to end a check-in
 -- they opened there, and the retention sweep's bulk close must not be rolled
--- back by their row. Neither exemption may let them stay counted: extending a
+-- back by their row. Neither exemption may let them stay counted: reopening a
 -- moment in a zone they have left is still refused.
 
 begin;
@@ -49,11 +49,13 @@ select lives_ok(
   'a member removed from a private zone can still check out of a moment there'
 );
 
+-- Removal already closed their check-ins there (zone_members_after_delete,
+-- 20260930040000), so the way back in is reopening one. That stays refused.
 select throws_ok(
-  $$ update public.moments set available_until = now() + interval '1 day'
+  $$ update public.moments set status = 'open', available_until = now() + interval '1 day'
      where id = '00000000-0000-0000-0000-0000000a0302'::uuid $$,
   'cannot check into a zone you are not part of',
-  'a removed member cannot extend a moment in a zone they have left'
+  'a removed member cannot reopen a moment in a zone they have left'
 );
 
 -- ————————————————————————— as the retention sweep —————————————————————————

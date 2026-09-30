@@ -2,14 +2,21 @@
 
 import type { Dispatch, SetStateAction } from 'react';
 import { Card } from '@/components/ui/Card';
+import { REMINDER_SCHEDULE_COPY } from '@/lib/plan-extras';
 
 interface VisibilityStepProps {
   showInviteList: boolean;
   setShowInviteList: Dispatch<SetStateAction<boolean>>;
   showAccepted: boolean;
   setShowAccepted: Dispatch<SetStateAction<boolean>>;
-  showExpired: boolean;
-  setShowExpired: Dispatch<SetStateAction<boolean>>;
+  /**
+   * @deprecated Retired by decision D3: nothing ever read `show_expired`, so
+   * this step no longer offers it. Still accepted so the wizard compiles
+   * unchanged; it is ignored.
+   */
+  showExpired?: boolean;
+  /** @deprecated See `showExpired`. Ignored. */
+  setShowExpired?: Dispatch<SetStateAction<boolean>>;
   remindersEnabled: boolean;
   setRemindersEnabled: Dispatch<SetStateAction<boolean>>;
   parentalApproval: boolean;
@@ -24,8 +31,6 @@ export function VisibilityStep({
   setShowInviteList,
   showAccepted,
   setShowAccepted,
-  showExpired,
-  setShowExpired,
   remindersEnabled,
   setRemindersEnabled,
   parentalApproval,
@@ -51,14 +56,8 @@ export function VisibilityStep({
                 set: setShowAccepted,
               },
               {
-                label: 'Keep expired invitations visible',
-                hint: 'People whose window passed can still see the plan page.',
-                value: showExpired,
-                set: setShowExpired,
-              },
-              {
                 label: 'Send reminder nudges',
-                hint: 'Switchboard can nudge invited people before the plan starts.',
+                hint: REMINDER_SCHEDULE_COPY,
                 value: remindersEnabled,
                 set: setRemindersEnabled,
               },

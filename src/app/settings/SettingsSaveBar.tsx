@@ -11,7 +11,11 @@ import {
   useRef,
   useState,
 } from 'react';
+import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/Button';
+import { useConfirm } from '@/components/ui/ConfirmDialog';
+import { useBottomOverlaySlot } from '@/components/system/BottomOverlaySlot';
+import { errorRef, type ErrorCode } from '@/lib/errors';
 import type { ActionResult } from '@/lib/actions/profile';
 
 /**
@@ -23,6 +27,13 @@ import type { ActionResult } from '@/lib/actions/profile';
  * Cancel reverts them. This replaces the old autosave-on-every-keystroke
  * behaviour with a deliberate commit step, so a stray toggle no longer writes
  * to the profile before you meant it to.
+ *
+ * It is the only save model on the page. Text messages, alert channels and the
+ * daily summary used to have their own Save buttons or save on change, so a
+ * half-edited channel choice was neither covered by the leave-page warning nor
+ * committed by "Save changes". Push on this device is the one exception: it is
+ * a browser permission, and a permission prompt only works in the tap that
+ * asks for it.
  */
 
 interface Participant {
@@ -35,6 +46,12 @@ interface Participant {
 interface SettingsSaveContextValue {
   register: (id: string, participant: Participant) => () => void;
   setDirty: (id: string, dirty: boolean) => void;
+}
+
+interface Notice {
+  kind: 'success' | 'error';
+  text: string;
+  code?: ErrorCode;
 }
 
 const SettingsSaveContext = createContext<SettingsSaveContextValue | null>(null);
@@ -50,17 +67,41 @@ export function useSettingsSave(): SettingsSaveContextValue {
   return ctx;
 }
 
+/** The internal link a click is about to follow, or null when it is not one. */
+function internalDestination(event: MouseEvent): string | null {
+  if (event.defaultPrevented || event.button !== 0) return null;
+  if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return null;
+  const anchor = (event.target as Element | null)?.closest?.('a[href]');
+  if (!(anchor instanceof HTMLAnchorElement)) return null;
+  if (anchor.target && anchor.target !== '_self') return null;
+  if (anchor.hasAttribute('download')) return null;
+  const url = new URL(anchor.href, window.location.href);
+  if (url.origin !== window.location.origin) return null;
+  // Same page (a hash jump) loses nothing.
+  if (url.pathname === window.location.pathname && url.search === window.location.search) {
+    return null;
+  }
+  return `${url.pathname}${url.search}${url.hash}`;
+}
+
 export function SettingsSaveProvider({
   children,
+  blocked = null,
 }: {
   children: React.ReactNode;
+  /**
+   * Set when a read this page depends on failed. Saving is refused outright
+   * rather than trusted to the sections that happen to be hidden: a default
+   * written over an unread value is the one failure here that cannot be undone.
+   */
+  blocked?: { message: string; code: ErrorCode } | null;
 }) {
   const participants = useRef(new Map<string, Participant>());
   const [dirtyIds, setDirtyIds] = useState<Set<string>>(() => new Set());
   const [saving, setSaving] = useState(false);
-  const [notice, setNotice] = useState<{ kind: 'success' | 'error'; text: string } | null>(
-    null,
-  );
+  const [notice, setNotice] = useState<Notice | null>(null);
+  const confirm = useConfirm();
+  const router = useRouter();
 
   // A ref mirror of the dirty set so the Save/Cancel handlers can read the
   // current value without being re-created on every change.
@@ -95,6 +136,10 @@ export function SettingsSaveProvider({
 
   const dirtyCount = dirtyIds.size;
 
+  // The bar and its notices own the band above the tab bar while they show, so
+  // the update toast and the nudges wait instead of covering them.
+  useBottomOverlaySlot('settings', dirtyCount > 0 || notice !== null, 100);
+
   // "Changes saved." used to sit at the bottom of the screen for the rest of
   // the page's life — nothing cleared it but the next edit. A confirmation that
   // never leaves stops reading as confirmation, and it is pinned in the same
@@ -117,9 +162,36 @@ export function SettingsSaveProvider({
     return () => window.removeEventListener('beforeunload', warn);
   }, [dirtyCount]);
 
+  // ...and to an in-app link, which `beforeunload` never sees: the tab bar,
+  // the back arrow, "Edit contact details". Captured on the document so it
+  // runs before the link's own handler, which then sees the default prevented.
+  useEffect(() => {
+    if (dirtyCount === 0) return;
+    const guard = (event: MouseEvent) => {
+      const destination = internalDestination(event);
+      if (!destination) return;
+      event.preventDefault();
+      event.stopPropagation();
+      void confirm({
+        title: 'Leave without saving?',
+        body: 'Your unsaved settings changes will be lost.',
+        confirmLabel: 'Leave',
+        danger: true,
+      }).then((leave) => {
+        if (leave) router.push(destination);
+      });
+    };
+    document.addEventListener('click', guard, true);
+    return () => document.removeEventListener('click', guard, true);
+  }, [confirm, dirtyCount, router]);
+
   const handleSave = useCallback(async () => {
     const ids = Array.from(dirtyRef.current);
     if (ids.length === 0) return;
+    if (blocked) {
+      setNotice({ kind: 'error', text: blocked.message, code: blocked.code });
+      return;
+    }
     setSaving(true);
     setNotice(null);
     try {
@@ -134,7 +206,11 @@ export function SettingsSaveProvider({
       const failure = results.find((result) => !result.ok);
       setNotice(
         failure
-          ? { kind: 'error', text: failure.error ?? 'Some changes could not be saved.' }
+          ? {
+              kind: 'error',
+              text: failure.error ?? 'Some changes could not be saved.',
+              code: failure.code,
+            }
           : { kind: 'success', text: 'Changes saved.' },
       );
     } catch {
@@ -148,7 +224,7 @@ export function SettingsSaveProvider({
     } finally {
       setSaving(false);
     }
-  }, []);
+  }, [blocked]);
 
   const handleCancel = useCallback(() => {
     for (const id of Array.from(dirtyRef.current)) {
@@ -168,13 +244,22 @@ export function SettingsSaveProvider({
             aria-label="Unsaved settings changes"
             className="animate-rise pointer-events-auto mx-auto flex max-w-lg items-center gap-3 rounded-card border border-line bg-card/95 px-4 py-3 shadow-float backdrop-blur-xl"
           >
-            <p className="min-w-0 flex-1 text-sm font-semibold text-ink" aria-live="polite">
-              {saving
-                ? 'Saving your changes…'
-                : notice?.kind === 'error'
-                  ? notice.text
-                  : 'You have unsaved changes'}
-            </p>
+            <div className="min-w-0 flex-1" aria-live="polite">
+              <p className="text-sm font-semibold text-ink">
+                {saving
+                  ? 'Saving your changes…'
+                  : notice?.kind === 'error'
+                    ? notice.text
+                    : blocked
+                      ? blocked.message
+                      : 'You have unsaved changes'}
+              </p>
+              {!saving && (notice?.kind === 'error' ? notice.code : blocked?.code) && (
+                <p className="mt-0.5 font-mono text-[11px] uppercase tracking-wide text-ink-faint">
+                  {errorRef((notice?.kind === 'error' ? notice.code : blocked?.code) as ErrorCode)}
+                </p>
+              )}
+            </div>
             <Button
               type="button"
               variant="secondary"
@@ -184,7 +269,12 @@ export function SettingsSaveProvider({
             >
               Cancel
             </Button>
-            <Button type="button" size="sm" onClick={handleSave} disabled={saving}>
+            <Button
+              type="button"
+              size="sm"
+              onClick={handleSave}
+              disabled={saving || Boolean(blocked)}
+            >
               {saving ? 'Saving…' : 'Save changes'}
             </Button>
           </div>
@@ -202,6 +292,11 @@ export function SettingsSaveProvider({
           }`}
         >
           {notice.text}
+          {notice.code && (
+            <span className="ml-1.5 font-mono text-[11px] uppercase tracking-wide opacity-80">
+              {errorRef(notice.code)}
+            </span>
+          )}
         </div>
       )}
     </SettingsSaveContext.Provider>

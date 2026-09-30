@@ -1,7 +1,9 @@
 'use client';
 
 import { useEffect, useMemo, useState, useTransition } from 'react';
+import { useRouter } from 'next/navigation';
 import { searchMessages, type MessageHit } from '@/lib/actions/rooms';
+import { createClient } from '@/lib/supabase/client';
 import Link from 'next/link';
 import { Card } from '@/components/ui/Card';
 import { Icon, type IconName } from '@/components/ui/Icon';
@@ -15,8 +17,13 @@ export interface InboxRoom {
   preview: string;
   activityAt: string;
   unread: boolean;
+  /** Muted by this member: no notifications, still listed (D20). */
+  muted: boolean;
   section: 'active' | 'matches' | 'past';
 }
+
+/** Realtime `in` filters take at most 100 values. */
+const MAX_FILTERED_ROOMS = 100;
 
 const ICONS: Record<string, IconName> = { event: 'calendar', match: 'sparkle', group: 'users', moment: 'sparkle' };
 const SECTIONS = [
@@ -29,6 +36,59 @@ export function RoomsInbox({ rooms }: { rooms: InboxRoom[] }) {
   const [query, setQuery] = useState('');
   const [hits, setHits] = useState<MessageHit[]>([]);
   const [searching, startSearch] = useTransition();
+  const router = useRouter();
+
+  /**
+   * Live inbox (G12). The bell's notification feed only refreshes this page
+   * for rooms that notify you, which leaves out muted rooms and one you were
+   * just reading. So the inbox listens to new messages in its own rooms and
+   * re-reads, coalesced so a burst is one refresh. RLS on `messages` limits
+   * delivery to rooms this person is in; the filter keeps the server from
+   * checking every other room's traffic against them. A filter holds at most
+   * 100 rooms, so someone in more follows their 100 most recently active.
+   */
+  const roomKey = [...rooms]
+    .sort((a, b) => new Date(b.activityAt).getTime() - new Date(a.activityAt).getTime())
+    .slice(0, MAX_FILTERED_ROOMS)
+    .map((room) => room.id)
+    .sort()
+    .join(',');
+  useEffect(() => {
+    const ids = roomKey ? roomKey.split(',') : [];
+    if (ids.length === 0) return;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const refresh = () => {
+      if (timer) return;
+      timer = setTimeout(() => {
+        timer = null;
+        router.refresh();
+      }, 500);
+    };
+    let channel: ReturnType<ReturnType<typeof createClient>['channel']> | null = null;
+    try {
+      const supabase = createClient();
+      channel = supabase
+        .channel('rooms-inbox')
+        .on(
+          'postgres_changes',
+          {
+            event: 'INSERT',
+            schema: 'public',
+            table: 'messages',
+            filter: `room_id=in.(${ids.join(',')})`,
+          },
+          refresh,
+        )
+        .subscribe();
+    } catch {
+      // Realtime unavailable: the inbox still refreshes on navigation.
+      channel = null;
+    }
+    return () => {
+      if (timer) clearTimeout(timer);
+      if (channel) channel.unsubscribe();
+    };
+  }, [roomKey, router]);
 
   /**
    * The room filter above is instant because the rooms are already here. What
@@ -86,7 +146,7 @@ export function RoomsInbox({ rooms }: { rooms: InboxRoom[] }) {
                 {room.unread && <span className="absolute -right-0.5 -top-0.5 size-3 rounded-full border-2 border-surface bg-terracotta" />}
               </span>
               <div className="min-w-0 flex-1">
-                <div className="flex items-baseline justify-between gap-2"><p className={`truncate ${room.unread ? 'font-extrabold' : 'font-bold'}`}>{room.title}</p><span className="shrink-0 text-[11px] text-ink-faint">{formatRelative(room.activityAt)}</span></div>
+                <div className="flex items-baseline justify-between gap-2"><p className={`truncate ${room.unread ? 'font-extrabold' : 'font-bold'}`}>{room.title}</p><span className="shrink-0 text-[11px] text-ink-faint">{room.muted && <span className="mr-1.5">Muted ·</span>}{formatRelative(room.activityAt)}</span></div>
                 <p className="truncate text-xs text-ink-muted">{room.preview}</p>
                 {room.people.length > 0 && <p className="truncate text-[11px] text-ink-faint">{room.people.join(', ')}</p>}
               </div>

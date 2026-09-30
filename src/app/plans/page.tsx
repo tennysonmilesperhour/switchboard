@@ -10,6 +10,7 @@ import { PlanCard, planColor } from '@/components/ui/PlanCard';
 import { formatDateTime } from '@/lib/format';
 import { reportOperationalError } from '@/lib/server/observability';
 import type { SwitchboardEvent } from '@/lib/types';
+import { LISTED_INVITE_STATUSES, sortPlans } from './sections';
 
 export const metadata: Metadata = { title: 'Calendar' };
 
@@ -51,18 +52,20 @@ export default async function PlansPage() {
   } = await supabase.auth.getUser();
   if (!user) redirect('/login');
 
-  // Your hosted plans, plus the invites you hold. The invites are read as plain
-  // rows — NOT a PostgREST-embedded `invites → events` join. That embed only
-  // resolves when the invites→events foreign key is present in the database
-  // serving the request, so a deployment with FK/schema drift makes the whole
-  // calendar query fail. When that error is swallowed (as it was here) the
-  // calendar never surfaces the failure and hangs on its loading skeleton. The
-  // invited plans are instead resolved by primary key, which is immune to FK
-  // metadata (mirroring the guest-RSVP fix in #44), and query errors are
-  // surfaced to the error boundary rather than discarded.
+  // Your hosted plans, the plans you co-host, plus the invites you hold. The
+  // invites are read as plain rows — NOT a PostgREST-embedded `invites →
+  // events` join. That embed only resolves when the invites→events foreign key
+  // is present in the database serving the request, so a deployment with
+  // FK/schema drift makes the whole calendar query fail. When that error is
+  // swallowed (as it was here) the calendar never surfaces the failure and
+  // hangs on its loading skeleton. The invited and co-hosted plans are instead
+  // resolved by primary key, which is immune to FK metadata (mirroring the
+  // guest-RSVP fix in #44), and query errors are surfaced to the error boundary
+  // rather than discarded.
   const [
     { data: hosting, error: hostingError },
     { data: inviteRows, error: invitesError },
+    { data: cohostRows, error: cohostError },
   ] = await Promise.all([
     supabase
       .from('events')
@@ -79,24 +82,34 @@ export default async function PlansPage() {
       // `queued` is included for one reason: a plan still deciding its date
       // shows its whole invited group the poll before any invite is sent, and
       // those people were the only ones whose plan had no card here.
-      .in('status', ['sent', 'accepted', 'waitlisted', 'queued']),
+      .in('status', [...LISTED_INVITE_STATUSES]),
+    // A co-host's own membership row (`event_cohosts_self_select`). Co-hosted
+    // plans used to be missing from here entirely unless the co-host also
+    // happened to hold an invitation.
+    supabase
+      .from('event_cohosts')
+      .select('event_id')
+      .eq('cohost_id', user.id),
   ]);
 
-  if (hostingError || invitesError) {
-    await reportOperationalError('plans.load', hostingError ?? invitesError, {
+  if (hostingError || invitesError || cohostError) {
+    await reportOperationalError('plans.load', hostingError ?? invitesError ?? cohostError, {
       userId: user.id,
     });
     throw new Error('Could not load your calendar');
   }
 
-  // Resolve the invited plans by primary key. RLS still applies, so any event
-  // the viewer may not see simply won't come back and is dropped below.
+  // Resolve the invited and co-hosted plans by primary key. RLS still applies
+  // (co-hosts may read the plans they co-host), so any event the viewer may
+  // not see simply won't come back and is dropped below.
+  const cohostIds = new Set((cohostRows ?? []).map((row) => row.event_id as string));
   const eventIds = [
-    ...new Set(
-      (inviteRows ?? [])
+    ...new Set([
+      ...(inviteRows ?? [])
         .map((row) => row.event_id)
         .filter((id): id is string => Boolean(id)),
-    ),
+      ...cohostIds,
+    ]),
   ];
 
   const eventsById = new Map<string, SwitchboardEvent>();
@@ -116,62 +129,30 @@ export default async function PlansPage() {
     }
   }
 
-  const invited = (inviteRows ?? [])
-    .map((row) => ({
-      status: row.status,
-      event: eventsById.get(row.event_id) ?? null,
-    }))
-    .filter(
-      (row): row is { status: string; event: SwitchboardEvent } =>
-        row.event !== null &&
-        row.event.host_id !== user.id &&
-        row.event.status !== 'cancelled' &&
-        // A queued invite is only yours to see while the group is deciding;
-        // once invites start going out, it becomes `sent` and shows up above.
-        (row.status !== 'queued' || row.event.status === 'deciding'),
-    );
-
-  // "Already happened" is judged by the actual start time (with the 'past'
-  // status as a fallback) so a plan drops into the archive as soon as it is
-  // over — even before the status-sweeping cron catches up. Plans with no set
-  // date (Time TBD) are treated as upcoming.
-  const nowMs = new Date().getTime();
-  const hasHappened = (event: SwitchboardEvent) =>
-    event.status === 'past' ||
-    (event.starts_at !== null && new Date(event.starts_at).getTime() < nowMs);
-
-  const hostingAll = hosting ?? [];
-  const hostingUpcoming = hostingAll.filter((event) => !hasHappened(event));
-
-  const upcomingInvited = invited.filter((row) => !hasHappened(row.event));
-  const needsResponse = upcomingInvited.filter((i) => i.status === 'sent');
-  const deciding = upcomingInvited.filter((i) => i.status === 'queued');
-  const going = upcomingInvited.filter(
-    (i) => i.status !== 'sent' && i.status !== 'queued',
-  );
-
-  // Past plans you hosted or committed to, newest first. Invitations you never
-  // answered for events that have since passed are dropped rather than archived.
-  const pastEvents = [
-    ...hostingAll.filter(hasHappened),
-    ...invited
-      .filter(
-        (row) =>
-          row.status !== 'sent' && row.status !== 'queued' && hasHappened(row.event),
-      )
-      .map((row) => row.event),
-  ].sort((a, b) => {
-    const ta = a.starts_at ? new Date(a.starts_at).getTime() : 0;
-    const tb = b.starts_at ? new Date(b.starts_at).getTime() : 0;
-    return tb - ta;
+  const sections = sortPlans({
+    userId: user.id,
+    hosted: hosting ?? [],
+    cohosted: [...cohostIds]
+      .map((id) => eventsById.get(id))
+      .filter((event): event is SwitchboardEvent => Boolean(event)),
+    invited: (inviteRows ?? []).flatMap((row) => {
+      const event = eventsById.get(row.event_id);
+      return event ? [{ status: row.status, event }] : [];
+    }),
+    nowMs: new Date().getTime(),
   });
+  const {
+    needsResponse,
+    deciding,
+    awaitingGuardian,
+    hosting: hostingUpcoming,
+    going,
+    waitlisted,
+    requested,
+    past: pastEvents,
+  } = sections;
 
-  const isEmpty =
-    hostingUpcoming.length === 0 &&
-    needsResponse.length === 0 &&
-    deciding.length === 0 &&
-    going.length === 0 &&
-    pastEvents.length === 0;
+  const isEmpty = Object.values(sections).every((list) => list.length === 0);
 
   return (
     <AppShell title="Coming up">
@@ -211,12 +192,30 @@ export default async function PlansPage() {
               </div>
             </section>
           )}
+          {awaitingGuardian.length > 0 && (
+            <section>
+              <SectionHeader
+                title="Waiting on a guardian"
+                hint="Your yes counts once a parent or guardian approves it"
+              />
+              <div className="grid grid-cols-2 gap-3">
+                {awaitingGuardian.map(({ event }, i) => (
+                  <EventCard key={event.id} event={event} index={i} note="Needs approval" />
+                ))}
+              </div>
+            </section>
+          )}
           {hostingUpcoming.length > 0 && (
             <section>
               <SectionHeader title="Hosting" />
               <div className="grid grid-cols-2 gap-3">
-                {hostingUpcoming.map((event, i) => (
-                  <EventCard key={event.id} event={event} index={i} />
+                {hostingUpcoming.map(({ event, cohost }, i) => (
+                  <EventCard
+                    key={event.id}
+                    event={event}
+                    index={i}
+                    note={cohost ? 'Co-hosting' : undefined}
+                  />
                 ))}
               </div>
             </section>
@@ -227,6 +226,32 @@ export default async function PlansPage() {
               <div className="grid grid-cols-2 gap-3">
                 {going.map(({ event }, i) => (
                   <EventCard key={event.id} event={event} index={i} />
+                ))}
+              </div>
+            </section>
+          )}
+          {waitlisted.length > 0 && (
+            <section>
+              <SectionHeader
+                title="On the waitlist"
+                hint="Full for now - if a spot opens, you’ll hear first"
+              />
+              <div className="grid grid-cols-2 gap-3">
+                {waitlisted.map(({ event }, i) => (
+                  <EventCard key={event.id} event={event} index={i} note="Waitlisted" />
+                ))}
+              </div>
+            </section>
+          )}
+          {requested.length > 0 && (
+            <section>
+              <SectionHeader
+                title="Asked to join"
+                hint="Open Table requests the host hasn’t answered yet"
+              />
+              <div className="grid grid-cols-2 gap-3">
+                {requested.map(({ event }, i) => (
+                  <EventCard key={event.id} event={event} index={i} note="Asked" />
                 ))}
               </div>
             </section>

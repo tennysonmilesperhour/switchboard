@@ -14,7 +14,10 @@ import {
   GRID_DAYS,
   gridSlots,
   heatLevel,
+  planGridZone,
   recommendAvailability,
+  slotRange,
+  upcomingSlotCounts,
   type SlotCount,
 } from '@/lib/availability';
 
@@ -84,7 +87,9 @@ export function AvailabilityGrid({
   calendarUsable = false,
   coveredThrough = null,
 }: AvailabilityGridProps) {
-  const slots = useMemo(() => gridSlots(new Date(), GRID_DAYS), []);
+  // The plan's week, in the plan's zone — the same week the server accepts.
+  const gridZone = planGridZone(timeZone);
+  const slots = useMemo(() => gridSlots(new Date(), GRID_DAYS, gridZone), [gridZone]);
   const countBySlot = useMemo(() => {
     const map = new Map<string, SlotCount>();
     for (const entry of counts) map.set(entry.slot, entry);
@@ -126,9 +131,16 @@ export function AvailabilityGrid({
     () => counts.reduce((most, entry) => Math.max(most, entry.people), 0),
     [counts],
   );
+  // Only times still ahead, exactly as "Put the best times on the poll"
+  // filters on the server, so the button is never live on a different answer.
   const recommendation = useMemo(
-    () => recommendAvailability({ counts, responders, eligiblePeople }),
-    [counts, responders, eligiblePeople],
+    () =>
+      recommendAvailability({
+        counts: upcomingSlotCounts(counts, gridZone),
+        responders,
+        eligiblePeople,
+      }),
+    [counts, responders, eligiblePeople, gridZone],
   );
 
   const days = useMemo(() => {
@@ -150,7 +162,8 @@ export function AvailabilityGrid({
    */
   function freeWithin(coveredUntil: string | null, busyList: string[]) {
     const coverEnd = coveredUntil ? new Date(coveredUntil).getTime() : 0;
-    const covered = slots.filter((slot) => new Date(slot).getTime() < coverEnd);
+    // A slot is a label; when it actually starts depends on the plan's zone.
+    const covered = slots.filter((slot) => slotRange(slot, gridZone).start < coverEnd);
     const taken = new Set(busyList);
     return { coverEnd, covered, free: covered.filter((slot) => !taken.has(slot)) };
   }
@@ -169,7 +182,7 @@ export function AvailabilityGrid({
   } | null> {
     setRefreshing(true);
     try {
-      const result = await syncCalendarForGrid();
+      const result = await syncCalendarForGrid(gridZone);
       if (!result.ok) {
         toast.error(
           result.error ?? 'Could not read your calendar just now.',
@@ -238,7 +251,7 @@ export function AvailabilityGrid({
   ) {
     // Only the covered days are decided. Anything past the end of the read
     // stays exactly as the person left it.
-    const kept = savedMine.filter((slot) => new Date(slot).getTime() >= window.coverEnd);
+    const kept = savedMine.filter((slot) => slotRange(slot, gridZone).start >= window.coverEnd);
     setMine(new Set([...window.free, ...kept]));
     setDirty(true);
     setPrefilled(true);
@@ -331,11 +344,14 @@ export function AvailabilityGrid({
     });
   }
 
+  // A slot's date is already the plan's date (see availability.ts), so it is
+  // printed as written. Formatting noon-UTC in the plan's zone moved every
+  // column a day on for a plan east of UTC+12.
   const dayLabel = (day: string) =>
     new Date(`${day}T12:00:00Z`).toLocaleDateString(undefined, {
       weekday: 'short',
       day: 'numeric',
-      timeZone: timeZone ?? undefined,
+      timeZone: 'UTC',
     });
 
   return (

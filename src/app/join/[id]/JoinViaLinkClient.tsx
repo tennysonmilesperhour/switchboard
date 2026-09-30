@@ -4,7 +4,7 @@ import { useState, useTransition } from 'react';
 import Link from 'next/link';
 import { Button } from '@/components/ui/Button';
 import { useToast } from '@/components/ui/Toast';
-import { requestToJoin } from '@/lib/actions/invites';
+import { requestToJoin } from '@/lib/actions/open-table';
 
 /**
  * Signed-in visitor asking to join a plan from its shared invite link. Uses the

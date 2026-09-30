@@ -27,32 +27,93 @@ import { getReconnectionSuggestions } from '@/lib/server/radar';
 import { formatDateTime, formatRelative } from '@/lib/format';
 import { greetingFor } from '@/lib/greeting';
 import { resolveDefaultSignalCircle } from '@/lib/signal-audience';
+import { localDate, ritualIsDue } from '@/lib/rituals';
+import { ErrorNotice } from '@/components/ui/ErrorNotice';
+import { errorFor, type ErrorCode } from '@/lib/errors';
+import { reportOperationalError } from '@/lib/server/observability';
+
+/**
+ * Every Home section that reads something on its own, with the code it shows
+ * when that read fails. Each section fails alone: one broken card says so
+ * where it would have been, and the rest of Home renders as normal. Before
+ * this, about seventeen reads ignored their errors, so a failure looked
+ * exactly like "nothing here" — no invitations, no plans, nobody around.
+ */
+const HOME_SECTIONS = {
+  profile: { area: 'home.profile', code: 'SB-PROFILE-LOAD' },
+  invites: { area: 'home.invites', code: 'SB-INVITE-LOAD' },
+  plans: { area: 'home.plans', code: 'SB-PLAN-LOAD' },
+  signals: { area: 'home.signals', code: 'SB-SIGNAL-LOAD' },
+  around: { area: 'home.around', code: 'SB-AROUND-LOAD' },
+  matches: { area: 'home.matches', code: 'SB-MATCH-LOAD' },
+  connections: { area: 'home.connections', code: 'SB-CONNECTION-LOAD' },
+  introductions: { area: 'home.introductions', code: 'SB-INTRO-LOAD' },
+  rituals: { area: 'home.rituals', code: 'SB-RITUAL-LOAD' },
+  radar: { area: 'home.radar', code: 'SB-RADAR-LOAD' },
+  reflections: { area: 'home.reflections', code: 'SB-ENERGY-LOAD' },
+} as const satisfies Record<string, { area: string; code: ErrorCode }>;
+
+type HomeSection = keyof typeof HOME_SECTIONS;
+
+/** A section whose read failed, in the place it would have rendered. */
+function SectionError({ section }: { section: HomeSection }) {
+  const entry = errorFor(HOME_SECTIONS[section].code);
+  return (
+    <Card>
+      <div role="alert">
+        <ErrorNotice message={entry.message} fix={entry.fix} code={entry.code} />
+      </div>
+    </Card>
+  );
+}
 
 export default async function HomePage() {
   const supabase = await createClient();
   const user = await getRenderUser();
   if (!user) redirect('/welcome');
 
-  const { data: profile } = await supabase
+  const userId = user.id;
+  const failed = new Set<HomeSection>();
+  const reads: Promise<void>[] = [];
+  /** Note a failed read against its section and log it under that code. */
+  function check(section: HomeSection, read: string, error: unknown) {
+    if (!error) return;
+    failed.add(section);
+    reads.push(
+      reportOperationalError(
+        HOME_SECTIONS[section].area,
+        error,
+        { userId, read },
+        HOME_SECTIONS[section].code,
+      ),
+    );
+  }
+
+  // maybeSingle: a missing row is an account that has not onboarded, and goes
+  // there. A failed read is not — sending an onboarded person to onboarding
+  // because a query errored would put their saved name and handle up for
+  // overwriting. The proxy already enforces the onboarding funnel.
+  const { data: profile, error: profileError } = await supabase
     .from('profiles')
     .select('display_name, onboarded, timezone')
     .eq('id', user.id)
-    .single();
-  if (!profile?.onboarded) redirect('/onboarding');
+    .maybeSingle();
+  check('profile', 'profile', profileError);
+  if (!profileError && !profile?.onboarded) redirect('/onboarding');
 
   const nowIso = new Date().toISOString();
   const [
-    { data: mySignals },
-    { data: circles },
-    { data: friendSignals },
-    { data: pendingInvites },
-    { data: myInvites },
-    { data: recentMatches },
-    { count: friendCount },
-    { data: aroundAvailable },
-    { data: rememberedSignalCircle },
-    { data: signalPeople },
-    { data: signalGroups },
+    { data: mySignals, error: mySignalsError },
+    { data: circles, error: circlesError },
+    { data: friendSignals, error: friendSignalsError },
+    { data: pendingInvites, error: pendingInvitesError },
+    { data: myInvites, error: myInvitesError },
+    { data: recentMatches, error: recentMatchesError },
+    { count: friendCount, error: friendCountError },
+    { data: aroundAvailable, error: aroundAvailableError },
+    { data: rememberedSignalCircle, error: rememberedSignalCircleError },
+    { data: signalPeople, error: signalPeopleError },
+    { data: signalGroups, error: signalGroupsError },
   ] = await Promise.all([
     supabase
       .from('availability_signals')
@@ -107,6 +168,17 @@ export default async function HomePage() {
     // And "a whole group": the boards RLS says this person belongs to.
     supabase.from('boards').select('id, name').order('name'),
   ]);
+  check('signals', 'my-signals', mySignalsError);
+  check('signals', 'circles', circlesError);
+  check('signals', 'remembered-circle', rememberedSignalCircleError);
+  check('signals', 'signal-people', signalPeopleError);
+  check('signals', 'signal-groups', signalGroupsError);
+  check('around', 'friend-signals', friendSignalsError);
+  check('around', 'around-available', aroundAvailableError);
+  check('invites', 'pending-invites', pendingInvitesError);
+  check('plans', 'my-invites', myInvitesError);
+  check('matches', 'recent-matches', recentMatchesError);
+  check('connections', 'connection-count', friendCountError);
 
   const peopleForSignals = (signalPeople ?? [])
     .map((row) => {
@@ -142,22 +214,27 @@ export default async function HomePage() {
   const nowMs = new Date(nowIso).getTime();
   const threeDaysAgo = new Date(nowMs - 3 * 86_400_000).toISOString();
   const [
-    { data: proposalRows },
-    { data: ritualRows },
-    radar,
-    { data: recentPast },
-    { data: energyLogged },
-    { data: upcomingRows },
+    { data: proposalRows, error: proposalError },
+    { data: ritualRows, error: ritualError },
+    radarResult,
+    { data: recentPast, error: recentPastError },
+    { data: energyLogged, error: energyLoggedError },
+    { data: upcomingRows, error: upcomingError },
   ] = await Promise.all([
     supabase.rpc('my_matchmaker_proposals'),
     supabase
       .from('rituals')
       .select(
-        'id, activity, cadence_days, status, last_planned_at, creator_id, partner_id, creator:profiles!rituals_creator_id_fkey(display_name), partner:profiles!rituals_partner_id_fkey(display_name)',
+        'id, activity, cadence_days, status, due_on, creator_id, partner_id, creator:profiles!rituals_creator_id_fkey(display_name, sabbatical), partner:profiles!rituals_partner_id_fkey(display_name, sabbatical)',
       )
       .or(`creator_id.eq.${user.id},partner_id.eq.${user.id}`)
       .in('status', ['proposed', 'active']),
-    getReconnectionSuggestions(user.id),
+    // Radar reads with the service role and can throw on a malformed row; it
+    // must never take the rest of Home with it.
+    getReconnectionSuggestions(user.id).then(
+      (suggestions) => ({ suggestions, error: null as unknown }),
+      (error: unknown) => ({ suggestions: [], error }),
+    ),
     // Only plans you hosted or said yes to: being asked how a plan you
     // declined left you feeling is a question with no answer.
     supabase
@@ -180,6 +257,13 @@ export default async function HomePage() {
       .order('starts_at', { ascending: true, nullsFirst: false })
       .limit(8),
   ]);
+  check('introductions', 'matchmaker-proposals', proposalError);
+  check('rituals', 'rituals', ritualError);
+  check('radar', 'reconnection', radarResult.error);
+  check('reflections', 'recent-past', recentPastError);
+  check('reflections', 'energy-logged', energyLoggedError);
+  check('plans', 'upcoming', upcomingError);
+  const radar = radarResult.suggestions;
 
   const upcoming = homePlans(upcomingRows, {
     userId: user.id,
@@ -210,16 +294,18 @@ export default async function HomePage() {
     }),
   );
 
+  const ritualToday = localDate(profile?.timezone);
   const rituals: RitualCardData[] = (ritualRows ?? [])
     .map((row) => {
       const isMine = row.creator_id === user.id;
       const otherRaw = isMine ? row.partner : row.creator;
+      const meRaw = isMine ? row.creator : row.partner;
       const other = Array.isArray(otherRaw) ? otherRaw[0] : otherRaw;
+      const me = Array.isArray(meRaw) ? meRaw[0] : meRaw;
+      // Due by its stored date in your own zone (D8), and on hold while either
+      // of you is on sabbatical (D6), the same rule the reminder follows.
       const due =
-        row.status === 'active' &&
-        (!row.last_planned_at ||
-          nowMs - new Date(row.last_planned_at).getTime() >
-            row.cadence_days * 86_400_000);
+        !other?.sabbatical && !me?.sabbatical && ritualIsDue(row, ritualToday);
       return {
         id: row.id,
         activity: row.activity,
@@ -229,6 +315,7 @@ export default async function HomePage() {
         status: row.status,
         isMine,
         due,
+        dueOn: row.due_on,
       };
     })
     .filter((ritual) => (ritual.status === 'proposed' && !ritual.isMine) || ritual.due);
@@ -253,11 +340,12 @@ export default async function HomePage() {
     ? passportProgress(await loadPassport(user.id))
     : { earned: 0, total: 0, done: false, next: null };
 
-  const firstName = profile.display_name.split(' ')[0];
+  const firstName = profile?.display_name?.split(' ')[0] ?? 'there';
   // Timed by the reader's clock, never the server's — `new Date().getHours()`
   // here reads UTC on Vercel and told a 9am Pacific tester "Good afternoon".
   // The stored zone renders first; <Greeting> corrects it from the browser.
-  const greeting = greetingFor(new Date(), profile.timezone);
+  const greeting = greetingFor(new Date(), profile?.timezone ?? 'UTC');
+  await Promise.all(reads);
 
   return (
     <AppShell>
@@ -269,9 +357,17 @@ export default async function HomePage() {
           </p>
         </div>
 
+        {failed.has('profile') && <SectionError section="profile" />}
+
         {/* Invitations are the only time-sensitive thing on Home. Keep them
             directly below the greeting so a 390px viewport never buries the
             response behind discovery or setup UI. */}
+        {failed.has('invites') && (
+          <section>
+            <SectionHeader title="Waiting on you 💌" />
+            <SectionError section="invites" />
+          </section>
+        )}
         {waitingOnYou.length > 0 && (
           <section>
             <SectionHeader title="Waiting on you 💌" />
@@ -292,8 +388,14 @@ export default async function HomePage() {
           </section>
         )}
 
-        {/* Plan feed - the heart of Home */}
-        {upcoming.length > 0 ? (
+        {/* Plan feed - the heart of Home. A failed read is not "no plans":
+            the empty state below invites you to start one, which is the
+            wrong answer to give someone whose plans simply did not load. */}
+        {failed.has('plans') ? (
+          <section aria-label="Your plans">
+            <SectionError section="plans" />
+          </section>
+        ) : upcoming.length > 0 ? (
           <section aria-label="Your plans" className="space-y-4">
             {upcoming.map((event, i) => (
               <PlanCard
@@ -352,28 +454,36 @@ export default async function HomePage() {
             passport takes its place rather than stacking another explainer.
             The checklist stays mounted even then, because Settings' "show
             tips again" can bring it back for someone who finished it. */}
-        <GettingStarted
-          friendDone={hasConnections}
-          planDone={upcoming.length > 0}
-          signalDone={(mySignals?.length ?? 0) > 0}
-          findableDone={findableDone}
-          whenDone={
-            gettingStartedDone ? (
-              <PassportCard
-                earned={passportSummary.earned}
-                total={passportSummary.total}
-                nextLabel={passportSummary.next?.label ?? null}
-              />
-            ) : null
-          }
-        />
+        {/* A checklist built from reads that failed would tick nothing and
+            claim every step is still to do. */}
+        {!failed.has('plans') && !failed.has('connections') && !failed.has('signals') && (
+          <GettingStarted
+            friendDone={hasConnections}
+            planDone={upcoming.length > 0}
+            signalDone={(mySignals?.length ?? 0) > 0}
+            findableDone={findableDone}
+            whenDone={
+              gettingStartedDone ? (
+                <PassportCard
+                  earned={passportSummary.earned}
+                  total={passportSummary.total}
+                  nextLabel={passportSummary.next?.label ?? null}
+                />
+              ) : null
+            }
+          />
+        )}
+
+        {failed.has('connections') && <SectionError section="connections" />}
 
         {/* The product doors follow what needs attention now. A new account
             gets the three useful ones; Mutual and I'm free arrive with the
             first connection, and Around only when the city has something
             behind it (one boolean from the database, never a row). */}
         <PillarRow
-          hasConnections={hasConnections}
+          // Unknown is not "none": keep every door open rather than hide the
+          // ones that wait for a first connection.
+          hasConnections={hasConnections || failed.has('connections')}
           showAround={aroundAvailable === true}
         />
 
@@ -388,16 +498,23 @@ export default async function HomePage() {
             use this and never saw it. SignalBar decides from the reach it was
             actually handed. */}
         <div id="signals" className="scroll-mt-20">
-          <SignalBar
-            active={mySignals ?? []}
-            circles={circles ?? []}
-            people={peopleForSignals}
-            groups={signalGroups ?? []}
-            defaultCircleId={defaultSignalCircleId}
-          />
+          {/* The composer decides "nobody to tell yet" from these reads, so a
+              failed one would refuse out loud for the wrong reason. */}
+          {failed.has('signals') ? (
+            <SectionError section="signals" />
+          ) : (
+            <SignalBar
+              active={mySignals ?? []}
+              circles={circles ?? []}
+              people={peopleForSignals}
+              groups={signalGroups ?? []}
+              defaultCircleId={defaultSignalCircleId}
+            />
+          )}
         </div>
 
         {/* Matchmaker introductions */}
+        {failed.has('introductions') && <SectionError section="introductions" />}
         {proposals.length > 0 && (
           <section aria-label="Introductions">
             <div className="space-y-2.5">
@@ -409,6 +526,7 @@ export default async function HomePage() {
         )}
 
         {/* Ritual nudges and invitations */}
+        {failed.has('rituals') && <SectionError section="rituals" />}
         {rituals.length > 0 && (
           <section aria-label="Rituals">
             <div className="space-y-2.5">
@@ -420,6 +538,7 @@ export default async function HomePage() {
         )}
 
         {/* Reconnection radar (private) */}
+        {failed.has('radar') && <SectionError section="radar" />}
         {radar.length > 0 && (
           <section>
             <SectionHeader
@@ -464,6 +583,7 @@ export default async function HomePage() {
         )}
 
         {/* Post-event reflection */}
+        {failed.has('reflections') && <SectionError section="reflections" />}
         {energyPrompts.length > 0 && (
           <section aria-label="Reflections">
             <div className="space-y-2.5">
@@ -479,6 +599,12 @@ export default async function HomePage() {
         )}
 
         {/* Friends who are around */}
+        {failed.has('around') && (
+          <section>
+            <SectionHeader title="Around right now" hint="People open to connecting" />
+            <SectionError section="around" />
+          </section>
+        )}
         {(friendSignals?.length ?? 0) > 0 && (
           <section>
             <SectionHeader
@@ -527,7 +653,11 @@ export default async function HomePage() {
         )}
 
         {/* Fresh matches — each one clearable, by swipe or by button. */}
-        <RecentMatches matches={recentMatches ?? []} />
+        {failed.has('matches') ? (
+          <SectionError section="matches" />
+        ) : (
+          <RecentMatches matches={recentMatches ?? []} />
+        )}
       </div>
     </AppShell>
   );

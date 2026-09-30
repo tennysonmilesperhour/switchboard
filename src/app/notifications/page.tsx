@@ -7,6 +7,25 @@ import { Card, SectionHeader } from '@/components/ui/Card';
 import { NotificationsFeed } from './NotificationsFeed';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { formatDateTime, formatRelative } from '@/lib/format';
+import { pendingInvitesInOrder } from '@/lib/home-focus';
+import { ErrorNotice } from '@/components/ui/ErrorNotice';
+import { errorFor, type ErrorCode } from '@/lib/errors';
+import { reportOperationalError } from '@/lib/server/observability';
+
+/** The newest page; "Show older" fetches the rest one page at a time. */
+const PAGE_SIZE = 20;
+
+/** A section whose read failed, where it would have been. */
+function SectionError({ code }: { code: ErrorCode }) {
+  const entry = errorFor(code);
+  return (
+    <Card>
+      <div role="alert">
+        <ErrorNotice message={entry.message} fix={entry.fix} code={entry.code} />
+      </div>
+    </Card>
+  );
+}
 
 export const metadata: Metadata = { title: 'Notifications' };
 
@@ -18,22 +37,22 @@ export default async function NotificationsPage() {
   if (!user) redirect('/welcome');
 
   const [
-    { data: pendingInvites },
-    { data: matches },
-    { data: announcements },
-    { data: connectionRequests },
-    { data: recentNotifications },
-    { count: unreadCount },
+    { data: pendingInvites, error: invitesError },
+    { data: matches, error: matchesError },
+    { data: announcements, error: announcementsError },
+    { data: connectionRequests, error: requestsError },
+    { data: recentNotifications, error: notificationsError },
+    { count: unreadCount, error: unreadError },
   ] = await Promise.all([
-    // Only invites the user can still act on: an unanswered invite to an event
-    // that already started would otherwise sit in "Waiting on you" forever with
-    // no way to clear it.
+    // Filtered by `pendingInvitesInOrder` below, the same rule Home uses. A
+    // database `starts_at >= now` filter here dropped every plan still polling
+    // for its date (starts_at is null), which is answerable and was the one
+    // invitation the inbox never showed.
     supabase
       .from('invites')
-      .select('id, event:events!inner(id, title, starts_at, time_zone)')
+      .select('id, event:events(id, title, starts_at, time_zone)')
       .eq('invitee_id', user.id)
-      .eq('status', 'sent')
-      .gte('event.starts_at', new Date().toISOString()),
+      .eq('status', 'sent'),
     supabase
       .from('matches')
       .select('id, activity, room_id, created_at, user_a, user_b')
@@ -62,7 +81,9 @@ export default async function NotificationsPage() {
       .select('id, kind, title, body, url, read_at, created_at')
       .eq('user_id', user.id)
       .order('created_at', { ascending: false })
-      .limit(20),
+      .order('id', { ascending: false })
+      // One more than a page, to know whether "Show older" has anything.
+      .limit(PAGE_SIZE + 1),
     // True unread total (not just within the 20 shown): the badge and the
     // "Mark all as read" control must agree even when older unread rows have
     // scrolled out of the visible feed.
@@ -73,14 +94,46 @@ export default async function NotificationsPage() {
       .is('read_at', null),
   ]);
 
-  const invites = pendingInvites ?? [];
+  // A read that failed is not an empty one. "You're all caught up" used to be
+  // the answer to a query that errored, which told the reader nothing needed
+  // them precisely when we could not see whether anything did.
+  const failures = {
+    notifications: notificationsError ?? unreadError,
+    invites: invitesError,
+    matches: matchesError,
+    announcements: announcementsError,
+    requests: requestsError,
+  };
+  await Promise.all([
+    failures.notifications &&
+      reportOperationalError('notifications.load', failures.notifications, { userId: user.id }),
+    invitesError &&
+      reportOperationalError('notifications.invites', invitesError, { userId: user.id }),
+    matchesError &&
+      reportOperationalError('notifications.matches', matchesError, { userId: user.id }),
+    announcementsError &&
+      reportOperationalError('notifications.announcements', announcementsError, {
+        userId: user.id,
+      }),
+    requestsError &&
+      reportOperationalError('notifications.requests', requestsError, { userId: user.id }),
+  ]);
+  const anyFailed = Object.values(failures).some(Boolean);
+
+  // Only invites the user can still act on: an unanswered invite to an event
+  // that already started would otherwise sit in "Waiting on you" forever with
+  // no way to clear it. Soonest first, undated plans last.
+  const invites = pendingInvitesInOrder(pendingInvites, new Date());
   const matchList = matches ?? [];
   const announcementList = announcements ?? [];
   const requestList = connectionRequests ?? [];
-  const notificationList = recentNotifications ?? [];
+  const notificationRows = recentNotifications ?? [];
+  const notificationList = notificationRows.slice(0, PAGE_SIZE);
+  const hasOlder = notificationRows.length > PAGE_SIZE;
   const totalUnread = unreadCount ?? 0;
 
   const isEmpty =
+    !anyFailed &&
     invites.length === 0 &&
     matchList.length === 0 &&
     announcementList.length === 0 &&
@@ -97,11 +150,26 @@ export default async function NotificationsPage() {
         />
       ) : (
         <div className="space-y-8">
-          {notificationList.length > 0 && (
-            <NotificationsFeed
-              notifications={notificationList}
-              totalUnread={totalUnread}
-            />
+          {failures.notifications ? (
+            <section>
+              <SectionHeader title="Recent 🔔" />
+              <SectionError code="SB-NOTIFY-LOAD" />
+            </section>
+          ) : (
+            notificationList.length > 0 && (
+              <NotificationsFeed
+                notifications={notificationList}
+                totalUnread={totalUnread}
+                hasOlder={hasOlder}
+              />
+            )
+          )}
+
+          {invitesError && (
+            <section>
+              <SectionHeader title="Waiting on you 💌" />
+              <SectionError code="SB-INVITE-LOAD" />
+            </section>
           )}
 
           {invites.length > 0 && (
@@ -111,11 +179,9 @@ export default async function NotificationsPage() {
                 hint="Invitations you haven’t answered yet"
               />
               <div className="space-y-2">
-                {invites.map((invite) => {
-                  const event = Array.isArray(invite.event) ? invite.event[0] : invite.event;
-                  if (!event) return null;
+                {invites.map(({ id, event }) => {
                   return (
-                    <Link key={invite.id} href={`/events/${event.id}`} className="block group">
+                    <Link key={id} href={`/events/${event.id}`} className="block group">
                       <Card tone="gold" className="group-hover:shadow-lift transition-shadow">
                         <p className="font-medium">{event.title}</p>
                         <p className="text-xs text-ink-soft mt-0.5">
@@ -126,6 +192,13 @@ export default async function NotificationsPage() {
                   );
                 })}
               </div>
+            </section>
+          )}
+
+          {requestsError && (
+            <section>
+              <SectionHeader title="Wants to connect 👋" />
+              <SectionError code="SB-CONNECTION-LOAD" />
             </section>
           )}
 
@@ -162,6 +235,13 @@ export default async function NotificationsPage() {
             </section>
           )}
 
+          {matchesError && (
+            <section>
+              <SectionHeader title="Matches ✨" />
+              <SectionError code="SB-MATCH-LOAD" />
+            </section>
+          )}
+
           {matchList.length > 0 && (
             <section>
               <SectionHeader title="Matches ✨" hint="You both chose each other" />
@@ -183,6 +263,13 @@ export default async function NotificationsPage() {
                   </Link>
                 ))}
               </div>
+            </section>
+          )}
+
+          {announcementsError && (
+            <section>
+              <SectionHeader title="From your hosts 📣" />
+              <SectionError code="SB-ANNOUNCEMENT-LOAD" />
             </section>
           )}
 

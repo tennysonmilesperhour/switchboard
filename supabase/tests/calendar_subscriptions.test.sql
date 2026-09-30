@@ -99,7 +99,9 @@ select is(
     where n.nspname = 'public'
       and c.relname = 'calendar_subscriptions'
       and p.polname = 'calendar_subscriptions_own'),
-  '(user_id = auth.uid())',
+  -- auth.uid() is wrapped so it runs once per statement
+  -- (20260930235900_rls_initplan.sql); the deparser prints that form.
+  '(user_id = ( SELECT auth.uid() AS uid))',
   'the subscription policy declares its ownership WITH CHECK explicitly'
 );
 

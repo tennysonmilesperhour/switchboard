@@ -10,13 +10,14 @@ import {
   signInWithPasswordIdentifier,
   type AuthActionResult,
 } from '@/lib/actions/auth';
-import { errorRef, type ErrorCode } from '@/lib/errors';
+import { errorFor, errorRef, type ErrorCode } from '@/lib/errors';
 import {
   PASSWORD_MIN_LENGTH,
   normalizeIdentifier,
 } from '@/lib/auth-identity';
 import { createClient } from '@/lib/supabase/client';
 import { COMMUNITY_COVENANT_SUMMARY } from '@/lib/legal';
+import { supportEmail } from '@/lib/contact';
 
 type Mode = 'signin' | 'create';
 type Status = 'idle' | 'submitting' | 'error';
@@ -48,7 +49,7 @@ export function LoginForm({ next = '/', initialMode = 'signin' }: LoginFormProps
   // OAuth kicks off a full-page redirect, so it needs its own feedback that
   // lives outside the sign-in/create forms (the button sits below both).
   const [oauthPending, setOauthPending] = useState(false);
-  const [oauthError, setOauthError] = useState('');
+  const [oauthError, setOauthError] = useState<ErrorCode | ''>('');
   const [createState, createAction, creating] = useActionState(
     createPasswordAccount,
     initialCreateState,
@@ -170,9 +171,7 @@ export function LoginForm({ next = '/', initialMode = 'signin' }: LoginFormProps
       },
     });
     if (error || !data.url) {
-      setOauthError(
-        'Google sign-in isn’t available right now. Use your email or username instead.',
-      );
+      setOauthError('SB-OAUTH-START');
       setOauthPending(false);
       return;
     }
@@ -249,6 +248,18 @@ export function LoginForm({ next = '/', initialMode = 'signin' }: LoginFormProps
             >
               <p>{message}</p>
               {fix ? <p className="mt-1 text-ink-soft">{fix}</p> : null}
+              {code === 'SB-AUTH-SUSPENDED' ? (
+                // Nothing on this form can lift a suspension, so the next step
+                // is a person (docs/AUTH.md: every blocked state needs a route
+                // out the reader can reach from here).
+                <p className="mt-1 text-ink-soft">
+                  If you think this is a mistake, email{' '}
+                  <a className="font-bold underline" href={`mailto:${supportEmail()}`}>
+                    {supportEmail()}
+                  </a>
+                  .
+                </p>
+              ) : null}
               {code ? (
                 <p className="mt-1 text-xs text-ink-faint">{errorRef(code)}</p>
               ) : null}
@@ -442,9 +453,13 @@ export function LoginForm({ next = '/', initialMode = 'signin' }: LoginFormProps
         {oauthPending ? 'Connecting to Google…' : 'Continue with Google'}
       </Button>
       {oauthError ? (
-        <p role="alert" className="text-sm text-rose-deep">
-          {oauthError}
-        </p>
+        <div role="alert" className="text-sm text-rose-deep">
+          <p>{errorFor(oauthError).message}</p>
+          {errorFor(oauthError).fix ? (
+            <p className="mt-1 text-ink-soft">{errorFor(oauthError).fix}</p>
+          ) : null}
+          <p className="mt-1 text-xs text-ink-faint">{errorRef(oauthError)}</p>
+        </div>
       ) : null}
     </div>
   );

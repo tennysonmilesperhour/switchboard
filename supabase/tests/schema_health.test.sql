@@ -1,11 +1,12 @@
--- pgTAP coverage for 20260902015913_schema_health_checks.sql.
+-- pgTAP coverage for 20260902015913_schema_health_checks.sql and the objects
+-- added to it by 20260930092000_schema_status_completion_plan.sql.
 --
 -- Migration history is bookkeeping, not proof that the schema exists. Rename
 -- each required object inside a savepoint to prove the health function detects
 -- the real absence by its operator-facing name.
 
 begin;
-select plan(22);
+select plan(26);
 
 select is(
   public.app_schema_status()->>'current',
@@ -151,6 +152,30 @@ select is(
 );
 alter table public.health_missing_availability_responses
   rename to event_availability_responses;
+
+alter table public.moderation_actions rename to health_missing_moderation_actions;
+select ok(
+  (public.app_schema_status()->'missing') ? 'public.moderation_actions',
+  'health names a missing moderation_actions table'
+);
+select is(
+  (public.app_schema_status()->>'complete')::boolean,
+  false,
+  'a missing moderation_actions table makes health incomplete'
+);
+alter table public.health_missing_moderation_actions rename to moderation_actions;
+
+alter function public.skip_ritual(uuid, date) rename to health_missing_skip_ritual;
+select ok(
+  (public.app_schema_status()->'missing') ? 'public.skip_ritual',
+  'health names a missing skip_ritual function'
+);
+select is(
+  (public.app_schema_status()->>'complete')::boolean,
+  false,
+  'a missing skip_ritual function makes health incomplete'
+);
+alter function public.health_missing_skip_ritual(uuid, date) rename to skip_ritual;
 
 select * from finish();
 rollback;

@@ -43,6 +43,26 @@ describe('shared action authentication', () => {
     if (result.ok) expect(result.supabase.auth.getUser).toBe(mocks.getUser);
   });
 
+  it('refuses a session a moderator has since suspended, naming the suspension', async () => {
+    const until = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
+    mocks.getUser.mockResolvedValue({ data: { user: { id: 'user-1', banned_until: until } } });
+
+    const result = await requireUser();
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.code).toBe('SB-AUTH-SUSPENDED');
+      expect(result.error).not.toMatch(/signed in to do that/);
+    }
+  });
+
+  it('lets a suspension that has run out through', async () => {
+    const user = { id: 'user-1', banned_until: '2020-01-01T00:00:00Z' };
+    mocks.getUser.mockResolvedValue({ data: { user } });
+
+    await expect(requireUser()).resolves.toMatchObject({ ok: true, user });
+  });
+
   it('keeps anonymous identity reads explicit', async () => {
     mocks.getUser.mockResolvedValue({ data: { user: null } });
 

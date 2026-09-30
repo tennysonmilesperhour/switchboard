@@ -25,6 +25,7 @@ import { isValidCoordinate } from '@/lib/geo';
 import type { ProfileLink, ProfileSocial } from '@/lib/types';
 import { toJson } from '@/lib/supabase/json';
 import type { NotificationPrefs } from '@/lib/notifications';
+import { requestContactVerification } from '@/lib/actions/contact-verification';
 
 const HANDLE_PATTERN = USERNAME_PATTERN;
 const MAX_LINKS = 15;
@@ -70,6 +71,11 @@ export async function acceptLatestTerms(formData: FormData): Promise<void> {
     .select('legal_terms_version')
     .maybeSingle();
   if (error || saved?.legal_terms_version !== LEGAL_VERSION) {
+    // The page shows SB-PROFILE-SAVE for this; log it under the same code so a
+    // screenshot of the loop is joinable to its cause.
+    await reportOperationalError('profile-save', error ?? {
+      message: 'legal_terms_version did not read back after a successful upsert',
+    }, { userId: user.id, step: 'legal-terms' });
     redirect(`/legal-update?error=save&next=${encodeURIComponent(nextPath)}`);
   }
   redirect(nextPath);
@@ -119,6 +125,31 @@ function parseSocials(raw: string): ProfileSocial[] {
     if (socials.length >= MAX_SOCIALS) break;
   }
   return socials;
+}
+
+/**
+ * The browser's IANA zone, or UTC. The field is client-supplied, and quiet
+ * hours, the digest hour and the greeting all hand it to Intl, which throws on
+ * a zone it doesn't recognise.
+ */
+function knownTimeZone(raw: string): string {
+  return exactTimeZone(raw) ?? 'UTC';
+}
+
+/**
+ * The zone exactly as given when Intl recognises it, otherwise null. Settings
+ * uses this rather than `knownTimeZone`: a choice someone made on purpose is
+ * refused out loud, never quietly swapped for UTC.
+ */
+function exactTimeZone(raw: string): string | null {
+  const zone = raw.trim();
+  if (!zone || zone.length > 64) return null;
+  try {
+    new Intl.DateTimeFormat('en-US', { timeZone: zone });
+    return zone;
+  } catch {
+    return null;
+  }
 }
 
 function nullableText(raw: FormDataEntryValue | null, max: number): string | null {
@@ -252,16 +283,25 @@ export async function completeOnboarding(formData: FormData): Promise<void> {
   if (!HANDLE_PATTERN.test(handle)) onboardingError('handle');
   if (!acceptedTerms || !acceptedCovenant) onboardingError('agreement');
 
+  // The optional recovery step, offered only to username sign-ups: without a
+  // verified email they have no way back in if they forget their password
+  // (docs/AUTH.md, decision 14). It becomes the profile's contact email, which
+  // the contact sync marks unverified until the link we send is opened —
+  // `/forgot-password` never mails an address nobody has proved.
+  const recoveryEmail = nullableText(formData.get('recovery_email'), 120)?.toLowerCase() ?? null;
+  if (recoveryEmail && !isEmail(recoveryEmail)) onboardingError('recovery_email');
+
   const profileUpdate = {
     display_name: displayName,
     handle,
     interests,
     down_to: downTo,
-    timezone: String(formData.get('timezone') || 'UTC'),
+    timezone: knownTimeZone(String(formData.get('timezone') || '')),
     onboarded: true,
     legal_terms_version: LEGAL_VERSION,
     legal_terms_accepted_at: new Date().toISOString(),
     community_covenant_accepted_at: new Date().toISOString(),
+    ...(recoveryEmail ? { contact_email: recoveryEmail } : {}),
   };
 
   // The authenticated user has already been verified by requireUserOrRedirect.
@@ -282,7 +322,13 @@ export async function completeOnboarding(formData: FormData): Promise<void> {
     .single();
 
   if (profileError || !savedProfile?.onboarded) {
-    onboardingError(profileError?.code === '23505' ? 'handle_taken' : 'save');
+    if (profileError?.code === '23505') onboardingError('handle_taken');
+    // Nothing was logged here, so "Something went wrong saving your profile"
+    // was undiagnosable. The page shows SB-PROFILE-SAVE; so does this line.
+    await reportOperationalError('onboarding', profileError ?? {
+      message: 'onboarded did not read back after a successful upsert',
+    }, { userId: user.id });
+    onboardingError('save');
   }
 
   // Starter circles - reused across signals, visibility, and invite lists.
@@ -309,6 +355,14 @@ export async function completeOnboarding(formData: FormData): Promise<void> {
     await reportOperationalError('invite-claim.contact', claimError, {
       area: 'onboarding',
     });
+  }
+
+  // Send the proof-of-ownership link for the recovery email. Best-effort: a
+  // failure here must not hold someone at onboarding (the only route out of
+  // onboarding is finishing it), and Settings keeps asking them to verify it
+  // until they do, with its own button to send the link again.
+  if (recoveryEmail) {
+    await requestContactVerification('email').catch(() => undefined);
   }
 
   // Counts only — never the interest strings themselves.
@@ -510,7 +564,9 @@ export async function updateSabbatical(formData: FormData): Promise<ActionResult
   const { supabase, user } = await requireUserOrRedirect();
 
   const on = formData.get('sabbatical') === 'on';
-  const message = String(formData.get('sabbatical_message') ?? '').trim();
+  // Shown to other people (profile, invite pickers), and capped at 140 by the
+  // database; the field's maxLength is only a hint.
+  const message = String(formData.get('sabbatical_message') ?? '').trim().slice(0, 140);
 
   const { error } = await supabase
     .from('profiles')
@@ -574,10 +630,32 @@ export async function updateQuietHours(formData: FormData): Promise<ActionResult
   const rawEnd = formData.get('quiet_end');
   const start = rawStart === '' || rawStart === null ? null : Number(rawStart);
   const end = rawEnd === '' || rawEnd === null ? null : Number(rawEnd);
+  // A window needs both ends. With one side Off, push treated quiet hours as
+  // off entirely while SMS filled the missing side with its 10pm/8am default,
+  // so the two channels went quiet at different times; equal ends are an
+  // empty window. Both saved "successfully" and did nothing anyone chose.
+  if ((start === null) !== (end === null)) {
+    return validation('Choose both a start and an end for quiet hours, or set both to Off.');
+  }
+  if (start !== null && start === end) {
+    return validation('Quiet hours need to start and end at different times.');
+  }
+  // The zone the hours are read in. Optional so an older form without the
+  // field still saves the hours; an explicit choice must be one Intl knows,
+  // because the sweeps hand it straight to Intl and to Postgres.
+  const rawZone = formData.get('timezone');
+  const timezone = rawZone === null ? null : exactTimeZone(String(rawZone));
+  if (rawZone !== null && !timezone) {
+    return validation('Choose a time zone from the list.');
+  }
 
   const { error } = await supabase
     .from('profiles')
-    .update({ quiet_hours_start: start, quiet_hours_end: end })
+    .update({
+      quiet_hours_start: start,
+      quiet_hours_end: end,
+      ...(timezone ? { timezone } : {}),
+    })
     .eq('id', user.id);
   if (error) {
     return reportAndFail('SB-SETTINGS-SAVE', 'settings.quiet-hours', error, {
@@ -586,6 +664,8 @@ export async function updateQuietHours(formData: FormData): Promise<ActionResult
   }
 
   revalidatePath('/settings');
+  // Home greets by the stored zone before the browser corrects it.
+  if (timezone) revalidatePath('/');
   return { ok: true };
 }
 

@@ -11,8 +11,8 @@ import { reportAndFail } from '@/lib/server/observability';
 import { checkRateLimit } from '@/lib/server/rate-limit';
 import { safeFetchText } from '@/lib/server/safe-fetch';
 import { isFetchableUrl } from '@/lib/net-guard';
-import { parseBusyIntervals, busyGridSlots } from '@/lib/ics-busy';
-import { GRID_DAYS, gridSlots, slotRange } from '@/lib/availability';
+import { parseBusyIntervals } from '@/lib/ics-busy';
+import { busyBandsFromStored, busyQuarters, calendarWindow } from '@/lib/availability';
 import type { TablesInsert } from '@/lib/supabase/database.types';
 
 /**
@@ -74,14 +74,16 @@ async function refreshBusy(
     return { ...failure('SB-CAL-READ'), status: 'unreadable', code: 'SB-CAL-READ' };
   }
 
-  const now = new Date();
-  const slots = gridSlots(now, GRID_DAYS);
-  const windowStart = new Date(slots[0]);
-  const windowEnd = new Date(slotRange(slots[slots.length - 1]).end);
-  const busy = busyGridSlots(
-    parseBusyIntervals(fetched.body, windowStart, windowEnd),
-    slots,
-    slotRange,
+  // Stored as real quarter-hours, not grid bands: a band only means something
+  // in one zone, and this person answers plans in whichever zone each one is
+  // in. Each plan's grid turns these into its own bands (busyBandsFromStored).
+  // Storing UTC bands here is what made "Fill from my calendar" mark the wrong
+  // evenings for anyone away from Greenwich.
+  const window = calendarWindow(new Date());
+  const windowEnd = new Date(window.end);
+  const busy = busyQuarters(
+    parseBusyIntervals(fetched.body, new Date(window.start), windowEnd),
+    window,
   );
 
   // Replace rather than merge: the calendar is the source of truth for these
@@ -116,7 +118,18 @@ async function refreshBusy(
       };
     }
   }
-  return { ok: true, slots: busy.length, coveredThrough: windowEnd.toISOString() };
+  // "N busy slots this week" is told in bands of the person's own week, since
+  // that is the grid they will see on a plan near them.
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('timezone')
+    .eq('id', userId)
+    .maybeSingle();
+  return {
+    ok: true,
+    slots: busyBandsFromStored(busy, profile?.timezone).length,
+    coveredThrough: windowEnd.toISOString(),
+  };
 }
 
 /**
@@ -308,17 +321,19 @@ export async function getCalendarStatus(): Promise<CalendarStatus> {
  * the same interaction — a re-render that arrives afterwards is a second thing
  * to notice, and noticing was the problem.
  */
-export async function syncCalendarForGrid(): Promise<
-  ActionResult & { busySlots?: string[]; coveredThrough?: string | null }
-> {
+export async function syncCalendarForGrid(
+  timeZone?: string | null,
+): Promise<ActionResult & { busySlots?: string[]; coveredThrough?: string | null }> {
   const result = await syncCalendar();
   if (!result.ok) return result;
-  const [busySlots, status] = await Promise.all([myBusySlots(), getCalendarStatus()]);
+  const [busySlots, status] = await Promise.all([myBusySlots(timeZone), getCalendarStatus()]);
   return { ok: true, busySlots, coveredThrough: status.coveredThrough };
 }
 
 /**
- * This person's busy bands for the week the grid covers.
+ * This person's busy bands for the week a plan's grid covers, in that plan's
+ * zone (`timeZone` is the plan's `time_zone`; an unknown one reads as UTC,
+ * exactly as the grid lays itself out).
  *
  * Read straight from the stored rows rather than re-fetching the feed, so
  * opening a plan never waits on somebody's calendar provider. Refreshing is an
@@ -328,20 +343,17 @@ export async function syncCalendarForGrid(): Promise<
  * Returns an empty list for anyone with no calendar connected, which is what
  * makes every caller's handling of "not connected" identical to "nothing on".
  */
-export async function myBusySlots(): Promise<string[]> {
+export async function myBusySlots(timeZone?: string | null): Promise<string[]> {
   const auth = await requireUser();
   if (!auth.ok) return [];
   const { supabase, user } = auth;
 
-  const slots = gridSlots(new Date(), GRID_DAYS);
   const { data } = await supabase
     .from('calendar_busy')
     .select('slot')
     .eq('user_id', user.id);
-
-  // Normalised through the grid's own slot list: Postgres hands back a
-  // timestamptz whose formatting need not match the ISO strings the grid keys
-  // on, and a near-miss would silently prefill nothing.
-  const stored = new Set((data ?? []).map((row: { slot: string }) => new Date(row.slot).getTime()));
-  return slots.filter((slot) => stored.has(new Date(slot).getTime()));
+  return busyBandsFromStored(
+    (data ?? []).map((row: { slot: string }) => row.slot),
+    typeof timeZone === 'string' ? timeZone.slice(0, 64) : null,
+  );
 }

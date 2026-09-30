@@ -1,7 +1,6 @@
 'use server';
 import { imminentChange, urgentChangeDeadline } from '@/lib/sms-commands';
 
-import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import { requireUser, requireUserOrRedirect } from '@/lib/server/require-user';
 import { createAdminClient } from '@/lib/supabase/admin';
@@ -12,15 +11,10 @@ import {
   type InvitationDeliverySummary,
 } from '@/lib/server/cascade-runner';
 import { notifyUsers } from '@/lib/server/notify';
-import { formatDateTime } from '@/lib/format';
+import { notifyDateSettled, openDecidingPlan } from '@/lib/server/poll-notices';
 import { capture } from '@/lib/analytics/server';
 import { ANALYTICS_EVENTS } from '@/lib/analytics/events';
 import { isValidMediaRef } from '@/lib/server/media';
-import type { RecurrenceKind } from '@/lib/types';
-import {
-  nextOccurrenceAfter,
-  normalizeCustomInterval,
-} from '@/lib/engine/recurrence';
 import { reportAndFail, reportOperationalError } from '@/lib/server/observability';
 import type { ActionResult } from '@/lib/errors';
 import { failure, validation } from '@/lib/errors';
@@ -30,8 +24,9 @@ import { consumeEventOutboundSlot } from '@/lib/server/invite-delivery-limit';
 import { safeHttpUrl } from '@/lib/security';
 import { toJson } from '@/lib/supabase/json';
 import { hasInviteDetails } from '@/lib/event-details';
-import { cloneEventForReuse } from '@/lib/server/event-clone';
+import { invitationStep, readyToSendInvitations } from '@/lib/poll-readiness';
 import { capacityProblem } from '@/lib/plan-capacity';
+import { normalizeNewQuestions, planExtrasProblem } from '@/lib/plan-extras';
 import { sameInstant } from '@/lib/plan-time';
 import {
   createEventError,
@@ -45,7 +40,11 @@ import {
   type UpdateEventInput,
 } from '@/lib/actions/event-action-shared';
 
-export async function createEvent(input: CreateEventInput): Promise<CreateEventResult> {
+export async function createEvent(
+  // The ideas floated in the wizard for the first poll; optional, and only read
+  // when the plan starts as a vote.
+  input: CreateEventInput & { pollOptions?: string[] },
+): Promise<CreateEventResult> {
   const { supabase, user } = await requireUserOrRedirect();
 
   const title = input.title.trim();
@@ -127,13 +126,23 @@ export async function createEvent(input: CreateEventInput): Promise<CreateEventR
     );
   }
 
+  // A plan that starts as a vote tells its people there is a vote, and gives
+  // email guests the link to help pick the date, once, here (decision D4). One
+  // that doesn't sends its first wave of invitations.
   let delivery: InvitationDeliverySummary | undefined;
-  if (!input.enablePoll) {
-    try {
-      delivery = await notifyCurrentInviteWave(eventId);
-    } catch (cascadeError) {
-      await reportOperationalError('event-initial-delivery', cascadeError, { eventId });
-    }
+  try {
+    delivery = input.enablePoll
+      ? await openDecidingPlan(supabase, eventId, user.id, input.pollOptions)
+      : await notifyCurrentInviteWave(eventId);
+  } catch (cascadeError) {
+    await reportOperationalError('event-initial-delivery', cascadeError, { eventId });
+  }
+
+  // A plan made from a ritual schedules the next one, whichever of the pair
+  // made it (D8). Best-effort: the plan exists either way.
+  if (input.ritualId) {
+    const { error: ritualError } = await supabase.rpc('note_ritual_planned', { p_ritual: input.ritualId, p_event: eventId });
+    if (ritualError) await reportOperationalError('ritual.plan', ritualError, { eventId });
   }
 
   // Put the plan on the map. After invite delivery so a geocode can't delay it.
@@ -154,8 +163,9 @@ export async function createEvent(input: CreateEventInput): Promise<CreateEventR
 
 /**
  * Host/co-host edit of an already-published plan. Changing the time or place
- * quietly pings everyone who has already accepted so nobody shows up to the
- * old details.
+ * pings everyone who has already accepted so nobody shows up to the old
+ * details. With `extras` it also changes what D18 lets change after creation:
+ * the cover, theme, reminders, Open Table, and new questions.
  */
 export async function updateEventDetails(
   eventId: string,
@@ -195,12 +205,33 @@ export async function updateEventDetails(
   const wishlistUrl = safeHttpUrl(input.wishlistUrl);
 
   const admin = createAdminClient();
-  const { data: before } = await admin
-    .from('events')
-    .select('starts_at, location_name, location_address, title')
-    .eq('id', eventId)
-    .maybeSingle();
+  const [{ data: before }, { data: asked, error: askedError }] = await Promise.all([
+    admin
+      .from('events')
+      .select('starts_at, location_name, location_address, title')
+      .eq('id', eventId)
+      .maybeSingle(),
+    admin.from('event_questions').select('position').eq('event_id', eventId),
+  ]);
   if (!before) return validation('Plan not found.');
+  if (askedError) {
+    return reportAndFail('SB-PLAN-SAVE', 'event-update', askedError, { eventId, step: 'questions-read' });
+  }
+
+  // D18: cover, theme, reminders, Open Table, and questions added (never
+  // edited) may change after creation. Checked before anything is written.
+  const extras = input.extras;
+  const newQuestions = extras ? normalizeNewQuestions(extras.newQuestions) : [];
+  const extrasError = extras
+    ? planExtrasProblem({
+        openTable: extras.openTable,
+        capacity: input.capacity,
+        theme: extras.theme,
+        existingQuestions: (asked ?? []).length,
+        newQuestions: newQuestions.length,
+      })
+    : null;
+  if (extrasError) return validation(extrasError);
 
   // Compared as instants, never as strings. The row comes back from PostgREST
   // as `2026-09-25T02:00:00+00:00` and the form sends `toISOString()`'s
@@ -231,6 +262,19 @@ export async function updateEventDetails(
       ...(input.timeZone ? { time_zone: input.timeZone.slice(0, 64) } : {}),
       capacity: input.capacity,
       wishlist_url: wishlistUrl,
+      ...(extras
+        ? {
+            // Shown on pages guests open, so held to the same scheme check.
+            cover_url: safeHttpUrl(extras.coverUrl),
+            theme: extras.theme,
+            reminders_enabled: extras.remindersEnabled,
+            open_table: extras.openTable,
+          }
+        : {}),
+      // The reminder markers describe the time they were sent for. Left set, a
+      // plan moved after its day-before note went out never got one for the
+      // new date, and one moved later after "starting soon" never got that.
+      ...(whenChanged ? { reminded_day_before_at: null, reminded_soon_at: null } : {}),
     })
     .eq('id', eventId);
   if (error) {
@@ -241,6 +285,25 @@ export async function updateEventDetails(
       { eventId },
       'Could not save your changes. Try again.',
     );
+  }
+
+  // New questions go in after the ones already asked, through the caller's own
+  // session so `event_questions_write` (host or co-host) decides. Anyone who
+  // already said yes is not asked again; the answers start with the next yes.
+  if (newQuestions.length > 0) {
+    const next = Math.max(-1, ...(asked ?? []).map((row) => row.position)) + 1;
+    const { error: questionError } = await auth.supabase
+      .from('event_questions')
+      .insert(newQuestions.map((q, i) => ({ ...q, event_id: eventId, position: next + i })));
+    if (questionError) {
+      return reportAndFail(
+        'SB-PLAN-SAVE',
+        'event-update',
+        questionError,
+        { eventId, step: 'questions' },
+        'Your other changes saved, but the new questions didn’t. Try adding them again.',
+      );
+    }
   }
 
   // Notify accepted guests only when the logistics they'd act on actually change.
@@ -288,7 +351,7 @@ export async function updateEventDetails(
  */
 export async function setEventVisibility(
   eventId: string,
-  field: 'show_invite_list' | 'show_accepted' | 'show_expired',
+  field: 'show_invite_list' | 'show_accepted',
   enabled: boolean,
 ): Promise<ActionResult> {
   const auth = await requireUser();
@@ -301,12 +364,9 @@ export async function setEventVisibility(
   }
 
   const admin = createAdminClient();
+  // `show_expired` is retired (D3): nothing reads it, so nothing may set it.
   const update =
-    field === 'show_invite_list'
-      ? { show_invite_list: enabled }
-      : field === 'show_accepted'
-        ? { show_accepted: enabled }
-        : { show_expired: enabled };
+    field === 'show_invite_list' ? { show_invite_list: enabled } : { show_accepted: enabled };
   const { error } = await admin
     .from('events')
     .update(update)
@@ -577,7 +637,7 @@ export async function cancelEvent(
     .from('invites')
     .update({ status: 'cancelled' })
     .eq('event_id', eventId)
-    .in('status', ['queued', 'sent', 'waitlisted', 'requested']);
+    .in('status', ['queued', 'sent', 'waitlisted', 'requested', 'pending_approval']);
   if (retireError) {
     await reportOperationalError('event-update', retireError, {
       eventId,
@@ -634,59 +694,17 @@ export async function deleteEventPermanently(
 }
 
 /**
- * Run It Back: clone a past plan into a fresh one - same people, same place,
- * new date TBD. Anyone who said "not my thing" is quietly left off; everyone
- * else keeps their place in the order (see `runItBackCrew` for who counts as
- * crew). The new plan is live - invitations go out as it is created - and the
- * host lands on it.
- */
-export async function runItBack(eventId: string): Promise<never> {
-  const { user } = await requireUserOrRedirect();
-
-  // new date TBD - the group can settle it in the room
-  const cloneId = await cloneEventForReuse(user.id, eventId, null);
-  redirect(cloneId ? `/events/${cloneId}` : `/events/${eventId}`);
-}
-
-/**
- * Schedule the next occurrence of a recurring plan: clone the crew forward onto
- * the upcoming date its cadence produces. Host only. If the source doesn't
- * repeat or has no start time to count from, the new date is left TBD.
- */
-export async function scheduleNextOccurrence(eventId: string): Promise<never> {
-  const { supabase, user } = await requireUserOrRedirect();
-  const manager = await checkEventManager(user.id, eventId);
-  if (!manager.ok || !manager.isManager) redirect('/plans');
-
-  const { data: source } = await supabase
-    .from('events')
-    .select('host_id, starts_at, recurrence, recurrence_interval_days')
-    .eq('id', eventId)
-    .single();
-  if (!source || source.host_id !== user.id) redirect('/plans');
-
-  let startsAt: string | null = null;
-  if (source.starts_at && source.recurrence && source.recurrence !== 'none') {
-    const next = nextOccurrenceAfter(
-      new Date(source.starts_at),
-      source.recurrence as RecurrenceKind,
-      normalizeCustomInterval(source.recurrence_interval_days),
-      new Date(),
-    );
-    startsAt = next ? next.toISOString() : null;
-  }
-
-  const cloneId = await cloneEventForReuse(user.id, eventId, startsAt);
-  redirect(cloneId ? `/events/${cloneId}` : `/events/${eventId}`);
-}
-
-/**
  * Host closes voting and moves an AWI event into the inviting phase.
  *
  * Only from `deciding` — the one status HostControls offers "Send the
  * invitations" for. Without the guard in the WHERE, a stale tab or a direct
  * call moved a cancelled or past plan back to `inviting`, which reopens its
- * share link and restarts its cascade.
+ * share link and restarts its cascade. And only once the group has decided and
+ * the plan has a date — the same rule that enables the button
+ * (`invitationStep` in poll-readiness.ts): the page was the only thing
+ * enforcing it, so a direct call could send invitations for a date still being
+ * voted on, and a poll decided on a free-text idea sent "The date is set" for a
+ * plan with no date at all.
  */
 export async function startInviting(eventId: string): Promise<ActionResult> {
   const auth = await requireUser();
@@ -694,11 +712,31 @@ export async function startInviting(eventId: string): Promise<ActionResult> {
   const refusal = managerRefusal(await checkEventManager(auth.user.id, eventId));
   if (refusal) return refusal;
   const admin = createAdminClient();
+  const [{ data: polls, error: pollError }, { data: plan, error: planError }] = await Promise.all([
+    admin.from('polls').select('phase').eq('event_id', eventId),
+    admin.from('events').select('starts_at').eq('id', eventId).maybeSingle(),
+  ]);
+  if (pollError || planError) {
+    return reportAndFail('SB-PLAN-SAVE', 'event-update', pollError ?? planError, {
+      eventId,
+      step: 'start-inviting-polls',
+    });
+  }
+  const step = invitationStep(readyToSendInvitations(polls ?? []), plan?.starts_at);
+  if (step === 'deciding') {
+    return validation('The group is still deciding, so the invitations can’t go out yet.');
+  }
+  if (step === 'needs-date') {
+    return validation('Set the plan’s date first. The invitations go out with it.');
+  }
+  // `starts_at` is re-checked in the WHERE, so a date cleared since the read
+  // above cannot send invitations for a plan with none.
   const { data: started, error } = await admin
     .from('events')
     .update({ status: 'inviting' })
     .eq('id', eventId)
     .eq('status', 'deciding')
+    .not('starts_at', 'is', null)
     .select('id')
     .maybeSingle();
   if (error) {
@@ -713,50 +751,8 @@ export async function startInviting(eventId: string): Promise<ActionResult> {
   // cascade below only speaks to invites it is sending, so it would never
   // reach them — and a yes given to a dateless plan has to be answered with
   // the date when it lands, or the promise the link made goes unkept.
-  await notifyDateSettled(admin, eventId);
+  await notifyDateSettled(eventId);
   await advanceEventCascade(eventId);
   revalidatePath(`/events/${eventId}`);
   return { ok: true };
-}
-
-/** Tell everyone who already accepted that the plan now has a date. */
-async function notifyDateSettled(
-  admin: ReturnType<typeof createAdminClient>,
-  eventId: string,
-): Promise<void> {
-  const { data: event } = await admin
-    .from('events')
-    .select('id, title, starts_at, time_zone')
-    .eq('id', eventId)
-    .maybeSingle<{
-      id: string;
-      title: string;
-      starts_at: string | null;
-      time_zone: string | null;
-    }>();
-  if (!event) return;
-
-  const { data: accepted } = await admin
-    .from('invites')
-    .select('invitee_id')
-    .eq('event_id', eventId)
-    .eq('status', 'accepted')
-    .not('invitee_id', 'is', null);
-
-  const recipients = (accepted ?? [])
-    .map((row) => row.invitee_id as string | null)
-    .filter((id): id is string => Boolean(id));
-  if (recipients.length === 0) return;
-
-  // In the plan's own zone — a notification has no viewer zone, so without this
-  // it would announce the server's UTC.
-  const when = event.starts_at ? formatDateTime(event.starts_at, event.time_zone) : null;
-  await notifyUsers(recipients, {
-    kind: 'event_date_set',
-    title: 'The date is set 📅',
-    body: when
-      ? `${event.title} is happening ${when}.`
-      : `${event.title} is moving ahead - the host has closed the vote.`,
-    url: `/events/${event.id}`,
-  });
 }

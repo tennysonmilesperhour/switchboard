@@ -11,6 +11,7 @@ import {
   removeZoneMember,
   resolveZoneJoinRequest,
   rotateZoneInviteLink,
+  setZoneMemberRole,
   setZoneVisibility,
 } from '@/lib/actions/zones';
 
@@ -98,19 +99,40 @@ export function ZoneAccess({
         toast.error(result.error ?? 'Could not answer that request.', result.code);
         return;
       }
-      toast.success(approve ? 'They’re in.' : 'Request passed on.');
+      toast.success(approve ? 'They’re in. They’ve been told.' : 'Passed on. They’ve been told.');
     });
   }
 
-  function remove(member: Member) {
+  function changeRole(member: Member) {
+    const next = member.role === 'moderator' ? 'member' : 'moderator';
     startTransition(async () => {
-      const ok = await confirm({
-        title: `Remove ${member.display_name}?`,
-        body: 'They lose access to this zone. You can invite them again later.',
-        confirmLabel: 'Remove',
-        danger: true,
-      });
-      if (!ok) return;
+      const result = await setZoneMemberRole(zoneId, member.member_id, next);
+      if (!result.ok) {
+        toast.error(result.error ?? 'Could not change their role.', result.code);
+        return;
+      }
+      toast.success(
+        next === 'moderator'
+          ? `${member.display_name} can now manage this zone with you.`
+          : `${member.display_name} is a member again.`,
+      );
+    });
+  }
+
+  async function remove(member: Member) {
+    // Ask before the transition starts. Updates made inside an async
+    // transition are held until the whole action settles, so a dialog opened
+    // in there never paints and the action waits on an answer nobody can give.
+    const ok = await confirm({
+      title: `Remove ${member.display_name}?`,
+      body: isPrivate
+        ? 'They lose access to this zone and any check-in here ends. They can ask to come back once, after 30 days, or you can send them the invite link.'
+        : 'Any check-in they have here ends. The zone is public, so they can still find it.',
+      confirmLabel: 'Remove',
+      danger: true,
+    });
+    if (!ok) return;
+    startTransition(async () => {
       const result = await removeZoneMember(zoneId, member.member_id);
       if (!result.ok) {
         toast.error(result.error ?? 'Could not remove them.', result.code);
@@ -243,14 +265,24 @@ export function ZoneAccess({
                   )}
                 </span>
                 {member.member_id !== organizerId && (
-                  <button
-                    type="button"
-                    disabled={pending}
-                    onClick={() => remove(member)}
-                    className="min-h-11 shrink-0 rounded-pill px-2 text-xs font-medium text-ink-faint hover:text-rose-deep focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-terracotta"
-                  >
-                    Remove
-                  </button>
+                  <>
+                    <button
+                      type="button"
+                      disabled={pending}
+                      onClick={() => changeRole(member)}
+                      className="min-h-11 shrink-0 rounded-pill px-2 text-xs font-medium text-terracotta-deep focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-terracotta"
+                    >
+                      {member.role === 'moderator' ? 'Make member' : 'Make moderator'}
+                    </button>
+                    <button
+                      type="button"
+                      disabled={pending}
+                      onClick={() => remove(member)}
+                      className="min-h-11 shrink-0 rounded-pill px-2 text-xs font-medium text-ink-faint hover:text-rose-deep focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-terracotta"
+                    >
+                      Remove
+                    </button>
+                  </>
                 )}
               </li>
             ))}

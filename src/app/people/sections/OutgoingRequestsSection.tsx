@@ -31,7 +31,7 @@ export function OutgoingRequestsSection({
           >
             <span className="flex-1 min-w-0">
               <strong>{request.name}</strong>{' '}
-              <span className="text-ink-faint">@{request.handle}</span>
+              {request.handle && <span className="text-ink-faint">@{request.handle}</span>}
             </span>
             <button
               type="button"

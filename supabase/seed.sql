@@ -41,6 +41,14 @@ revoke insert, update, delete on public.give_space_notices from anon, authentica
 revoke insert, update, delete on public.event_availability from anon, authenticated;
 revoke insert, update, delete on public.event_availability_responses from anon, authenticated;
 
+-- Expense shares are written only by the split-the-bill definer functions
+-- (20260930022000), which keep every expense's shares summing to its amount.
+revoke insert, update, delete on public.expense_shares from anon, authenticated;
+
+-- The moderation audit trail is written only by the moderator definer
+-- functions (20260930070000); nobody may write or rewrite it from the API.
+revoke insert, update, delete on public.moderation_actions from anon, authenticated;
+
 -- SELECT everywhere EXCEPT tables with explicit column allowlists.
 --
 -- SB-01 (20260710120000_lock_sensitive_profile_columns.sql) dropped the
@@ -112,5 +120,8 @@ revoke all on public.sms_jobs, public.sms_consent_events from anon, authenticate
 revoke insert, update, delete on public.sms_preferences from anon, authenticated;
 
 revoke all on public.notification_email_jobs,public.guest_sms_consents,public.sms_inbound_receipts from anon,authenticated;
+-- The ritual reminder ledger is written and read only by definer code
+-- (20260930081000_ritual_reminders.sql).
+revoke all on public.ritual_reminders from anon, authenticated;
 revoke all on public.notification_routes from anon,authenticated;
 grant select on public.notification_routes to authenticated;

@@ -143,8 +143,8 @@ export function MapExplorer({
       const located = result.located ?? 0;
       const unmatched = result.unmatched ?? 0;
       const remaining = result.remaining ?? 0;
-      if (located === 0 && unmatched === 0) {
-        toast.success('Everything with an address is already on the map.');
+      if (located === 0 && unmatched === 0 && !result.interrupted) {
+        toast.success('Every plan with an address is already on the map.');
         return;
       }
       const parts: string[] = [];
@@ -153,6 +153,14 @@ export function MapExplorer({
         parts.push(
           `Couldn’t find ${unmatched === 1 ? 'one address' : `${unmatched} addresses`}. A street address or city usually fixes it.`,
         );
+      }
+      if (result.interrupted) {
+        // An outage is not a bad address: say which it was, with its code.
+        toast.error(
+          [...parts, 'The address lookup stopped answering, so the rest will wait for another try.'].join(' '),
+          'SB-MAP-LOOKUP',
+        );
+        return;
       }
       if (remaining > unmatched) parts.push('Press again to keep going.');
       const message = parts.join(' ');
@@ -235,9 +243,11 @@ export function MapExplorer({
       />
 
       <p className="text-xs leading-relaxed text-ink-faint">
-        “Locate my plans” places your plans and shared places that already have an
-        address. Zones are placed from their own settings. Distances
-        are measured from your own pin, so they appear once you’re sharing.
+        “Locate my plans” places plans you host that already have an address.
+        Shared places appear when you check in with your location, and zones are
+        placed from their own settings. The Plans layer shows what’s coming up,
+        not plans that are over or that you declined. Distances are measured from
+        your own pin, so they appear once you’re sharing.
       </p>
     </div>
   );

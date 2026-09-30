@@ -7,6 +7,8 @@ import { safeHttpUrl, serializeJsonLd } from '@/lib/security';
 import { advanceEventCascade } from '@/lib/server/cascade-runner';
 import { AppShell } from '@/components/shell/AppShell';
 import { Card, SectionHeader } from '@/components/ui/Card';
+import { ErrorNotice } from '@/components/ui/ErrorNotice';
+import { errorFor } from '@/lib/errors';
 import { PlanCard, planColor } from '@/components/ui/PlanCard';
 import { themeColor } from '@/lib/themes';
 import { CopyButton } from '@/components/ui/CopyButton';
@@ -16,7 +18,8 @@ import { AttendeeGrid } from '@/components/events/AttendeeGrid';
 import { HostCard } from '@/components/events/HostCard';
 import { JoinRequests } from '@/components/events/JoinRequests';
 import { ParentalApprovalManager } from '@/components/events/ParentalApprovalManager';
-import { RsvpCard } from '@/components/events/RsvpCard';
+import { GuardianApprovalStep } from '@/components/events/GuardianApprovalStep';
+import { MyInviteCard } from '@/components/events/MyInviteCard';
 import { Announcements } from '@/components/events/Announcements';
 import { EventThread } from '@/components/events/EventThread';
 import { VoiceNote } from '@/components/ui/VoiceNote';
@@ -25,6 +28,7 @@ import { ScheduleNextButton } from '@/components/events/ScheduleNextButton';
 import { PollSection } from '@/components/polls/PollSection';
 import { PollChain } from '@/components/polls/PollChain';
 import { FollowUpComposer } from '@/components/polls/FollowUpComposer';
+import { pollOptionLabel } from '@/components/polls/option-label';
 import { AvailabilityGrid } from '@/components/events/AvailabilityGrid';
 import { recurrenceLabel } from '@/lib/engine/recurrence';
 import { HostControls } from './HostControls';
@@ -32,7 +36,6 @@ import { CoHostManager } from './CoHostManager';
 import { AddInvitees } from './AddInvitees';
 import { InviteLink } from './InviteLink';
 import { PrivacyAccess } from './PrivacyAccess';
-import { inviteExpiresAt } from '@/lib/engine/cascade';
 import { asInviteMode, inviteListHint, inviteListTitle } from '@/lib/invite-rhythm';
 import { formatDateTime, formatDateTimeRange } from '@/lib/format';
 import { resolveEventZone } from '@/lib/server/event-zone';
@@ -42,11 +45,12 @@ import { inviteOpenGraph } from '@/lib/invite-links';
 import {
   hostCanEditInvitees,
   hostCanEditLine,
+  hostCanExtendLiveWindow,
   hostCanShare,
 } from '@/lib/share-link';
-import type { SwitchboardEvent } from '@/lib/types';
+import type { Poll, SwitchboardEvent } from '@/lib/types';
 import { normalizePollTopic, pollQuestion } from '@/lib/types';
-import { loadEventPage } from '@/lib/server/event-page';
+import { EVENT_PAGE_UNAVAILABLE, loadEventPage } from '@/lib/server/event-page';
 
 /**
  * The tab title and card for a plan, for someone allowed to see it.
@@ -106,6 +110,16 @@ export default async function EventPage({
   if (!user) redirect(`/login?next=${encodeURIComponent(`/events/${id}`)}`);
 
   const loaded = await loadEventPage(id, user);
+  if (loaded === EVENT_PAGE_UNAVAILABLE) {
+    const failure = errorFor('SB-PLAN-OPEN');
+    return (
+      <AppShell title="Plan" back="/plans">
+        <Card tone="cream">
+          <ErrorNotice message={failure.message} fix={failure.fix} code="SB-PLAN-OPEN" />
+        </Card>
+      </AppShell>
+    );
+  }
   // RLS makes a missing event and an event this viewer cannot read equivalent.
   // The join page can safely resolve the public/share-link branch.
   if (!loaded) redirect(`/join/${id}`);
@@ -128,15 +142,19 @@ export default async function EventPage({
     isHost,
     canManage,
     cohosts,
+    cohostCandidates,
     hostCard,
     hostInvites,
     myInvite,
+    guardianStep,
+    inviteList,
     addableConnections,
     attendees,
     giveSpaceNotice,
     poll,
     decidedPolls,
     pendingPolls,
+    invitationsReady,
     availability,
     calendarBusy,
     calendarStatus,
@@ -170,6 +188,18 @@ export default async function EventPage({
   // editing the guest list: while a date poll runs nothing has gone out, so the
   // order is still a draft and the database already accepts the edit.
   const lineEditable = canManage && hostCanEditLine(event.status);
+
+  // The question a poll asks. The wizard's own poll is created with no topic
+  // or title, which `pollQuestion` reads as the generic follow-up ("One more
+  // thing") — right for a queued extra, wrong for the plan's first question.
+  const questionFor = (row: Poll) =>
+    !row.parent_poll_id && !row.title?.trim() && row.topic === 'custom'
+      ? 'What should we do?'
+      : pollQuestion(row);
+
+  // A plan that has happened already offers Run it back and the capsule in its
+  // "It happened" card; the page-level copies below would repeat them.
+  const happenedCard = event.status === 'past' && Boolean(event.happened_at);
 
   const statusLabel: Record<SwitchboardEvent['status'], string> = {
     draft: 'Draft',
@@ -368,7 +398,7 @@ export default async function EventPage({
                 ❋ Room
               </Link>
             )}
-            {event.starts_at && new Date(event.starts_at) < new Date() && (
+            {!happenedCard && event.starts_at && new Date(event.starts_at) < new Date() && (
               <Link
                 href={`/events/${event.id}/capsule`}
                 className="inline-flex items-center gap-1.5 rounded-pill border border-line bg-card px-3.5 py-2 text-xs font-bold text-ink-soft shadow-lift hover:border-terracotta hover:text-terracotta-deep active:scale-[0.98] transition-all"
@@ -433,46 +463,25 @@ export default async function EventPage({
           />
         )}
 
-        {/* Invitee RSVP */}
-        {myInvite?.status === 'sent' && rsvpAnchorId && (
-          <div id={rsvpAnchorId} className="scroll-mt-20">
-          <RsvpCard
-            inviteId={myInvite.id}
-            questions={questions.map((q) => ({
-              id: q.id,
-              prompt: q.prompt,
-              required: q.required,
-              kind: q.kind === 'choice' ? 'choice' : 'text',
-              options: q.options,
-            }))}
-            expiresAtIso={
-              inviteExpiresAt({
-                id: myInvite.id,
-                position: myInvite.position,
-                groupStage: myInvite.group_stage,
-                status: myInvite.status,
-                windowMinutes: myInvite.window_minutes,
-                sentAt: myInvite.sent_at,
-              })?.toISOString() ?? null
-            }
+        {/* The viewer's own invitation, whatever state it is in. */}
+        {myInvite && (
+          <MyInviteCard
+            invite={myInvite}
+            eventStatus={event.status}
+            questions={questions}
+            rsvpAnchorId={rsvpAnchorId}
+            guardianDenied={Boolean(guardianStep)}
           />
-          </div>
         )}
-        {myInvite?.status === 'accepted' && (
-          <Card tone="sage" lifted>
-            <p className="font-extrabold text-lg text-sage-deep">You’re in ✓</p>
-            <p className="text-sm text-ink-soft mt-0.5">
-              See you there. The room has the details.
-            </p>
-          </Card>
-        )}
-        {myInvite?.status === 'waitlisted' && (
-          <Card tone="gold" lifted>
-            <p className="font-extrabold text-lg">You’re on the waitlist</p>
-            <p className="text-sm text-ink-soft mt-0.5">
-              If a spot opens up, you’ll be the first to know.
-            </p>
-          </Card>
+        {/* A yes held for a guardian, or one a guardian turned down. The step
+            lives on the invite, so it is here whenever they come back. */}
+        {myInvite && guardianStep && (
+          <GuardianApprovalStep
+            inviteId={myInvite.id}
+            eventId={event.id}
+            request={guardianStep.request}
+            canSend
+          />
         )}
 
         {/* When everyone is free. Above the poll on purpose: it is the input to
@@ -486,7 +495,7 @@ export default async function EventPage({
               counts={availability.counts}
               responders={availability.responders}
               eligiblePeople={availability.eligiblePeople}
-              isHost={isHost}
+              isHost={canManage}
               pollId={poll && poll.phase !== 'decided' ? poll.id : null}
               busySlots={calendarBusy}
               calendarUsable={calendarStatus?.usable ?? false}
@@ -502,15 +511,16 @@ export default async function EventPage({
             <PollChain
               decided={decidedPolls.map((row) => ({
                 id: row.id,
-                question: pollQuestion(row),
-                winner:
-                  allDecidedWinners[row.id] ?? null,
+                question: questionFor(row),
+                winner: allDecidedWinners[row.id]
+                  ? pollOptionLabel(allDecidedWinners[row.id], event.time_zone)
+                  : null,
               }))}
               pending={pendingPolls.map((row) => ({
                 id: row.id,
-                question: pollQuestion(row),
+                question: questionFor(row),
               }))}
-              activeQuestion={pollQuestion(poll)}
+              activeQuestion={questionFor(poll)}
               activeDecided={poll.phase === 'decided'}
               eventId={event.id}
               isHost={canManage}
@@ -520,7 +530,11 @@ export default async function EventPage({
               options={options}
               results={results}
               myVotes={myVotes}
-              isHost={isHost}
+              // Host or co-host: every poll action authorizes both, and so does
+              // the database. Passing the primary-host flag hid Lock, Close and
+              // Choose this from the co-hosts the feature hands those powers to.
+              isHost={canManage}
+              question={questionFor(poll)}
               eventId={event.id}
               currentUserId={user.id}
               timeZone={event.time_zone}
@@ -540,7 +554,9 @@ export default async function EventPage({
         {/* Host broadcasts */}
         <Announcements
           eventId={event.id}
-          isHost={isHost}
+          // Co-hosts post too: the insert policy is is_event_host and the
+          // fan-out already tells the host when a co-host writes.
+          isHost={canManage}
           canReach={acceptedCount ?? 0}
           announcements={announcements}
         />
@@ -567,7 +583,7 @@ export default async function EventPage({
             <SectionHeader title="RSVP answers" hint="Only you can see these" />
             <ul className="space-y-2">
               {answersByGuest.map((guest) => (
-                <li key={guest.name} className="rounded-card bg-cream px-3.5 py-3">
+                <li key={guest.inviteId} className="rounded-card bg-cream px-3.5 py-3">
                   <p className="text-sm font-bold text-ink">{guest.name}</p>
                   <dl className="mt-1.5 space-y-1">
                     {guest.answers.map((qa, i) => (
@@ -591,6 +607,15 @@ export default async function EventPage({
               hint={`${attendees.length}${event.capacity ? ` of ${event.capacity}` : ''} so far`}
             />
             <AttendeeGrid people={attendeeCards} />
+          </section>
+        )}
+
+        {/* Everyone the host has asked, when they chose to show it. What is on
+            this list, and what it may say, is decided by event_invite_list. */}
+        {inviteList.length > 0 && (
+          <section>
+            <SectionHeader title="Who’s invited" hint="Everyone the host has asked so far" />
+            <AttendeeGrid people={inviteList} />
           </section>
         )}
 
@@ -642,6 +667,7 @@ export default async function EventPage({
               mode={inviteMode}
               eventId={event.id}
               editable={lineEditable}
+              canExtend={canManage && hostCanExtendLiveWindow(event.status)}
               people={inviteeCards}
             />
           </section>
@@ -697,7 +723,7 @@ export default async function EventPage({
         {canManage && (
           <HostControls
             event={event}
-            pollDecided={poll?.phase === 'decided'}
+            pollDecided={invitationsReady}
             isPrimaryHost={isHost}
           />
         )}
@@ -707,11 +733,12 @@ export default async function EventPage({
             eventId={event.id}
             showInviteList={event.show_invite_list}
             showAccepted={event.show_accepted}
-            showExpired={event.show_expired}
           />
         )}
 
-        {isHost && <CoHostManager eventId={event.id} cohosts={cohosts} />}
+        {isHost && (
+          <CoHostManager eventId={event.id} cohosts={cohosts} candidates={cohostCandidates} />
+        )}
 
         {/* Standing plan: a recurring host always has a one-tap "next one". */}
         {isHost && event.recurrence && event.recurrence !== 'none' && (
@@ -726,6 +753,7 @@ export default async function EventPage({
 
         {/* Run it back: a one-off plan the host can re-clone once it's behind them. */}
         {isHost &&
+          !happenedCard &&
           (!event.recurrence || event.recurrence === 'none') &&
           (event.status === 'past' ||
             event.status === 'cancelled' ||

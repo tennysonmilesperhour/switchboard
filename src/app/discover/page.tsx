@@ -7,9 +7,14 @@ import {
   PeopleDiscoveryClient,
   type DiscoveryMatch,
 } from './PeopleDiscoveryClient';
-import { OpenTables } from '@/components/events/OpenTables';
+import { OpenTables, type PendingJoinRequest } from '@/components/events/OpenTables';
 import { VenuePerks } from '@/components/venues/VenuePerks';
 import { IntentLaunchpad } from './IntentLaunchpad';
+import { supportEmail } from '@/lib/contact';
+import { venueAreaKey } from '@/lib/venue-area';
+import { ilikeTerm } from '@/lib/zone-rules';
+import { reportOperationalError } from '@/lib/server/observability';
+import type { ErrorCode } from '@/lib/errors';
 
 export const metadata: Metadata = { title: 'Explore' };
 
@@ -33,26 +38,42 @@ export default async function DiscoverPage({
   } = await supabase.auth.getUser();
   if (!user) redirect('/login');
 
+  // The viewer's own profile decides two scopes below: whether they may browse
+  // people at all (D13 — the database enforces it too) and which area's partner
+  // perks they see (D14).
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('interests, discoverable, location')
+    .eq('id', user.id)
+    .single();
+  const area = venueAreaKey(profile?.location);
+  const areaTerm = area ? ilikeTerm(area) : '';
+
   const [
-    { data: profile },
     { data: openTables },
-    { data: venues },
+    venuesResult,
     { data: myVenues },
-    { data: people },
+    peopleResult,
     { data: discoveryMatches },
+    { data: myInterests },
+    myRequestsResult,
   ] =
     await Promise.all([
-      supabase.from('profiles').select('interests, discoverable').eq('id', user.id).single(),
       supabase.rpc('list_open_tables'),
+      // Verified perks in the viewer's area, newest first. This was the ten
+      // newest verified venues anywhere in the world.
+      areaTerm
+        ? supabase
+            .from('venues')
+            .select('id, name, area, perk, url')
+            .eq('status', 'verified')
+            .ilike('area', `%${areaTerm}%`)
+            .order('created_at', { ascending: false })
+            .limit(10)
+        : Promise.resolve({ data: [], error: null }),
       supabase
         .from('venues')
-        .select('id, name, area, perk, url')
-        .eq('status', 'verified')
-        .order('created_at', { ascending: false })
-        .limit(10),
-      supabase
-        .from('venues')
-        .select('id, name, area, perk, url, status')
+        .select('id, name, area, perk, url, status, review_note, reviewed_at')
         .eq('claimed_by', user.id)
         .order('created_at', { ascending: false }),
       supabase.rpc('list_discoverable_people', { p_category: 'all' }),
@@ -63,7 +84,62 @@ export default async function DiscoverPage({
         .or(`user_a.eq.${user.id},user_b.eq.${user.id}`)
         .order('created_at', { ascending: false })
         .limit(6),
+      // The reader's own open "Interested" marks, so a card can say so and
+      // offer to take it back. RLS returns only the author's intents.
+      supabase
+        .from('mutual_intents')
+        .select('id, target_id, activity')
+        .eq('author_id', user.id)
+        .eq('kind', 'discover_connect')
+        .eq('status', 'active'),
+      // The reader's own Open Table requests still waiting on a host (G20).
+      // `invites_select` lets an invitee read their own non-queued rows, and
+      // `can_view_event` lets a requester read the plan they asked to join.
+      supabase
+        .from('invites')
+        .select('id, event:events(id, title, starts_at, time_zone)')
+        .eq('invitee_id', user.id)
+        .eq('status', 'requested')
+        .order('created_at', { ascending: false })
+        .limit(10),
     ]);
+
+  // A failed lookup must not read as an empty room ("No one in this lane
+  // yet"), so it is logged with its code and shown as a failure.
+  let peopleError: ErrorCode | null = null;
+  if (peopleResult.error) {
+    await reportOperationalError('discover.people', peopleResult.error, {}, 'SB-PEOPLE-LOAD');
+    peopleError = 'SB-PEOPLE-LOAD';
+  }
+  let venuesError: ErrorCode | null = null;
+  if (venuesResult.error) {
+    await reportOperationalError('venue.load', venuesResult.error, {}, 'SB-VENUE-LOAD');
+    venuesError = 'SB-VENUE-LOAD';
+  }
+  let requestsError: ErrorCode | null = null;
+  if (myRequestsResult.error) {
+    await reportOperationalError('discover.join-requests', myRequestsResult.error, {}, 'SB-INVITE-LOAD');
+    requestsError = 'SB-INVITE-LOAD';
+  }
+  const myRequests: PendingJoinRequest[] = (myRequestsResult.data ?? []).flatMap((row) => {
+    const event = Array.isArray(row.event) ? row.event[0] : row.event;
+    return event
+      ? [{
+          inviteId: row.id,
+          eventId: event.id,
+          title: event.title,
+          startsAt: event.starts_at,
+          timeZone: event.time_zone,
+        }]
+      : [];
+  });
+  const people = peopleResult.data;
+  const venues = venuesResult.data;
+  const interestByTarget = Object.fromEntries(
+    (myInterests ?? [])
+      .filter((intent) => intent.target_id)
+      .map((intent) => [intent.target_id as string, { id: intent.id, activity: intent.activity }]),
+  );
 
   const matchRows = discoveryMatches ?? [];
   const otherIds = [
@@ -103,11 +179,20 @@ export default async function DiscoverPage({
             people={people ?? []}
             matches={matches}
             discoverable={Boolean(profile?.discoverable)}
+            interests={interestByTarget}
+            loadError={peopleError}
           />
-          <OpenTables tables={openTables ?? []} />
+          <OpenTables
+            tables={openTables ?? []}
+            requests={myRequests}
+            requestsError={requestsError}
+          />
         </div>
         <VenuePerks
           venues={venues ?? []}
+          area={area}
+          loadError={venuesError}
+          supportEmail={supportEmail()}
           myClaims={(myVenues ?? []).map((venue) => ({
             ...venue,
             status:

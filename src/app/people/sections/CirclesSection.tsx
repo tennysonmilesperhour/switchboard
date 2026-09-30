@@ -111,7 +111,7 @@ export function CirclesSection({
                                   <span className="text-sm font-semibold block truncate">
                                     {member.name}
                                   </span>
-                                  <span className="text-xs text-ink-faint">@{member.handle}</span>
+                                  {member.handle && <span className="text-xs text-ink-faint">@{member.handle}</span>}
                                 </span>
                                 <button
                                   type="button"

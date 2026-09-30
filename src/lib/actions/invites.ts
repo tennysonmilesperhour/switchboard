@@ -13,6 +13,7 @@ import { ANALYTICS_EVENTS } from '@/lib/analytics/events';
 import type { DeclineNote } from '@/lib/types';
 import { checkRateLimit } from '@/lib/server/rate-limit';
 import { isEventManager } from '@/lib/server/authz';
+import { canAnswer, shareLinkNotice, shareLinkState } from '@/lib/share-link';
 
 export interface RespondResult {
   ok: boolean;
@@ -34,7 +35,12 @@ export interface RespondResult {
   eventId?: string;
   /** Nonfatal follow-up when the RSVP saved but account attachment did not. */
   warning?: string;
-  /** When true, the RSVP was recorded but needs parental approval to take effect. */
+  /**
+   * When true, the yes was recorded but is held (`pending_approval`): it takes
+   * no seat until a parent or guardian approves it. The invitation itself now
+   * says so wherever it is opened, so this only lets the answering screen move
+   * straight on to asking for the guardian.
+   */
   needsApproval?: boolean;
   /** The invite row id, when the client needs it for a follow-up action. */
   inviteId?: string;
@@ -48,10 +54,12 @@ function cleanDeclineMessage(value: string): string | null {
 type AnswerClient = ReturnType<typeof createAdminClient>;
 
 /**
- * Persist RSVP answers for an accepted invite, keeping only answers whose
- * question actually belongs to this event (M1: don't trust client-supplied
- * question_ids). Called only once an invite is confirmed accepted (M2: never
- * store answers for a declined or waitlisted RSVP).
+ * Persist RSVP answers for a yes, keeping only answers whose question actually
+ * belongs to this event (M1: don't trust client-supplied question_ids). Called
+ * only for an invite that is accepted, or accepted pending a guardian's
+ * approval — the questions were answered with that yes and are not asked
+ * again when the guardian approves (M2: never store answers for a declined or
+ * waitlisted RSVP).
  */
 async function saveInviteAnswers(
   client: AnswerClient,
@@ -111,27 +119,6 @@ async function noteGiveSpaceOverlap(
   }
 }
 
-/**
- * The same decision, for a person who has no session in this request: the Open
- * Table requester whose join the host has just approved.
- *
- * Service-role, and deliberately narrow — the database function re-checks that
- * `userId` really does hold an accepted invite to `eventId` before it reads or
- * writes anything, so a host cannot use this to learn or plant anything about
- * a guest. Nothing is returned to the caller: the host must not find out what
- * it decided.
- */
-async function noteGiveSpaceOverlapFor(userId: string, eventId: string): Promise<void> {
-  try {
-    await createAdminClient().rpc('note_give_space_overlap_for', {
-      p_user: userId,
-      p_event: eventId,
-    });
-  } catch (error) {
-    await reportOperationalError('give-space.note', error, { eventId });
-  }
-}
-
 export async function respondToInvite(
   inviteId: string,
   accept: boolean,
@@ -176,11 +163,13 @@ export async function respondToInvite(
         });
       }
     }
-    if (data === 'accepted') {
-      // Only persist answers once accepted, and only for this event's questions.
+    if (data === 'accepted' || data === 'pending_approval') {
+      // Only persist answers for a yes, and only for this event's questions.
       await saveInviteAnswers(supabase, inviteId, invite.event_id, answers);
-      await noteGiveSpaceOverlap(supabase, invite.event_id);
     }
+    // A held yes is not yet a commitment; the Give Space check runs when the
+    // guardian's approval makes it one (see parental-approval.ts).
+    if (data === 'accepted') await noteGiveSpaceOverlap(supabase, invite.event_id);
     await advanceEventCascade(invite.event_id);
 
     if (data === 'accepted') {
@@ -231,94 +220,11 @@ export async function respondToInvite(
   }
   revalidatePath('/');
   revalidatePath('/plans');
-  return { ok: true, outcome: typeof data === 'string' ? data : undefined };
-}
-
-/** Open Table: ask to join a friends-of-friends event. */
-export async function requestToJoin(eventId: string): Promise<RespondResult> {
-  const auth = await requireUser();
-  if (!auth.ok) {
-    return failure('SB-RSVP-AUTH', 'Sign in to request to join.');
-  }
-  const { supabase } = auth;
-  // The request_to_join RPC already keys the row on auth.uid(); this app-layer
-  // session check just fails fast (and keeps the admin notify below from firing
-  // for an unauthenticated caller) rather than relying on the RPC alone.
-  const { error } = await supabase.rpc('request_to_join', { p_event: eventId });
-  if (error) return reportAndFail('SB-RSVP-SAVE', 'join.request', error, { eventId });
-
-  // Let the host know a request is waiting — previously this fired nothing at
-  // all, so requests sat unseen until the host happened to open the event.
-  const admin = createAdminClient();
-  const { data: event } = await admin
-    .from('events')
-    .select('id, title, host_id')
-    .eq('id', eventId)
-    .maybeSingle();
-  if (event?.host_id) {
-    await notifyUsers([event.host_id], {
-      kind: 'join_request',
-      title: 'Someone wants in 👋',
-      body: `A new request to join ${event.title} is waiting for your OK.`,
-      url: `/events/${event.id}`,
-    });
-  }
-
-  revalidatePath('/discover');
-  revalidatePath(`/events/${eventId}`);
-  return { ok: true, outcome: 'requested' };
-}
-
-/** Open Table: host approves a join request (capacity-checked in the DB). */
-export async function approveJoinRequest(
-  inviteId: string,
-  eventId: string,
-): Promise<RespondResult> {
-  const auth = await requireUser();
-  if (!auth.ok) return auth;
-  const { supabase } = auth;
-  const { data, error } = await supabase.rpc('approve_join_request', {
-    p_invite: inviteId,
-  });
-  if (error) return reportAndFail('SB-RSVP-SAVE', 'join.approve', error, { inviteId, eventId });
-
-  if (data === 'accepted') {
-    const { data: invite } = await supabase
-      .from('invites')
-      .select('invitee_id, event:events(title)')
-      .eq('id', inviteId)
-      .single();
-    const event = Array.isArray(invite?.event) ? invite?.event[0] : invite?.event;
-    if (invite?.invitee_id) {
-      // Their commitment, completed by someone else's approval. The requester
-      // has no session here, so this runs service-role against their id — and
-      // the function still refuses unless that id now holds an accepted invite
-      // to this exact plan.
-      await noteGiveSpaceOverlapFor(invite.invitee_id, eventId);
-      await notifyUsers([invite.invitee_id], {
-        kind: 'join_approved',
-        title: 'You are in 🎉',
-        body: `The host welcomed you to ${event?.title ?? 'the event'}.`,
-        url: `/events/${eventId}`,
-      });
-    }
-  }
-  revalidatePath(`/events/${eventId}`);
-  return { ok: true, outcome: typeof data === 'string' ? data : undefined };
-}
-
-export async function declineJoinRequest(
-  inviteId: string,
-  eventId: string,
-): Promise<RespondResult> {
-  const auth = await requireUser();
-  if (!auth.ok) return auth;
-  const { supabase } = auth;
-  // Host-only via RLS delete policy on invites.
-  const { error } = await supabase.from('invites').delete().eq('id', inviteId);
-  if (error) return reportAndFail('SB-RSVP-SAVE', 'join.decline', error, { inviteId, eventId });
-  revalidatePath(`/events/${eventId}`);
-  return { ok: true };
+  return {
+    ok: true,
+    outcome: typeof data === 'string' ? data : undefined,
+    needsApproval: data === 'pending_approval' || undefined,
+  };
 }
 
 /**
@@ -465,8 +371,23 @@ export async function respondViaShareLink(
     };
   }
   if (outcome === 'not_accepting') {
+    // Name the reason the share page would name for this plan (called off,
+    // already happened, not published), with its code, so the page someone
+    // is looking at and the answer they get back agree. SB-RSVP-CLOSED stays
+    // for a plan that is answerable again by the time it is re-read.
+    const { data: closed } = hostedEventId
+      ? await admin
+          .from('events')
+          .select('status, share_link_active')
+          .eq('id', hostedEventId)
+          .maybeSingle()
+      : { data: null };
+    const state = shareLinkState(closed);
+    const notice = canAnswer(state) ? null : shareLinkNotice(state);
     return {
-      ...failure('SB-RSVP-CLOSED', 'This plan isn’t taking answers right now.'),
+      ...(notice
+        ? failure(notice.code, notice.heading)
+        : failure('SB-RSVP-CLOSED', 'This plan isn’t taking answers right now.')),
       outcome,
     };
   }
@@ -493,8 +414,9 @@ export async function respondViaShareLink(
   // take the most recently answered row rather than letting a stray duplicate
   // turn this into a read error. Resolved once: the answers below and the
   // guardian step further down both need the same row.
+  const held = outcome === 'pending_approval';
   let acceptedInviteId: string | null = null;
-  if (outcome === 'accepted' && eventId) {
+  if ((outcome === 'accepted' || held) && eventId) {
     const { data: acceptedInvite } = await admin
       .from('invites')
       .select('id')
@@ -532,30 +454,16 @@ export async function respondViaShareLink(
     revalidatePath(`/events/${eventId}`);
   }
 
-  // If the plan requires parental approval, flag the response so the UI
-  // can collect the guardian's email in a follow-up step.
-  if (outcome === 'accepted' && eventId) {
-    const { data: evt } = await admin
-      .from('events')
-      .select('parental_approval')
-      .eq('id', eventId)
-      .maybeSingle();
-    if (evt?.parental_approval) {
-      return {
-        ok: true,
-        outcome: 'accepted',
-        token: typeof row?.token === 'string' ? row.token : undefined,
-        needsApproval: true,
-        inviteId: acceptedInviteId ?? undefined,
-        eventId,
-      };
-    }
-  }
-
+  // A held yes (the plan needs a guardian's approval) carries what the next
+  // screen needs to ask for the guardian. The responder's own `/rsvp/<token>`
+  // page shows the same held state, so closing the tab loses nothing.
   return {
     ok: true,
     outcome,
     token: typeof row?.token === 'string' ? row.token : undefined,
+    ...(held && eventId
+      ? { needsApproval: true, inviteId: acceptedInviteId ?? undefined, eventId }
+      : {}),
   };
 }
 
@@ -635,8 +543,8 @@ export async function respondToGuestInvite(
   });
   if (error) return reportAndFail('SB-RSVP-SAVE', 'guest-rsvp.respond', error);
 
-  if (outcome === 'accepted') {
-    // Only persist answers once accepted, and only for this event's questions.
+  if (outcome === 'accepted' || outcome === 'pending_approval') {
+    // Only persist answers for a yes, and only for this event's questions.
     await saveInviteAnswers(admin, invite.id, invite.event_id, answers);
   }
 
@@ -715,21 +623,19 @@ export async function respondToGuestInvite(
     revalidatePath(`/events/${invite.event_id}`);
   }
 
-  if (outcome === 'accepted') {
-    const { data: evt } = await admin
-      .from('events')
-      .select('parental_approval')
-      .eq('id', invite.event_id)
-      .maybeSingle();
-    if (evt?.parental_approval) {
-      return {
-        ok: true,
-        outcome: 'accepted',
-        needsApproval: true,
-        inviteId: invite.id,
-        eventId: claimedEventId ?? invite.event_id,
-      };
-    }
+  if (outcome === 'pending_approval') {
+    // Held for a guardian. Asking for one needs the invite to belong to the
+    // responder, which the claim above just made true.
+    return {
+      ok: true,
+      outcome,
+      needsApproval: true,
+      inviteId: invite.id,
+      eventId: claimedEventId ?? invite.event_id,
+      warning: claimError
+        ? 'Your RSVP was saved, but we could not add the plan to your account yet.'
+        : undefined,
+    };
   }
 
   return {

@@ -11,7 +11,6 @@ import {
   type RsvpQuestion,
 } from '@/components/events/RsvpQuestions';
 import { respondViaShareLink } from '@/lib/actions/invites';
-import { requestParentalApproval } from '@/lib/actions/parental-approval';
 import { errorRef, type ErrorCode } from '@/lib/errors';
 
 interface ShareLinkRsvpProps {
@@ -34,6 +33,11 @@ interface ShareLinkRsvpProps {
  * On success the responder is handed off to their own `/rsvp/<token>` page: the
  * durable per-person link they can reopen to add the plan to a calendar or
  * change their answer, and the same surface a directly-invited guest gets.
+ *
+ * That includes a yes held for a guardian. The guardian step used to live in
+ * this component's state, so closing the tab after "I'm in" lost it: the yes
+ * counted and no guardian was ever asked. The held state is on the invite now,
+ * and `/rsvp/<token>` renders it — with the form — every time it is opened.
  */
 export function ShareLinkRsvp({
   shareToken,
@@ -51,12 +55,6 @@ export function ShareLinkRsvp({
   const [pending, startTransition] = useTransition();
   const router = useRouter();
   const needsName = defaultName.trim().length === 0;
-  const [needsApproval, setNeedsApproval] = useState(false);
-  const [guardianEmail, setGuardianEmail] = useState('');
-  const [guardianName, setGuardianName] = useState('');
-  const [approvalSent, setApprovalSent] = useState(false);
-  const [inviteId, setInviteId] = useState('');
-  const [eventId, setEventId] = useState('');
 
   function respond(accept: boolean) {
     const trimmed = name.trim();
@@ -92,99 +90,15 @@ export function ShareLinkRsvp({
         setCode(result.code ?? 'SB-UNKNOWN');
         return;
       }
-      if (result.needsApproval && result.eventId) {
-        setNeedsApproval(true);
-        setEventId(result.eventId);
-        if (result.inviteId) setInviteId(result.inviteId);
-        return;
-      }
       if (result.token) {
-        // Their own RSVP page shows the outcome (in, waitlisted, or declined) and
-        // stays valid afterwards.
+        // Their own RSVP page shows the outcome (in, waitlisted, declined, or
+        // waiting on a guardian, with the step to ask them) and stays valid
+        // afterwards.
         router.push(`/rsvp/${result.token}`);
+      } else {
+        router.refresh();
       }
     });
-  }
-
-  if (approvalSent) {
-    return (
-      <div className="mt-8 rounded-card bg-sage-soft p-5 animate-rise">
-        <p className="font-bold text-sage-deep">Approval request sent</p>
-        <p className="text-sm text-ink-soft mt-2">
-          We&rsquo;ve emailed the guardian. Once they approve, the RSVP will count.
-        </p>
-      </div>
-    );
-  }
-
-  if (needsApproval) {
-    return (
-      <div className="mt-8 rounded-card bg-gold-soft p-5 animate-rise">
-        <p className="font-bold text-gold-deep">Almost there &mdash; guardian approval needed</p>
-        <p className="text-sm text-ink-soft mt-2">
-          This plan requires a parent or guardian to approve attendance.
-          Enter their email and we&rsquo;ll send them a link.
-        </p>
-        <label className="block mt-4">
-          <span className="block text-sm font-bold text-ink mb-1">Guardian&rsquo;s email</span>
-          <input
-            type="email"
-            value={guardianEmail}
-            onChange={(e) => setGuardianEmail(e.target.value)}
-            disabled={pending}
-            placeholder="parent@example.com"
-            className="w-full rounded-card border border-line bg-paper px-3.5 py-2.5 text-base text-ink placeholder:text-ink-faint focus:border-terracotta focus:outline-none focus:ring-2 focus:ring-terracotta/30"
-          />
-        </label>
-        <label className="block mt-3">
-          <span className="block text-sm font-bold text-ink mb-1">Guardian&rsquo;s name (optional)</span>
-          <input
-            type="text"
-            value={guardianName}
-            onChange={(e) => setGuardianName(e.target.value)}
-            disabled={pending}
-            placeholder="First name"
-            className="w-full rounded-card border border-line bg-paper px-3.5 py-2.5 text-base text-ink placeholder:text-ink-faint focus:border-terracotta focus:outline-none focus:ring-2 focus:ring-terracotta/30"
-          />
-        </label>
-        {error && (
-          <p role="alert" className="text-sm text-rose-deep mt-3">
-            {error}
-            {code && (
-              <span className="ml-1.5 font-mono text-[11px] uppercase tracking-wide text-ink-faint">
-                {errorRef(code)}
-              </span>
-            )}
-          </p>
-        )}
-        <Button
-          variant="accept"
-          size="lg"
-          className="w-full mt-4"
-          disabled={pending || !guardianEmail.trim()}
-          onClick={() => {
-            setError('');
-            setCode(null);
-            startTransition(async () => {
-              const res = await requestParentalApproval({
-                inviteId,
-                eventId,
-                guardianEmail: guardianEmail.trim(),
-                guardianName: guardianName.trim() || undefined,
-              });
-              if (!res.ok) {
-                setError(res.error ?? 'Could not send the approval request.');
-                setCode(res.code ?? null);
-                return;
-              }
-              setApprovalSent(true);
-            });
-          }}
-        >
-          Send approval request
-        </Button>
-      </div>
-    );
   }
 
   return (

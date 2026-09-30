@@ -13,7 +13,9 @@ import { Icon } from '@/components/ui/Icon';
 import { useToast } from '@/components/ui/Toast';
 import { useConfirm } from '@/components/ui/ConfirmDialog';
 import { downToConnect, withdrawIntent } from '@/lib/actions/mutual';
-import { endRitual, pauseRitual, proposeRitual } from '@/lib/actions/rituals';
+import { unmatch } from '@/lib/actions/matches';
+import { endRitual, pauseRitual, proposeRitual, respondToRitual, skipRitual } from '@/lib/actions/rituals';
+import { ritualDueLabel } from '@/lib/rituals';
 import { formatRelative } from '@/lib/format';
 import { ACTIVITY_PRESETS } from '@/lib/types';
 
@@ -47,6 +49,14 @@ export interface RitualRow {
   isMine: boolean;
   otherId: string;
   otherName: string;
+  /** The next due date (`YYYY-MM-DD`), once accepted. */
+  dueOn: string | null;
+  /** Due in the viewer's own zone, and not on hold. */
+  due: boolean;
+  /** The viewer's date, for "due tomorrow". */
+  today: string;
+  /** Who is on sabbatical, holding it ('you' or their name), or null. */
+  heldBy: string | null;
 }
 
 export function MutualClient({
@@ -55,6 +65,7 @@ export function MutualClient({
   intents,
   matches,
   rituals = [],
+  onSabbatical = false,
   initialPersonId = null,
 }: {
   currentUserId: string;
@@ -62,6 +73,8 @@ export function MutualClient({
   intents: MyIntent[];
   matches: MyMatch[];
   rituals?: RitualRow[];
+  /** Mutual and new rituals are paused while the viewer is on sabbatical (D6). */
+  onSabbatical?: boolean;
   initialPersonId?: string | null;
 }) {
   const [activities, setActivities] = useState<string[]>([]);
@@ -132,6 +145,61 @@ export function MutualClient({
     });
   }
 
+  // The ritual notification links here, so the answer has to be here too: it
+  // used to say "waiting on you (see Home)" and offer nothing to press.
+  function answer(ritual: RitualRow, accept: boolean) {
+    startTransition(async () => {
+      const result = await respondToRitual(ritual.id, accept);
+      if (!result.ok) {
+        toast.error(result.error ?? 'Could not respond. Try again.', result.code);
+        return;
+      }
+      router.refresh();
+    });
+  }
+
+  // G37: the ordinary way out of a match. Blocking was the only one, and it
+  // says something much stronger than "this isn't going anywhere".
+  async function endMatch(match: MyMatch) {
+    const ok = await confirm({
+      title: `Unmatch with ${match.otherName}?`,
+      body: `The match and its room go away for both of you, messages included, and neither of you is told. If something happened that a moderator should see, report it from the room first.`,
+      confirmLabel: 'Unmatch',
+      danger: true,
+    });
+    if (!ok) return;
+    startTransition(async () => {
+      const result = await unmatch(match.id);
+      if (!result.ok) {
+        toast.error(result.error ?? 'Could not unmatch. Try again.', result.code);
+        return;
+      }
+      toast.success('Unmatched.');
+      router.refresh();
+    });
+  }
+
+  // D8: skipping moves this one's due date a cadence ahead, for both of you,
+  // and tells nobody.
+  function skip(ritual: RitualRow) {
+    if (!ritual.dueOn) return;
+    const dueOn = ritual.dueOn;
+    startTransition(async () => {
+      try {
+        const result = await skipRitual(ritual.id, dueOn);
+        if (!result.ok) {
+          toast.error(result.error ?? 'Could not skip it. Try again.', result.code);
+          router.refresh();
+          return;
+        }
+        toast.success(`Skipped. The next one is due in about ${ritual.cadenceDays} days.`);
+        router.refresh();
+      } catch {
+        toast.error('Could not skip it. Try again.');
+      }
+    });
+  }
+
   async function end(ritual: RitualRow) {
     const ok = await confirm({
       title: `End your ${ritual.activity} ritual?`,
@@ -195,92 +263,120 @@ export function MutualClient({
                     </Link>
                   )}
                 </div>
+                <div className="mt-2 flex justify-end">
+                  <button
+                    type="button"
+                    disabled={pending}
+                    onClick={() => endMatch(match)}
+                    className="min-h-11 rounded-pill px-2 text-xs font-semibold text-ink-faint hover:text-rose-deep focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-terracotta"
+                  >
+                    Unmatch
+                  </button>
+                </div>
               </Card>
             ))}
           </div>
         </section>
       )}
 
-      {/* Compose */}
-      <section>
-        <SectionHeader title="Down to…" />
-        <div className="flex flex-wrap gap-2">
-          {ACTIVITY_PRESETS.map((activity) => (
-            <Chip
-              key={activity.label}
-              emoji={activity.emoji}
-              selected={activities.includes(activity.label)}
-              onClick={() => setActivities((a) => toggle(a, activity.label))}
-            >
-              {activity.label}
-            </Chip>
-          ))}
-        </div>
-      </section>
-
-      <section>
-        <SectionHeader title="…with" />
-        {friends.length === 0 ? (
-          <EmptyState
-            emoji="☺"
-            title="No connections yet"
-            body="Mutual is a private, two-sided signal: pick a friend and something you would enjoy doing together, and neither of you hears a word unless you both pick the same one. Add a connection first, then come back when there is someone to choose."
-            action={
-              <Link
-                href="/people"
-                className="inline-flex min-h-11 items-center rounded-btn bg-brand-gradient px-4 text-sm font-bold text-white"
+      {onSabbatical ? (
+        <Card tone="cream">
+          <p className="text-sm font-bold text-ink">Mutual is paused while you’re on sabbatical</p>
+          <p className="mt-1 text-sm leading-relaxed text-ink-soft">
+            Nobody can pick you and you can’t pick anyone, so nothing can match
+            until you’re back. Your matches and rituals are still here.
+          </p>
+          <Link
+            href="/settings"
+            className="mt-2 inline-flex min-h-11 items-center text-sm font-bold text-terracotta-deep"
+          >
+            End your sabbatical in Settings
+          </Link>
+        </Card>
+      ) : (
+        <>
+        {/* Compose */}
+        <section>
+          <SectionHeader title="Down to…" />
+          <div className="flex flex-wrap gap-2">
+            {ACTIVITY_PRESETS.map((activity) => (
+              <Chip
+                key={activity.label}
+                emoji={activity.emoji}
+                selected={activities.includes(activity.label)}
+                onClick={() => setActivities((a) => toggle(a, activity.label))}
               >
-                Find your people
-              </Link>
-            }
-          />
-        ) : (
-          <div className="space-y-2">
-            {friends.map((friend) => {
-              const selected = people.includes(friend.id);
-              return (
-                <button
-                  key={friend.id}
-                  type="button"
-                  aria-pressed={selected}
-                  onClick={() => setPeople((p) => toggle(p, friend.id))}
-                  className={`w-full flex items-center gap-3 rounded-card border p-3 transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-terracotta ${
-                    selected
-                      ? 'border-terracotta bg-terracotta-soft'
-                      : 'border-line bg-card hover:border-ink-faint'
-                  }`}
-                >
-                  <Avatar name={friend.name} seed={friend.id} size="sm" />
-                  <span className="flex-1 text-left font-bold">{friend.name}</span>
-                  <Icon
-                    name={selected ? 'check' : 'add'}
-                    size={20}
-                    className={selected ? 'text-terracotta-deep' : 'text-ink-faint'}
-                  />
-                </button>
-              );
-            })}
+                {activity.label}
+              </Chip>
+            ))}
           </div>
-        )}
-      </section>
+        </section>
 
-      <Button
-        size="lg"
-        className="w-full"
-        disabled={pending || activities.length === 0 || people.length === 0}
-        onClick={connect}
-      >
-        {pending ? 'Saving quietly…' : 'Down to Connect 🤝'}
-      </Button>
-      <p className="text-xs text-ink-faint text-center -mt-4">
-        Completely private until it’s mutual.
-      </p>
-      {(activities.length === 0 || people.length === 0) && (
-        <p className="text-xs text-ink-faint text-center">
-          {activities.length === 0
-            ? "Select an activity"
-            : "Select someone to connect with"}
+        <section>
+          <SectionHeader title="…with" />
+          {friends.length === 0 ? (
+            <EmptyState
+              emoji="☺"
+              title="No connections yet"
+              body="Mutual is a private, two-sided signal: pick a friend and something you would enjoy doing together, and neither of you hears a word unless you both pick the same one. Add a connection first, then come back when there is someone to choose."
+              action={
+                <Link
+                  href="/people"
+                  className="inline-flex min-h-11 items-center rounded-btn bg-brand-gradient px-4 text-sm font-bold text-white"
+                >
+                  Find your people
+                </Link>
+              }
+            />
+          ) : (
+            <div className="space-y-2">
+              {friends.map((friend) => {
+                const selected = people.includes(friend.id);
+                return (
+                  <button
+                    key={friend.id}
+                    type="button"
+                    aria-pressed={selected}
+                    onClick={() => setPeople((p) => toggle(p, friend.id))}
+                    className={`w-full flex items-center gap-3 rounded-card border p-3 transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-terracotta ${
+                      selected
+                        ? 'border-terracotta bg-terracotta-soft'
+                        : 'border-line bg-card hover:border-ink-faint'
+                    }`}
+                  >
+                    <Avatar name={friend.name} seed={friend.id} size="sm" />
+                    <span className="flex-1 text-left font-bold">{friend.name}</span>
+                    <Icon
+                      name={selected ? 'check' : 'add'}
+                      size={20}
+                      className={selected ? 'text-terracotta-deep' : 'text-ink-faint'}
+                    />
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </section>
+
+        <Button
+          size="lg"
+          className="w-full"
+          disabled={pending || activities.length === 0 || people.length === 0}
+          onClick={connect}
+        >
+          {pending ? 'Saving quietly…' : 'Down to Connect 🤝'}
+        </Button>
+        <p className="text-xs text-ink-faint text-center -mt-4">
+          Completely private until it’s mutual.
         </p>
+        {(activities.length === 0 || people.length === 0) && (
+          <p className="text-xs text-ink-faint text-center">
+            {activities.length === 0
+              ? "Select an activity"
+              : "Select someone to connect with"}
+          </p>
+        )}
+        </>
       )}
 
       {/* Standing rituals */}
@@ -294,9 +390,9 @@ export function MutualClient({
             {rituals.map((ritual) => (
               <li
                 key={ritual.id}
-                className="flex items-center gap-3 rounded-card bg-cream px-3.5 py-2.5"
+                className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-card bg-cream px-3.5 py-2.5"
               >
-                <span className="text-sm flex-1">
+                <span className="text-sm flex-1 min-w-[12rem]">
                   <strong>{ritual.activity}</strong> with{' '}
                   <strong>{ritual.otherName}</strong>
                   <span className="text-ink-faint">
@@ -305,12 +401,44 @@ export function MutualClient({
                     {ritual.status === 'proposed'
                       ? ritual.isMine
                         ? ' · waiting on them'
-                        : ' · waiting on you (see Home)'
+                        : ' · waiting on you'
                       : ritual.status === 'paused'
                         ? ' · paused'
-                        : ''}
+                        : ritual.heldBy
+                          ? ` · on hold while ${ritual.heldBy === 'you' ? 'you’re' : `${ritual.heldBy} is`} on sabbatical`
+                          : ritual.dueOn
+                            ? ` · ${ritualDueLabel(ritual.dueOn, ritual.today)}`
+                            : ''}
                   </span>
                 </span>
+                {ritual.status === 'proposed' && !ritual.isMine && (
+                  <Button
+                    size="sm"
+                    variant="accept"
+                    disabled={pending}
+                    onClick={() => answer(ritual, true)}
+                  >
+                    Love it
+                  </Button>
+                )}
+                {ritual.due && (
+                  <>
+                    <Link
+                      href={`/events/new?title=${encodeURIComponent(ritual.activity)}&ritual=${ritual.id}&invite=${ritual.otherId}`}
+                      className="rounded-pill px-2 py-1 text-xs font-bold text-terracotta-deep hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-terracotta"
+                    >
+                      Plan it
+                    </Link>
+                    <button
+                      type="button"
+                      className="rounded-pill px-2 py-1 text-xs text-ink-faint hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-terracotta"
+                      disabled={pending}
+                      onClick={() => skip(ritual)}
+                    >
+                      Skip
+                    </button>
+                  </>
+                )}
                 {ritual.status !== 'proposed' && (
                   <button
                     type="button"
@@ -338,15 +466,19 @@ export function MutualClient({
                   type="button"
                   className="rounded-pill px-2 py-1 text-xs text-ink-faint hover:text-rose-deep focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-terracotta"
                   disabled={pending}
-                  onClick={() => end(ritual)}
+                  onClick={() =>
+                    ritual.status === 'proposed' && !ritual.isMine
+                      ? answer(ritual, false)
+                      : end(ritual)
+                  }
                 >
-                  End
+                  {ritual.status === 'proposed' && !ritual.isMine ? 'Not now' : 'End'}
                 </button>
               </li>
             ))}
           </ul>
         )}
-        {friends.length > 0 && (
+        {friends.length > 0 && !onSabbatical && (
           <Card>
             <p className="text-sm font-bold mb-2.5">Start one</p>
             <div className="space-y-2.5">
@@ -414,9 +546,8 @@ export function MutualClient({
                 Propose the ritual
               </Button>
               <p className="text-xs text-ink-faint">
-                They accept once. After that, Switchboard nudges you both when
-                it has been about that long, and either of you can skip
-                guilt-free.
+                They accept once. After that, Switchboard nudges you both on
+                the day it’s due, and either of you can skip one guilt-free.
               </p>
             </div>
           </Card>

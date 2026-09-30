@@ -15,6 +15,7 @@ import {
   swipeRelease,
   type SwipeConfig,
 } from '@/lib/swipe-dismiss';
+import { freshNotificationMoment } from './live-notification-events';
 
 /** How long a banner sits before it slides away on its own. */
 const DISMISS_MS = 6500;
@@ -35,10 +36,13 @@ interface LiveNotificationsProps {
  * reminder — in addition to the bell badge, which this also refreshes.
  *
  * Every one of those events already writes a row to `public.notifications`
- * (see notifyUsers), so this subscribes once to INSERTs on that table filtered
- * to the current user. RLS restricts delivery to the recipient, so the filter
- * is defence-in-depth, not the boundary. Mounted once in the root layout, above
- * the router, so it survives navigation and never misses an event mid-transition.
+ * (see notifyUsers), so this subscribes once to that table filtered to the
+ * current user — INSERTs, and UPDATEs too, because a coalescing notifier (room
+ * messages, poll ideas) rewrites its standing unread row instead of adding
+ * another (see live-notification-events.ts). RLS restricts delivery to the
+ * recipient, so the filter is defence-in-depth, not the boundary. Mounted once
+ * in the root layout, above the router, so it survives navigation and never
+ * misses an event mid-transition.
  *
  * A banner leaves three ways: swiped up or to either side, tapped on its close
  * button, or left alone for a few seconds. The swipe is the one people reach
@@ -73,35 +77,41 @@ export function LiveNotifications({ userId }: LiveNotificationsProps) {
     let channel: ReturnType<ReturnType<typeof createClient>['channel']> | null =
       null;
 
+    const onChange = (value: Record<string, unknown>) => {
+      // Any change moves the bell: a new row, a bump, or a row marked read.
+      scheduleRefresh();
+      const moment = freshNotificationMoment(value);
+      const row = parseNotificationRow(value);
+      if (!moment || !row?.id || seen.current.has(moment)) return;
+      seen.current.add(moment);
+
+      // The bell count should update whether or not the tab is focused; the
+      // banner itself is a live-attention surface, so only raise it while the
+      // tab is actually being looked at. When they come back, the bell and
+      // /notifications already hold it.
+      if (document.visibilityState !== 'visible') return;
+
+      const banner = bannerFromRow(row);
+      // A bumped row replaces its own earlier banner rather than stacking.
+      setBanners((current) =>
+        [...current.filter((b) => b.id !== banner.id), banner].slice(-MAX_VISIBLE),
+      );
+    };
+
     try {
       const supabase = createClient();
+      const filter = `user_id=eq.${userId}`;
       channel = supabase
         .channel(`notifications:${userId}`)
         .on(
           'postgres_changes',
-          {
-            event: 'INSERT',
-            schema: 'public',
-            table: 'notifications',
-            filter: `user_id=eq.${userId}`,
-          },
-          (payload) => {
-            const row = parseNotificationRow(payload.new);
-            if (!row?.id || seen.current.has(row.id)) return;
-            seen.current.add(row.id);
-
-            // The bell count should update whether or not the tab is focused;
-            // the banner itself is a live-attention surface, so only raise it
-            // while the tab is actually being looked at. When they come back,
-            // the bell and /notifications already hold it.
-            scheduleRefresh();
-            if (document.visibilityState !== 'visible') return;
-
-            const banner = bannerFromRow(row);
-            setBanners((current) =>
-              [...current, banner].slice(-MAX_VISIBLE),
-            );
-          },
+          { event: 'INSERT', schema: 'public', table: 'notifications', filter },
+          (payload) => onChange(payload.new),
+        )
+        .on(
+          'postgres_changes',
+          { event: 'UPDATE', schema: 'public', table: 'notifications', filter },
+          (payload) => onChange(payload.new),
         )
         .subscribe();
     } catch {

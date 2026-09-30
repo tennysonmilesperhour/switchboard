@@ -70,6 +70,17 @@ jobs:
     name: Authenticated E2E
     runs-on: ubuntu-latest
     timeout-minutes: 25
+    # Test-only values for the throwaway local stack, not secrets. Job-level so
+    # the build, the `npm run start` server Playwright launches and the specs
+    # all read the same ones. CRON_SECRET lets the plan-lifecycle journeys run
+    # the minute sweep on demand; the RESEND_* trio sends the app's mail to the
+    # loopback relay Playwright starts (e2e/mail-relay.ts), which hands it to
+    # the local Mailpit, so sign-up and recovery links can be opened.
+    env:
+      CRON_SECRET: e2e-local-cron-secret
+      RESEND_API_KEY: e2e-local-relay
+      EMAIL_FROM: Switchboard E2E <e2e@switchboard.test>
+      RESEND_API_URL: http://127.0.0.1:54380/emails
 
     steps:
       - name: Check out repository
@@ -159,7 +170,7 @@ jobs:
         run: npx playwright install --with-deps chromium
 
       - name: Run authenticated journey tests
-        run: npx playwright test --project=desktop e2e/authed.spec.ts e2e/invite-links.spec.ts e2e/client-signoff.spec.ts
+        run: npx playwright test --project=desktop e2e/authed.spec.ts e2e/invite-links.spec.ts e2e/client-signoff.spec.ts e2e/places.spec.ts e2e/accounts.spec.ts e2e/plan-lifecycle.spec.ts
         env:
           PLAYWRIGHT_WEB_SERVER: npm run start
 

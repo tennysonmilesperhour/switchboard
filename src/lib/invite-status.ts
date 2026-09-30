@@ -18,6 +18,7 @@ export const INVITE_STATUS_LABEL: Record<InviteStatus, string> = {
   cancelled: 'Not needed',
   waitlisted: 'Waitlisted',
   requested: 'Asked to join',
+  pending_approval: 'Waiting on a guardian',
 };
 
 /** Fail closed if a database CHECK value is newer than this application. */
@@ -31,6 +32,7 @@ export function normalizeInviteStatus(status: string): InviteStatus {
     case 'cancelled':
     case 'waitlisted':
     case 'requested':
+    case 'pending_approval':
       return status;
     default:
       return 'cancelled';

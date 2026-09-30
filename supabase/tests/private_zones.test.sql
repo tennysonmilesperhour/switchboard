@@ -103,10 +103,11 @@ select throws_ok(
   'a non-moderator cannot mint a zone invite code'
 );
 
--- A request is the one thing they may write, and only as themselves.
-insert into public.zone_join_requests (zone_id, requester_id, note)
-  values ('00000000-0000-0000-0000-0000000f0002'::uuid,
-          '00000000-0000-0000-0000-00000000203c', 'I am on this trip');
+-- A request is the one thing they may write, and only as themselves. Since
+-- 20260930040000_private_zone_requests.sql it goes through request_zone_join,
+-- which also decides whether a past decision still stands.
+select * from public.request_zone_join(
+  '00000000-0000-0000-0000-0000000f0002'::uuid, 'I am on this trip');
 select is(
   (select status from public.zone_join_requests
     where requester_id = '00000000-0000-0000-0000-00000000203c'),

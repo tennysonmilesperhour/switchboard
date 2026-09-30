@@ -12,10 +12,20 @@ import { errorRef, type ErrorCode } from '@/lib/errors';
 interface CoHostManagerProps {
   eventId: string;
   cohosts: Array<{ id: string; name: string }>;
+  /**
+   * People who can be made a co-host in one tap: on this plan's guest list, or
+   * one of your connections (decision D1). Anyone else by handle is refused.
+   */
+  candidates?: Array<{ id: string; name: string; handle: string }>;
 }
 
-/** Primary-host-only panel to share host powers with a friend by handle. */
-export function CoHostManager({ eventId, cohosts }: CoHostManagerProps) {
+/**
+ * Primary-host-only panel to share host powers with someone you know: a
+ * connection, or someone already on this plan's guest list (decision D1). The
+ * new co-host is notified with a link to the plan, which now opens for them
+ * whether or not they were invited.
+ */
+export function CoHostManager({ eventId, cohosts, candidates = [] }: CoHostManagerProps) {
   const [handle, setHandle] = useState('');
   const [error, setError] = useState<string | null>(null);
   // Only operational failures carry one; "No one with that handle." does not.
@@ -49,7 +59,10 @@ export function CoHostManager({ eventId, cohosts }: CoHostManagerProps) {
 
   function add(e: React.FormEvent) {
     e.preventDefault();
-    const value = handle.trim();
+    addByHandle(handle.trim());
+  }
+
+  function addByHandle(value: string) {
     if (!value) return;
     setError(null);
     setErrorCode(null);
@@ -70,7 +83,8 @@ export function CoHostManager({ eventId, cohosts }: CoHostManagerProps) {
       <h2 className="text-plate text-plate-inset font-display text-xl text-ink">Co-hosts</h2>
       <p className="text-plate text-plate-inset text-sm text-ink-faint mt-0.5 mb-3">
         Co-hosts share your powers - editing the plan, approving join requests,
-        and confirming or cancelling. Only you can manage this list.
+        and confirming or cancelling. Pick someone you’re connected with or
+        who’s already invited. Only you can manage this list.
       </p>
 
       {cohosts.length > 0 && (
@@ -93,6 +107,22 @@ export function CoHostManager({ eventId, cohosts }: CoHostManagerProps) {
             </li>
           ))}
         </ul>
+      )}
+
+      {candidates.length > 0 && (
+        <div className="mb-3 flex flex-wrap gap-2">
+          {candidates.slice(0, 12).map((person) => (
+            <button
+              key={person.id}
+              type="button"
+              disabled={pending}
+              onClick={() => addByHandle(person.handle)}
+              className="inline-flex items-center gap-1.5 rounded-pill border border-line bg-card px-3 py-1.5 text-xs font-bold text-ink-soft hover:border-terracotta hover:text-terracotta-deep disabled:opacity-60"
+            >
+              <Avatar name={person.name} seed={person.id} size="xs" />+ {person.name}
+            </button>
+          ))}
+        </div>
       )}
 
       <form onSubmit={add} className="flex items-center gap-2">

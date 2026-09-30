@@ -67,7 +67,9 @@ export default async function CommunityPage() {
                 href="/boards"
                 className="mt-2 inline-block rounded-pill bg-ink px-4 py-2 text-sm font-bold text-paper"
               >
-                Browse boards
+                {/* Boards are invite-only; there is nothing to browse, and the
+                    page this opens is where you start one. */}
+                Start a board
               </Link>
             }
           />

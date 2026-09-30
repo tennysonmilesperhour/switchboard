@@ -3,31 +3,36 @@
 import { useEffect, useRef, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
-import { Avatar } from '@/components/ui/Avatar';
 import { Button } from '@/components/ui/Button';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { useToast } from '@/components/ui/Toast';
 import { useConfirm, usePrompt } from '@/components/ui/ConfirmDialog';
 import {
+  deleteMessage,
+  loadEarlierMessages,
   markRoomRead,
+  reportRoomMessage,
   sendMessage,
   sendPhotoMessage,
+  signRoomMessagePhotos,
   toggleTask,
 } from '@/lib/actions/rooms';
-import { blockProfile, reportProfile } from '@/lib/actions/connections';
-import { addExpense, deleteExpense } from '@/lib/actions/expenses';
+import { blockProfile } from '@/lib/actions/connections';
 import { UploadError, uploadImage } from '@/lib/client/upload-image';
-import { errorRef, type ActionResult } from '@/lib/errors';
 import { formatRelative } from '@/lib/format';
 import type { RoomItemKind } from '@/lib/types';
+import { MessageBubble } from './MessageBubble';
+import { RoomHeader, type RoomMemberInfo, type RoomReadOnly } from './RoomHeader';
+import { SplitTab, type ExpenseRow, type ExpenseShareRow } from './SplitTab';
+import {
+  mergeRoomMessages,
+  OPTIMISTIC_PREFIX,
+  prependEarlierMessages,
+  type RoomMessage,
+} from './room-messages';
 
-export interface RoomMessage {
-  id: string;
-  sender_id: string;
-  body: string;
-  image_url: string | null;
-  created_at: string;
-}
+export type { RoomMessage } from './room-messages';
+export type { ExpenseRow } from './SplitTab';
 
 export interface RoomItemRow {
   id: string;
@@ -36,16 +41,6 @@ export interface RoomItemRow {
   detail: string | null;
   url: string | null;
   done: boolean;
-  created_at: string;
-}
-
-export interface ExpenseRow {
-  id: string;
-  description: string;
-  amount_cents: number;
-  payer_id: string;
-  settle_url: string | null;
-  created_by: string;
   created_at: string;
 }
 
@@ -61,13 +56,27 @@ const TABS: Array<{ key: TabKey; label: string; emoji: string }> = [
   { key: 'split', label: 'Split', emoji: '💸' },
 ];
 
+const PHOTO_BODY = '📷 Photo';
+
 interface RoomClientProps {
   roomId: string;
+  roomKind: string;
   currentUserId: string;
+  members: RoomMemberInfo[];
+  /** Names for everyone who wrote here, including people who have left. */
   memberNames: Record<string, string>;
   initialMessages: RoomMessage[];
+  /** Whether there are messages before the first page. */
+  hasEarlier: boolean;
   items: RoomItemRow[];
   expenses: ExpenseRow[];
+  shares: ExpenseShareRow[];
+  muted: boolean;
+  readOnly: RoomReadOnly;
+  plan: { id: string; title: string } | null;
+  canLeave: boolean;
+  /** False when AI filing is unavailable and only the pattern rules run (G32). */
+  smartFiling: boolean;
 }
 
 function parseRoomMessage(value: Record<string, unknown>): RoomMessage | null {
@@ -89,40 +98,51 @@ function parseRoomMessage(value: Record<string, unknown>): RoomMessage | null {
   };
 }
 
-function formatMoney(cents: number): string {
-  return (cents / 100).toLocaleString('en-US', {
-    style: 'currency',
-    currency: 'USD',
-  });
-}
-
 export function RoomClient({
   roomId,
+  roomKind,
   currentUserId,
+  members,
   memberNames,
   initialMessages,
+  hasEarlier,
   items,
   expenses,
+  shares,
+  muted,
+  readOnly,
+  plan,
+  canLeave,
+  smartFiling,
 }: RoomClientProps) {
   const [messages, setMessages] = useState<RoomMessage[]>(initialMessages);
+  // A refresh hands down a new server read; fold it in rather than ignoring it,
+  // so messages the realtime channel missed appear, deleted ones go, and a
+  // realtime photo picks up its signed URL (see mergeRoomMessages).
+  const [seenServerRead, setSeenServerRead] = useState(initialMessages);
+  if (seenServerRead !== initialMessages) {
+    setSeenServerRead(initialMessages);
+    setMessages((current) => mergeRoomMessages(current, initialMessages));
+  }
+  const [moreBefore, setMoreBefore] = useState(hasEarlier);
+  const [loadingEarlier, setLoadingEarlier] = useState(false);
   const [tab, setTab] = useState<TabKey>('chat');
   const [draft, setDraft] = useState('');
   const [pending, startTransition] = useTransition();
-  // Split the Bill form state.
-  const [expenseDesc, setExpenseDesc] = useState('');
-  const [expenseAmount, setExpenseAmount] = useState('');
-  const [expenseUrl, setExpenseUrl] = useState('');
-  const [expenseError, setExpenseError] = useState<Pick<ActionResult, 'error' | 'code'> | null>(
-    null,
-  );
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
-  const [memberMenu, setMemberMenu] = useState<string | null>(null);
+  const [menu, setMenu] = useState<string | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const photoInputRef = useRef<HTMLInputElement>(null);
   const router = useRouter();
   const toast = useToast();
   const confirm = useConfirm();
   const askReason = usePrompt();
+
+  const memberIds = new Set(members.map((member) => member.id));
+  // A match room the other person left has nobody to talk to.
+  const alone = roomKind === 'match' && members.every((member) => member.id === currentUserId);
+  const canWrite = !readOnly && !alone;
+  const nameOf = (id: string) => memberNames[id] ?? 'Someone who left';
 
   useEffect(() => {
     markRoomRead(roomId).catch(() => undefined);
@@ -137,6 +157,8 @@ export function RoomClient({
     const onVisibility = () => {
       if (document.visibilityState === 'visible') {
         markRoomRead(roomId).catch(() => undefined);
+        // Realtime does not replay what arrived while the phone was asleep.
+        router.refresh();
       }
     };
     document.addEventListener('visibilitychange', onVisibility);
@@ -144,7 +166,96 @@ export function RoomClient({
       clearInterval(interval);
       document.removeEventListener('visibilitychange', onVisibility);
     };
-  }, [roomId]);
+  }, [roomId, router]);
+
+  // Live updates (G12). New messages are appended in place; everything else —
+  // filed items appearing *and being ticked*, expenses added or edited, shares
+  // settled — re-reads the room, coalesced so a burst is one refresh. RLS on
+  // each table decides which changes this member receives.
+  useEffect(() => {
+    const supabase = createClient();
+    let joined = false;
+    let refreshTimer: ReturnType<typeof setTimeout> | null = null;
+    const scheduleRefresh = () => {
+      if (refreshTimer) return;
+      refreshTimer = setTimeout(() => {
+        refreshTimer = null;
+        router.refresh();
+      }, 300);
+    };
+    const roomFilter = `room_id=eq.${roomId}`;
+
+    const signPhoto = (messageId: string) => {
+      signRoomMessagePhotos(roomId, [messageId])
+        .then((signed) => {
+          if (!(messageId in signed)) return;
+          setMessages((current) =>
+            current.map((m) => (m.id === messageId ? { ...m, image_src: signed[messageId] } : m)),
+          );
+        })
+        .catch(() => undefined);
+    };
+
+    let channel = supabase
+      .channel(`room-${roomId}`)
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'messages', filter: roomFilter },
+        (payload) => {
+          const incoming = parseRoomMessage(payload.new);
+          if (!incoming) return;
+          setMessages((current) => {
+            // Already have the real row (e.g. duplicate delivery) — ignore.
+            if (current.some((m) => m.id === incoming.id)) return current;
+            // Reconcile our own optimistic placeholder: it was appended with a
+            // synthetic id, so it won't match the real UUID here. Swap the first
+            // matching placeholder for the real row instead of appending a
+            // second copy, keeping the local preview of a photo just sent.
+            const placeholder = current.findIndex(
+              (m) =>
+                m.id.startsWith(OPTIMISTIC_PREFIX) &&
+                m.sender_id === incoming.sender_id &&
+                m.body === incoming.body,
+            );
+            if (placeholder === -1) return [...current, incoming];
+            const next = [...current];
+            const preview = current[placeholder].image_src;
+            next[placeholder] = preview ? { ...incoming, image_src: preview } : incoming;
+            return next;
+          });
+          // A realtime payload carries the stored path, which a browser cannot
+          // load; ask the server for a signed URL for this one photo.
+          if (incoming.image_url) signPhoto(incoming.id);
+        },
+      );
+    for (const table of ['room_items', 'expenses', 'expense_shares'] as const) {
+      for (const event of ['INSERT', 'UPDATE'] as const) {
+        channel = channel.on(
+          'postgres_changes',
+          { event, schema: 'public', table, filter: roomFilter },
+          scheduleRefresh,
+        );
+      }
+    }
+    channel.subscribe((status) => {
+      // A rejoin after a dropped socket fires SUBSCRIBED again; whatever was
+      // sent in the gap is not replayed, so re-read the room.
+      if (status !== 'SUBSCRIBED') return;
+      if (joined) router.refresh();
+      joined = true;
+    });
+    return () => {
+      if (refreshTimer) clearTimeout(refreshTimer);
+      supabase.removeChannel(channel);
+    };
+  }, [roomId, router]);
+
+  // Follow the conversation to its newest message, but not when older ones are
+  // loaded in above it.
+  const lastId = messages[messages.length - 1]?.id;
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [lastId]);
 
   async function onPickPhoto(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -155,19 +266,23 @@ export function RoomClient({
       return;
     }
     setUploadingPhoto(true);
+    const preview = URL.createObjectURL(file);
     try {
-      const url = await uploadImage({ file, bucket: 'media', pathPrefix: 'room' });
-      // Optimistic: show it immediately; the realtime echo reconciles by
-      // sender+body, same as text messages.
+      // Private storage (G2): the upload returns a path in the sender's own
+      // folder, and every viewer is handed a short-lived signed URL.
+      const ref = await uploadImage({ file, bucket: 'media-private', pathPrefix: 'room' });
+      // Optimistic: show the local copy immediately; the realtime echo
+      // reconciles by sender+body, same as text messages.
       const optimistic: RoomMessage = {
-        id: `optimistic-${Date.now()}`,
+        id: `${OPTIMISTIC_PREFIX}${Date.now()}`,
         sender_id: currentUserId,
-        body: '📷 Photo',
-        image_url: url,
+        body: PHOTO_BODY,
+        image_url: ref,
+        image_src: preview,
         created_at: new Date().toISOString(),
       };
       setMessages((current) => [...current, optimistic]);
-      const result = await sendPhotoMessage(roomId, url);
+      const result = await sendPhotoMessage(roomId, ref);
       if (!result.ok) {
         setMessages((current) => current.filter((m) => m.id !== optimistic.id));
         toast.error(result.error ?? 'Could not send the photo.', result.code);
@@ -184,87 +299,6 @@ export function RoomClient({
     }
   }
 
-  async function removeExpense(expenseId: string) {
-    const ok = await confirm({
-      title: 'Delete this expense?',
-      body: 'It’ll be removed from the ledger for everyone in this room.',
-      confirmLabel: 'Delete',
-      danger: true,
-    });
-    if (!ok) return;
-    startTransition(async () => {
-      try {
-        const result = await deleteExpense(expenseId, roomId);
-        if (!result.ok) {
-          toast.error(result.error ?? 'Could not delete the expense. Try again.', result.code);
-          return;
-        }
-        router.refresh();
-      } catch {
-        toast.error('Could not delete the expense. Try again.');
-      }
-    });
-  }
-
-  // Live messages via Supabase Realtime.
-  useEffect(() => {
-    const supabase = createClient();
-    const channel = supabase
-      .channel(`room-${roomId}`)
-      .on(
-        'postgres_changes',
-        {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'messages',
-          filter: `room_id=eq.${roomId}`,
-        },
-        (payload) => {
-          const incoming = parseRoomMessage(payload.new);
-          if (!incoming) return;
-          setMessages((current) => {
-            // Already have the real row (e.g. duplicate delivery) — ignore.
-            if (current.some((m) => m.id === incoming.id)) return current;
-            // Reconcile our own optimistic placeholder: it was appended with a
-            // synthetic `optimistic-…` id, so it won't match the real UUID here.
-            // Swap the first matching placeholder for the real row instead of
-            // appending a second copy (which showed the sender their own
-            // message twice).
-            const placeholder = current.findIndex(
-              (m) =>
-                m.id.startsWith('optimistic-') &&
-                m.sender_id === incoming.sender_id &&
-                m.body === incoming.body,
-            );
-            if (placeholder === -1) return [...current, incoming];
-            const next = [...current];
-            next[placeholder] = incoming;
-            return next;
-          });
-        },
-      )
-      .on(
-        'postgres_changes',
-        {
-          // Auto-filed items (addresses/tasks/links/notes) land in room_items;
-          // refresh so a member sees another member's filing appear live.
-          event: 'INSERT',
-          schema: 'public',
-          table: 'room_items',
-          filter: `room_id=eq.${roomId}`,
-        },
-        () => router.refresh(),
-      )
-      .subscribe();
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [roomId, router]);
-
-  useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages.length]);
-
   function submit(e: React.FormEvent) {
     e.preventDefault();
     const body = draft.trim();
@@ -274,7 +308,7 @@ export function RoomClient({
     // placeholder with the real row when it arrives (matching on sender+body),
     // so the sender never sees their own message twice.
     const optimistic: RoomMessage = {
-      id: `optimistic-${Date.now()}`,
+      id: `${OPTIMISTIC_PREFIX}${Date.now()}`,
       sender_id: currentUserId,
       body,
       image_url: null,
@@ -293,6 +327,7 @@ export function RoomClient({
         if (!result.ok) {
           unsend();
           toast.error(result.error ?? 'Your message didn’t send. Try again.', result.code);
+          if (!result.code) router.refresh(); // a block may have closed the room
           return;
         }
         router.refresh(); // pick up any auto-filed items
@@ -300,6 +335,87 @@ export function RoomClient({
         unsend();
         toast.error('Your message didn’t send. Check your connection and try again.');
       }
+    });
+  }
+
+  function loadEarlier() {
+    const oldest = messages.find((m) => !m.id.startsWith(OPTIMISTIC_PREFIX));
+    if (!oldest) return;
+    setLoadingEarlier(true);
+    loadEarlierMessages(roomId, oldest.created_at)
+      .then((result) => {
+        if (!result.ok) {
+          toast.error(result.error ?? 'Could not load earlier messages.', result.code);
+          return;
+        }
+        setMoreBefore(result.hasMore);
+        setMessages((current) => prependEarlierMessages(current, result.messages));
+      })
+      .catch(() => toast.error('Could not load earlier messages. Check your connection.'))
+      .finally(() => setLoadingEarlier(false));
+  }
+
+  async function removeMessage(message: RoomMessage) {
+    setMenu(null);
+    const ok = await confirm({
+      title: 'Delete this message?',
+      body: 'It’s removed for everyone in this room. Anything it filed into the tabs stays unless it was a photo.',
+      confirmLabel: 'Delete',
+      danger: true,
+    });
+    if (!ok) return;
+    startTransition(async () => {
+      const result = await deleteMessage(message.id, roomId);
+      if (!result.ok) {
+        toast.error(result.error ?? 'Could not delete that message.', result.code);
+        return;
+      }
+      setMessages((current) => current.filter((m) => m.id !== message.id));
+      router.refresh();
+    });
+  }
+
+  // Reports this one message, not just its sender: the moderator sees the
+  // words (and photo) themselves, even if they are deleted later.
+  async function reportMessage(message: RoomMessage) {
+    setMenu(null);
+    const reason = await askReason({
+      title: `Report this message from ${nameOf(message.sender_id)}?`,
+      body: `A moderator sees the message and your reason, and a sentence is plenty. ${nameOf(message.sender_id)} won’t be told who reported it.`,
+      confirmLabel: 'Send report',
+    });
+    if (!reason) return;
+    startTransition(async () => {
+      const result = await reportRoomMessage(message.id, reason);
+      if (!result.ok) {
+        toast.error(result.error ?? 'Could not send the report.', result.code);
+        return;
+      }
+      toast.success('Report received.');
+    });
+  }
+
+  async function blockSender(senderId: string) {
+    setMenu(null);
+    const name = memberNames[senderId];
+    const ok = await confirm({
+      title: `Block ${name ?? 'this person'}?`,
+      body:
+        roomKind === 'event'
+          ? 'You’ll stop being connected, and they won’t find you in discovery or on the map or be able to reconnect. You stay in this plan’s room, but you won’t be notified about each other’s messages. They won’t be told.'
+          : 'You’ll stop being connected, and they won’t find you in discovery or on the map or be able to reconnect. This conversation becomes read-only for both of you. They won’t be told.',
+      confirmLabel: 'Block',
+      danger: true,
+    });
+    if (!ok) return;
+    startTransition(async () => {
+      const result = await blockProfile(senderId);
+      if (!result.ok) {
+        toast.error(result.error ?? 'Could not block that person.', result.code);
+        return;
+      }
+      toast.success(`${name ?? 'They'} ${name ? 'is' : 'are'} blocked.`);
+      router.refresh();
     });
   }
 
@@ -314,40 +430,19 @@ export function RoomClient({
       : item.kind === tab || (tab === 'note' && item.kind === 'event'),
   );
 
-  // Split the Bill: equal shares across everyone in the room.
-  const memberIds = Object.keys(memberNames);
-  const memberCount = Math.max(memberIds.length, 1);
-  const totalCents = expenses.reduce((sum, e) => sum + e.amount_cents, 0);
-  const shareCents = Math.round(totalCents / memberCount);
-  const paidByMember = expenses.reduce<Record<string, number>>((acc, e) => {
-    acc[e.payer_id] = (acc[e.payer_id] ?? 0) + e.amount_cents;
-    return acc;
-  }, {});
-  const myPaid = paidByMember[currentUserId] ?? 0;
-  const myNet = myPaid - shareCents; // positive: you're owed; negative: you owe
-
-  function submitExpense(e: React.FormEvent) {
-    e.preventDefault();
-    const description = expenseDesc.trim();
-    const amount = expenseAmount.trim();
-    if (!description || !amount) return;
-    setExpenseError(null);
-    startTransition(async () => {
-      const result = await addExpense(roomId, description, amount, expenseUrl.trim());
-      if (result.ok) {
-        setExpenseDesc('');
-        setExpenseAmount('');
-        setExpenseUrl('');
-        router.refresh();
-      } else {
-        setExpenseError({ error: result.error ?? 'Could not add that.', code: result.code });
-      }
-    });
-  }
-
   return (
     <div className="flex flex-col h-[calc(100dvh-180px)]">
-      {/* Tabs */}
+      <RoomHeader
+        roomId={roomId}
+        roomKind={roomKind}
+        currentUserId={currentUserId}
+        members={members}
+        muted={muted}
+        plan={plan}
+        canLeave={canLeave}
+        readOnly={readOnly}
+      />
+
       <div
         role="tablist"
         aria-label="Room sections"
@@ -381,6 +476,19 @@ export function RoomClient({
       {tab === 'chat' ? (
         <>
           <div className="flex-1 overflow-y-auto space-y-3 py-3">
+            {moreBefore && (
+              <div className="flex justify-center">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  disabled={loadingEarlier}
+                  onClick={loadEarlier}
+                >
+                  {loadingEarlier ? 'Loading…' : 'Load earlier messages'}
+                </Button>
+              </div>
+            )}
             {messages.length === 0 && (
               <EmptyState
                 emoji="👋"
@@ -390,296 +498,88 @@ export function RoomClient({
             )}
             {messages.map((message) => {
               const mine = message.sender_id === currentUserId;
+              const present = memberIds.has(message.sender_id);
               return (
-                <div
+                <MessageBubble
                   key={message.id}
-                  className={`flex gap-2.5 ${mine ? 'flex-row-reverse' : ''}`}
-                >
-                  {!mine && (
-                    <div className="relative">
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setMemberMenu((prev) =>
-                            prev === message.sender_id ? null : message.sender_id,
-                          )
-                        }
-                        className="rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-terracotta"
-                      >
-                        <Avatar
-                          name={memberNames[message.sender_id] ?? '?'}
-                          seed={message.sender_id}
-                          size="sm"
-                        />
-                      </button>
-                      {memberMenu === message.sender_id && (
-                        <div className="absolute left-0 top-full z-30 mt-1 min-w-[120px] rounded-card border border-line bg-card p-1 shadow-float">
-                          <button
-                            type="button"
-                            disabled={pending}
-                            className="w-full rounded-btn px-3 py-1.5 text-left text-xs font-semibold text-ink-faint hover:bg-cream"
-                            onClick={async () => {
-                              setMemberMenu(null);
-                              const reason = await askReason({
-                                title: `Report ${memberNames[message.sender_id] ?? 'this person'}?`,
-                                body: 'A sentence is plenty. A moderator reads it, and they won’t be told who sent it.',
-                                confirmLabel: 'Send report',
-                              });
-                              if (!reason) return;
-                              startTransition(async () => {
-                                const result = await reportProfile(message.sender_id, reason);
-                                if (!result.ok)
-                                  return toast.error(
-                                    result.error ?? 'Could not send the report.',
-                                    result.code,
-                                  );
-                                toast.success('Report received.');
-                              });
-                            }}
-                          >
-                            Report
-                          </button>
-                          <button
-                            type="button"
-                            disabled={pending}
-                            className="w-full rounded-btn px-3 py-1.5 text-left text-xs font-semibold text-rose-deep hover:bg-cream"
-                            onClick={async () => {
-                              setMemberMenu(null);
-                              const ok = await confirm({
-                                title: `Block ${memberNames[message.sender_id] ?? 'this person'}?`,
-                                body: 'You’ll stop being connected, and they won’t find you in discovery or on the map or be able to reconnect. They won’t be told.',
-                                confirmLabel: 'Block',
-                                danger: true,
-                              });
-                              if (!ok) return;
-                              startTransition(async () => {
-                                const result = await blockProfile(message.sender_id);
-                                if (!result.ok)
-                                  return toast.error(
-                                    result.error ?? 'Could not block that person.',
-                                    result.code,
-                                  );
-                                toast.success(
-                                  `${memberNames[message.sender_id] ?? 'They'} ${memberNames[message.sender_id] ? 'is' : 'are'} blocked.`,
-                                );
-                                router.refresh();
-                              });
-                            }}
-                          >
-                            Block
-                          </button>
-                        </div>
-                      )}
-                    </div>
-                  )}
-                  <div className={`max-w-[75%] ${mine ? 'items-end' : ''}`}>
-                    {!mine && (
-                      <p className="text-[11px] text-ink-faint mb-0.5 px-1">
-                        {memberNames[message.sender_id] ?? 'Member'}
-                      </p>
-                    )}
-                    {message.image_url ? (
-                      <div
-                        className={`overflow-hidden rounded-card ${
-                          mine ? 'rounded-br-md' : 'rounded-bl-md'
-                        }`}
-                      >
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img
-                          src={message.image_url}
-                          alt={message.body === '📷 Photo' ? 'Shared photo' : message.body}
-                          className="max-h-72 w-full object-cover"
-                          loading="lazy"
-                        />
-                        {message.body !== '📷 Photo' && (
-                          <p
-                            className={`px-3.5 py-2 text-[15px] leading-relaxed break-words ${
-                              mine ? 'bg-terracotta text-white' : 'bg-cream text-ink'
-                            }`}
-                          >
-                            {message.body}
-                          </p>
-                        )}
-                      </div>
-                    ) : (
-                      <div
-                        className={`rounded-card px-3.5 py-2.5 text-[15px] leading-relaxed whitespace-pre-wrap break-words ${
-                          mine
-                            ? 'bg-terracotta text-white rounded-br-md'
-                            : 'bg-cream text-ink rounded-bl-md'
-                        }`}
-                      >
-                        {message.body}
-                      </div>
-                    )}
-                  </div>
-                </div>
+                  message={message}
+                  mine={mine}
+                  senderName={nameOf(message.sender_id)}
+                  menuOpen={menu === message.id}
+                  onToggleMenu={() => setMenu((prev) => (prev === message.id ? null : message.id))}
+                  pending={pending}
+                  onReport={
+                    !mine && !message.id.startsWith(OPTIMISTIC_PREFIX)
+                      ? () => reportMessage(message)
+                      : undefined
+                  }
+                  onBlock={!mine && present ? () => blockSender(message.sender_id) : undefined}
+                  onDelete={
+                    mine && !message.id.startsWith(OPTIMISTIC_PREFIX)
+                      ? () => removeMessage(message)
+                      : undefined
+                  }
+                />
               );
             })}
             <div ref={bottomRef} />
           </div>
 
-          <form onSubmit={submit} className="flex gap-2 pt-2 border-t border-line">
-            <input
-              ref={photoInputRef}
-              type="file"
-              accept="image/*"
-              onChange={onPickPhoto}
-              className="hidden"
-              aria-hidden
-              tabIndex={-1}
-            />
-            <button
-              type="button"
-              onClick={() => photoInputRef.current?.click()}
-              disabled={uploadingPhoto}
-              aria-label="Send a photo"
-              className="shrink-0 rounded-pill border border-line bg-card px-3 py-2.5 text-lg leading-none outline-none hover:border-terracotta focus-visible:ring-2 focus-visible:ring-terracotta disabled:opacity-50"
-            >
-              {uploadingPhoto ? '…' : '📷'}
-            </button>
-            <input
-              value={draft}
-              onChange={(e) => setDraft(e.target.value)}
-              placeholder="Message…"
-              aria-label="Message"
-              className="flex-1 rounded-pill border border-line bg-card px-4 py-2.5 text-[15px] outline-none focus:border-terracotta"
-            />
-            <Button type="submit" size="sm" disabled={!draft.trim()}>
-              Send
-            </Button>
-          </form>
+          {canWrite && (
+            <form onSubmit={submit} className="flex gap-2 pt-2 border-t border-line">
+              <input
+                ref={photoInputRef}
+                type="file"
+                accept="image/*"
+                onChange={onPickPhoto}
+                className="hidden"
+                aria-hidden
+                tabIndex={-1}
+              />
+              <button
+                type="button"
+                onClick={() => photoInputRef.current?.click()}
+                disabled={uploadingPhoto}
+                aria-label="Send a photo"
+                className="shrink-0 rounded-pill border border-line bg-card px-3 py-2.5 text-lg leading-none outline-none hover:border-terracotta focus-visible:ring-2 focus-visible:ring-terracotta disabled:opacity-50"
+              >
+                {uploadingPhoto ? '…' : '📷'}
+              </button>
+              <input
+                value={draft}
+                onChange={(e) => setDraft(e.target.value)}
+                placeholder="Message…"
+                aria-label="Message"
+                maxLength={4000}
+                className="flex-1 rounded-pill border border-line bg-card px-4 py-2.5 text-[15px] outline-none focus:border-terracotta"
+              />
+              <Button type="submit" size="sm" disabled={!draft.trim()}>
+                Send
+              </Button>
+            </form>
+          )}
         </>
       ) : tab === 'split' ? (
-        <div className="flex-1 overflow-y-auto py-3 space-y-3">
-          {expenses.length > 0 && (
-            <div className="rounded-card bg-cream px-3.5 py-3">
-              <div className="flex items-center justify-between text-sm">
-                <span className="text-ink-soft">Total spent</span>
-                <span className="font-medium">{formatMoney(totalCents)}</span>
-              </div>
-              <div className="flex items-center justify-between text-sm mt-1">
-                <span className="text-ink-soft">Even split ({memberCount})</span>
-                <span className="font-medium">{formatMoney(shareCents)} each</span>
-              </div>
-              <p className="text-sm mt-2 pt-2 border-t border-line">
-                {myNet > 0 ? (
-                  <>You’re owed <strong>{formatMoney(myNet)}</strong>.</>
-                ) : myNet < 0 ? (
-                  <>You owe <strong>{formatMoney(-myNet)}</strong>.</>
-                ) : (
-                  <>You’re all square.</>
-                )}
-              </p>
-            </div>
-          )}
-
-          {expenses.length === 0 ? (
-            <EmptyState
-              emoji="💸"
-              title="No expenses yet"
-              body="Log what people paid - Switchboard tallies who owes what. Settling up happens with your own Venmo or PayPal link."
-            />
-          ) : (
-            <ul className="space-y-2">
-              {expenses.map((expense) => {
-                const canRemove =
-                  expense.created_by === currentUserId ||
-                  expense.payer_id === currentUserId;
-                return (
-                  <li
-                    key={expense.id}
-                    className="flex items-start gap-3 rounded-card bg-card border border-line px-3.5 py-3"
-                  >
-                    <div className="flex-1 min-w-0">
-                      <p className="font-medium break-words">{expense.description}</p>
-                      <p className="text-xs text-ink-faint mt-0.5">
-                        {memberNames[expense.payer_id] ?? 'Someone'} paid ·{' '}
-                        {formatRelative(expense.created_at)}
-                      </p>
-                      {expense.settle_url && (
-                        <a
-                          href={expense.settle_url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-xs font-medium text-terracotta-deep underline underline-offset-2 mt-1 inline-block"
-                        >
-                          Settle up →
-                        </a>
-                      )}
-                    </div>
-                    <div className="flex flex-col items-end gap-1">
-                      <span className="font-medium">{formatMoney(expense.amount_cents)}</span>
-                      {canRemove && (
-                        <button
-                          type="button"
-                          onClick={() => removeExpense(expense.id)}
-                          disabled={pending}
-                          className="rounded-pill px-2 py-1 text-[11px] text-ink-faint hover:text-rose-deep focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-terracotta"
-                        >
-                          remove
-                        </button>
-                      )}
-                    </div>
-                  </li>
-                );
-              })}
-            </ul>
-          )}
-
-          <form
-            onSubmit={submitExpense}
-            className="space-y-2 pt-2 border-t border-line"
-          >
-            <input
-              value={expenseDesc}
-              onChange={(e) => setExpenseDesc(e.target.value)}
-              placeholder="What was it for?"
-              aria-label="Expense description"
-              maxLength={120}
-              className="w-full rounded-card border border-line bg-card px-3.5 py-2.5 text-sm outline-none focus:border-terracotta"
-            />
-            <div className="flex gap-2">
-              <input
-                value={expenseAmount}
-                onChange={(e) => setExpenseAmount(e.target.value)}
-                type="number"
-                min="0"
-                step="0.01"
-                inputMode="decimal"
-                placeholder="Amount"
-                aria-label="Amount"
-                className="w-28 rounded-card border border-line bg-card px-3.5 py-2.5 text-sm outline-none focus:border-terracotta"
-              />
-              <input
-                value={expenseUrl}
-                onChange={(e) => setExpenseUrl(e.target.value)}
-                placeholder="Venmo/PayPal link (optional)"
-                aria-label="Settle-up link"
-                className="flex-1 rounded-card border border-line bg-card px-3.5 py-2.5 text-sm outline-none focus:border-terracotta"
-              />
-            </div>
-            {expenseError && (
-              <p className="text-xs text-rose-deep">
-                {expenseError.error}
-                {expenseError.code && (
-                  <span className="ml-1.5 font-mono text-[11px] uppercase tracking-wide opacity-70">
-                    {errorRef(expenseError.code)}
-                  </span>
-                )}
-              </p>
-            )}
-            <Button
-              type="submit"
-              size="sm"
-              disabled={pending || !expenseDesc.trim() || !expenseAmount.trim()}
-            >
-              Add expense
-            </Button>
-          </form>
-        </div>
+        <SplitTab
+          roomId={roomId}
+          currentUserId={currentUserId}
+          members={members}
+          names={memberNames}
+          expenses={expenses}
+          shares={shares}
+          readOnly={!canWrite}
+        />
       ) : (
         <div className="flex-1 overflow-y-auto py-3 space-y-2">
+          {tab === 'note' && !smartFiling && (
+            // G32: say why notes are quiet, in the reader's terms (D25's rule:
+            // never a word about keys or configuration).
+            <p className="rounded-card bg-cream px-3.5 py-2.5 text-xs leading-snug text-ink-soft">
+              Smart filing isn’t available right now, so only links, street addresses and
+              to-dos (“I’ll bring…”, “don’t forget…”) file themselves. Everything else stays in
+              the chat.
+            </p>
+          )}
           {visibleItems.length === 0 ? (
             <EmptyState
               emoji={TABS.find((t) => t.key === tab)?.emoji ?? '📋'}
@@ -740,7 +640,7 @@ export function RoomClient({
                         }
                       })
                     }
-                    disabled={pending}
+                    disabled={pending || !canWrite}
                     className="mt-1 size-4 accent-terracotta"
                   />
                 )}

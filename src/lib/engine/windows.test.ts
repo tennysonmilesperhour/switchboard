@@ -1,5 +1,9 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { describe, expect, test } from 'vitest';
 import {
+  EXTEND_CHOICES,
+  liveWindowRefusal,
   suggestWindow,
   paceFromChosenWindows,
   sharedWindow,
@@ -120,5 +124,27 @@ describe('windowForNewInvitee', () => {
     // There is no shared answer to inherit, so the suggestion is the only
     // defensible guess — and it leaves the list Mixed, which it already was.
     expect(windowForNewInvitee([1440, 240], 60)).toBe(60);
+  });
+});
+
+describe('giving a live invitation more time (D17)', () => {
+  test('only ever adds time', () => {
+    expect(EXTEND_CHOICES.every((choice) => choice.addMinutes > 0)).toBe(true);
+  });
+
+  test('names each refusal set_invite_window raises, and nothing else', () => {
+    // The hints raised by the latest set_invite_window.
+    const sql = readFileSync(
+      join(process.cwd(), 'supabase', 'migrations', '20260930060000_plan_polish.sql'),
+      'utf8',
+    );
+    const body = sql.slice(sql.indexOf('create or replace function private.set_invite_window'));
+    const hints = [...body.slice(0, body.indexOf('\n$$;')).matchAll(/hint = '([a-z_]+)'/g)].map(
+      (match) => match[1],
+    );
+    expect(hints.length).toBeGreaterThan(0);
+    for (const hint of hints) expect(liveWindowRefusal(hint), hint).toBeTruthy();
+    expect(liveWindowRefusal('something_else')).toBeNull();
+    expect(liveWindowRefusal(null)).toBeNull();
   });
 });

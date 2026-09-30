@@ -103,7 +103,7 @@ export const FEATURE_GROUPS: readonly FeatureGroup[] = [
         id: 'cascade-editing',
         title: 'Change the chain after it’s live',
         blurb:
-          'Reorder who’s up next, resend an invite, or lengthen a window without disturbing anyone who already said yes.',
+          'Reorder who’s up next, resend an invite, or give someone who hasn’t answered yet more time, without disturbing anyone who already said yes.',
         where: 'Your plan’s page → host controls',
         start: { href: '/plans', label: 'Your plans' },
       },
@@ -143,8 +143,8 @@ export const FEATURE_GROUPS: readonly FeatureGroup[] = [
         id: 'rsvp-questions',
         title: 'Ask guests a question',
         blurb:
-          'Collect dietary needs or who’s bringing what as people RSVP. Answers are visible only to you.',
-        where: 'Plan wizard → Basics, answers on your plan’s page',
+          'Collect dietary needs or who’s bringing what as people RSVP, and add another question later. Answers are visible only to you.',
+        where: 'Plan wizard → Basics, or Edit plan to add one; answers on your plan’s page',
         start: { href: '/create', label: 'Start something' },
       },
       {
@@ -160,14 +160,14 @@ export const FEATURE_GROUPS: readonly FeatureGroup[] = [
         title: 'Automatic reminders',
         blurb:
           'A day-before note to people who are in, a nudge to anyone still holding an invite, and a starting-soon ping — all inside quiet hours.',
-        where: 'Plan wizard → Privacy (on by default)',
+        where: 'Plan wizard → Privacy (on by default), or Edit plan to switch them off or on',
         start: { href: '/create', label: 'Start something' },
       },
       {
         id: 'parental-approval',
         title: 'Parental approval',
         blurb:
-          'Require a parent or guardian to approve before someone can RSVP yes — for plans that need an adult in the loop.',
+          'Require a parent or guardian to approve each yes — it waits, without taking a spot, until they answer the link we email them, and you see everyone still waiting.',
         where: 'Plan wizard → Privacy',
         start: { href: '/create', label: 'Start something' },
       },
@@ -176,7 +176,7 @@ export const FEATURE_GROUPS: readonly FeatureGroup[] = [
         title: 'Cover image',
         blurb:
           'Give a plan a picture; it renders on the page and in the preview when the link gets texted around.',
-        where: 'Plan wizard → Basics',
+        where: 'Plan wizard → Basics, or Edit plan to change it',
         start: { href: '/create', label: 'Start something' },
       },
       {
@@ -190,15 +190,15 @@ export const FEATURE_GROUPS: readonly FeatureGroup[] = [
         id: 'open-table',
         title: 'Open Table',
         blurb:
-          'Leave a few seats open to friends-of-friends; they ask to join and you approve, so the guest list still belongs to you.',
-        where: 'Plan wizard → Privacy, requests arrive on the plan page',
+          'Leave a few seats open to friends-of-friends; they ask to join and you approve, so the guest list still belongs to you. Whoever asked hears your answer, yes or no.',
+        where: 'Plan wizard → Privacy or Edit plan; requests arrive on the plan page, and your own wait on Explore',
         href: '/discover',
       },
       {
         id: 'privacy-access',
         title: 'Privacy and access',
         blurb:
-          'Change what guests can see about each other — who’s in, the whole invite list, expired invitations — at any point, not just when you set the plan up.',
+          'Change what guests can see about each other — who’s in, and everyone you’ve invited so far — at any point, not just when you set the plan up.',
         where: 'Your plan’s page → Privacy and access',
         start: { href: '/plans', label: 'Your plans' },
       },
@@ -206,7 +206,7 @@ export const FEATURE_GROUPS: readonly FeatureGroup[] = [
         id: 'co-hosts',
         title: 'Co-hosts',
         blurb:
-          'Hand someone else the host powers — editing the chain, approving requests, closing polls — because most plans have two organizers.',
+          'Hand a friend or someone on the guest list the host powers — editing the chain, approving requests, closing polls — because most plans have two organizers. They get a note and the plan shows up in their calendar.',
         where: 'Your plan’s page → Co-hosts',
         start: { href: '/plans', label: 'Your plans' },
       },
@@ -229,7 +229,7 @@ export const FEATURE_GROUPS: readonly FeatureGroup[] = [
         id: 'run-it-back',
         title: 'Run it back',
         blurb:
-          'Re-invite the same crew to a fresh plan in one tap, minus anyone who said it wasn’t their thing.',
+          'Start a fresh plan with the same crew and co-hosts in one tap, minus anyone who said it wasn’t their thing. It opens by asking everyone when works.',
         where: 'A past plan’s page → Run it back',
         start: { href: '/plans', label: 'Your plans' },
       },
@@ -261,7 +261,7 @@ export const FEATURE_GROUPS: readonly FeatureGroup[] = [
         id: 'weighted-input',
         title: 'Private group decisions',
         blurb:
-          'Everyone rates each option privately as love, good, or rather-not, so people can be honest about a date or a place.',
+          'Float a few options to start the list, and everyone on it hears there is a vote — guests without the app get the link by email. Everyone rates each option privately as love, good, or rather-not, so people can be honest about a date or a place.',
         where: 'Start something → Help me figure it out',
         href: '/events/new?decide=1',
       },
@@ -308,7 +308,7 @@ export const FEATURE_GROUPS: readonly FeatureGroup[] = [
         id: 'poll-resolution',
         title: 'Polls that close themselves',
         blurb:
-          'Set a deadline and let a poll resolve on its own, pick the winner yourself, or run a runoff between the top options.',
+          'Set a deadline and let a poll resolve on its own, pick the winner yourself, or run a runoff between the top options. When it closes, everyone who was asked hears the result, the host hears when it is their pick, and a winning time from the availability grid becomes the plan’s date.',
         where: 'Plan wizard → Invites, then the plan page',
         start: { href: '/create', label: 'Start something' },
       },
@@ -340,7 +340,7 @@ export const FEATURE_GROUPS: readonly FeatureGroup[] = [
         id: 'people-home',
         title: 'Your people',
         blurb:
-          'Everyone you’re connected to, plus requests waiting on you and the ones you’re waiting on.',
+          'Everyone you’re connected to, plus requests waiting on you and the ones you’re waiting on. Search your people and open anyone’s profile. Ignore a request and that person’s requests stay out of sight for 90 days.',
         where: 'More → People',
         href: '/people',
       },
@@ -372,7 +372,7 @@ export const FEATURE_GROUPS: readonly FeatureGroup[] = [
         id: 'households',
         title: 'Households',
         blurb:
-          'Bundle the people who always come as a pair or a family, so inviting one invites the set.',
+          'Bundle the people who always come as a pair or a family. When you invite people, tapping the household selects everyone in it; picking one person selects just them. Add or remove people any time.',
         where: 'People → Households 🏡',
         href: '/people',
       },
@@ -388,7 +388,7 @@ export const FEATURE_GROUPS: readonly FeatureGroup[] = [
         id: 'mutual',
         title: 'Mutual',
         blurb:
-          'Say you’re down to connect with someone and it stays private unless they say it too. A no is never observable by anyone.',
+          'Say you’re down to connect with someone and it stays private unless they say it too. A no is never observable by anyone, and either of you can unmatch later.',
         where: 'Home → Mutual',
         href: '/mutual',
       },
@@ -396,7 +396,7 @@ export const FEATURE_GROUPS: readonly FeatureGroup[] = [
         id: 'rituals',
         title: 'Standing rituals',
         blurb:
-          'Make a thing a regular thing — monthly dinner, Thursday climbing — and Switchboard reminds you both when it’s due.',
+          'Make a thing a regular thing — monthly dinner, Thursday climbing — and Switchboard reminds you both on the day it’s due. Either of you can plan it or skip that one.',
         where: 'More → Mutual',
         href: '/mutual',
       },
@@ -413,22 +413,22 @@ export const FEATURE_GROUPS: readonly FeatureGroup[] = [
         title: 'Give space',
         blurb:
           'Name someone you’d rather not run into. When you say yes to a plan they may also be at, you get a private nudge — never who, never their answer, never anything after. They’re never removed and never told.',
-        where: 'Anyone’s profile, and People → a person’s controls',
+        where: 'Anyone’s profile, and People → a person’s controls. People → Giving space lists everyone you give space to.',
         href: '/people',
       },
       {
         id: 'block-report',
         title: 'Block and report',
         blurb:
-          'Blocking is enforced across discovery, matching, and the map — not just hidden. Both are reachable anywhere you’d actually meet someone, and Settings lists everyone you’ve blocked so you can undo one.',
-        where: 'Profiles, room members, moment reveals, and requests. Your blocked list is in Settings.',
+          'Blocking is enforced across discovery, matching, the map, and rooms — a one-to-one room becomes read-only for both of you, and in a plan’s room neither of you is notified about the other. Reporting a room message or a board post sends a moderator the message or post itself, not just a name, and moderators can take it down or suspend the account. Both are reachable anywhere you’d actually meet someone, and Settings lists everyone you’ve blocked so you can undo one.',
+        where: 'Profiles, a sender’s avatar on their room messages, board posts, moment reveals, and requests. Your blocked list is in Settings.',
         start: { href: '/people', label: 'People' },
       },
       {
         id: 'public-profile',
         title: 'Your public profile',
         blurb:
-          'The card people see: your photo, what you’re into, your socials, and a handle you can hand out.',
+          'The card people see: your photo, what you’re into, your socials, and a handle you can hand out — with a link to your page you can copy.',
         where: 'More → Profile',
         href: '/profile',
       },
@@ -468,7 +468,7 @@ export const FEATURE_GROUPS: readonly FeatureGroup[] = [
         id: 'moments',
         title: 'Shared moments',
         blurb:
-          'Check in somewhere and, if someone else is there too, you each step through three moments of consent before either of you is revealed.',
+          'Check in somewhere and, if someone else is there too — in the same zone, or within about 200 m — you each step through three moments of consent before either of you is revealed.',
         where: 'More → Around → Moments',
         href: '/moments',
       },
@@ -476,7 +476,7 @@ export const FEATURE_GROUPS: readonly FeatureGroup[] = [
         id: 'zones',
         title: 'Serendipity zones',
         blurb:
-          'Named places you check into — a conference, a cruise, a campus, a festival — so “who else is here?” has an answer.',
+          'Named places you check into — a conference, a cruise, a campus, a festival — so “who else is here?” has an answer. Find one by search or near you; each runs until the end date its organizer sets.',
         where: 'More → Around → Zones',
         href: '/zones',
       },
@@ -484,7 +484,7 @@ export const FEATURE_GROUPS: readonly FeatureGroup[] = [
         id: 'private-zones',
         title: 'Private zones',
         blurb:
-          'Make a zone visible only to people you let in, by link or by request, and remove anyone later. Public zones still work exactly as before.',
+          'Make a zone visible only to people you let in, by link or by request, and remove anyone later. Someone you pass on is told, and can ask once more after 30 days. Public zones still work exactly as before.',
         where:
           'More → Around → Zones → create one, or a zone you organize → Who can be here',
         href: '/zones',
@@ -509,7 +509,7 @@ export const FEATURE_GROUPS: readonly FeatureGroup[] = [
         id: 'boards',
         title: 'Neighborhood boards',
         blurb:
-          'Invite-only local boards with notices and recurring happenings, walled off so only members can read them.',
+          'Invite-only local boards with notices, offers, requests and recurring happenings, walled off so only members can read them. Share the running with co-moderators.',
         where: 'More → Boards',
         href: '/boards',
       },
@@ -532,7 +532,7 @@ export const FEATURE_GROUPS: readonly FeatureGroup[] = [
         id: 'living-rooms',
         title: 'Digital living rooms',
         blurb:
-          'Every plan and every match gets a room, so the conversation lives with the thing it’s about.',
+          'Every plan and every match gets a room, so the conversation lives with the thing it’s about. See who’s in it, jump back to the plan, delete your own messages, mute a room, and leave a match room or a finished plan’s room.',
         where: 'More → Rooms',
         href: '/rooms',
       },
@@ -547,7 +547,7 @@ export const FEATURE_GROUPS: readonly FeatureGroup[] = [
       {
         id: 'room-photos',
         title: 'Room photos',
-        blurb: 'Send pictures into the room and they collect in a Photos tab.',
+        blurb: 'Send pictures into the room and they collect in a Photos tab. Only people in the room can open them.',
         where: 'Any room → 📷, then the Photos tab',
         href: '/rooms',
       },
@@ -555,7 +555,7 @@ export const FEATURE_GROUPS: readonly FeatureGroup[] = [
         id: 'split-the-bill',
         title: 'Split the bill',
         blurb:
-          'Log what people spent and see who owes what. Settling up happens between you — no money moves through Switchboard.',
+          'Log who paid and who was in on it, see who owes what to whom, and mark it settled once you’ve paid each other back. In US dollars for now, and no money moves through Switchboard.',
         where: 'Any room → Split 💸',
         href: '/rooms',
       },
@@ -563,7 +563,7 @@ export const FEATURE_GROUPS: readonly FeatureGroup[] = [
         id: 'voice-notes',
         title: 'Voice notes',
         blurb:
-          'Say it instead of typing it — in a plan’s thread, or as the reason when you have to call something off.',
+          'Say it instead of typing it — in a plan’s thread, or as the reason when you have to call something off. A browser that can’t record says so, and you can still write it.',
         where: 'A plan’s page → the comment box, and Cancel this plan',
         start: { href: '/plans', label: 'Your plans' },
       },
@@ -571,7 +571,7 @@ export const FEATURE_GROUPS: readonly FeatureGroup[] = [
         id: 'live-updates',
         title: 'Everything updates live',
         blurb:
-          'Messages, filed items, moments, and matches appear for everyone without a refresh.',
+          'Messages, filed items and ticked tasks, expenses, moments, and matches appear for everyone without a refresh.',
         where: 'Rooms, Moments, and Mutual',
         start: { href: '/rooms', label: 'Rooms' },
       },
@@ -587,7 +587,7 @@ export const FEATURE_GROUPS: readonly FeatureGroup[] = [
         id: 'memory-capsule',
         title: 'Memory capsules',
         blurb:
-          'After it’s over, everyone adds one line and one photo. It stays as the record of the night.',
+          'After it’s over, everyone who went adds one line and one photo. It stays as the record of the night.',
         where: 'A past plan’s page → the capsule',
         start: { href: '/plans', label: 'Your plans' },
       },
@@ -614,7 +614,7 @@ export const FEATURE_GROUPS: readonly FeatureGroup[] = [
         id: 'social-battery',
         title: 'Social battery',
         blurb:
-          'After a plan, one tap on how it left you feeling. Private, and it paces what Switchboard suggests next.',
+          'After a plan, one tap on how it left you feeling. Private, and it builds the energy map in Your Read — which times and group sizes fill you up.',
         where: 'Home, after something you went to',
         href: '/',
       },
@@ -652,7 +652,8 @@ export const FEATURE_GROUPS: readonly FeatureGroup[] = [
       {
         id: 'quiet-hours',
         title: 'Quiet hours',
-        blurb: 'Set the hours nothing is allowed to buzz you.',
+        blurb:
+          'Set the hours nothing is allowed to buzz you, in the time zone you choose. What arrives meanwhile waits in your inbox.',
         where: 'Settings → Notifications → Quiet hours',
         href: '/settings',
       },
@@ -660,7 +661,7 @@ export const FEATURE_GROUPS: readonly FeatureGroup[] = [
         id: 'sabbatical',
         title: 'Sabbatical mode',
         blurb:
-          'One switch pauses the social machinery. People who reach for you see that you’re taking a quiet season, instead of silence.',
+          'One switch takes you out of radar, discovery, Mutual, matchmaking and ritual reminders, and holds every notification except those from plans you’re already in. Your note shows on your profile and to friends picking you for a plan.',
         where: 'Settings → Sabbatical',
         href: '/settings',
       },
@@ -684,6 +685,14 @@ export const FEATURE_GROUPS: readonly FeatureGroup[] = [
         title: 'What you get notified about',
         blurb: 'Choose SMS, push, email, or the in-app inbox for plan alerts and reminders. Other categories have separate push controls.',
         where: 'Settings → Notifications',
+        href: '/settings',
+      },
+      {
+        id: 'daily-digest',
+        title: 'A daily summary',
+        blurb:
+          'One round-up a day at the hour you pick, instead of a buzz per thing. Invitations, plan changes and reminders still arrive when they happen; without push it comes by email.',
+        where: 'Settings → Notifications → A daily summary instead',
         href: '/settings',
       },
       {

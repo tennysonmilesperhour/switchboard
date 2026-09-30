@@ -28,7 +28,10 @@ export default async function JoinZonePage({
   const result = await joinZoneViaCode(code);
   if (result.ok && result.slug) redirect(`/zones/${result.slug}`);
 
-  const dead = errorFor('SB-ZONE-UNKNOWN');
+  // An unknown or replaced code is the reader's dead end; a lookup that failed
+  // is ours, and saying "this link doesn't match" for it sent people back to
+  // ask for a new link that would have failed the same way.
+  const dead = errorFor(result.code ?? 'SB-ZONE-UNKNOWN');
 
   return (
     <AppShell title="Join zone" back="/zones">
@@ -37,7 +40,7 @@ export default async function JoinZonePage({
           🎪
         </p>
         <h2 className="mt-3 text-xl font-black text-ink">{dead.message}</h2>
-        <p className="mt-2 text-sm leading-relaxed text-ink-soft">{dead.fix}</p>
+        {dead.fix && <p className="mt-2 text-sm leading-relaxed text-ink-soft">{dead.fix}</p>}
         <p className="mt-3 font-mono text-[11px] uppercase tracking-wide text-ink-faint">
           {errorRef(dead.code)}
         </p>

@@ -190,6 +190,32 @@ describe('group mode', () => {
   });
 });
 
+describe('a yes held for a guardian (pending_approval)', () => {
+  test('takes no seat, does not block the line, and is not retired', () => {
+    const invites = [
+      invite({ id: 'held', position: 0, status: 'pending_approval', sentAt: EARLIER }),
+      invite({ id: 'next', position: 1 }),
+    ];
+    expect(spotsRemaining(invites, INDIVIDUAL)).toBe(1);
+    // Not `sent`, so the one-at-a-time line moves on to the next person, and
+    // not expired by its old window: the guardian's answer decides it.
+    expect(advanceCascade(invites, INDIVIDUAL, NOW)).toEqual([
+      { id: 'next', status: 'sent', sentAt: NOW.toISOString() },
+    ]);
+  });
+
+  test('survives the plan filling, so an approval can still waitlist it', () => {
+    const invites = [
+      invite({ id: 'in', position: 0, status: 'accepted' }),
+      invite({ id: 'held', position: 1, status: 'pending_approval' }),
+      invite({ id: 'queued', position: 2 }),
+    ];
+    expect(advanceCascade(invites, INDIVIDUAL, NOW)).toEqual([
+      { id: 'queued', status: 'cancelled' },
+    ]);
+  });
+});
+
 describe('capacity helpers', () => {
   test('spotsRemaining respects capacity and defaults individual to 1', () => {
     const invites = [invite({ id: 'a', status: 'accepted' })];

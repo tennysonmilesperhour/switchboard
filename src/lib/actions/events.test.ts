@@ -42,6 +42,10 @@ vi.mock('@/lib/server/sms', () => ({
   sendSmsMessages: vi.fn(),
 }));
 vi.mock('@/lib/server/geocode', () => ({ geocode: vi.fn() }));
+vi.mock('@/lib/server/poll-notices', () => ({
+  notifyDateSettled: vi.fn(),
+  openDecidingPlan: vi.fn(),
+}));
 vi.mock('@/lib/server/observability', () => ({
   reportAndFail: vi.fn(),
   reportOperationalError: mocks.reportOperationalError,
@@ -59,6 +63,10 @@ import {
 import { notifyUsers } from '@/lib/server/notify';
 import { capture } from '@/lib/analytics/server';
 import { reportAndFail } from '@/lib/server/observability';
+import { notifyDateSettled } from '@/lib/server/poll-notices';
+
+/** A plan with a date, as startInviting's read of it returns. */
+const DATED = { starts_at: '2026-10-02T22:00:00+00:00' };
 
 /**
  * A service-role client for the host lifecycle actions. Every write records its
@@ -70,6 +78,8 @@ function lifecycleAdmin(options: {
   updated: Record<string, unknown> | null;
   error?: { message: string } | null;
   current?: Record<string, unknown> | null;
+  /** What a read of the plan's polls returns; decided unless a test says otherwise. */
+  polls?: Array<{ phase: string }>;
 }) {
   const writes: Array<{
     table: string;
@@ -85,7 +95,9 @@ function lifecycleAdmin(options: {
           ? { data: options.updated, error: options.error ?? null }
           : write
             ? { data: null, error: null, count: 0 }
-            : { data: options.current ?? null, error: null, count: 0 };
+            : table === 'polls'
+              ? { data: options.polls ?? [{ phase: 'decided' }], error: null }
+              : { data: options.current ?? null, error: null, count: 0 };
       const builder: Record<string, unknown> = {};
       const record =
         (op: string) =>
@@ -112,6 +124,45 @@ function lifecycleAdmin(options: {
     },
   };
   return { admin, writes };
+}
+
+/**
+ * The caller's session client, answering the two `connections` reads
+ * `addPeopleToEvent` makes for picked ids. `connectedTo` is who the caller
+ * (user-1) has an accepted connection with; RLS would hide everyone else's.
+ */
+function connectionsSession(connectedTo: string[]) {
+  return {
+    rpc: mocks.rpc,
+    from(table: string) {
+      if (table !== 'connections') throw new Error(`Unexpected session read: ${table}`);
+      const filters: Record<string, unknown> = {};
+      let column = '';
+      let ids: string[] = [];
+      const builder: Record<string, unknown> = {
+        select: (selected: string) => {
+          column = selected;
+          return builder;
+        },
+        eq: (key: string, value: unknown) => {
+          filters[key] = value;
+          return builder;
+        },
+        in: (_key: string, values: string[]) => {
+          ids = values;
+          return builder;
+        },
+        then: (resolve: (value: unknown) => unknown) =>
+          resolve({
+            data: filters.status === 'accepted'
+              ? ids.filter((id) => connectedTo.includes(id)).map((id) => ({ [column]: id }))
+              : [],
+            error: null,
+          }),
+      };
+      return builder;
+    },
+  };
 }
 
 /**
@@ -300,6 +351,34 @@ describe('event management actions', () => {
     );
   });
 
+  /**
+   * The reminder markers describe the time they were sent for. A plan moved
+   * after its day-before note went out has to be reminded about the new date,
+   * and fixing a typo must not re-send one.
+   */
+  it('re-arms the reminders only when the time moves', async () => {
+    const start = new Date(Date.now() + 3 * 86_400_000);
+    start.setUTCSeconds(0, 0);
+    const stored = start.toISOString().replace('.000Z', '+00:00');
+
+    const moved = editAdmin({ starts_at: stored, location_name: 'Mei Wei' });
+    mocks.createAdminClient.mockReturnValue(moved.admin);
+    await updateEventDetails('event-1', {
+      ...EDIT,
+      startsAt: new Date(start.getTime() + 86_400_000).toISOString(),
+    });
+    expect(moved.updates[0]).toMatchObject({
+      reminded_day_before_at: null,
+      reminded_soon_at: null,
+    });
+
+    const wordsOnly = editAdmin({ starts_at: stored, location_name: 'Mei Wei' });
+    mocks.createAdminClient.mockReturnValue(wordsOnly.admin);
+    await updateEventDetails('event-1', { ...EDIT, startsAt: start.toISOString() });
+    expect(wordsOnly.updates[0]).not.toHaveProperty('reminded_day_before_at');
+    expect(wordsOnly.updates[0]).not.toHaveProperty('reminded_soon_at');
+  });
+
   it('refuses an edit that ends the plan before it starts', async () => {
     const start = new Date(Date.now() + 86_400_000);
     const result = await updateEventDetails('event-1', {
@@ -389,7 +468,7 @@ describe('event management actions', () => {
   ] as const)(
     '%s only moves a plan from its one valid status',
     async (_name, action, target, source) => {
-      const { admin, writes } = lifecycleAdmin({ updated: null });
+      const { admin, writes } = lifecycleAdmin({ updated: null, current: DATED });
       mocks.createAdminClient.mockReturnValue(admin);
 
       const result = await action('event-1');
@@ -409,6 +488,50 @@ describe('event management actions', () => {
     },
   );
 
+  it.each([
+    ['a poll is still being voted on', [{ phase: 'decided' }, { phase: 'voting' }], DATED, 'still deciding'],
+    ['a runoff is open, even with a date', [{ phase: 'runoff' }], DATED, 'still deciding'],
+    ['the group decided but the plan has no date', [{ phase: 'decided' }], { starts_at: null }, 'date first'],
+    ['a poll closed empty and nothing set a date', [{ phase: 'decided' }, { phase: 'pending' }], null, 'date first'],
+    ['the plan has no poll and no date', [], { starts_at: null }, 'date first'],
+  ])('startInviting refuses while %s', async (_case, polls, current, reason) => {
+    // The page shows "Waiting for the group" or "Set the date" for exactly
+    // these cases; a stale tab or a direct call must meet the same rule rather
+    // than send "The date is set" for a plan with no date.
+    const { admin, writes } = lifecycleAdmin({ updated: { id: 'event-1' }, polls, current });
+    mocks.createAdminClient.mockReturnValue(admin);
+
+    const result = await startInviting('event-1');
+
+    expect(result).toMatchObject({ ok: false });
+    expect(result.error).toContain(reason);
+    expect(writes).toHaveLength(0);
+    expect(vi.mocked(notifyDateSettled)).not.toHaveBeenCalled();
+  });
+
+  it('startInviting sends a decided, dated plan and tells the people already in', async () => {
+    const { admin, writes } = lifecycleAdmin({
+      updated: { id: 'event-1' },
+      polls: [{ phase: 'decided' }, { phase: 'pending' }],
+      current: DATED,
+    });
+    mocks.createAdminClient.mockReturnValue(admin);
+
+    await expect(startInviting('event-1')).resolves.toEqual({ ok: true });
+
+    // The date is re-checked in the UPDATE itself, so one cleared since the
+    // read cannot slip through.
+    expect(writes[0]).toMatchObject({
+      table: 'events',
+      row: { status: 'inviting' },
+      filters: expect.arrayContaining([
+        ['eq', 'status', 'deciding'],
+        ['not', 'starts_at', 'is', null],
+      ]),
+    });
+    expect(vi.mocked(notifyDateSettled)).toHaveBeenCalledWith('event-1');
+  });
+
   it('confirms an inviting plan and retires the invitations still in motion', async () => {
     const { admin, writes } = lifecycleAdmin({ updated: { id: 'event-1' } });
     mocks.createAdminClient.mockReturnValue(admin);
@@ -420,7 +543,7 @@ describe('event management actions', () => {
   });
 
   it('reports a failed status write with a code', async () => {
-    const { admin } = lifecycleAdmin({ updated: null, error: { message: 'boom' } });
+    const { admin } = lifecycleAdmin({ updated: null, error: { message: 'boom' }, current: DATED });
     mocks.createAdminClient.mockReturnValue(admin);
     vi.mocked(reportAndFail).mockResolvedValueOnce({
       ok: false,
@@ -526,6 +649,11 @@ describe('event management actions', () => {
       return builder;
     });
     mocks.createAdminClient.mockImplementation(() => ({ from, rpc: adminRpc }));
+    mocks.requireUser.mockResolvedValue({
+      ok: true,
+      supabase: connectionsSession(['person-1', 'person-2']),
+      user: { id: 'user-1' },
+    });
 
     const result = await addPeopleToEvent('event-1', {
       profileIds: ['person-1', 'person-2'],
@@ -538,6 +666,62 @@ describe('event management actions', () => {
     expect(mocks.rpc).not.toHaveBeenCalledWith('are_blocked', expect.anything());
     expect(inserted).toHaveLength(1);
     expect(inserted[0]).toEqual([expect.objectContaining({ invitee_id: 'person-1', status: 'queued' })]);
+  });
+
+  it('skips a picked id that is not one of the caller’s connections', async () => {
+    // The sheet only offers accepted connections; a forged id must not ride
+    // that path onto the guest list. Adding by handle stays the deliberate way
+    // to invite anyone else.
+    const tables: Record<string, unknown[]> = {
+      events: [
+        { id: 'event-1', host_id: 'host-1', status: 'inviting', invite_mode: 'group', starts_at: null },
+      ],
+      profiles: [
+        { id: 'person-1', display_name: 'Alice' },
+        { id: 'stranger-1', display_name: 'Stranger' },
+      ],
+      invites: [],
+    };
+    const inserted: unknown[] = [];
+    const from = vi.fn((table: string) => {
+      const rows = tables[table] ?? [];
+      const builder: Record<string, unknown> = {};
+      const chain = () => builder;
+      Object.assign(builder, {
+        select: chain,
+        eq: chain,
+        in: chain,
+        order: chain,
+        maybeSingle: async () => ({ data: rows[0] ?? null, error: null }),
+        insert: async (payload: unknown) => {
+          inserted.push(payload);
+          return { data: null, error: null };
+        },
+        then: (resolve: (value: unknown) => unknown) =>
+          resolve({ data: rows, error: null }),
+      });
+      return builder;
+    });
+    mocks.createAdminClient.mockImplementation(() => ({
+      from,
+      rpc: vi.fn(async () => ({ data: false, error: null })),
+    }));
+    mocks.requireUser.mockResolvedValue({
+      ok: true,
+      supabase: connectionsSession(['person-1']),
+      user: { id: 'user-1' },
+    });
+
+    const result = await addPeopleToEvent('event-1', {
+      profileIds: ['person-1', 'stranger-1'],
+    });
+
+    expect(result).toMatchObject({ ok: true, added: 1 });
+    expect(result.skipped).toEqual([
+      { entry: 'Stranger', reason: 'not one of your connections' },
+    ]);
+    expect(inserted[0]).toEqual([expect.objectContaining({ invitee_id: 'person-1' })]);
+    expect(JSON.stringify(inserted)).not.toContain('stranger-1');
   });
 
   it('requires cancellation before permanently deleting accepted guests', async () => {

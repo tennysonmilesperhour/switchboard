@@ -9,11 +9,31 @@ import { requireUser } from '@/lib/server/require-user';
 import { isEventManager } from '@/lib/server/authz';
 import { reportAndFail } from '@/lib/server/observability';
 import {
+  GRID_DAYS,
   gridSlots,
+  parseGridSlot,
+  planGridZone,
   recommendAvailability,
+  upcomingSlotCounts,
   type AvailabilitySnapshot,
   type SlotCount,
 } from '@/lib/availability';
+
+type SessionClient = Awaited<ReturnType<typeof createClient>>;
+
+/**
+ * The zone this plan's grid is laid out in, read through the caller's own
+ * session. A plan the caller cannot see reads as UTC, and the RPC refuses them
+ * anyway.
+ */
+async function gridZoneFor(supabase: SessionClient, eventId: string): Promise<string> {
+  const { data } = await supabase
+    .from('events')
+    .select('time_zone')
+    .eq('id', eventId)
+    .maybeSingle();
+  return planGridZone(data?.time_zone);
+}
 
 /**
  * Replace this person's availability for a plan.
@@ -35,10 +55,12 @@ export async function setAvailability(
   if (!auth.ok) return auth;
   const { supabase } = auth;
 
-  const now = new Date();
-  const allowed = new Set(gridSlots(now));
-  const clean = [...new Set(slots)].filter((slot) => allowed.has(slot));
-  if (clean.length !== new Set(slots).size) {
+  // The plan's week, in the plan's zone: the grid the client drew, and the one
+  // `replace_event_availability` checks again on its side.
+  const allowed = new Set(gridSlots(new Date(), GRID_DAYS, await gridZoneFor(supabase, eventId)));
+  const requested = new Set(slots.map((slot) => parseGridSlot(slot) ?? slot));
+  const clean = [...requested].filter((slot) => allowed.has(slot));
+  if (clean.length !== requested.size) {
     // Not silently dropped: a client sending slots this grid never offered is
     // out of step with the server, and quietly storing the subset would show
     // them a heatmap that disagrees with what they just tapped.
@@ -78,9 +100,13 @@ export async function loadAvailability(eventId: string): Promise<AvailabilitySna
     | { responders: number; eligible_people: number }
     | null;
   return {
+    // PostgREST spells a timestamptz `2026-10-02T17:00:00+00:00`; the grid
+    // keys its cells by `toISOString()`. Unnormalised, no count ever matched a
+    // cell, your own saved marks came back unticked, and saving them again was
+    // refused as "not on the grid".
     counts: (countResult.data ?? []).map(
       (row: { slot: string; people: number; mine: boolean }): SlotCount => ({
-        slot: row.slot,
+        slot: parseGridSlot(row.slot) ?? row.slot,
         people: row.people,
         mine: row.mine,
       }),
@@ -114,31 +140,41 @@ export async function slotsToPollOptions(
   }
 
   const snapshot = await loadAvailability(eventId);
-  const recommendation = recommendAvailability(snapshot, limit);
+  // Only times still ahead, in this week's grid: a band that has already
+  // started would decide the plan for a moment that has passed.
+  const zone = await gridZoneFor(supabase, eventId);
+  const recommendation = recommendAvailability(
+    { ...snapshot, counts: upcomingSlotCounts(snapshot.counts, zone) },
+    limit,
+  );
   if (recommendation.status !== 'ready') {
     return validation(recommendation.message);
   }
   const best = recommendation.slots;
 
-  // The label is the instant, formatted by the client that renders it; storing
-  // the ISO string in `detail` keeps the option machine-readable so picking a
-  // winner can set the plan's date later without parsing prose.
+  // The label is the slot, formatted by the client that renders it, and the
+  // same slot in `detail` keeps the option machine-readable even if someone
+  // rewords the label: deciding on it sets the plan's date without parsing
+  // prose (`applyDecidedDate`). Compared as slots, never as strings, because
+  // the two columns have been written in two spellings.
   const { data: existing } = await supabase
     .from('poll_options')
-    .select('detail')
+    .select('label, detail')
     .eq('poll_id', pollId);
-  const already = new Set((existing ?? []).map((row) => row.detail));
+  const already = new Set(
+    (existing ?? [])
+      .flatMap((row) => [parseGridSlot(row.label), parseGridSlot(row.detail)])
+      .filter((slot): slot is string => slot !== null),
+  );
 
-  const fresh = best.filter((slot) => !already.has(slot.slot));
+  const fresh = best.filter((slot) => !already.has(parseGridSlot(slot.slot) ?? slot.slot));
   if (fresh.length === 0) return { ok: true, added: 0 };
 
   const { error } = await supabase.from('poll_options').insert(
-    fresh.map((slot) => ({
-      poll_id: pollId,
-      label: new Date(slot.slot).toISOString(),
-      detail: slot.slot,
-      source: 'host',
-    })),
+    fresh.map((slot) => {
+      const canonical = parseGridSlot(slot.slot) ?? slot.slot;
+      return { poll_id: pollId, label: canonical, detail: canonical, source: 'host' };
+    }),
   );
   if (error) {
     return reportAndFail('SB-FREE-POLL', 'availability.to-poll', error);

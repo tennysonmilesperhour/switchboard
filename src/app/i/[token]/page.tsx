@@ -44,6 +44,10 @@ const ANSWER_LINES: Record<string, string> = {
   accepted: 'You’ve said you’re in. You can change your answer below.',
   declined: 'You’ve said you can’t make it. You can change your answer below.',
   waitlisted: 'You’re on the waitlist. You can change your answer below.',
+  // A yes held for a guardian. The link below is where the guardian step
+  // lives, so a guest who closed the tab after "I'm in" can pick it up again.
+  pending_approval:
+    'You’ve said you’re in - it counts once a parent or guardian approves. Your invitation has the step to ask them.',
 };
 
 const EVENT_FIELDS =

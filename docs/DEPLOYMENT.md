@@ -99,12 +99,23 @@ The app reads these (see `.env.example` for the full list). Set them in Vercel
 - `CRON_SECRET` — required; the cron endpoint refuses to run without it
 - `ANTHROPIC_API_KEY` — optional; AI features degrade gracefully without it
 - `RESEND_API_KEY`, `EMAIL_FROM` — optional; off-platform email
+- `RESEND_API_URL` — test only; leave unset in production. Lets the browser
+  suite post mail to a loopback relay in front of the local mail catcher. Only
+  a loopback address or a path on `api.resend.com` is accepted; anything else
+  falls back to Resend, since the API key travels with every request.
 - `SCOPE_WATCH_EMAIL` — optional; where to write when the scope-of-work
   checklist gains a note or moves on. Needs Resend configured above. Unset means
   those notifications are simply off, and nothing else changes.
 - `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_FROM_NUMBER`,
   `CONTACT_VERIFICATION_SECRET` — required together for phone verification
 - `NEXT_PUBLIC_VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY` — optional; web push
+- `NEXT_PUBLIC_MAP_TILE_URL`, `NEXT_PUBLIC_MAP_TILE_ATTRIBUTION` — optional;
+  an https raster tile template with `{z}`, `{x}` and `{y}`, and its credit.
+  Unset or invalid falls back to OpenStreetMap's public tiles, whose usage
+  policy does not cover heavy production traffic.
+- `GEOCODER_URL` — optional; a Nominatim-compatible https `/search` endpoint
+  (hosted Nominatim, LocationIQ). Unset or invalid falls back to the public
+  Nominatim, which the app throttles to one lookup a second across all users.
 
 See [SMS purpose and acceptance checks](SMS.md) for implemented behavior, gaps,
 and the September 8 database repair.

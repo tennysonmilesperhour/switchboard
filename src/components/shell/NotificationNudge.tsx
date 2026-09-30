@@ -5,6 +5,7 @@ import { Icon } from '@/components/ui/Icon';
 import { enablePush, getPushState, PushSaveError, type PushState } from '@/lib/client/push';
 import { useToast } from '@/components/ui/Toast';
 import { useBottomOverlaySlot } from '@/components/system/BottomOverlaySlot';
+import { readDeviceFlag, writeDeviceFlag } from '@/components/system/device-storage';
 
 const DISMISS_KEY = 'sb-push-nudge-dismissed';
 
@@ -26,10 +27,13 @@ export function NotificationNudge() {
   const ownsSlot = useBottomOverlaySlot('notifications', wantsSlot, 30);
 
   useEffect(() => {
+    // Without the VAPID key, enablePush() answers 'unsupported' before asking
+    // anything, so "Turn on" would silently hide the prompt and change nothing.
+    if (!process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY) return;
     let cancelled = false;
     getPushState().then((next) => {
       if (cancelled) return;
-      setDismissed(localStorage.getItem(DISMISS_KEY) === '1');
+      setDismissed(readDeviceFlag(DISMISS_KEY) === '1');
       setState(next);
     });
     return () => {
@@ -46,7 +50,7 @@ export function NotificationNudge() {
       setState(next);
       if (next === 'unsupported') {
         // iPhone-in-a-tab and the like — keep the hint, don't nag further.
-        localStorage.setItem(DISMISS_KEY, '1');
+        writeDeviceFlag(DISMISS_KEY, '1');
       }
     } catch (error) {
       if (error instanceof PushSaveError) {
@@ -60,7 +64,7 @@ export function NotificationNudge() {
   }
 
   function dismiss() {
-    localStorage.setItem(DISMISS_KEY, '1');
+    writeDeviceFlag(DISMISS_KEY, '1');
     setDismissed(true);
   }
 

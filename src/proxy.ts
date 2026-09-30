@@ -9,6 +9,7 @@ import {
 import { LEGAL_VERSION } from '@/lib/legal';
 import { buildCsp } from '@/lib/csp';
 import { failure } from '@/lib/errors';
+import { isSuspendedUser, SUSPENDED_LOGIN_ERROR } from '@/lib/suspension';
 
 /** Paths reachable without a session. */
 const PUBLIC_PREFIXES = [
@@ -142,6 +143,37 @@ export async function proxy(request: NextRequest) {
   const {
     data: { user },
   } = await supabase.auth.getUser();
+
+  // A session issued before a moderator suspended the account. Sign-in already
+  // names a suspension (SB-AUTH-SUSPENDED); a page load on a live session is
+  // signed out and sent to that same sentence, with its route out, instead of
+  // carrying on inside the app (docs/AUTH.md). A Server Action sent from a tab
+  // that was already open passes through and `requireUser` refuses it with the
+  // same code: answering a POST with a redirect hands it an HTML page it
+  // cannot read.
+  if (user && isSuspendedUser(user) && !request.headers.has('next-action')) {
+    if (isApiCall(request)) {
+      const res = NextResponse.json(failure('SB-AUTH-SUSPENDED'), { status: 403 });
+      res.headers.set('content-security-policy', csp);
+      return res;
+    }
+    await supabase.auth.signOut({ scope: 'local' }).catch(() => undefined);
+    if (
+      pathname === '/login' &&
+      request.nextUrl.searchParams.get('error') === SUSPENDED_LOGIN_ERROR
+    ) {
+      return response;
+    }
+    const url = request.nextUrl.clone();
+    url.pathname = '/login';
+    url.search = '';
+    url.searchParams.set('error', SUSPENDED_LOGIN_ERROR);
+    const res = NextResponse.redirect(url);
+    res.headers.set('content-security-policy', csp);
+    // Carry the cleared session cookies, so the sign-in page renders signed out.
+    for (const cookie of response.cookies.getAll()) res.cookies.set(cookie);
+    return res;
+  }
 
   if (!user && !isPublicPath(pathname) && isApiCall(request)) {
     // A fetch() follows a redirect silently, so sending an expired session's

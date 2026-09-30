@@ -15,10 +15,17 @@ interface OnboardingFormProps {
   next?: string;
   /** The `?error=` the last submission came back with. */
   error?: string;
+  /**
+   * A username sign-up: offer the optional recovery-email step, because
+   * without a verified email a forgotten password cannot be reset.
+   */
+  askRecoveryEmail?: boolean;
 }
 
 /** Errors about fields on step 1, which step 2 cannot show or fix. */
 const STEP_ONE_ERRORS = new Set(['name', 'handle', 'handle_taken', 'agreement']);
+/** Errors about the recovery step. */
+const STEP_THREE_ERRORS = new Set(['recovery_email']);
 
 /**
  * One form, two light steps. Everything stays mounted (hidden, not unmounted)
@@ -31,8 +38,10 @@ export function OnboardingForm({
   initialHandle,
   next = '/',
   error,
+  askRecoveryEmail = false,
 }: OnboardingFormProps) {
-  const [step, setStep] = useState<1 | 2>(1);
+  const steps = askRecoveryEmail ? 3 : 2;
+  const [step, setStep] = useState<1 | 2 | 3>(1);
   // A failed save redirects back here with only the query string changed, so
   // this component stays mounted. Return to the step that holds the field the
   // error names instead of leaving the reader on step 2, unable to see it.
@@ -40,8 +49,10 @@ export function OnboardingForm({
   if (error !== seenError) {
     setSeenError(error);
     if (error && STEP_ONE_ERRORS.has(error)) setStep(1);
+    if (error && askRecoveryEmail && STEP_THREE_ERRORS.has(error)) setStep(3);
   }
   const formRef = useRef<HTMLFormElement>(null);
+  const recoveryRef = useRef<HTMLInputElement>(null);
   // Normalize the handle to lowercase as it's typed so the validated value
   // matches what the user sees. The `lowercase` CSS class only changes the
   // display, so without this the browser would reject a value that looks valid.
@@ -76,7 +87,7 @@ export function OnboardingForm({
       <input type="hidden" name="next" value={next} />
       <input type="hidden" name="timezone" value={timezone} />
       <p className="text-xs font-bold uppercase tracking-widest text-ink-faint">
-        Step {step} of 2
+        Step {step} of {steps}
       </p>
 
       <div hidden={step !== 1} className="space-y-6">
@@ -195,7 +206,21 @@ export function OnboardingForm({
           />
         </fieldset>
 
-        <SubmitButton />
+        {askRecoveryEmail ? (
+          <Button
+            type="button"
+            size="lg"
+            className="w-full"
+            onClick={() => {
+              setStep(3);
+              window.scrollTo({ top: 0 });
+            }}
+          >
+            Continue
+          </Button>
+        ) : (
+          <SubmitButton />
+        )}
         <button
           type="button"
           onClick={() => setStep(1)}
@@ -204,6 +229,46 @@ export function OnboardingForm({
           ← Back
         </button>
       </div>
+
+      {askRecoveryEmail && (
+        <div hidden={step !== 3} className="space-y-6">
+          <div className="space-y-2">
+            <label htmlFor="recovery_email" className="text-sm font-medium text-ink">
+              A recovery email{' '}
+              <span className="text-ink-faint font-normal">(optional)</span>
+            </label>
+            <p className="text-sm text-ink-soft leading-relaxed">
+              You signed up with a username, so if you ever forget your password this is the
+              only way back in. We’ll send a link to confirm it’s yours; nobody else sees it.
+            </p>
+            <input
+              ref={recoveryRef}
+              id="recovery_email"
+              name="recovery_email"
+              type="email"
+              autoComplete="email"
+              placeholder="you@example.com"
+              className="w-full rounded-card border border-line bg-card px-4 py-3 outline-none focus:border-terracotta transition-colors"
+            />
+            <p className="text-xs text-ink-faint">
+              You can add or change it later in Settings.
+            </p>
+          </div>
+          <SubmitButton />
+          <SkipRecoveryButton
+            onSkip={() => {
+              if (recoveryRef.current) recoveryRef.current.value = '';
+            }}
+          />
+          <button
+            type="button"
+            onClick={() => setStep(2)}
+            className="w-full text-center text-sm font-bold text-ink-faint hover:text-ink"
+          >
+            ← Back
+          </button>
+        </div>
+      )}
     </form>
   );
 }
@@ -218,5 +283,20 @@ function SubmitButton() {
     <Button type="submit" size="lg" className="w-full" disabled={pending}>
       {pending ? 'Saving…' : 'Start connecting'}
     </Button>
+  );
+}
+
+/** Finish without a recovery email: clears the field, then submits. */
+function SkipRecoveryButton({ onSkip }: { onSkip: () => void }) {
+  const { pending } = useFormStatus();
+  return (
+    <button
+      type="submit"
+      disabled={pending}
+      onClick={onSkip}
+      className="w-full text-center text-sm font-bold text-ink-soft hover:text-ink"
+    >
+      Skip for now
+    </button>
   );
 }

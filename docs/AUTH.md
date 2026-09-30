@@ -57,8 +57,9 @@ above applies.
 - *Residual risk:* a username-only account with no verified email contact
   **cannot recover a forgotten password at all** — by design
   (`docs/SECURITY.md` §9: never mail a recovery link to an address nobody proved
-  they control). `/forgot-password` says so, but nothing ever prompts these
-  users to add a recovery email. See "Open decisions" below.
+  they control). `/forgot-password` says so. Onboarding now offers these
+  accounts an optional recovery-email step, and Settings keeps a banner up
+  until one is verified (finding 14 below).
 
 ### 3. Google OAuth
 
@@ -158,20 +159,57 @@ also live in the proxy.
     flag was never reset. The button now reads the form's own pending state,
     and an error about a step-one field returns the reader to step one.
 
-### Open decisions — not changed here
+### Decided in the 2026-09 completion pass
 
-These need a product or security call rather than a unilateral fix.
+These were open decisions; the owner accepted the recommendations in
+`docs/COMPLETION-PLAN-2026-09.md` (G45, D27).
 
-13. **Username sign-in silently breaks without service-role credentials.**
-   `resolveIdentifierEmails` resolves a handle to its real login email via the
-   admin client. Without it, it falls back to the synthetic
-   `<handle>@users.switchboard.local`, which is wrong for anyone who signed up
-   with an email — so their username stops working. Production has the
-   credentials; a misconfigured deployment fails silently.
-14. **Username-only accounts have no recovery path** (see §2 above). Consider
-    prompting for a recovery email during onboarding.
-15. **`/auth/confirm` drops `next` when a link fails**, so an expired link taken
-    from a deep link loses the destination. Cosmetic next to the rest.
+13. **Username sign-in without service-role credentials now says so.**
+    `resolveIdentifierEmails` resolves a handle to its real login email via the
+    admin client. It used to fall back to the synthetic
+    `<handle>@users.switchboard.local`, which is wrong for anyone who signed up
+    with an email, so their username "did not work" with the right password.
+    Without the credentials it now refuses before any password grant with
+    `SB-CONFIG-AUTH` and a sentence pointing at the one route that still works:
+    the account's email address. Email sign-in is unaffected. Guarded in
+    `src/lib/actions/auth.test.ts`.
+14. **Username-only accounts are asked for a recovery email.** Onboarding shows
+    username sign-ups an optional third step; the address becomes the profile's
+    contact email (unverified) and a verification link is sent on the way out.
+    Nothing blocks on it — onboarding is the only route out of onboarding.
+    Settings shows a banner to any account whose login address is synthetic and
+    which has no verified email, saying plainly that a forgotten password cannot
+    be reset until one is verified, with the step that fixes it. Recovery still
+    only ever mails a *verified* contact (`docs/SECURITY.md` §9).
+15. **`/auth/confirm` keeps `next` when a link fails.** A failed confirmation or
+    magic link now sends the reader to `/login` with the destination attached,
+    so signing in afterwards lands where the link was going (the invitation,
+    the onboarding funnel). A failed recovery link says it was a reset link and
+    offers a fresh one rather than "sign in", which is no route out for someone
+    who forgot the password. Both show `SB-AUTH-LINK`, whose sentence includes
+    "already used": mail scanners open links before people do, so the reader may
+    be confirmed already.
+
+16. **A moderator can suspend an account (P7, D7), and every way in names it.**
+    The suspension is GoTrue's own ban (`auth.users.banned_until`), set only by
+    `moderate_suspend_account` (docs/SECURITY.md, "Moderation"), so it is the
+    same `user_banned` that finding 4 already maps to `SB-AUTH-SUSPENDED` —
+    there was no new reason to refuse a valid password to add to the table.
+    What changed is the other doors. A session issued before the suspension
+    is signed out by the proxy on its next page load and sent to
+    `/login?error=suspended`; an API call gets a coded 403; a Server Action
+    from an already-open tab is refused by `requireUser` with the same code.
+    A confirmation, magic or recovery link refused for `user_banned` lands on
+    the same sentence instead of "expired or already used", and so does
+    Google sign-in. Everywhere it appears, the page says the account is
+    suspended and gives the support address to write to: nothing the person
+    can press lifts a suspension, so the route out is a person, and a
+    moderator can lift it (or it runs out) from `/moderation`.
+
+Google sign-in failures on `/login` now carry codes too — `SB-OAUTH-DENIED`,
+`SB-OAUTH-EXCHANGE`, `SB-OAUTH-MISSING`, and `SB-OAUTH-START` when the auth
+server will not start the round trip — and `/auth/callback` logs the same code
+it redirects with.
 
 ## Guards (keep them green)
 
@@ -181,6 +219,11 @@ These need a product or security call rather than a unilateral fix.
   fails first.
 - `src/lib/errors.test.ts` — every reader-facing failure carries a code, and
   every reader-actionable code carries a real next step.
+- `src/proxy.test.ts`, `src/lib/server/require-user.test.ts` and
+  `src/app/auth/suspended-routes.test.ts` — a suspended account meets
+  `SB-AUTH-SUSPENDED` at every door: a live session's next page load, an API
+  call, a Server Action, an email link and Google sign-in. A suspension that
+  has run out lets the person straight back in.
 - `e2e/authed.spec.ts` — the real journey: sign in, land inside the app. This is
   the test that must never be allowed to sit red again. Its fixtures
   (`e2e/seed.mjs`) derive `LEGAL_VERSION` from source, because a fixture that

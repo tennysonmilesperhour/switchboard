@@ -143,7 +143,7 @@ export async function refreshLocationPoint(
     .gt('expires_at', new Date().toISOString())
     .select('user_id')
     .maybeSingle();
-  if (error) return reportAndFail('SB-LOCATION-SAVE', 'location.share', error);
+  if (error) return reportAndFail('SB-LOCATION-SAVE', 'location.refresh', error);
   if (!data) return validation('not_sharing');
   return { ok: true };
 }

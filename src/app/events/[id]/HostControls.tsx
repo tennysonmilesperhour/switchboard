@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useTransition } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
@@ -16,11 +17,17 @@ import {
 } from '@/lib/actions/events';
 import { UploadError, uploadAudio } from '@/lib/client/upload-audio';
 import { hostCanEditInvitees } from '@/lib/share-link';
+import { invitationStep } from '@/lib/poll-readiness';
 import type { ActionResult } from '@/lib/errors';
 import type { SwitchboardEvent } from '@/lib/types';
 
 interface HostControlsProps {
   event: SwitchboardEvent;
+  /**
+   * The polls' half of the send rule: nothing is still being answered
+   * (`readyToSendInvitations`). Combined here with the plan's date through
+   * `invitationStep`, the same composition `startInviting` enforces.
+   */
   pollDecided: boolean;
   isPrimaryHost: boolean;
 }
@@ -103,6 +110,7 @@ export function HostControls({ event, pollDecided, isPrimaryHost }: HostControls
   const isClosed = event.status === 'cancelled' || event.status === 'past';
 
   const elapsed = !!event.starts_at && new Date(event.starts_at) < new Date();
+  const sendStep = invitationStep(pollDecided, event.starts_at);
 
   return (
     <section className="border-t border-line pt-6 space-y-2.5">
@@ -118,14 +126,30 @@ export function HostControls({ event, pollDecided, isPrimaryHost }: HostControls
         </Button>
       ) : (
         <>
-          {event.status === 'deciding' && (
+          {event.status === 'deciding' && sendStep === 'needs-date' && (
+            // The group is done, but nothing it decided is a time: a free-text
+            // idea won, nobody picked, or the poll closed empty. A disabled
+            // button here was a dead end; the date is the host's to set.
+            <div className="space-y-1.5">
+              <Link
+                href={`/events/${event.id}/edit#startsAt`}
+                className="flex w-full items-center justify-center gap-2 rounded-btn bg-brand-gradient px-7 py-4 text-base font-bold text-white shadow-lift outline-none transition-all duration-150 hover:brightness-105 focus-visible:ring-2 focus-visible:ring-terracotta focus-visible:ring-offset-2 focus-visible:ring-offset-paper active:scale-[0.98]"
+              >
+                Set the date 📅
+              </Link>
+              <p className="text-plate text-plate-inset text-center text-xs text-ink-soft">
+                The group has decided, but the plan has no date yet. Set one and the invitations can go out.
+              </p>
+            </div>
+          )}
+          {event.status === 'deciding' && sendStep !== 'needs-date' && (
             <Button
               size="lg"
               className="w-full"
-              disabled={pending || !pollDecided}
+              disabled={pending || sendStep !== 'ready'}
               onClick={() => run(() => startInviting(event.id))}
             >
-              {pollDecided
+              {sendStep === 'ready'
                 ? 'Send the invitations 🪜'
                 : 'Waiting for the group to decide…'}
             </Button>

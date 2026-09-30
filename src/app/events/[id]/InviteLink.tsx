@@ -53,17 +53,21 @@ export function InviteLink({ eventId, shareUrl, state, eventTitle }: InviteLinkP
     });
   }
 
-  function rotate() {
+  async function rotate() {
+    // One tap used to kill the link everyone already has, with no way back:
+    // anyone who hadn't opened it yet would find it dead. Worth one question.
+    //
+    // Ask before the transition starts. Updates made inside an async
+    // transition are held until the whole action settles, so a dialog opened
+    // in there never paints and the action waits on an answer nobody can give.
+    const ok = await confirm({
+      title: 'Replace this invite link?',
+      body: 'The link you’ve already sent will stop working. Anyone who hasn’t opened it yet will need the new one.',
+      confirmLabel: 'Get a new link',
+      danger: true,
+    });
+    if (!ok) return;
     startTransition(async () => {
-      // One tap used to kill the link everyone already has, with no way back:
-      // anyone who hadn't opened it yet would find it dead. Worth one question.
-      const ok = await confirm({
-        title: 'Replace this invite link?',
-        body: 'The link you’ve already sent will stop working. Anyone who hasn’t opened it yet will need the new one.',
-        confirmLabel: 'Get a new link',
-        danger: true,
-      });
-      if (!ok) return;
       const result = await rotateEventShareLink(eventId);
       if (!result.ok) {
         toast.error(result.error ?? 'Could not refresh the invite link.', result.code);

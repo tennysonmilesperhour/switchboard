@@ -4,6 +4,7 @@ import { NextResponse } from 'next/server';
 import { sweepCascades } from '@/lib/server/cascade-runner';
 import { sweepDuePolls, sweepSuggestionDeadlines } from '@/lib/server/poll-runner';
 import { sweepReminders } from '@/lib/server/reminders';
+import { sweepRitualReminders } from '@/lib/server/ritual-reminders';
 import { sweepExpired } from '@/lib/server/cleanup';
 import { checkRateLimit } from '@/lib/server/rate-limit';
 import { bearerMatches } from '@/lib/server/secret';
@@ -20,8 +21,8 @@ export const maxDuration = 60;
 
 /**
  * Vercel cron (see vercel.json): advances every live cascade, resolves polls
- * whose deadlines passed, and fires any due event reminders. Lazy advancement
- * on page load is the low-latency path; this is the guarantee.
+ * whose deadlines passed, and fires any due event and ritual reminders. Lazy
+ * advancement on page load is the low-latency path; this is the guarantee.
  */
 export async function GET(request: Request) {
   const startedAt = Date.now();
@@ -51,10 +52,11 @@ export async function GET(request: Request) {
     // just passed should be in `voting` before the resolver looks at it, not
     // resolved out of `suggesting` in the same tick.
     const suggestionsClosed = await sweepSuggestionDeadlines();
-    const [eventsAdvanced, pollsResolved, remindersSent, cleaned] = await Promise.all([
+    const [eventsAdvanced, pollsResolved, remindersSent, ritualRemindersSent, cleaned] = await Promise.all([
       sweepCascades(),
       sweepDuePolls(),
       sweepReminders(),
+      sweepRitualReminders(),
       sweepExpired(),
     ]);
     const [smsAccepted, notificationEmailsSent] = await Promise.all([sweepSmsJobs(), sweepNotificationEmails()]);
@@ -66,6 +68,7 @@ export async function GET(request: Request) {
       suggestionsClosed,
       pollsResolved,
       remindersSent,
+      ritualRemindersSent,
       signalsDeleted: cleaned.signalsDeleted,
       momentsClosed: cleaned.momentsClosed,
       liveLocationsDeleted: cleaned.liveLocationsDeleted,

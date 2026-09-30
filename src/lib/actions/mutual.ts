@@ -41,6 +41,22 @@ export async function downToConnect(
     return failure('SB-RATE-LIMIT', 'Give it a moment before sending more.');
   }
 
+  // A sabbatical pauses Mutual both ways (D6). The `mutual_intents` policy
+  // refuses it regardless; asking first lets the refusal be a sentence.
+  if (kind !== 'open_to_reschedule') {
+    const { data: away } = await supabase
+      .from('profiles')
+      .select('id')
+      .in('id', [user.id, targetId])
+      .eq('sabbatical', true);
+    if (away?.some((row) => row.id === user.id)) {
+      return validation('Mutual is paused while you’re on sabbatical. End it in Settings to pick people again.');
+    }
+    if (away?.length) {
+      return validation('They’re on sabbatical right now, so Mutual is paused for them.');
+    }
+  }
+
   // Already mutual: say so and write nothing. The upsert below sets `status:
   // 'active'`, so re-sending an interest that had matched flipped the caller's
   // side back to active - which sent the other person a fresh anonymous

@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { Icon } from '@/components/ui/Icon';
 import { useBottomOverlaySlot } from '@/components/system/BottomOverlaySlot';
+import { readDeviceFlag, writeDeviceFlag } from '@/components/system/device-storage';
 
 interface BeforeInstallPromptEvent extends Event {
   prompt: () => Promise<void>;
@@ -32,7 +33,7 @@ export function InstallPrompt() {
       window.addEventListener('beforeinstallprompt', suppressInstall);
       return () => window.removeEventListener('beforeinstallprompt', suppressInstall);
     }
-    if (localStorage.getItem(DISMISSED_KEY)) return;
+    if (readDeviceFlag(DISMISSED_KEY)) return;
     // Already running as an installed app — nothing to prompt.
     if (window.matchMedia('(display-mode: standalone)').matches) return;
 
@@ -43,7 +44,7 @@ export function InstallPrompt() {
     window.addEventListener('beforeinstallprompt', onPrompt);
     const onInstalled = () => {
       setDeferred(null);
-      localStorage.setItem(DISMISSED_KEY, '1');
+      writeDeviceFlag(DISMISSED_KEY, '1');
     };
     window.addEventListener('appinstalled', onInstalled);
 
@@ -56,7 +57,7 @@ export function InstallPrompt() {
   if (!deferred || !ownsSlot) return null;
 
   function dismiss() {
-    localStorage.setItem(DISMISSED_KEY, '1');
+    writeDeviceFlag(DISMISSED_KEY, '1');
     setDeferred(null);
   }
 
@@ -76,7 +77,7 @@ export function InstallPrompt() {
     // the `appinstalled` listener above, which is the only signal that means
     // the app exists. A blocked install simply leaves the offer standing, and
     // Chrome re-fires `beforeinstallprompt` on a later visit.
-    if (outcome === 'dismissed') localStorage.setItem(DISMISSED_KEY, '1');
+    if (outcome === 'dismissed') writeDeviceFlag(DISMISSED_KEY, '1');
     setDeferred(null);
   }
 

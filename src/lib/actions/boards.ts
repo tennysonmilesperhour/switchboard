@@ -164,7 +164,7 @@ export async function rotateBoardInviteLink(
  */
 export async function joinBoardViaCode(
   code: string,
-): Promise<{ ok: boolean; slug?: string }> {
+): Promise<ActionResult & { slug?: string }> {
   const auth = await requireUser();
   if (!auth.ok) return auth;
   const { supabase } = auth;
@@ -550,4 +550,140 @@ export async function planFromBoardPost(postId: string): Promise<ActionResult & 
 
   revalidatePath('/boards');
   return { ok: true, eventId: created.eventId };
+}
+
+/**
+ * Leave a board. Anyone may remove themselves (RLS), except the last moderator:
+ * the database refuses that, because a board nobody can run is a board nobody
+ * can invite to, clean up, or close. They hand it on first, or delete it.
+ */
+export async function leaveBoard(boardId: string): Promise<ActionResult> {
+  const auth = await requireUser();
+  if (!auth.ok) return auth;
+  const { supabase, user } = auth;
+
+  const { data, error } = await supabase
+    .from('board_members')
+    .delete()
+    .eq('board_id', boardId)
+    .eq('member_id', user.id)
+    .select('member_id');
+  if (error) {
+    if (/last moderator/i.test(error.message)) {
+      return validation(
+        'You’re the only moderator. Make someone else a moderator before you leave, or delete the board.',
+      );
+    }
+    return reportAndFail('SB-BOARD-SAVE', 'board.leave', error, { boardId });
+  }
+  if (!data || data.length === 0) return validation('You’re not on this board.');
+
+  revalidatePath('/boards', 'layout');
+  return { ok: true };
+}
+
+/**
+ * Rename a board or change its description. Moderators only (the boards UPDATE
+ * policy); the address stays the same so links already shared keep working.
+ */
+export async function updateBoardDetails(
+  boardId: string,
+  input: { name: string; description: string },
+): Promise<ActionResult> {
+  const name = input.name.trim().slice(0, 80);
+  if (name.length < 3) return validation('Give the board a name of at least 3 characters.');
+  const auth = await requireUser();
+  if (!auth.ok) return auth;
+  const { supabase } = auth;
+
+  const { data, error } = await supabase
+    .from('boards')
+    .update({ name, description: input.description.trim().slice(0, 280) || null })
+    .eq('id', boardId)
+    .select('slug');
+  if (error) return reportAndFail('SB-BOARD-SAVE', 'board.update', error, { boardId });
+  if (!data || data.length === 0) {
+    return failure('SB-PERM-DENIED', 'Only a board moderator can rename the board.');
+  }
+  revalidatePath('/boards', 'layout');
+  return { ok: true };
+}
+
+/**
+ * Delete a board and everything on it. The founder may; once the founder has
+ * left, any moderator may (the boards DELETE policy).
+ */
+export async function deleteBoard(boardId: string): Promise<ActionResult> {
+  const auth = await requireUser();
+  if (!auth.ok) return auth;
+  const { supabase } = auth;
+
+  const { data, error } = await supabase.from('boards').delete().eq('id', boardId).select('id');
+  if (error) return reportAndFail('SB-BOARD-SAVE', 'board.delete', error, { boardId });
+  if (!data || data.length === 0) {
+    return failure(
+      'SB-PERM-DENIED',
+      'Only the person who started the board can delete it while they’re still on it.',
+    );
+  }
+  revalidatePath('/boards', 'layout');
+  return { ok: true };
+}
+
+/**
+ * Make a neighbor a co-moderator, or step one back to member. Goes through
+ * `set_board_member_role`, the only path that can change a role: moderators
+ * only, never the last moderator, and never the founder by anyone else.
+ */
+export async function setBoardMemberRole(
+  boardId: string,
+  memberId: string,
+  role: 'member' | 'moderator',
+): Promise<ActionResult> {
+  if (role !== 'member' && role !== 'moderator') return validation('Pick a role.');
+  const auth = await requireUser();
+  if (!auth.ok) return auth;
+  const { supabase } = auth;
+
+  const { data, error } = await supabase.rpc('set_board_member_role', {
+    p_board: boardId,
+    p_member: memberId,
+    p_role: role,
+  });
+  if (error) {
+    if (/not a moderator/i.test(error.message)) {
+      return failure('SB-PERM-DENIED', 'Only a board moderator can change roles.');
+    }
+    return reportAndFail('SB-BOARD-SAVE', 'board.role', error, { boardId });
+  }
+  switch (data) {
+    case 'updated':
+    case 'unchanged':
+      revalidatePath('/boards', 'layout');
+      return { ok: true };
+    case 'last_moderator':
+      return validation('A board needs at least one moderator. Make someone else one first.');
+    case 'founder':
+      return validation('Only the person who started the board can step themselves down.');
+    case 'not_member':
+      return validation('They’re no longer on this board.');
+    default:
+      return reportAndFail('SB-BOARD-SAVE', 'board.role', new Error(`unexpected outcome ${data}`), {
+        boardId,
+      });
+  }
+}
+
+/** Take back an "I can help". RLS lets a responder delete only their own. */
+export async function withdrawBoardResponse(postId: string, slug: string): Promise<ActionResult> {
+  const auth = await requireUser();
+  if (!auth.ok) return auth;
+  const { error } = await auth.supabase
+    .from('board_post_responses')
+    .delete()
+    .eq('post_id', postId)
+    .eq('responder_id', auth.user.id);
+  if (error) return reportAndFail('SB-BOARD-SAVE', 'board.response-withdraw', error, { postId });
+  revalidatePath(`/boards/${slug}`);
+  return { ok: true };
 }

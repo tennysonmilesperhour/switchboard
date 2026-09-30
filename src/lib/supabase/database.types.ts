@@ -200,6 +200,7 @@ export type Database = {
           id: string
           kind: string
           location: string | null
+          removed_at: string | null
           starts_at: string | null
           title: string
           updated_at: string | null
@@ -217,6 +218,7 @@ export type Database = {
           id?: string
           kind?: string
           location?: string | null
+          removed_at?: string | null
           starts_at?: string | null
           title: string
           updated_at?: string | null
@@ -234,6 +236,7 @@ export type Database = {
           id?: string
           kind?: string
           location?: string | null
+          removed_at?: string | null
           starts_at?: string | null
           title?: string
           updated_at?: string | null
@@ -513,6 +516,39 @@ export type Database = {
           status?: string
         }
         Relationships: []
+      }
+      connection_request_ignores: {
+        Row: {
+          ignored_at: string
+          ignored_id: string
+          ignorer_id: string
+        }
+        Insert: {
+          ignored_at?: string
+          ignored_id: string
+          ignorer_id: string
+        }
+        Update: {
+          ignored_at?: string
+          ignored_id?: string
+          ignorer_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "connection_request_ignores_ignored_id_fkey"
+            columns: ["ignored_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "connection_request_ignores_ignorer_id_fkey"
+            columns: ["ignorer_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       connections: {
         Row: {
@@ -960,6 +996,62 @@ export type Database = {
             columns: ["room_id"]
             isOneToOne: false
             referencedRelation: "rooms"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      expense_shares: {
+        Row: {
+          expense_id: string
+          member_id: string
+          room_id: string
+          settled_at: string | null
+          settled_by: string | null
+          share_cents: number
+        }
+        Insert: {
+          expense_id: string
+          member_id: string
+          room_id: string
+          settled_at?: string | null
+          settled_by?: string | null
+          share_cents: number
+        }
+        Update: {
+          expense_id?: string
+          member_id?: string
+          room_id?: string
+          settled_at?: string | null
+          settled_by?: string | null
+          share_cents?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "expense_shares_expense_id_fkey"
+            columns: ["expense_id"]
+            isOneToOne: false
+            referencedRelation: "expenses"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "expense_shares_member_id_fkey"
+            columns: ["member_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "expense_shares_room_id_fkey"
+            columns: ["room_id"]
+            isOneToOne: false
+            referencedRelation: "rooms"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "expense_shares_settled_by_fkey"
+            columns: ["settled_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
         ]
@@ -1628,6 +1720,7 @@ export type Database = {
           created_at: string
           id: string
           image_url: string | null
+          removed_at: string | null
           room_id: string
           sender_id: string
         }
@@ -1636,6 +1729,7 @@ export type Database = {
           created_at?: string
           id?: string
           image_url?: string | null
+          removed_at?: string | null
           room_id: string
           sender_id: string
         }
@@ -1644,6 +1738,7 @@ export type Database = {
           created_at?: string
           id?: string
           image_url?: string | null
+          removed_at?: string | null
           room_id?: string
           sender_id?: string
         }
@@ -1658,6 +1753,81 @@ export type Database = {
           {
             foreignKeyName: "messages_sender_id_fkey"
             columns: ["sender_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      moderation_actions: {
+        Row: {
+          action: string
+          created_at: string
+          id: string
+          message_id: string | null
+          moderator_id: string | null
+          note: string | null
+          post_id: string | null
+          report_id: string | null
+          subject_id: string | null
+          suspended_until: string | null
+        }
+        Insert: {
+          action: string
+          created_at?: string
+          id?: string
+          message_id?: string | null
+          moderator_id?: string | null
+          note?: string | null
+          post_id?: string | null
+          report_id?: string | null
+          subject_id?: string | null
+          suspended_until?: string | null
+        }
+        Update: {
+          action?: string
+          created_at?: string
+          id?: string
+          message_id?: string | null
+          moderator_id?: string | null
+          note?: string | null
+          post_id?: string | null
+          report_id?: string | null
+          subject_id?: string | null
+          suspended_until?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "moderation_actions_message_id_fkey"
+            columns: ["message_id"]
+            isOneToOne: false
+            referencedRelation: "messages"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "moderation_actions_moderator_id_fkey"
+            columns: ["moderator_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "moderation_actions_post_id_fkey"
+            columns: ["post_id"]
+            isOneToOne: false
+            referencedRelation: "board_posts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "moderation_actions_report_id_fkey"
+            columns: ["report_id"]
+            isOneToOne: false
+            referencedRelation: "user_reports"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "moderation_actions_subject_id_fkey"
+            columns: ["subject_id"]
             isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
@@ -1870,16 +2040,22 @@ export type Database = {
         Row: {
           plans: string
           reminders: string
+          sms_fallback_at: string | null
+          sms_fallback_reason: string | null
           user_id: string
         }
         Insert: {
           plans?: string
           reminders?: string
+          sms_fallback_at?: string | null
+          sms_fallback_reason?: string | null
           user_id: string
         }
         Update: {
           plans?: string
           reminders?: string
+          sms_fallback_at?: string | null
+          sms_fallback_reason?: string | null
           user_id?: string
         }
         Relationships: [
@@ -1968,6 +2144,7 @@ export type Database = {
       parental_approvals: {
         Row: {
           created_at: string
+          email_status: string | null
           event_id: string
           guardian_email: string
           guardian_name: string | null
@@ -1979,6 +2156,7 @@ export type Database = {
         }
         Insert: {
           created_at?: string
+          email_status?: string | null
           event_id: string
           guardian_email: string
           guardian_name?: string | null
@@ -1990,6 +2168,7 @@ export type Database = {
         }
         Update: {
           created_at?: string
+          email_status?: string | null
           event_id?: string
           guardian_email?: string
           guardian_name?: string | null
@@ -2527,12 +2706,49 @@ export type Database = {
         }
         Relationships: []
       }
+      ritual_reminders: {
+        Row: {
+          due_on: string
+          ritual_id: string
+          sent_at: string
+          user_id: string
+        }
+        Insert: {
+          due_on: string
+          ritual_id: string
+          sent_at?: string
+          user_id: string
+        }
+        Update: {
+          due_on?: string
+          ritual_id?: string
+          sent_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ritual_reminders_ritual_id_fkey"
+            columns: ["ritual_id"]
+            isOneToOne: false
+            referencedRelation: "rituals"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ritual_reminders_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       rituals: {
         Row: {
           activity: string
           cadence_days: number
           created_at: string
           creator_id: string
+          due_on: string | null
           id: string
           last_planned_at: string | null
           partner_id: string
@@ -2543,6 +2759,7 @@ export type Database = {
           cadence_days: number
           created_at?: string
           creator_id: string
+          due_on?: string | null
           id?: string
           last_planned_at?: string | null
           partner_id: string
@@ -2553,6 +2770,7 @@ export type Database = {
           cadence_days?: number
           created_at?: string
           creator_id?: string
+          due_on?: string | null
           id?: string
           last_planned_at?: string | null
           partner_id?: string
@@ -2641,18 +2859,21 @@ export type Database = {
           joined_at: string
           last_read_at: string | null
           member_id: string
+          muted: boolean
           room_id: string
         }
         Insert: {
           joined_at?: string
           last_read_at?: string | null
           member_id: string
+          muted?: boolean
           room_id: string
         }
         Update: {
           joined_at?: string
           last_read_at?: string | null
           member_id?: string
+          muted?: boolean
           room_id?: string
         }
         Relationships: [
@@ -3009,12 +3230,16 @@ export type Database = {
         Row: {
           created_at: string
           id: string
+          message_id: string | null
           reason: string
           reported_id: string
           reporter_id: string
           resolution_note: string | null
           resolved_at: string | null
           resolved_by: string | null
+          snapshot_body: string | null
+          snapshot_image: string | null
+          snapshot_title: string | null
           status: string
           target_id: string | null
           target_kind: string
@@ -3022,12 +3247,16 @@ export type Database = {
         Insert: {
           created_at?: string
           id?: string
+          message_id?: string | null
           reason: string
           reported_id: string
           reporter_id: string
           resolution_note?: string | null
           resolved_at?: string | null
           resolved_by?: string | null
+          snapshot_body?: string | null
+          snapshot_image?: string | null
+          snapshot_title?: string | null
           status?: string
           target_id?: string | null
           target_kind?: string
@@ -3035,17 +3264,28 @@ export type Database = {
         Update: {
           created_at?: string
           id?: string
+          message_id?: string | null
           reason?: string
           reported_id?: string
           reporter_id?: string
           resolution_note?: string | null
           resolved_at?: string | null
           resolved_by?: string | null
+          snapshot_body?: string | null
+          snapshot_image?: string | null
+          snapshot_title?: string | null
           status?: string
           target_id?: string | null
           target_kind?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "user_reports_message_id_fkey"
+            columns: ["message_id"]
+            isOneToOne: false
+            referencedRelation: "messages"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "user_reports_reported_id_fkey"
             columns: ["reported_id"]
@@ -3135,7 +3375,9 @@ export type Database = {
       }
       zone_join_requests: {
         Row: {
+          asks: number
           created_at: string
+          decided_at: string | null
           id: string
           note: string | null
           requester_id: string
@@ -3143,7 +3385,9 @@ export type Database = {
           zone_id: string
         }
         Insert: {
+          asks?: number
           created_at?: string
+          decided_at?: string | null
           id?: string
           note?: string | null
           requester_id: string
@@ -3151,7 +3395,9 @@ export type Database = {
           zone_id: string
         }
         Update: {
+          asks?: number
           created_at?: string
+          decided_at?: string | null
           id?: string
           note?: string | null
           requester_id?: string
@@ -3215,7 +3461,7 @@ export type Database = {
         Row: {
           created_at: string
           description: string | null
-          ends_at: string | null
+          ends_at: string
           experiences: string[]
           id: string
           invite_code: string | null
@@ -3230,7 +3476,7 @@ export type Database = {
         Insert: {
           created_at?: string
           description?: string | null
-          ends_at?: string | null
+          ends_at?: string
           experiences?: string[]
           id?: string
           invite_code?: string | null
@@ -3245,7 +3491,7 @@ export type Database = {
         Update: {
           created_at?: string
           description?: string | null
-          ends_at?: string | null
+          ends_at?: string
           experiences?: string[]
           id?: string
           invite_code?: string | null
@@ -3301,6 +3547,10 @@ export type Database = {
         Args: { p_event: string; p_user: string }
         Returns: boolean
       }
+      can_current_user_add_to_capsule: {
+        Args: { p_event: string }
+        Returns: boolean
+      }
       can_current_user_view_event: {
         Args: { p_event: string }
         Returns: boolean
@@ -3335,6 +3585,17 @@ export type Database = {
           isOneToOne: false
           isSetofReturn: true
         }
+      }
+      claim_ritual_reminders: {
+        Args: { p_limit?: number }
+        Returns: {
+          activity: string
+          due_on: string
+          other_id: string
+          other_name: string
+          ritual_id: string
+          user_id: string
+        }[]
       }
       claim_sms_jobs: {
         Args: never
@@ -3380,6 +3641,7 @@ export type Database = {
         Returns: string
       }
       create_event_atomic: { Args: { p_input: Json }; Returns: string }
+      decline_join_request: { Args: { p_invite: string }; Returns: string }
       delete_hosted_event_permanently: {
         Args: { p_event: string }
         Returns: string
@@ -3392,6 +3654,7 @@ export type Database = {
           latest_title: string
         }[]
       }
+      dismiss_sms_route_note: { Args: never; Returns: undefined }
       ensure_board_invite_code: { Args: { p_board: string }; Returns: string }
       ensure_zone_invite_code: { Args: { p_zone: string }; Returns: string }
       event_availability_counts: {
@@ -3407,6 +3670,17 @@ export type Database = {
         Returns: {
           eligible_people: number
           responders: number
+        }[]
+      }
+      event_invite_list: {
+        Args: { p_event: string }
+        Returns: {
+          avatar_url: string
+          display_name: string
+          handle: string
+          invite_id: string
+          invitee_id: string
+          status: string
         }[]
       }
       facet_live: { Args: { p_key: string; p_user: string }; Returns: boolean }
@@ -3513,6 +3787,7 @@ export type Database = {
       }
       join_board_via_code: { Args: { p_code: string }; Returns: string }
       join_zone_via_code: { Args: { p_code: string }; Returns: string }
+      leave_room: { Args: { p_room: string }; Returns: string }
       list_discoverable_people: {
         Args: { p_category?: string }
         Returns: {
@@ -3539,11 +3814,16 @@ export type Database = {
           reported_handle: string
           reported_id: string
           reported_name: string
+          reported_suspended_until: string
           reporter_id: string
           reporter_name: string
+          room_title: string
           target_body: string
+          target_exists: boolean
           target_id: string
+          target_image: string
           target_kind: string
+          target_removed_at: string
           target_title: string
         }[]
       }
@@ -3572,6 +3852,38 @@ export type Database = {
           perk: string
           url: string
         }[]
+      }
+      list_suspended_accounts: {
+        Args: never
+        Returns: {
+          display_name: string
+          handle: string
+          member_id: string
+          note: string
+          suspended_at: string
+          suspended_until: string
+        }[]
+      }
+      moderate_lift_suspension: {
+        Args: { p_member: string; p_note?: string }
+        Returns: string
+      }
+      moderate_remove_board_post: {
+        Args: { p_note?: string; p_post: string; p_report: string }
+        Returns: string
+      }
+      moderate_remove_room_message: {
+        Args: { p_message: string; p_note?: string; p_report: string }
+        Returns: string
+      }
+      moderate_suspend_account: {
+        Args: {
+          p_days?: number
+          p_member: string
+          p_note?: string
+          p_report: string
+        }
+        Returns: string
       }
       move_queued_invite: {
         Args: { p_invite: string; p_up: boolean }
@@ -3615,12 +3927,30 @@ export type Database = {
           room_id: string
         }[]
       }
+      my_room_inbox: {
+        Args: never
+        Returns: {
+          kind: string
+          last_message_at: string
+          last_message_body: string
+          last_read_at: string
+          last_sender_id: string
+          muted: boolean
+          room_created_at: string
+          room_id: string
+          title: string
+        }[]
+      }
       my_signal_default_circle: { Args: never; Returns: string }
       normalize_phone_number: { Args: { p_value: string }; Returns: string }
       note_give_space_overlap: { Args: { p_event: string }; Returns: boolean }
       note_give_space_overlap_for: {
         Args: { p_event: string; p_user: string }
         Returns: boolean
+      }
+      note_ritual_planned: {
+        Args: { p_event: string; p_ritual: string }
+        Returns: string
       }
       operator_sweep_status: {
         Args: { p_sweep: string }
@@ -3656,6 +3986,13 @@ export type Database = {
         Returns: undefined
       }
       request_to_join: { Args: { p_event: string }; Returns: string }
+      request_zone_join: {
+        Args: { p_note?: string; p_zone: string }
+        Returns: {
+          outcome: string
+          retry_after: string
+        }[]
+      }
       reschedule_cancel_event: { Args: { p_event: string }; Returns: boolean }
       resolve_parental_approval: {
         Args: { p_approve: boolean; p_token: string }
@@ -3695,6 +4032,7 @@ export type Database = {
         Args: { p_decision: string; p_note?: string; p_venue: string }
         Returns: undefined
       }
+      room_is_read_only: { Args: { p_room: string }; Returns: boolean }
       rotate_board_invite_code: { Args: { p_board: string }; Returns: string }
       rotate_event_share_token: {
         Args: { p_event: string; p_user: string }
@@ -3713,6 +4051,22 @@ export type Database = {
           outcome: string
           token: string
         }[]
+      }
+      save_expense: {
+        Args: {
+          p_amount_cents: number
+          p_description: string
+          p_expense?: string
+          p_participants: string[]
+          p_payer: string
+          p_room: string
+          p_settle_url?: string
+        }
+        Returns: string
+      }
+      set_board_member_role: {
+        Args: { p_board: string; p_member: string; p_role: string }
+        Returns: string
       }
       set_invite_stage: {
         Args: { p_invite: string; p_stage: number }
@@ -3734,6 +4088,7 @@ export type Database = {
         Args: { p_enabled: boolean; p_plans: boolean; p_reminders: boolean }
         Returns: undefined
       }
+      settle_up: { Args: { p_other: string; p_room: string }; Returns: number }
       shared_facets_of: {
         Args: { p_target: string }
         Returns: {
@@ -3743,6 +4098,10 @@ export type Database = {
           summary: string
           title: string
         }[]
+      }
+      skip_ritual: {
+        Args: { p_due_on: string; p_ritual: string }
+        Returns: string
       }
       sweep_retention: {
         Args: { p_now?: string }
@@ -3757,6 +4116,7 @@ export type Database = {
         Args: { p_lease_seconds?: number; p_sweep: string }
         Returns: boolean
       }
+      unmatch: { Args: { p_match: string }; Returns: string }
       viewer_in_signal_audience: {
         Args: { p_circle_ids: string[]; p_owner: string; p_viewer: string }
         Returns: boolean

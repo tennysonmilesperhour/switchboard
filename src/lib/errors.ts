@@ -184,6 +184,13 @@ const REGISTRY = {
     fix: null,
     actor: 'operator',
   },
+  // The zone list failing to load used to read as "no zones here", which sent
+  // organizers off to create a duplicate of one that existed.
+  'SB-ZONE-LOAD': {
+    message: 'Switchboard couldn’t load zones just now.',
+    fix: 'Reload the page. Nothing about your zones changed.',
+    actor: 'reader',
+  },
 
   // ————————————————————————— answering an invitation —————————————————————————
   'SB-RSVP-AUTH': {
@@ -219,6 +226,15 @@ const REGISTRY = {
   'SB-RSVP-GUARDIAN': {
     message: 'This guardian request does not belong to your RSVP.',
     fix: 'Open your own invitation and try again, or ask the host for help.',
+    actor: 'reader',
+  },
+  // The guardian request saved and the RSVP is still held; only the email to
+  // the guardian failed. Its own code rather than SB-RSVP-SAVE because nothing
+  // was lost and the next step differs: "We've emailed the guardian" used to
+  // show whether or not the email went anywhere.
+  'SB-GUARDIAN-EMAIL': {
+    message: 'The request is saved, but the email to the guardian didn’t go out.',
+    fix: 'Check the address and send it again.',
     actor: 'reader',
   },
   // The Give Space heads-up failing to record itself. Deliberately its own
@@ -285,6 +301,43 @@ const REGISTRY = {
     fix: 'Request a fresh reset link and try again.',
     actor: 'reader',
   },
+  /**
+   * An emailed confirmation, magic or recovery link that no longer verifies.
+   * "Already used" is in the sentence on purpose: mail scanners open links
+   * before people do, so the reader may well be confirmed already and only
+   * needs to sign in.
+   */
+  'SB-AUTH-LINK': {
+    message: 'That emailed link has expired or was already used.',
+    fix: 'Sign in below. If you still need a link, ask for a fresh one from there.',
+    actor: 'reader',
+  },
+  // Google sign-in, one code per way the round trip can end short. They used
+  // to be three different sentences with nothing a log line could be matched
+  // against. `SB-OAUTH-*` rather than `SB-AUTH-OAUTH-*` because a code is
+  // exactly one area and one reason (errors.test.ts).
+  'SB-OAUTH-DENIED': {
+    message: 'Google didn’t complete the sign-in.',
+    fix: 'Try again, or sign in with your email or username below.',
+    actor: 'reader',
+  },
+  'SB-OAUTH-EXCHANGE': {
+    message: 'Google approved the sign-in, but Switchboard couldn’t finish it.',
+    fix: 'Try again in this same browser. If it keeps happening, sign in with your email or username.',
+    actor: 'reader',
+  },
+  'SB-OAUTH-MISSING': {
+    message: 'Google sent you back without a sign-in code.',
+    fix: 'Try again, or sign in with your email or username below.',
+    actor: 'reader',
+  },
+  // Before Google is even reached: the auth server would not hand out a
+  // sign-in address (provider switched off, or a redirect it does not allow).
+  'SB-OAUTH-START': {
+    message: 'Google sign-in isn’t available right now.',
+    fix: 'Sign in with your email or username instead.',
+    actor: 'reader',
+  },
   'SB-AUTH-DELETE': {
     message: 'Switchboard couldn’t delete that account.',
     fix: 'Try again in a moment.',
@@ -329,6 +382,11 @@ const REGISTRY = {
     fix: 'Reload the page.',
     actor: 'reader',
   },
+  'SB-PLAN-OPEN': {
+    message: 'This plan couldn’t be opened right now.',
+    fix: 'Reload the page. The plan and your place in it are unchanged.',
+    actor: 'reader',
+  },
   'SB-PLAN-DELETE': {
     message: 'This plan couldn’t be deleted.',
     fix: 'Try again in a moment.',
@@ -347,6 +405,14 @@ const REGISTRY = {
     message: 'Switchboard couldn’t confirm you host this plan.',
     fix: null,
     actor: 'operator',
+  },
+  // Run it back / Schedule the next one. Anything made before the failure is
+  // removed, so "nothing was sent" is true when the host reads it (G27). It
+  // used to redirect back to the old plan with no word at all.
+  'SB-PLAN-CLONE': {
+    message: 'Switchboard couldn’t set up the new plan.',
+    fix: 'Nothing was sent. Try again in a moment.',
+    actor: 'reader',
   },
   // The suggestion box clears the moment you submit, so an idea that fails to
   // save leaves a screen identical to one that saved nothing at all: empty box,
@@ -483,9 +549,91 @@ const REGISTRY = {
     fix: 'Try again.',
     actor: 'reader',
   },
+  // ————————————————————————— reading what's there —————————————————————————
+  // A read that failed and rendered as an empty section is the most misleading
+  // failure there is: "You're all caught up" and "nothing here yet" are claims,
+  // and a query that errored has no business making them. Settings did worse —
+  // it rendered defaults for an unread profile, and the next Save wrote them
+  // over the real values. Each section that can fail on its own gets its own
+  // code, so one broken card never takes a page down and a screenshot still
+  // says which read it was.
+  'SB-SETTINGS-LOAD': {
+    message: 'Some of your settings didn’t load, so they’re hidden rather than shown wrong.',
+    fix: 'Reload the page. Nothing was changed, and saving is off until they load.',
+    actor: 'reader',
+  },
+  'SB-PROFILE-LOAD': {
+    message: 'Your profile didn’t load.',
+    fix: 'Reload the page. Nothing was saved or changed.',
+    actor: 'reader',
+  },
+  'SB-INVITE-LOAD': {
+    message: 'Your invitations didn’t load.',
+    fix: 'Reload the page. Nothing about them changed, and no answer was sent.',
+    actor: 'reader',
+  },
+  'SB-SIGNAL-LOAD': {
+    message: 'Your signals, and who they can reach, didn’t load.',
+    fix: 'Reload the page before you send one.',
+    actor: 'reader',
+  },
+  'SB-AROUND-LOAD': {
+    message: 'Who’s around right now didn’t load.',
+    fix: 'Reload the page.',
+    actor: 'reader',
+  },
+  'SB-MATCH-LOAD': {
+    message: 'Your matches didn’t load.',
+    fix: 'Reload the page. Nothing about them changed — they’re still on Mutual.',
+    actor: 'reader',
+  },
+  'SB-CONNECTION-LOAD': {
+    message: 'Your connections didn’t load, so this page may look emptier than it is.',
+    fix: 'Reload the page. Your people list hasn’t changed.',
+    actor: 'reader',
+  },
+  'SB-INTRO-LOAD': {
+    message: 'Introductions waiting for you didn’t load.',
+    fix: 'Reload the page. Nobody was told anything.',
+    actor: 'reader',
+  },
+  'SB-RITUAL-LOAD': {
+    message: 'Your rituals didn’t load.',
+    fix: 'Reload the page. Nothing about them changed.',
+    actor: 'reader',
+  },
+  'SB-RADAR-LOAD': {
+    message: 'Reconnection suggestions didn’t load.',
+    fix: 'Reload the page.',
+    actor: 'reader',
+  },
+  'SB-ENERGY-LOAD': {
+    message: 'Reflections on your recent plans didn’t load.',
+    fix: 'Reload the page.',
+    actor: 'reader',
+  },
+  'SB-ANNOUNCEMENT-LOAD': {
+    message: 'Announcements from your hosts didn’t load.',
+    fix: 'Reload the page, or open the plan to read them there.',
+    actor: 'reader',
+  },
+  'SB-NOTIFY-LOAD': {
+    message: 'Your notifications didn’t load.',
+    fix: 'Reload the page. Nothing was marked read or cleared.',
+    actor: 'reader',
+  },
   'SB-UPLOAD-FAILED': {
     message: 'That file didn’t upload.',
     fix: 'Check the file is an image or audio clip under the size limit, then try again.',
+    actor: 'reader',
+  },
+  // The browser's microphone or recorder failed to start or broke mid-way
+  // (G33). Nothing reached the server, so there is no log line; the code is
+  // what tells a screenshot of it apart from a blocked microphone or an empty
+  // clip.
+  'SB-VOICE-RECORD': {
+    message: 'The recording couldn’t continue: this browser’s microphone or recorder hit an error. Your microphone is off.',
+    fix: 'Try recording again, or write your message instead.',
     actor: 'reader',
   },
   'SB-SCOPE-BOARD': {
@@ -528,6 +676,14 @@ const REGISTRY = {
   },
   'SB-PUSH-SEND': {
     message: 'A push notification couldn’t be delivered.',
+    fix: null,
+    actor: 'operator',
+  },
+  // Never shown to a reader: the hourly sweep retries an undelivered digest
+  // instead of marking it sent, and this is the log line that says why it had
+  // to (no push reached a device and the email fallback failed too).
+  'SB-DIGEST-SEND': {
+    message: 'A daily summary couldn’t be delivered.',
     fix: null,
     actor: 'operator',
   },
@@ -641,9 +797,12 @@ const REGISTRY = {
     fix: 'Reload the page.',
     actor: 'reader',
   },
+  // The address lookup service itself failed or is throttling us. Distinct
+  // from "that address matched nothing", which is the reader's to fix and is
+  // reported without a code: checking the spelling cannot fix an outage.
   'SB-MAP-LOOKUP': {
-    message: 'Switchboard couldn’t look up that place.',
-    fix: 'Check the place name or address and try again.',
+    message: 'The map’s address lookup isn’t answering right now.',
+    fix: 'Try again in a few minutes. Nothing you entered was lost.',
     actor: 'reader',
   },
   'SB-INTRO-SAVE': {
@@ -651,8 +810,28 @@ const REGISTRY = {
     fix: 'Try again.',
     actor: 'reader',
   },
+  // The insert policy refused the pair. It never says why: the reason can be a
+  // block between the two, which the person introducing them must not learn.
+  'SB-INTRO-UNAVAILABLE': {
+    message: 'This introduction can’t be made.',
+    fix: 'Try introducing one of them to someone else.',
+    actor: 'reader',
+  },
   'SB-MODERATION-SAVE': {
     message: 'That moderation decision didn’t save.',
+    fix: 'Reload the queue and try again.',
+    actor: 'reader',
+  },
+  // A moderator's suspension or lift did not land. Its own code because it
+  // writes the auth server's ban, not the report: "the queue didn't save" would
+  // point at the wrong half.
+  'SB-MODERATION-SUSPEND': {
+    message: 'That suspension change didn’t save.',
+    fix: 'Reload the queue and check whether the account shows as suspended before trying again.',
+    actor: 'reader',
+  },
+  'SB-MODERATION-REMOVE': {
+    message: 'That removal didn’t save.',
     fix: 'Reload the queue and try again.',
     actor: 'reader',
   },
@@ -676,6 +855,26 @@ const REGISTRY = {
     fix: 'Reload the room and try again.',
     actor: 'reader',
   },
+  // Reporting one message. "Not there" covers a message deleted, removed, or in
+  // a room the reporter has left, on purpose: the same rule as SB-POST-MISSING.
+  'SB-MESSAGE-MISSING': {
+    message: 'That message isn’t there any more.',
+    fix: 'It may have been deleted or removed already. Reload the room.',
+    actor: 'reader',
+  },
+  'SB-MESSAGE-REPORT': {
+    message: 'That report didn’t reach the moderators.',
+    fix: 'Try again. If it keeps failing, report the person from their profile instead.',
+    actor: 'reader',
+  },
+  // Reading rooms (the inbox, or scrolling back past the newest messages). Its
+  // own code because nothing was being saved: the reader's question is "are my
+  // conversations gone?", and the answer is no.
+  'SB-ROOM-LOAD': {
+    message: 'Switchboard couldn’t load your messages right now.',
+    fix: 'Try again in a moment. Nothing was lost.',
+    actor: 'reader',
+  },
   'SB-SIGNAL-SAVE': {
     message: 'That signal didn’t save.',
     fix: 'Try again.',
@@ -691,6 +890,18 @@ const REGISTRY = {
     fix: 'Try again.',
     actor: 'reader',
   },
+  'SB-VENUE-LOAD': {
+    message: 'Switchboard couldn’t load partner perks just now.',
+    fix: 'Reload the page. Your own claims are unchanged.',
+    actor: 'reader',
+  },
+  // People discovery failing to load used to read as "No one in this lane
+  // yet" — an empty-room answer to what was an outage.
+  'SB-PEOPLE-LOAD': {
+    message: 'Switchboard couldn’t load people discovery just now.',
+    fix: 'Reload the page. Nothing about your discoverability changed.',
+    actor: 'reader',
+  },
 
   // ————————————————————————— last resort —————————————————————————
   // The route-level error boundary and anything genuinely unclassified. Always
@@ -699,6 +910,17 @@ const REGISTRY = {
   'SB-APP-CRASH': {
     message: 'Something slipped on our end, not yours.',
     fix: 'Give it another try in a moment.',
+    actor: 'reader',
+  },
+  /**
+   * The error boundary caught a failure while the device had no connection:
+   * the next page's code or data never arrived. That is not a crash, and
+   * "something slipped on our end" sent people looking for a bug instead of a
+   * signal.
+   */
+  'SB-APP-OFFLINE': {
+    message: 'You’re offline, so this page couldn’t open.',
+    fix: 'Reconnect, then try again. Anything you already saved is safe.',
     actor: 'reader',
   },
   /**
@@ -826,6 +1048,7 @@ const AREA_CODES: Record<string, ErrorCode> = {
 
   // Plans
   'plans.load': 'SB-PLAN-LOAD',
+  'event-page.load': 'SB-PLAN-OPEN',
   'plans.invited-events': 'SB-PLAN-LOAD',
   'event-create': 'SB-PLAN-CREATE',
   'event-update': 'SB-PLAN-SAVE',
@@ -852,6 +1075,7 @@ const AREA_CODES: Record<string, ErrorCode> = {
   'event.delete': 'SB-PLAN-DELETE',
   'event.delete-room': 'SB-PLAN-DELETE',
   'event.cohost-add': 'SB-PLAN-SAVE',
+  'event.clone': 'SB-PLAN-CLONE',
 
   // Getting invitations out
   'event-initial-delivery': 'SB-INVITE-SEND',
@@ -883,6 +1107,12 @@ const AREA_CODES: Record<string, ErrorCode> = {
   'zone.visibility': 'SB-ZONE-SAVE',
   'zone.location': 'SB-ZONE-SAVE',
   'zone.join': 'SB-ZONE-SAVE',
+  'zone.create': 'SB-ZONE-SAVE',
+  'zone.update': 'SB-ZONE-SAVE',
+  'zone.delete': 'SB-ZONE-SAVE',
+  'zone.role': 'SB-ZONE-SAVE',
+  'zone.withdraw-request': 'SB-ZONE-SAVE',
+  'zones.load': 'SB-ZONE-LOAD',
 
   // Notification inbox
   'notification.read': 'SB-NOTIFY-SAVE',
@@ -897,6 +1127,16 @@ const AREA_CODES: Record<string, ErrorCode> = {
   'poll.open-voting': 'SB-POLL-DECIDE',
   'poll.close': 'SB-POLL-DECIDE',
   'poll.pick': 'SB-POLL-DECIDE',
+  // After a decision: giving the plan the winning date. Logged, never thrown —
+  // the decision is saved and the host can still set the date by hand.
+  'poll.apply-date': 'SB-POLL-DECIDE',
+  // Ideas floated in the wizard that did not reach the new plan's first poll.
+  'poll.seed': 'SB-POLL-SUGGEST',
+  // Telling the group a poll opened or how it came out. Never shown: the poll
+  // moved either way, and this is the log line behind "nobody told me".
+  'poll.notify': 'SB-NOTIFY-RECORD',
+  // The cascade's atomic apply failed, so nothing moved; the next tick retries.
+  'cascade.apply': 'SB-INVITE-SEND',
 
   // Answering
   'share-rsvp.respond': 'SB-RSVP-SAVE',
@@ -915,7 +1155,7 @@ const AREA_CODES: Record<string, ErrorCode> = {
   'parental-approval.event': 'SB-RSVP-SAVE',
   'parental-approval.resend': 'SB-RSVP-SAVE',
   'parental-approval.resolve': 'SB-RSVP-SAVE',
-  'parental-approval.email': 'SB-RSVP-SAVE',
+  'parental-approval.email': 'SB-GUARDIAN-EMAIL',
 
   // Profile & settings
   'onboarding': 'SB-PROFILE-SAVE',
@@ -925,12 +1165,18 @@ const AREA_CODES: Record<string, ErrorCode> = {
   'settings.appearance': 'SB-SETTINGS-SAVE',
   'settings.digest': 'SB-SETTINGS-SAVE',
   'layout.appearance': 'SB-LOOK-UNREAD',
-  'settings.appearance-read': 'SB-LOOK-UNREAD',
+  // Any Settings read, logged once per part that failed. The profile read used
+  // to be logged as an appearance failure, which pointed away from the fact
+  // that the whole page was rendering defaults.
+  'settings.load': 'SB-SETTINGS-LOAD',
+  'onboarding.load': 'SB-PROFILE-LOAD',
   'settings.discoverability': 'SB-SETTINGS-SAVE',
   'settings.sabbatical': 'SB-SETTINGS-SAVE',
   'settings.quiet-hours': 'SB-SETTINGS-SAVE',
   'settings.notifications': 'SB-SETTINGS-SAVE',
   'settings.calendar-token': 'SB-SETTINGS-SAVE',
+  'settings.sms-note': 'SB-SETTINGS-SAVE',
+  'sms.preferences': 'SB-SMS-PREFERENCES',
 
   // Social surfaces and personal tools
   'announcement.save': 'SB-ANNOUNCEMENT-SAVE',
@@ -945,6 +1191,11 @@ const AREA_CODES: Record<string, ErrorCode> = {
   'board.post-delete': 'SB-BOARD-SAVE',
   'board.post-complete': 'SB-BOARD-SAVE',
   'board.post-update': 'SB-BOARD-SAVE',
+  'board.leave': 'SB-BOARD-SAVE',
+  'board.update': 'SB-BOARD-SAVE',
+  'board.delete': 'SB-BOARD-SAVE',
+  'board.role': 'SB-BOARD-SAVE',
+  'board.response-withdraw': 'SB-BOARD-SAVE',
   'capsule.save': 'SB-CAPSULE-SAVE',
   'connection.request': 'SB-CONNECTION-SAVE',
   'connection.respond': 'SB-CONNECTION-SAVE',
@@ -954,6 +1205,7 @@ const AREA_CODES: Record<string, ErrorCode> = {
   'connection.avoid': 'SB-CONNECTION-SAVE',
   'connection.unavoid': 'SB-CONNECTION-SAVE',
   'connection.report': 'SB-CONNECTION-SAVE',
+  'connection.ignore': 'SB-CONNECTION-SAVE',
   'circle.create': 'SB-CIRCLE-SAVE',
   'circle.rename': 'SB-CIRCLE-SAVE',
   'circle.members': 'SB-CIRCLE-SAVE',
@@ -961,11 +1213,15 @@ const AREA_CODES: Record<string, ErrorCode> = {
   'contact.verify-start': 'SB-VERIFY-START',
   'contact.verify-check': 'SB-VERIFY-CHECK',
   'discovery.run': 'SB-DISCOVERY-RUN',
+  'discover.people': 'SB-PEOPLE-LOAD',
+  'discover.join-requests': 'SB-INVITE-LOAD',
   'energy.save': 'SB-ENERGY-SAVE',
   'event-thread.send': 'SB-THREAD-SAVE',
   'event-thread.delete': 'SB-THREAD-SAVE',
   'expense.save': 'SB-EXPENSE-SAVE',
+  'expense.settle': 'SB-EXPENSE-SAVE',
   'household.save': 'SB-HOUSEHOLD-SAVE',
+  'household.members': 'SB-HOUSEHOLD-SAVE',
   'identity.preference': 'SB-IDENTITY-SAVE',
   'identity.verdict': 'SB-IDENTITY-SAVE',
   'identity.operator': 'SB-IDENTITY-SAVE',
@@ -974,31 +1230,56 @@ const AREA_CODES: Record<string, ErrorCode> = {
   'location.share': 'SB-LOCATION-SAVE',
   'location.stop': 'SB-LOCATION-SAVE',
   'location.load': 'SB-LOCATION-LOAD',
-  'location.refresh': 'SB-LOCATION-LOAD',
+  'location.refresh': 'SB-LOCATION-SAVE',
   'map.search': 'SB-MAP-LOOKUP',
   'map.reverse': 'SB-MAP-LOOKUP',
+  'map.locate': 'SB-MAP-LOOKUP',
   'intro.create': 'SB-INTRO-SAVE',
+  'intro.respond': 'SB-INTRO-SAVE',
   'moderation.resolve': 'SB-MODERATION-SAVE',
+  'moderation.suspend': 'SB-MODERATION-SUSPEND',
+  'moderation.lift': 'SB-MODERATION-SUSPEND',
+  'moderation.remove-post': 'SB-MODERATION-REMOVE',
+  'moderation.remove-message': 'SB-MODERATION-REMOVE',
   'moment.create': 'SB-MOMENT-SAVE',
   'moment.update': 'SB-MOMENT-SAVE',
   'moment.load': 'SB-MOMENT-SAVE',
   'moment.chat': 'SB-MOMENT-CHAT',
   'mutual.intent': 'SB-MUTUAL-SAVE',
   'mutual.respond': 'SB-MUTUAL-SAVE',
+  'mutual.unmatch': 'SB-MUTUAL-SAVE',
   'ritual.create': 'SB-RITUAL-SAVE',
   'ritual.update': 'SB-RITUAL-SAVE',
+  'ritual.skip': 'SB-RITUAL-SAVE',
+  // Recording that a plan fulfilled a ritual. Logged, never shown: the plan
+  // itself was made either way.
+  'ritual.plan': 'SB-RITUAL-SAVE',
+  // The cron's due-day reminder claim. Never shown; the next tick retries.
+  'ritual.remind': 'SB-NOTIFY-RECORD',
   'room.message': 'SB-ROOM-SAVE',
   'room.task': 'SB-ROOM-SAVE',
   'room.image': 'SB-ROOM-SAVE',
+  'room.message-delete': 'SB-ROOM-SAVE',
+  'room.mute': 'SB-ROOM-SAVE',
+  'room.leave': 'SB-ROOM-SAVE',
+  'room.history': 'SB-ROOM-LOAD',
+  'room.inbox': 'SB-ROOM-LOAD',
+  'room.report-message': 'SB-MESSAGE-REPORT',
   'signal.activate': 'SB-SIGNAL-SAVE',
   'signal.remove': 'SB-SIGNAL-SAVE',
   'signal.clear': 'SB-SIGNAL-SAVE',
   'venue.claim': 'SB-VENUE-SAVE',
   'venue.review': 'SB-VENUE-SAVE',
+  'venue.update': 'SB-VENUE-SAVE',
+  'venue.withdraw': 'SB-VENUE-SAVE',
+  'venue.load': 'SB-VENUE-LOAD',
 
   // Getting into an account
   'auth.resend-confirmation': 'SB-AUTH-RESEND',
   'auth.signup': 'SB-AUTH-SIGNUP',
+  'auth.oauth-provider': 'SB-OAUTH-DENIED',
+  'auth.oauth-exchange': 'SB-OAUTH-EXCHANGE',
+  'auth.oauth-callback': 'SB-OAUTH-MISSING',
   'account.delete': 'SB-AUTH-DELETE',
   'account.export': 'SB-ACCOUNT-EXPORT',
 
@@ -1007,6 +1288,28 @@ const AREA_CODES: Record<string, ErrorCode> = {
   'push.send': 'SB-PUSH-SEND',
   'push.subscribe': 'SB-PUSH-SAVE',
   'notify.record': 'SB-NOTIFY-RECORD',
+  'digest.items': 'SB-DIGEST-SEND',
+  'digest.send': 'SB-DIGEST-SEND',
+  'digest.stamp': 'SB-DIGEST-SEND',
+
+  // Reads that used to fail as empty sections. One area per section, so the
+  // log says which card was blank even when two share a code.
+  'home.profile': 'SB-PROFILE-LOAD',
+  'home.invites': 'SB-INVITE-LOAD',
+  'home.plans': 'SB-PLAN-LOAD',
+  'home.signals': 'SB-SIGNAL-LOAD',
+  'home.around': 'SB-AROUND-LOAD',
+  'home.matches': 'SB-MATCH-LOAD',
+  'home.connections': 'SB-CONNECTION-LOAD',
+  'home.introductions': 'SB-INTRO-LOAD',
+  'home.rituals': 'SB-RITUAL-LOAD',
+  'home.radar': 'SB-RADAR-LOAD',
+  'home.reflections': 'SB-ENERGY-LOAD',
+  'notifications.load': 'SB-NOTIFY-LOAD',
+  'notifications.invites': 'SB-INVITE-LOAD',
+  'notifications.matches': 'SB-MATCH-LOAD',
+  'notifications.announcements': 'SB-ANNOUNCEMENT-LOAD',
+  'notifications.requests': 'SB-CONNECTION-LOAD',
 
   // Uploads
   'audio-upload': 'SB-UPLOAD-FAILED',

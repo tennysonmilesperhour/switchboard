@@ -3,12 +3,23 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 const mocks = vi.hoisted(() => ({
   from: vi.fn(),
   rpc: vi.fn(),
-  notifyUsers: vi.fn(),
+  notifyPollOpened: vi.fn(),
+  notifyPollOutcome: vi.fn(),
+  applyDecidedDate: vi.fn(),
 }));
 vi.mock('@/lib/supabase/admin', () => ({ createAdminClient: () => mocks }));
-vi.mock('@/lib/server/notify', () => ({ notifyUsers: mocks.notifyUsers }));
+vi.mock('@/lib/server/poll-notices', () => ({
+  notifyPollOpened: mocks.notifyPollOpened,
+  notifyPollOutcome: mocks.notifyPollOutcome,
+}));
+vi.mock('@/lib/server/poll-date', () => ({ applyDecidedDate: mocks.applyDecidedDate }));
 
-import { resolvePoll, sweepDuePolls, sweepSuggestionDeadlines } from './poll-runner';
+import {
+  openFollowUpPolls,
+  resolvePoll,
+  sweepDuePolls,
+  sweepSuggestionDeadlines,
+} from './poll-runner';
 
 type Result = { data?: unknown; error?: unknown };
 type Query = { table: string; steps: Array<[string, ...unknown[]]> };
@@ -53,6 +64,7 @@ beforeEach(() => {
   vi.useFakeTimers();
   vi.setSystemTime(new Date('2026-09-25T10:05:00.000Z'));
   mocks.rpc.mockResolvedValue({ data: [], error: null });
+  mocks.applyDecidedDate.mockResolvedValue({ kind: 'none' });
   queries = [];
 });
 afterEach(() => vi.useRealTimers());
@@ -71,19 +83,66 @@ describe('poll resolution', () => {
       phase: 'runoff', vote_deadline: nextDeadline, allow_suggestions: false,
     }]);
     expect(mocks.rpc).not.toHaveBeenCalled();
+    // The first round's ratings were just cleared: everyone is asked again.
+    expect(mocks.notifyPollOpened).toHaveBeenCalledWith('poll-1', 'runoff', null);
+    expect(mocks.notifyPollOutcome).not.toHaveBeenCalled();
 
     vi.setSystemTime(new Date('2026-09-26T10:06:00.000Z'));
     database([
       { data: { ...POLL, phase: 'runoff', vote_deadline: nextDeadline } },
       { data: OPTIONS.slice(0, 3) },
       { data: [{ option_id: 'b', voter_id: 'voter-2', weight: 2 }] },
-      {},
+      { data: [{ id: 'poll-1' }] },
     ]);
+    const date = { kind: 'set', startsAt: '2026-10-02T22:00:00.000Z', timeZone: 'America/New_York' };
+    mocks.applyDecidedDate.mockResolvedValue(date);
     await resolvePoll('poll-1', { onlyIfDue: true });
     expect(queries.at(-1)?.steps).toContainEqual(['update', {
       phase: 'decided', winning_option_id: 'b',
     }]);
+    // Only a poll that is still open can be decided, so a racing close cannot
+    // announce the same result twice.
+    expect(queries.at(-1)?.steps).toContainEqual(['in', 'phase', ['suggesting', 'voting', 'runoff']]);
+    expect(mocks.applyDecidedDate).toHaveBeenCalledWith('poll-1');
     expect(mocks.rpc).toHaveBeenCalledWith('resolve_poll_children', { p_poll: 'poll-1' });
+    // The deadline closed it, so nobody is left out as "the one who did it".
+    expect(mocks.notifyPollOutcome).toHaveBeenCalledWith('poll-1', { date, actorId: null });
+  });
+
+  it('sets the date before the follow-ups open and the result goes out', async () => {
+    const order: string[] = [];
+    mocks.applyDecidedDate.mockImplementation(async () => {
+      order.push('date');
+      return { kind: 'none' };
+    });
+    mocks.rpc.mockImplementation(async () => {
+      order.push('unlock');
+      return { data: [], error: null };
+    });
+    mocks.notifyPollOutcome.mockImplementation(async () => {
+      order.push('notify');
+    });
+    database([
+      { data: { ...POLL, resolution: 'host_pick' } },
+      { data: OPTIONS }, { data: VOTES }, { data: [{ id: 'poll-1' }] },
+    ]);
+    await resolvePoll('poll-1', { actorId: 'host-1' });
+    expect(order).toEqual(['date', 'unlock', 'notify']);
+    expect(mocks.notifyPollOutcome).toHaveBeenCalledWith('poll-1', {
+      date: { kind: 'none' },
+      actorId: 'host-1',
+    });
+  });
+
+  it('stays quiet when another worker decided the poll first', async () => {
+    database([
+      { data: { ...POLL, resolution: 'auto' } },
+      { data: OPTIONS }, { data: VOTES }, { data: [] },
+    ]);
+    await resolvePoll('poll-1');
+    expect(mocks.applyDecidedDate).not.toHaveBeenCalled();
+    expect(mocks.rpc).not.toHaveBeenCalled();
+    expect(mocks.notifyPollOutcome).not.toHaveBeenCalled();
   });
 
   it('keeps a host-controlled poll untimed when it opens a runoff', async () => {
@@ -129,11 +188,23 @@ describe('poll resolution', () => {
     expect(mocks.rpc).not.toHaveBeenCalled();
   });
 
-  it('retries opening follow-ups when the decision was saved before an unlock failed', async () => {
+  it('retries the date and the follow-ups when the decision was saved before they failed', async () => {
     database([{ data: { ...POLL, phase: 'decided' } }]);
     await resolvePoll('poll-1');
+    expect(mocks.applyDecidedDate).toHaveBeenCalledWith('poll-1');
     expect(mocks.rpc).toHaveBeenCalledWith('resolve_poll_children', { p_poll: 'poll-1' });
     expect(queries).toHaveLength(1);
+    // A retry is not a new decision; the group already heard about it.
+    expect(mocks.notifyPollOutcome).not.toHaveBeenCalled();
+  });
+
+  it('tells the group about every follow-up the decision opened', async () => {
+    mocks.rpc.mockResolvedValue({ data: [{ id: 'next-1' }, 'next-2'], error: null });
+    await expect(openFollowUpPolls('poll-1')).resolves.toEqual(['next-1', 'next-2']);
+    expect(mocks.notifyPollOpened.mock.calls).toEqual([
+      ['next-1', 'follow-up'],
+      ['next-2', 'follow-up'],
+    ]);
   });
 
   it('surfaces a failed follow-up unlock to the caller', async () => {

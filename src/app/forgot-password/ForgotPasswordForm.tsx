@@ -3,16 +3,19 @@
 import { useState } from 'react';
 import { Button } from '@/components/ui/Button';
 import { requestPasswordReset } from '@/lib/actions/auth';
+import { errorRef, type ErrorCode } from '@/lib/errors';
 
 export function ForgotPasswordForm() {
   const [identifier, setIdentifier] = useState('');
   const [pending, setPending] = useState(false);
   const [message, setMessage] = useState('');
+  const [code, setCode] = useState<ErrorCode | null>(null);
 
   async function submit(event: React.FormEvent) {
     event.preventDefault();
     setPending(true);
     setMessage('');
+    setCode(null);
     try {
       const result = await requestPasswordReset(identifier);
       setMessage(
@@ -20,6 +23,7 @@ export function ForgotPasswordForm() {
           ? 'If an account matches and has a verified recovery email, we’ll send instructions. Username-only accounts need a verified recovery email before they can receive a reset.'
           : result.error ?? 'Enter your email or username.',
       );
+      setCode(result.ok ? null : result.code ?? null);
     } catch {
       setMessage('Recovery is temporarily unavailable. Please try again.');
     } finally {
@@ -39,7 +43,14 @@ export function ForgotPasswordForm() {
         placeholder="Email or username"
         className="w-full rounded-card border border-line bg-card px-4 py-3.5 outline-none focus:border-terracotta"
       />
-      {message ? <p role="status" className="text-sm text-ink-soft">{message}</p> : null}
+      {message ? (
+        <p role="status" className="text-sm text-ink-soft">
+          {message}
+          {code ? (
+            <span className="mt-1 block text-xs text-ink-faint">{errorRef(code)}</span>
+          ) : null}
+        </p>
+      ) : null}
       <Button type="submit" size="lg" className="w-full" disabled={pending}>
         {pending ? 'Sending...' : 'Send recovery instructions'}
       </Button>

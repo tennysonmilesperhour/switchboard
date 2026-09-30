@@ -5,8 +5,9 @@ import Link from 'next/link';
 import { Button } from '@/components/ui/Button';
 import { Icon } from '@/components/ui/Icon';
 import { claimGuestInvite, respondToGuestInvite } from '@/lib/actions/invites';
-import { requestParentalApproval } from '@/lib/actions/parental-approval';
 import { errorRef, type ErrorCode } from '@/lib/errors';
+import type { GuardianRequestView } from '@/lib/guardian-approval';
+import { GuardianApprovalStep } from '@/components/events/GuardianApprovalStep';
 import {
   googleCalendarUrl,
   outlookCalendarUrl,
@@ -37,6 +38,14 @@ interface GuestRsvpClientProps {
    * accepted guest has nowhere to go from here.
    */
   eventId?: string | null;
+  /** This invitation's id — the guardian step asks about exactly this row. */
+  inviteId: string;
+  /**
+   * The newest guardian request for this invite, masked, when the viewer is
+   * the person who said yes. Loaded by the page, so a yes held for a guardian
+   * shows its real state on every visit, not only right after answering.
+   */
+  guardianRequest?: GuardianRequestView | null;
 }
 
 /** The onward link, shown once answering has earned the responder a way in. */
@@ -65,6 +74,8 @@ export function GuestRsvpClient({
   authed = false,
   unclaimed = false,
   eventId = null,
+  inviteId,
+  guardianRequest = null,
 }: GuestRsvpClientProps) {
   const [status, setStatus] = useState(initialStatus);
   const [declining, setDeclining] = useState(false);
@@ -76,11 +87,6 @@ export function GuestRsvpClient({
   const [code, setCode] = useState<ErrorCode | null>(null);
   const [signInNeeded, setSignInNeeded] = useState(false);
   const [answers, setAnswers] = useState<Record<string, string>>({});
-  const [needsApproval, setNeedsApproval] = useState(false);
-  const [guardianEmail, setGuardianEmail] = useState('');
-  const [guardianNameInput, setGuardianNameInput] = useState('');
-  const [approvalSent, setApprovalSent] = useState(false);
-  const [inviteId, setInviteId] = useState('');
   const [pending, startTransition] = useTransition();
 
   // If an invited guest has since created an account (or signed in) and reopened
@@ -100,9 +106,11 @@ export function GuestRsvpClient({
   ) {
     if (accept && !requiredAnswered(questions, answers)) {
       setError('Please answer the required questions');
+      setCode(null);
       return;
     }
     setError('');
+    setCode(null);
     startTransition(async () => {
       const result = await respondToGuestInvite(
         token,
@@ -117,14 +125,8 @@ export function GuestRsvpClient({
         // treat 'auth_required' as this invitation's new status.
         setSignInNeeded(result.outcome === 'auth_required');
         setError(result.error ?? 'Something went wrong');
+        setCode(result.code ?? null);
         if (result.outcome && result.outcome !== 'auth_required') setStatus(result.outcome);
-        return;
-      }
-      if (result.needsApproval && result.inviteId) {
-        setNeedsApproval(true);
-        setInviteId(result.inviteId);
-        if (result.eventId) setPlanId(result.eventId);
-        setStatus('accepted');
         return;
       }
       if (result.eventId) setPlanId(result.eventId);
@@ -133,82 +135,23 @@ export function GuestRsvpClient({
     });
   }
 
-  if (needsApproval && status === 'accepted') {
-    if (approvalSent) {
-      return (
-        <div className="mt-8 rounded-card bg-sage-soft p-5 animate-rise">
-          <p className="font-bold text-sage-deep">Approval request sent</p>
-          <p className="text-sm text-ink-soft mt-2">
-            We&rsquo;ve emailed the guardian. Once they approve, the RSVP will count.
-          </p>
-          {authed && planId && <OpenThePlan eventId={planId} tone="sage" />}
-        </div>
-      );
-    }
+  // A yes held for a guardian (or one a guardian turned down). The state is
+  // the invite's own, so it is here on every visit — this used to be a step
+  // in component state, and closing the tab lost it for good.
+  if (
+    status === 'pending_approval' ||
+    (status === 'declined' && guardianRequest?.status === 'denied')
+  ) {
     return (
-      <div className="mt-8 rounded-card bg-gold-soft p-5 animate-rise">
-        <p className="font-bold text-gold-deep">Almost there — guardian approval needed</p>
-        <p className="text-sm text-ink-soft mt-2">
-          This plan requires a parent or guardian to approve attendance.
-        </p>
-        <label className="block mt-4">
-          <span className="block text-sm font-bold text-ink mb-1">Guardian&rsquo;s email</span>
-          <input
-            type="email"
-            value={guardianEmail}
-            onChange={(e) => setGuardianEmail(e.target.value)}
-            disabled={pending}
-            placeholder="parent@example.com"
-            className="w-full rounded-card border border-line bg-paper px-3.5 py-2.5 text-base text-ink placeholder:text-ink-faint focus:border-terracotta focus:outline-none focus:ring-2 focus:ring-terracotta/30"
-          />
-        </label>
-        <label className="block mt-3">
-          <span className="block text-sm font-bold text-ink mb-1">Guardian&rsquo;s name (optional)</span>
-          <input
-            type="text"
-            value={guardianNameInput}
-            onChange={(e) => setGuardianNameInput(e.target.value)}
-            disabled={pending}
-            placeholder="First name"
-            className="w-full rounded-card border border-line bg-paper px-3.5 py-2.5 text-base text-ink placeholder:text-ink-faint focus:border-terracotta focus:outline-none focus:ring-2 focus:ring-terracotta/30"
-          />
-        </label>
-        {error && (
-          <p role="alert" className="text-sm text-rose-deep mt-3">
-            {error}
-            {code && (
-              <span className="ml-1.5 font-mono text-[11px] uppercase tracking-wide text-ink-faint">
-                {errorRef(code)}
-              </span>
-            )}
-          </p>
-        )}
-        <Button
-          variant="accept"
-          size="lg"
-          className="w-full mt-4"
-          disabled={pending || !guardianEmail.trim()}
-          onClick={() => {
-            setError('');
-            setCode(null);
-            startTransition(async () => {
-              const res = await requestParentalApproval({
-                inviteId,
-                eventId: planId ?? '',
-                guardianEmail: guardianEmail.trim(),
-                guardianName: guardianNameInput.trim() || undefined,
-              });
-              if (!res.ok) {
-                setError(res.error ?? 'Could not send the approval request.');
-                setCode(res.code ?? null);
-                return;
-              }
-              setApprovalSent(true);
-            });
-          }}
-        >
-          Send approval request
-        </Button>
+      <div className="mt-8 space-y-3">
+        {error && <p role="status" className="text-sm text-gold-deep">{error}</p>}
+        <GuardianApprovalStep
+          inviteId={inviteId}
+          eventId={planId ?? ''}
+          request={guardianRequest}
+          canSend={authed && Boolean(planId)}
+        />
+        {authed && planId && <OpenThePlan eventId={planId} tone="gold" />}
       </div>
     );
   }
@@ -311,6 +254,11 @@ export function GuestRsvpClient({
       {error && (
         <p role="alert" className="text-sm text-rose-deep mb-3">
           {error}
+          {code && (
+            <span className="ml-1.5 font-mono text-[11px] uppercase tracking-wide text-ink-faint">
+              {errorRef(code)}
+            </span>
+          )}
           {signInNeeded && (
             <>
               {' '}

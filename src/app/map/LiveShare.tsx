@@ -5,6 +5,7 @@ import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { useToast } from '@/components/ui/Toast';
 import { formatRelative } from '@/lib/format';
+import { errorRef, type ErrorCode } from '@/lib/errors';
 import { coarsenCoordinate, type MapMarker, type MapPoint } from '@/lib/geo';
 import {
   getNearbyPeople,
@@ -31,6 +32,28 @@ const RADIUS_CHOICES: { label: string; meters: number }[] = [
   { label: 'Nearby', meters: 5_000 },
   { label: 'Around town', meters: 25_000 },
 ];
+
+// The reader's last radius, remembered on this device. A preference, so
+// browser storage is the right home for it (docs/SECURITY.md §4); every access
+// is guarded because storage can be blocked, and the default stands in.
+const RADIUS_STORAGE_KEY = 'sb:live-radius';
+
+function readStoredRadius(): number | null {
+  try {
+    const stored = Number(window.localStorage.getItem(RADIUS_STORAGE_KEY));
+    return RADIUS_CHOICES.some((choice) => choice.meters === stored) ? stored : null;
+  } catch {
+    return null;
+  }
+}
+
+function storeRadius(meters: number): void {
+  try {
+    window.localStorage.setItem(RADIUS_STORAGE_KEY, String(meters));
+  } catch {
+    // Not remembered this time; the choice still applies to this visit.
+  }
+}
 
 const GEO_OPTIONS: PositionOptions = {
   enableHighAccuracy: true,
@@ -105,6 +128,9 @@ export function LiveShare({
   const [note, setNote] = useState(mySharing?.headline ?? '');
   const [expiresAt, setExpiresAt] = useState<string | null>(mySharing?.expires_at ?? null);
   const [nearbyCount, setNearbyCount] = useState<number | null>(null);
+  // A failed "who's nearby" check. Shown quietly in place of the count, which
+  // would otherwise go on describing a moment that has passed.
+  const [nearbyError, setNearbyError] = useState<ErrorCode | null>(null);
   // A render-safe copy of the latest point (the ref below is for stable reads
   // inside interval/watch callbacks; refs must not be read during render).
   const [approxPoint, setApproxPoint] = useState<MapPoint | null>(
@@ -138,9 +164,22 @@ export function LiveShare({
   }, []);
 
   const pollNearby = useCallback(async () => {
-    const result = await getNearbyPeople(radiusRef.current);
-    if (!result.ok) return;
+    let result: Awaited<ReturnType<typeof getNearbyPeople>>;
+    try {
+      result = await getNearbyPeople(radiusRef.current);
+    } catch {
+      result = { ok: false, code: 'SB-LOCATION-LOAD' };
+    }
+    if (!result.ok) {
+      // A silent failure left the last count and the last pins up as if they
+      // were current. Clear them, and say the check didn't go through.
+      setNearbyError(result.code ?? 'SB-LOCATION-LOAD');
+      setNearbyCount(null);
+      onNearbyChange([]);
+      return;
+    }
     const people = result.people ?? [];
+    setNearbyError(null);
     setNearbyCount(people.length);
     onNearbyChange(peopleToMarkers(people));
   }, [onNearbyChange]);
@@ -158,6 +197,7 @@ export function LiveShare({
       lastSent.current = null;
       setSharing(false);
       setNearbyCount(null);
+      setNearbyError(null);
       setExpiresAt(null);
       onSelfChange(null);
       onNearbyChange([]);
@@ -207,6 +247,11 @@ export function LiveShare({
   // server render, avoiding a hydration mismatch) — the pattern used elsewhere.
   useEffect(() => {
     const timeout = window.setTimeout(() => {
+      const remembered = readStoredRadius();
+      if (remembered !== null) {
+        radiusRef.current = remembered;
+        setRadius(remembered);
+      }
       if (typeof navigator === 'undefined' || !('geolocation' in navigator)) {
         setSupported(false);
         return;
@@ -347,6 +392,32 @@ export function LiveShare({
     }
   }
 
+  // Widen or narrow who counts as nearby, before or during a share. While
+  // sharing, the new circle is checked at once rather than at the next poll.
+  function changeRadius(meters: number) {
+    setRadius(meters);
+    radiusRef.current = meters;
+    storeRadius(meters);
+    if (sharing) void pollNearby();
+  }
+
+  const radiusSelect = (
+    <label className="text-xs font-bold text-ink-soft">
+      Show people
+      <select
+        value={radius}
+        onChange={(e) => changeRadius(Number(e.target.value))}
+        className="ml-1.5 min-h-11 rounded-pill border border-line bg-card px-2.5 py-1 text-xs font-semibold text-ink outline-none focus:border-terracotta"
+      >
+        {RADIUS_CHOICES.map((choice) => (
+          <option key={choice.meters} value={choice.meters}>
+            {choice.label}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
+
   if (!supported) {
     return (
       <Card tone="cream">
@@ -379,7 +450,7 @@ export function LiveShare({
                 {visibility === 'connections' ? 'your connections' : 'people sharing nearby'}
               </strong>
               {expiresAt ? ` · turns off ${formatRelative(expiresAt)}` : ''}.
-              {nearbyCount !== null && (
+              {nearbyCount !== null && !nearbyError && (
                 <>
                   {' '}
                   {nearbyCount === 0
@@ -388,6 +459,12 @@ export function LiveShare({
                 </>
               )}
             </p>
+            {nearbyError && (
+              <p role="status" className="mt-1 text-xs text-ink-faint">
+                Couldn’t check who’s nearby just now. It’ll try again shortly.{' '}
+                <span className="opacity-70">{errorRef(nearbyError)}</span>
+              </p>
+            )}
             {approx && (
               <p className="mt-1 text-xs text-ink-faint">
                 Others see an approximate spot ({approx}), never your exact position.
@@ -421,6 +498,7 @@ export function LiveShare({
               {label}
             </button>
           ))}
+          {radiusSelect}
         </div>
       </Card>
     );
@@ -457,20 +535,7 @@ export function LiveShare({
               <option value="connections">Connections only</option>
             </select>
           </label>
-          <label className="text-xs font-bold text-ink-soft">
-            Show people
-            <select
-              value={radius}
-              onChange={(e) => setRadius(Number(e.target.value))}
-              className="ml-1.5 rounded-pill border border-line bg-card px-2.5 py-1 text-xs font-semibold text-ink outline-none focus:border-terracotta"
-            >
-              {RADIUS_CHOICES.map((choice) => (
-                <option key={choice.meters} value={choice.meters}>
-                  {choice.label}
-                </option>
-              ))}
-            </select>
-          </label>
+          {radiusSelect}
         </div>
       </div>
 

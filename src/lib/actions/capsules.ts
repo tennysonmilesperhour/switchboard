@@ -7,6 +7,9 @@ import { requireUser } from '@/lib/server/require-user';
 import { isStoredMediaPath, isOwnPublicStorageUrl } from '@/lib/server/media';
 import { reportAndFail } from '@/lib/server/observability';
 
+const CAPSULE_WRITERS =
+  'Only people who went, and the plan’s hosts, can add to the capsule.';
+
 export async function addCapsuleEntry(
   eventId: string,
   line: string,
@@ -36,7 +39,12 @@ export async function addCapsuleEntry(
     },
     { onConflict: 'event_id,user_id' },
   );
-  if (error) return reportAndFail('SB-CAPSULE-SAVE', 'capsule.save', error, { eventId });
+  if (error) {
+    // The capsule policies take lines only from people who went and the
+    // plan's hosts (G28). A refusal from them is that rule, not an incident.
+    if (error.code === '42501') return validation(CAPSULE_WRITERS);
+    return reportAndFail('SB-CAPSULE-SAVE', 'capsule.save', error, { eventId });
+  }
   revalidatePath(`/events/${eventId}/capsule`);
   return { ok: true };
 }

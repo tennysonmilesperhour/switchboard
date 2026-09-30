@@ -2,7 +2,7 @@
 
 import { revalidatePath } from 'next/cache';
 
-import type { ActionResult } from '@/lib/errors';
+import { validation, type ActionResult } from '@/lib/errors';
 import { requireUser } from '@/lib/server/require-user';
 import { reportAndFail } from '@/lib/server/observability';
 
@@ -56,6 +56,24 @@ export async function restoreMatch(matchId: string): Promise<ActionResult> {
     .eq('user_id', user.id);
   if (error) return reportAndFail('SB-MATCH-CLEAR', 'match.restore', error);
 
+  revalidatePath('/');
+  return { ok: true };
+}
+
+/**
+ * Unmatch (G37): end a match for both people. The match row, its room and the
+ * interest behind it all go together inside `unmatch`, which checks that the
+ * caller is one of the two people. Neither person is notified.
+ */
+export async function unmatch(matchId: string): Promise<ActionResult> {
+  const auth = await requireUser();
+  if (!auth.ok) return auth;
+  const { data, error } = await auth.supabase.rpc('unmatch', { p_match: matchId });
+  if (error) return reportAndFail('SB-MUTUAL-SAVE', 'mutual.unmatch', error, { matchId });
+  if (data !== 'unmatched') return validation('That match is already gone.');
+
+  revalidatePath('/mutual');
+  revalidatePath('/rooms');
   revalidatePath('/');
   return { ok: true };
 }

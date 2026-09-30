@@ -712,15 +712,18 @@ test.describe('authenticated surface', () => {
     await login(page, 'e2eguest');
     await page.goto('/settings');
     const routes = page.getByRole('heading', { name: 'How plan alerts reach you', exact: true }).locator('..');
+    // Channels are committed by the shared Settings save bar, like every other
+    // choice on the page (completion plan G49).
+    const saveBar = page.getByRole('region', { name: 'Unsaved settings changes' });
     await routes.getByRole('combobox').first().selectOption('in_app');
-    await routes.getByRole('button', { name: 'Save notification channels', exact: true }).click();
-    await expect(routes.getByRole('status')).toHaveText('Notification channels saved.');
+    await saveBar.getByRole('button', { name: 'Save changes', exact: true }).click();
+    await expect(page.getByText('Changes saved.', { exact: true })).toBeVisible();
     await page.reload();
     await expect(routes.getByRole('combobox').first()).toHaveValue('in_app');
     await expect(page.getByLabel('I agree to receive these text messages.', { exact: true })).not.toBeChecked();
     await routes.getByRole('combobox').first().selectOption('existing');
-    await routes.getByRole('button', { name: 'Save notification channels', exact: true }).click();
-    await expect(routes.getByRole('status')).toHaveText('Notification channels saved.');
+    await saveBar.getByRole('button', { name: 'Save changes', exact: true }).click();
+    await expect(page.getByText('Changes saved.', { exact: true })).toBeVisible();
   });
 
 });

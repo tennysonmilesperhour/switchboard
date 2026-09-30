@@ -7,6 +7,7 @@ import { Card } from '@/components/ui/Card';
 import { Chip } from '@/components/ui/Chip';
 import { Icon } from '@/components/ui/Icon';
 import { ContactImportControls } from '@/components/ContactImportControls';
+import { SabbaticalNote } from '@/components/profile/SabbaticalNote';
 import type {
   ContactCandidate,
   ContactMatch,
@@ -71,6 +72,11 @@ export function PeopleStep({
   isMatchSelected,
   toggleContactMatch,
 }: PeopleStepProps) {
+  // D6: picking someone on sabbatical shows their note, wherever the pick
+  // came from (a group chip adds people without opening the friends list).
+  const sabbaticalPicks = friends.filter(
+    (friend) => friend.sabbatical && invitees.some((i) => i.profileId === friend.id),
+  );
   return (
         <div className="space-y-4 animate-rise">
           {(households.length > 0 || circles.length > 0) && (
@@ -157,7 +163,7 @@ export function PeopleStep({
                         <span className="flex-1 min-w-0">
                           <span className="font-bold text-sm block truncate">{friend.name}</span>
                           <span className="text-[11px] text-ink-faint block truncate">
-                            @{friend.handle}
+                            {friend.sabbatical ? '🍃 On sabbatical' : `@${friend.handle}`}
                           </span>
                         </span>
                         <span
@@ -177,6 +183,15 @@ export function PeopleStep({
               )}
             </div>
           )}
+
+          {sabbaticalPicks.map((friend) => (
+            <SabbaticalNote
+              key={friend.id}
+              name={friend.name}
+              status={friend.sabbatical!}
+              detail="Your invitation will wait in their inbox without a notification, so they may not answer in time."
+            />
+          ))}
 
           {/* Contacts, first and on their own.
               It used to be the last control inside the "invite by username,

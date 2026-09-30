@@ -9,13 +9,17 @@ import { advanceEventCascade } from '@/lib/server/cascade-runner';
 import { notifyUsers } from '@/lib/server/notify';
 import { reportAndFail, reportOperationalError } from '@/lib/server/observability';
 import { failure, validation, type ActionResult, type ErrorCode } from '@/lib/errors';
-import { looksLikeEmail, sendEmails } from '@/lib/server/email';
+import { looksLikeEmail, sendEmailWithResult, type DeliveryStatus } from '@/lib/server/email';
 import { approvalUrl } from '@/lib/links';
 import { isJsonObject } from '@/lib/supabase/json';
 import { checkRateLimit } from '@/lib/server/rate-limit';
+import { guardianApprovalEmail } from '@/lib/guardian-approval';
+import { loadGuardianPlanFacts } from '@/lib/server/guardian-facts';
 
 const APPROVAL_REQUEST_LIMIT = 5;
 const APPROVAL_REQUEST_WINDOW_SECONDS = 60 * 60;
+
+type Admin = ReturnType<typeof createAdminClient>;
 
 export interface RequestApprovalInput {
   inviteId: string;
@@ -24,9 +28,26 @@ export interface RequestApprovalInput {
   guardianName?: string;
 }
 
+/**
+ * The result of asking a guardian. `approvalId` is present whenever the
+ * request was saved, including when the email then failed: the RSVP stays held
+ * and the request can be sent again, so a failed send is reported as exactly
+ * that rather than as "nothing happened".
+ */
+export type GuardianRequestResult = ActionResult & { approvalId?: string };
+
+/**
+ * The invitee asks their guardian — the first time, or again.
+ *
+ * Only for a yes that is actually being held (`pending_approval`). Sending
+ * again re-uses the pending request and rotates its token, the same way the
+ * host's resend does: a mistyped address, or an email that never arrived, is
+ * corrected without leaving a second live link behind. The guardian may still
+ * approve from the newest email only.
+ */
 export async function requestParentalApproval(
   input: RequestApprovalInput,
-): Promise<ActionResult & { approvalId?: string }> {
+): Promise<GuardianRequestResult> {
   const auth = await requireUser();
   if (!auth.ok) return auth;
   const { supabase, user } = auth;
@@ -39,14 +60,19 @@ export async function requestParentalApproval(
 
   // This read runs as the caller, so RLS is part of the authorization boundary.
   // The explicit identity + event checks remain necessary: a host can also read
-  // invites for their plan, but only the invitee may create the first guardian
-  // request. The host recovery path below is deliberately separate.
+  // invites for their plan, but only the invitee may ask their own guardian.
+  // The host recovery path below is deliberately separate.
   const { data: invite, error: inviteError } = await supabase
     .from('invites')
-    .select('id, event_id, invitee_id')
+    .select('id, event_id, invitee_id, status')
     .eq('id', input.inviteId)
     .eq('event_id', input.eventId)
-    .maybeSingle<{ id: string; event_id: string; invitee_id: string | null }>();
+    .maybeSingle<{
+      id: string;
+      event_id: string;
+      invitee_id: string | null;
+      status: string;
+    }>();
   if (inviteError) {
     return reportAndFail(
       'SB-RSVP-SAVE',
@@ -62,6 +88,9 @@ export async function requestParentalApproval(
     invite.event_id !== input.eventId
   ) {
     return failure('SB-RSVP-GUARDIAN');
+  }
+  if (invite.status !== 'pending_approval') {
+    return validation('This RSVP isn’t waiting on a guardian.');
   }
 
   // Keep the event read under the caller's RLS session too. No service-role
@@ -101,7 +130,11 @@ export async function requestParentalApproval(
     .from('parental_approvals')
     .select('id')
     .eq('invite_id', input.inviteId)
-    .maybeSingle();
+    .eq('event_id', input.eventId)
+    .eq('status', 'pending')
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle<{ id: string }>();
   if (existingError) {
     return reportAndFail(
       'SB-RSVP-SAVE',
@@ -111,23 +144,28 @@ export async function requestParentalApproval(
       'Could not check the approval request. Try again.',
     );
   }
-  if (existing) {
-    return failure(
-      'SB-RSVP-APPROVAL',
-      'An approval request has already been sent for this RSVP.',
-    );
-  }
 
-  const { data: approval, error } = await admin
-    .from('parental_approvals')
-    .insert({
-      invite_id: input.inviteId,
-      event_id: input.eventId,
-      guardian_email: guardianEmail,
-      guardian_name: guardianName,
-    })
-    .select('id, token')
-    .single();
+  const token = randomBytes(24).toString('hex');
+  const { data: approval, error } = existing
+    ? await admin
+        .from('parental_approvals')
+        .update({ guardian_email: guardianEmail, guardian_name: guardianName, token })
+        .eq('id', existing.id)
+        .eq('invite_id', input.inviteId)
+        .eq('status', 'pending')
+        .select('id')
+        .maybeSingle<{ id: string }>()
+    : await admin
+        .from('parental_approvals')
+        .insert({
+          invite_id: input.inviteId,
+          event_id: input.eventId,
+          guardian_email: guardianEmail,
+          guardian_name: guardianName,
+          token,
+        })
+        .select('id')
+        .maybeSingle<{ id: string }>();
 
   if (error || !approval) {
     return reportAndFail(
@@ -139,16 +177,17 @@ export async function requestParentalApproval(
     );
   }
 
-  await deliverGuardianApproval({
+  const status = await deliverGuardianApproval(admin, {
+    approvalId: approval.id,
     eventId: input.eventId,
-    eventTitle: event.title,
+    inviteId: input.inviteId,
     guardianEmail,
     guardianName,
-    token: approval.token,
+    token,
   });
 
   revalidatePath(`/events/${input.eventId}`);
-  return { ok: true, approvalId: approval.id };
+  return deliveryResult(status, approval.id, 'Your RSVP is saved');
 }
 
 export interface ResendApprovalInput {
@@ -161,14 +200,15 @@ export interface ResendApprovalInput {
 /**
  * Host recovery for a pending guardian request.
  *
- * This is intentionally not folded into `requestParentalApproval`: the first
- * request must be bound to the invitee's own RLS-visible row, while a host needs
- * a separately authorized way to correct a mistyped/pre-empted address and
- * resend the existing capability without minting a second approval.
+ * This is intentionally not folded into `requestParentalApproval`: that path
+ * must be bound to the invitee's own RLS-visible row, while a host needs a
+ * separately authorized way to correct a mistyped/pre-empted address and
+ * resend the existing capability without minting a second approval. A host
+ * can resend a request; they cannot start one on the invitee's behalf.
  */
 export async function resendParentalApproval(
   input: ResendApprovalInput,
-): Promise<ActionResult & { approvalId?: string }> {
+): Promise<GuardianRequestResult> {
   const auth = await requireUser();
   if (!auth.ok) return auth;
   const { user } = auth;
@@ -254,49 +294,114 @@ export async function resendParentalApproval(
     );
   }
 
-  await deliverGuardianApproval({
+  const status = await deliverGuardianApproval(admin, {
+    approvalId: approval.id,
     eventId: input.eventId,
-    eventTitle: event.title,
+    inviteId: input.inviteId,
     guardianEmail,
     guardianName,
     token,
   });
 
   revalidatePath(`/events/${input.eventId}`);
-  return { ok: true, approvalId: approval.id };
+  return deliveryResult(status, approval.id, 'The guardian request is saved');
 }
 
-async function deliverGuardianApproval(input: {
-  eventId: string;
-  eventTitle: string;
-  guardianEmail: string;
-  guardianName: string | null;
-  token: string;
-}): Promise<void> {
-  const link = approvalUrl(input.token);
-  try {
-    await sendEmails([
-      {
-        to: input.guardianEmail,
-        subject: `Approval needed: ${input.eventTitle} on Switchboard`,
-        text: [
-          `Hi${input.guardianName ? ` ${input.guardianName}` : ''},`,
-          '',
-          `Someone has RSVP'd to "${input.eventTitle}" on Switchboard, and the host has asked that a parent or guardian approve their attendance.`,
-          '',
-          'To approve or deny, open this link:',
-          link,
-          '',
-          'If you did not expect this, you can safely ignore it.',
-          '',
-          '- Switchboard',
-        ].join('\n'),
-      },
-    ]);
-  } catch (emailError) {
-    await reportOperationalError('parental-approval.email', emailError, {
+/**
+ * Tell the reader what actually happened to the email. The request row is
+ * saved either way, so every non-`sent` outcome keeps `approvalId` and names
+ * what is true now: saved, not yet delivered.
+ */
+function deliveryResult(
+  status: DeliveryStatus,
+  approvalId: string,
+  saved: string,
+): GuardianRequestResult {
+  if (status === 'sent') return { ok: true, approvalId };
+  if (status === 'not_configured') {
+    return {
+      ...failure(
+        'SB-CONFIG-EMAIL',
+        `${saved}, but this server can’t send email, so the guardian hasn’t been asked yet.`,
+      ),
+      approvalId,
+    };
+  }
+  return {
+    ...failure('SB-GUARDIAN-EMAIL', `${saved}, but the email to the guardian didn’t go out.`),
+    approvalId,
+  };
+}
+
+/**
+ * Send the guardian their link and record what happened to it on the request
+ * (`email_status`), so every later view — the invitee's card, the host's
+ * panel — can say "we couldn't email them" instead of implying it arrived.
+ */
+async function deliverGuardianApproval(
+  admin: Admin,
+  input: {
+    approvalId: string;
+    eventId: string;
+    inviteId: string;
+    guardianEmail: string;
+    guardianName: string | null;
+    token: string;
+  },
+): Promise<DeliveryStatus> {
+  const status = await sendGuardianEmail(admin, input);
+  const { error } = await admin
+    .from('parental_approvals')
+    .update({ email_status: status })
+    .eq('id', input.approvalId)
+    .eq('invite_id', input.inviteId);
+  if (error) {
+    await reportOperationalError('parental-approval.email', error, {
       eventId: input.eventId,
+      step: 'record-status',
     });
+  }
+  return status;
+}
+
+async function sendGuardianEmail(
+  admin: Admin,
+  input: {
+    eventId: string;
+    inviteId: string;
+    guardianEmail: string;
+    guardianName: string | null;
+    token: string;
+  },
+): Promise<DeliveryStatus> {
+  const codeFor = (status: DeliveryStatus): ErrorCode =>
+    status === 'not_configured' ? 'SB-CONFIG-EMAIL' : 'SB-GUARDIAN-EMAIL';
+  try {
+    const facts = await loadGuardianPlanFacts(admin, input.eventId, input.inviteId);
+    if (!facts) throw new Error('Guardian approval facts are missing');
+    const message = guardianApprovalEmail({
+      facts,
+      guardianName: input.guardianName,
+      link: approvalUrl(input.token),
+    });
+    const result = await sendEmailWithResult({ to: input.guardianEmail, ...message });
+    if (result.status !== 'sent') {
+      await reportOperationalError(
+        'parental-approval.email',
+        new Error(`Guardian approval email ${result.status}`),
+        { eventId: input.eventId, provider: result.provider, errorCode: result.errorCode },
+        codeFor(result.status),
+      );
+    }
+    return result.status;
+  } catch (emailError) {
+    await reportOperationalError(
+      'parental-approval.email',
+      emailError,
+      { eventId: input.eventId },
+      'SB-GUARDIAN-EMAIL',
+    );
+    return 'failed';
   }
 }
 
@@ -304,6 +409,8 @@ export interface ResolveApprovalResult {
   ok: boolean;
   outcome?: string;
   eventTitle?: string;
+  /** After an approval: `accepted`, or `waitlisted` when the plan had filled. */
+  inviteStatus?: string;
   error?: string;
   code?: ErrorCode;
   fix?: string | null;
@@ -333,6 +440,7 @@ export async function resolveParentalApproval(
   const row = isJsonObject(data) ? data : {};
   const outcome = typeof row.outcome === 'string' ? row.outcome : undefined;
   const eventTitle = typeof row.event_title === 'string' ? row.event_title : undefined;
+  const inviteStatus = typeof row.invite_status === 'string' ? row.invite_status : undefined;
 
   if (outcome === 'event_gone' || outcome === 'invite_gone') {
     return {
@@ -343,6 +451,17 @@ export async function resolveParentalApproval(
           : 'The invitation this approval was for has been withdrawn.',
       ),
       outcome,
+    };
+  }
+
+  if (outcome === 'event_closed') {
+    return {
+      ...failure(
+        'SB-RSVP-CLOSED',
+        'This plan isn’t taking answers anymore, so there is nothing left to approve.',
+      ),
+      outcome,
+      eventTitle,
     };
   }
 
@@ -363,61 +482,96 @@ export async function resolveParentalApproval(
     };
   }
 
-  if (outcome === 'approved') {
-    const eventId = await eventIdForApprovalToken(admin, token);
-    if (eventId) {
-      await advanceEventCascade(eventId);
-
-      const { data: event } = await admin
-        .from('events')
-        .select('host_id')
-        .eq('id', eventId)
-        .maybeSingle();
-      if (event) {
-        await notifyUsers([event.host_id], {
-          kind: 'parental_approval',
-          title: 'Guardian approved',
-          body: `A guardian approved attendance for ${eventTitle ?? 'your plan'}.`,
-          url: `/events/${eventId}`,
-        });
-      }
-      revalidatePath(`/events/${eventId}`);
-    }
+  if (outcome === 'approved' || outcome === 'denied') {
+    await afterGuardianAnswer(admin, token, outcome, inviteStatus, eventTitle);
   }
 
-  if (outcome === 'denied') {
-    const eventId = await eventIdForApprovalToken(admin, token);
-    if (eventId) {
-      await advanceEventCascade(eventId);
-
-      const { data: event } = await admin
-        .from('events')
-        .select('host_id')
-        .eq('id', eventId)
-        .maybeSingle();
-      if (event) {
-        await notifyUsers([event.host_id], {
-          kind: 'parental_approval_denied',
-          title: 'Guardian denied',
-          body: `A guardian denied attendance for ${eventTitle ?? 'your plan'}.`,
-          url: `/events/${eventId}`,
-        });
-      }
-      revalidatePath(`/events/${eventId}`);
-    }
-  }
-
-  return { ok: true, outcome, eventTitle };
+  return { ok: true, outcome, eventTitle, inviteStatus };
 }
 
-async function eventIdForApprovalToken(
-  admin: ReturnType<typeof createAdminClient>,
+/**
+ * Everything that follows a guardian's answer: the cascade, the host, and the
+ * person whose yes it was — who is the one most waiting to hear.
+ */
+async function afterGuardianAnswer(
+  admin: Admin,
   token: string,
-): Promise<string | null> {
-  const { data } = await admin
+  outcome: 'approved' | 'denied',
+  inviteStatus: string | undefined,
+  eventTitle: string | undefined,
+): Promise<void> {
+  const { data: approval } = await admin
     .from('parental_approvals')
-    .select('event_id')
+    .select('event_id, invite_id')
     .eq('token', token)
     .maybeSingle();
-  return data?.event_id ?? null;
+  if (!approval) return;
+  const eventId = approval.event_id as string;
+  const title = eventTitle ?? 'the plan';
+
+  await advanceEventCascade(eventId);
+
+  const [{ data: event }, { data: invite }] = await Promise.all([
+    admin.from('events').select('host_id').eq('id', eventId).maybeSingle(),
+    admin
+      .from('invites')
+      .select('invitee_id, invitee:profiles(display_name)')
+      .eq('id', approval.invite_id)
+      .maybeSingle(),
+  ]);
+  const profile = Array.isArray(invite?.invitee) ? invite?.invitee[0] : invite?.invitee;
+  const who = profile?.display_name?.trim() || 'someone';
+  const inviteeId = (invite?.invitee_id as string | null) ?? null;
+  const waitlisted = inviteStatus === 'waitlisted';
+
+  if (outcome === 'approved' && inviteStatus === 'accepted' && inviteeId) {
+    // Their commitment, completed by the guardian rather than by them — the
+    // same shape as an Open Table approval, so the same service-role form of
+    // the Give Space check, which re-verifies the accepted invite itself.
+    try {
+      await admin.rpc('note_give_space_overlap_for', {
+        p_user: inviteeId,
+        p_event: eventId,
+      });
+    } catch (noteError) {
+      await reportOperationalError('give-space.note', noteError, { eventId });
+    }
+  }
+
+  if (event) {
+    await notifyUsers([event.host_id], outcome === 'approved'
+      ? {
+          kind: 'parental_approval',
+          title: 'Guardian approved',
+          body: waitlisted
+            ? `A guardian approved ${who} for ${title}, but it had filled, so they’re on the waitlist.`
+            : `A guardian approved ${who} for ${title}. They’re in.`,
+          url: `/events/${eventId}`,
+        }
+      : {
+          kind: 'parental_approval_denied',
+          title: 'Guardian denied',
+          body: `A guardian didn’t approve ${who} for ${title}.`,
+          url: `/events/${eventId}`,
+        });
+  }
+  if (inviteeId) {
+    await notifyUsers([inviteeId], outcome === 'approved'
+      ? {
+          kind: 'parental_approval',
+          title: waitlisted ? 'Approved - on the waitlist' : 'You’re in 🎉',
+          body: waitlisted
+            ? `Your guardian approved ${title}, but it filled up first, so you’re on the waitlist.`
+            : `Your guardian approved ${title}. Your RSVP counts now.`,
+          url: `/events/${eventId}`,
+        }
+      : {
+          kind: 'parental_approval_denied',
+          title: 'Not approved',
+          body: `Your guardian didn’t approve ${title}, so your RSVP was withdrawn.`,
+          url: `/events/${eventId}`,
+        });
+  }
+  revalidatePath(`/events/${eventId}`);
+  revalidatePath('/plans');
 }

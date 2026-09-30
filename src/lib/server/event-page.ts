@@ -11,6 +11,8 @@ import type { CalendarStatus } from '@/lib/actions/calendar-sync';
 import { threadGate, THREAD_PREVIEW_COUNT } from '@/lib/engine/thread';
 import { formatDateTimeRange } from '@/lib/format';
 import { appOrigin, eventShareUrl, guestRsvpUrl } from '@/lib/links';
+import { likeLiteral } from '@/lib/security';
+import { sabbaticalOf, type SabbaticalStatus } from '@/lib/sabbatical';
 import {
   hostCanEditInvitees,
   hostCanShare,
@@ -23,7 +25,7 @@ import {
   planInviteMessage,
 } from '@/lib/invitee-contact';
 import type { AvailabilitySnapshot } from '@/lib/availability';
-import { GRID_DAYS, gridSlots } from '@/lib/availability';
+import { busyBandsFromStored } from '@/lib/availability';
 import type { Weight } from '@/lib/engine/scoring';
 import type {
   EventQuestion,
@@ -38,6 +40,16 @@ import type { PendingParentalApproval } from '@/components/events/ParentalApprov
 import type { AnnouncementView } from '@/components/events/Announcements';
 import type { ThreadCommentView } from '@/components/events/EventThread';
 import type { OptionResult } from '@/components/polls/PollSection';
+import { readyToSendInvitations } from '@/lib/poll-readiness';
+import { reportOperationalError } from '@/lib/server/observability';
+import { guardianStepFor, type GuardianRequestView } from '@/lib/guardian-approval';
+import { groupAnswersByInvite, type GuestAnswers } from '@/lib/event-answers';
+import {
+  cohostCandidates,
+  hostGuardianQueue,
+  inviteListPeople,
+  type InviteListRow,
+} from '@/lib/event-people';
 
 export type EventPageInvite = Invite & {
   invitee_name: string;
@@ -73,20 +85,30 @@ export interface EventPageData {
   isHost: boolean;
   canManage: boolean;
   cohosts: Array<{ id: string; name: string }>;
+  /** One-tap co-host picks for the primary host (decision D1). */
+  cohostCandidates: Array<{ id: string; name: string; handle: string }>;
   hostCard: {
     host: HostCardData;
     relationship: Awaited<ReturnType<typeof getRelationship>>;
     mutuals: Awaited<ReturnType<typeof getMutualConnections>>;
   } | null;
   hostInvites: EventPageInvite[];
-  /** Guardian-pending requests the host may re-send or redirect. Host/co-host only. */
+  /** Every RSVP waiting on a guardian, asked or not. Host/co-host only. */
   pendingParentalApprovals: PendingParentalApproval[];
   myInvite: Invite | null;
+  /**
+   * The viewer's own guardian step: their yes is held (`pending_approval`), or
+   * a guardian turned it down. Null for everyone else.
+   */
+  guardianStep: { request: GuardianRequestView | null } | null;
+  /** "Who's invited", when the host shows it (`event_invite_list`). Guests only. */
+  inviteList: InviteePerson[];
   addableConnections: Array<{
     id: string;
     name: string;
     handle: string;
     avatarUrl: string | null;
+    sabbatical: SabbaticalStatus | null;
   }>;
   attendees: EventPageAttendee[];
   /**
@@ -101,6 +123,8 @@ export interface EventPageData {
   poll: Poll | null;
   decidedPolls: Poll[];
   pendingPolls: Poll[];
+  /** Whether "Send the invitations" may run; `startInviting` asks the same. */
+  invitationsReady: boolean;
   availability: AvailabilitySnapshot;
   calendarBusy: string[];
   calendarStatus: CalendarStatus | null;
@@ -116,10 +140,7 @@ export interface EventPageData {
   threadGateInfo: ReturnType<typeof threadGate>;
   threadComments: ThreadCommentView[];
   acceptedCount: number;
-  answersByGuest: Array<{
-    name: string;
-    answers: Array<{ prompt: string; answer: string }>;
-  }>;
+  answersByGuest: GuestAnswers[];
   calendarEvent: {
     title: string;
     description: string | null;
@@ -133,6 +154,9 @@ export interface EventPageData {
   cancelVoiceUrl: string | null;
 }
 
+/** The plan exists for this viewer or not, but the read itself failed. */
+export const EVENT_PAGE_UNAVAILABLE = 'unavailable' as const;
+
 /**
  * Load the event detail page without its old twenty-query waterfall.
  *
@@ -145,15 +169,22 @@ export interface EventPageData {
 export async function loadEventPage(
   id: string,
   user: User,
-): Promise<EventPageData | null> {
+): Promise<EventPageData | null | typeof EVENT_PAGE_UNAVAILABLE> {
   const supabase = await createClient();
-  const { data: eventWithHost } = await supabase
+  const { data: eventWithHost, error: eventError } = await supabase
     .from('events')
     .select(
       '*, host:profiles!events_host_id_fkey(id, display_name, handle, avatar_url, tagline, timezone)',
     )
     .eq('id', id)
     .single<EventWithHost>();
+  // No row (PGRST116) is how RLS answers "not yours to see", and the page sends
+  // that viewer to /join. Any other error is the database failing: sending a
+  // host to /join then told them they had lost their own plan.
+  if (eventError && eventError.code !== 'PGRST116') {
+    await reportOperationalError('event-page.load', eventError, { eventId: id }, 'SB-PLAN-OPEN');
+    return EVENT_PAGE_UNAVAILABLE;
+  }
   if (!eventWithHost) return null;
 
   const { host: hostRaw, ...eventFields } = eventWithHost;
@@ -183,7 +214,7 @@ export async function loadEventPage(
         .from('venues')
         .select('name, perk')
         .eq('status', 'verified')
-        .ilike('name', event.location_name.trim())
+        .ilike('name', likeLiteral(event.location_name.trim()))
         .limit(1)
         .maybeSingle<{ name: string; perk: string }>()
     : Promise.resolve({ data: null as { name: string; perk: string } | null });
@@ -250,13 +281,14 @@ export async function loadEventPage(
     : isValidTimeZone(hostProfile?.timezone)
       ? hostProfile.timezone
       : null;
-  const busySlots = gridSlots(new Date(), GRID_DAYS);
-  const storedBusy = new Set(
-    (calendarBusyResult.data ?? []).map((row) => new Date(row.slot).getTime()),
-  );
+  // Stored busy time is 15-minute blocks; map them onto the same zone's bands
+  // the grid shows (`timeZone={event.time_zone}` on the plan page).
   const calendarBusy = event.starts_at
     ? []
-    : busySlots.filter((slot) => storedBusy.has(new Date(slot).getTime()));
+    : busyBandsFromStored(
+        (calendarBusyResult.data ?? []).map((row) => row.slot),
+        event.time_zone,
+      );
   const calendarRow = Array.isArray(calendarStatusResult.data)
     ? calendarStatusResult.data[0]
     : null;
@@ -330,6 +362,8 @@ export async function loadEventPage(
     giveSpaceResult,
     cancelVoiceUrl,
     parentalApprovalResult,
+    myGuardianResult,
+    inviteListResult,
   ] = await Promise.all([
     canManage
       ? admin
@@ -353,7 +387,7 @@ export async function loadEventPage(
       ? supabase
           .from('connections')
           .select(
-            'requester_id, addressee_id, requester:profiles!connections_requester_id_fkey(id, display_name, handle, avatar_url), addressee:profiles!connections_addressee_id_fkey(id, display_name, handle, avatar_url)',
+            'requester_id, addressee_id, requester:profiles!connections_requester_id_fkey(id, display_name, handle, avatar_url, sabbatical, sabbatical_message), addressee:profiles!connections_addressee_id_fkey(id, display_name, handle, avatar_url, sabbatical, sabbatical_message)',
           )
           .eq('status', 'accepted')
           .or(`requester_id.eq.${user.id},addressee_id.eq.${user.id}`)
@@ -382,7 +416,7 @@ export async function loadEventPage(
       ? admin
           .from('invite_answers')
           .select(
-            'question_id, answer, invite:invites(guest_name, invitee:profiles(display_name))',
+            'invite_id, question_id, answer, invite:invites(guest_name, invitee:profiles(display_name))',
           )
           .in('question_id', [...promptById.keys()])
       : Promise.resolve({ data: [] }),
@@ -410,10 +444,25 @@ export async function loadEventPage(
     canManage && event.parental_approval
       ? admin
           .from('parental_approvals')
-          .select('invite_id, guardian_email, guardian_name')
+          .select('invite_id, guardian_email, guardian_name, email_status')
           .eq('event_id', id)
           .eq('status', 'pending')
       : Promise.resolve({ data: [] }),
+    // The viewer's own guardian requests, scoped to the invite RLS just
+    // returned as theirs. Masked before it leaves the server.
+    !canManage && myInvite && event.parental_approval
+      ? admin
+          .from('parental_approvals')
+          .select('status, guardian_email, created_at, email_status')
+          .eq('event_id', id)
+          .eq('invite_id', myInvite.id)
+      : Promise.resolve({ data: [] }),
+    // Read as the viewer: the definer function decides from the flag, the
+    // viewer's access, and each invite's status (never queued, declined, or
+    // expired), so nothing here needs trusting.
+    !canManage && event.show_invite_list
+      ? supabase.rpc('event_invite_list', { p_event: id })
+      : Promise.resolve({ data: [] as InviteListRow[] }),
   ]);
 
   // Only hosts/co-hosts reach this read; return delivery status, never numbers or bodies.
@@ -460,19 +509,10 @@ export async function loadEventPage(
     };
   });
 
-  const inviteeNameById = new Map(
-    hostInvites.map((invite) => [invite.id, invite.invitee_name]),
-  );
   const pendingParentalApprovals: PendingParentalApproval[] = canManage
-    ? (parentalApprovalResult.data ?? [])
-        .filter((approval) => inviteeNameById.has(approval.invite_id as string))
-        .map((approval) => ({
-          inviteId: approval.invite_id as string,
-          inviteeName: inviteeNameById.get(approval.invite_id as string) ?? 'Invitee',
-          guardianEmail: approval.guardian_email as string,
-          guardianName: (approval.guardian_name as string | null) ?? null,
-        }))
+    ? hostGuardianQueue(hostInvites, parentalApprovalResult.data ?? [])
     : [];
+  const guardianStep = guardianStepFor(myInvite?.status, myGuardianResult.data ?? []);
 
   const invitedIds = new Set(
     hostInvites
@@ -490,6 +530,7 @@ export async function loadEventPage(
       name: other.display_name ?? 'Friend',
       handle: other.handle ?? '',
       avatarUrl: other.avatar_url ?? null,
+      sabbatical: sabbaticalOf(other),
     });
   }
 
@@ -498,15 +539,21 @@ export async function loadEventPage(
     : (attendeeResult.data ?? []);
   const attendees: EventPageAttendee[] = attendeeRows.map((row) => {
     const profile = Array.isArray(row.invitee) ? row.invitee[0] : row.invitee;
+    // A guest added by email or phone has that address as their "name". Only
+    // the host's side may show it; a guest reads "Guest", as `event_invite_list`
+    // does. Contacts and RSVP tokens are host-only (docs/SECURITY.md).
+    const rawGuestName = row.guest_name?.trim() ?? '';
+    const guestNameIsContact =
+      rawGuestName === (row.guest_contact?.trim() ?? '') || looksLikeContactString(rawGuestName);
     return {
       id: row.invitee_id ?? row.id,
       inviteId: row.id as string,
       inviteeId: (row.invitee_id as string | null) ?? null,
-      name: profile?.display_name ?? row.guest_name ?? 'Guest',
+      name: profile?.display_name ?? (canManage || !guestNameIsContact ? row.guest_name : null) ?? 'Guest',
       handle: (profile?.handle as string | null) ?? null,
       avatarUrl: (profile?.avatar_url as string | null) ?? null,
-      guestToken: (row.guest_token as string | null) ?? null,
-      guestContact: (row.guest_contact as string | null) ?? null,
+      guestToken: canManage ? ((row.guest_token as string | null) ?? null) : null,
+      guestContact: canManage ? ((row.guest_contact as string | null) ?? null) : null,
       status: row.status as Invite['status'],
     };
   });
@@ -571,26 +618,8 @@ export async function loadEventPage(
     }),
   );
 
-  const groupedAnswers = new Map<string, Array<{ prompt: string; answer: string }>>();
-  for (const row of answerResult.data ?? []) {
-    const invite = Array.isArray(row.invite) ? row.invite[0] : row.invite;
-    const profile = invite
-      ? Array.isArray(invite.invitee)
-        ? invite.invitee[0]
-        : invite.invitee
-      : null;
-    const name = profile?.display_name ?? invite?.guest_name ?? 'Guest';
-    const answers = groupedAnswers.get(name) ?? [];
-    answers.push({
-      prompt: promptById.get(row.question_id as string) ?? '',
-      answer: row.answer as string,
-    });
-    groupedAnswers.set(name, answers);
-  }
-  const answersByGuest = [...groupedAnswers.entries()].map(([name, answers]) => ({
-    name,
-    answers,
-  }));
+  // By invitation, never by display name: two guests called Sam are two cards.
+  const answersByGuest = groupAnswersByInvite(answerResult.data ?? [], questions);
 
   const hostCard =
     !isHost && hostProfile && relationship && mutuals
@@ -701,16 +730,27 @@ export async function loadEventPage(
     isHost,
     canManage,
     cohosts,
+    cohostCandidates: isHost
+      ? cohostCandidates({
+          invites: hostInvites,
+          connections: addableConnections,
+          cohostIds,
+          hostId: user.id,
+        })
+      : [],
     hostCard,
     hostInvites,
     pendingParentalApprovals,
     myInvite,
+    guardianStep,
+    inviteList: inviteListPeople((inviteListResult.data ?? []) as InviteListRow[]),
     addableConnections,
     attendees,
     giveSpaceNotice,
     poll,
     decidedPolls,
     pendingPolls,
+    invitationsReady: readyToSendInvitations(allPolls),
     availability,
     calendarBusy,
     calendarStatus,

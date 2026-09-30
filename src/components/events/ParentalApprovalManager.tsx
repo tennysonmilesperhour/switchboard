@@ -10,8 +10,11 @@ import { resendParentalApproval } from '@/lib/actions/parental-approval';
 export interface PendingParentalApproval {
   inviteId: string;
   inviteeName: string;
-  guardianEmail: string;
+  /** Null until the invitee has named a guardian. */
+  guardianEmail: string | null;
   guardianName: string | null;
+  /** What happened to the newest email (`sent`, a failure, or null if unknown). */
+  emailStatus: string | null;
 }
 
 interface ApprovalDraft {
@@ -19,7 +22,15 @@ interface ApprovalDraft {
   guardianName: string;
 }
 
-/** Host-only recovery for guardian requests that are still pending. */
+/**
+ * Everyone on this plan whose yes is waiting on a guardian, for the host.
+ *
+ * Every held RSVP is listed, including the ones where nobody has been asked
+ * yet — those used to be invisible here, because the list was built from
+ * requests that already carried an email. A host can correct an address and
+ * resend a request; the first request is always the invitee's to make, so a
+ * row without one says so rather than offering a form.
+ */
 export function ParentalApprovalManager({
   eventId,
   approvals,
@@ -32,7 +43,7 @@ export function ParentalApprovalManager({
       approvals.map((approval) => [
         approval.inviteId,
         {
-          guardianEmail: approval.guardianEmail,
+          guardianEmail: approval.guardianEmail ?? '',
           guardianName: approval.guardianName ?? '',
         },
       ]),
@@ -69,6 +80,8 @@ export function ParentalApprovalManager({
       setSendingId(null);
       if (!result.ok) {
         toast.error(result.error ?? 'Could not resend the guardian request.', result.code);
+        // Saved even though the email failed, so the row now says so.
+        if (result.approvalId) router.refresh();
         return;
       }
       toast.success(`Guardian request sent again for ${approval.inviteeName}.`);
@@ -79,16 +92,23 @@ export function ParentalApprovalManager({
   return (
     <section>
       <SectionHeader
-        title="Guardian approvals"
-        hint="Only hosts see this - correct an address and resend while approval is pending"
+        title="Waiting on a guardian"
+        hint="These yeses don’t count or hold a spot until a guardian approves. Only hosts see this."
       />
       <ul className="space-y-2">
         {approvals.map((approval) => {
           const draft = drafts[approval.inviteId] ?? {
-            guardianEmail: approval.guardianEmail,
+            guardianEmail: approval.guardianEmail ?? '',
             guardianName: approval.guardianName ?? '',
           };
           const isSending = pending && sendingId === approval.inviteId;
+          const note = !approval.guardianEmail
+            ? 'No guardian asked yet. Their invitation is prompting them to add one.'
+            : approval.emailStatus === 'sent'
+              ? `Emailed ${approval.guardianEmail}.`
+              : approval.emailStatus
+                ? `The email to ${approval.guardianEmail} didn’t go out. Check it and resend.`
+                : null;
           return (
             <li
               key={approval.inviteId}
@@ -100,6 +120,8 @@ export function ParentalApprovalManager({
                   Waiting for guardian
                 </span>
               </p>
+              {note && <p className="mt-1 text-xs text-ink-soft">{note}</p>}
+              {approval.guardianEmail && (
               <div className="mt-2 grid gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(0,0.7fr)_auto] sm:items-end">
                 <label className="block">
                   <span className="mb-1 block text-xs font-semibold text-ink-soft">
@@ -145,6 +167,7 @@ export function ParentalApprovalManager({
                   {isSending ? 'Sending…' : 'Update & resend'}
                 </Button>
               </div>
+              )}
             </li>
           );
         })}

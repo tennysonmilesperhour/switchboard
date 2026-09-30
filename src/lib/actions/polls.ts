@@ -8,6 +8,8 @@ import { requireUser } from '@/lib/server/require-user';
 import type { createClient } from '@/lib/supabase/server';
 import { isEventManager } from '@/lib/server/authz';
 import { openFollowUpPolls, resolvePoll } from '@/lib/server/poll-runner';
+import { applyDecidedDate } from '@/lib/server/poll-date';
+import { notifyPollOutcome } from '@/lib/server/poll-notices';
 import { notifySuggestionAdded } from '@/lib/server/notify';
 import { failure, validation } from '@/lib/errors';
 import { isOwnPublicStorageUrl } from '@/lib/server/media';
@@ -330,11 +332,13 @@ export async function closeVoting(pollId: string, eventId: string): Promise<Acti
   const poll = await pollOnPlan(supabase, pollId, eventId);
   if (!poll) return failure('SB-POLL-DECIDE');
   try {
-    await resolvePoll(pollId);
+    await resolvePoll(pollId, { actorId: user.id });
   } catch (error) {
     return reportAndFail('SB-POLL-DECIDE', 'poll.close', error, { pollId, eventId });
   }
   revalidatePath(`/events/${eventId}`);
+  // Deciding a date poll can give the plan its date, which /plans lists.
+  revalidatePath('/plans');
   return { ok: true };
 }
 
@@ -368,14 +372,19 @@ export async function pickWinner(
   if (error) return reportAndFail('SB-POLL-DECIDE', 'poll.pick', error, { pollId, eventId });
   if (!data || data.length === 0) return failure('SB-POLL-DECIDE');
   // A host picking the winner decides the poll just as much as the runner
-  // does, so the follow-ups have to open from here too — otherwise a chain
-  // stalls silently for every host who uses the pick-the-winner path.
+  // does, so everything that follows a decision happens from here too: the
+  // plan takes the winning time as its date, the follow-ups open, and the
+  // group hears the result — otherwise a chain stalls silently, and the plan
+  // stays "Time TBD", for every host who uses the pick-the-winner path.
+  const date = await applyDecidedDate(pollId);
   try {
     await openFollowUpPolls(pollId);
   } catch (error) {
     return reportAndFail('SB-POLL-DECIDE', 'poll.pick', error, { pollId, eventId });
   }
+  await notifyPollOutcome(pollId, { date, actorId: user.id });
   revalidatePath(`/events/${eventId}`);
+  revalidatePath('/plans');
   return { ok: true };
 }
 

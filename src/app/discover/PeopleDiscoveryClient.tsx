@@ -8,10 +8,13 @@ import { Button } from '@/components/ui/Button';
 import { Card, SectionHeader } from '@/components/ui/Card';
 import { Chip } from '@/components/ui/Chip';
 import { EmptyState } from '@/components/ui/EmptyState';
+import { ErrorNotice } from '@/components/ui/ErrorNotice';
 import { useToast } from '@/components/ui/Toast';
-import { downToConnect } from '@/lib/actions/mutual';
+import { BlockReportButtons } from '@/components/profile/BlockReportButtons';
+import { downToConnect, withdrawIntent } from '@/lib/actions/mutual';
 import { setDiscoverable } from '@/lib/actions/profile';
 import { formatRelative } from '@/lib/format';
+import { errorFor, type ErrorCode } from '@/lib/errors';
 
 export interface DiscoveryPerson {
   id: string;
@@ -45,14 +48,26 @@ const FILTERS = [
   { value: 'mutual friends', label: 'Mutuals' },
 ] as const;
 
+/** The reader's own open "Interested" mark on someone, by their profile id. */
+export interface DiscoveryInterest {
+  id: string;
+  activity: string;
+}
+
 export function PeopleDiscoveryClient({
   people,
   matches,
   discoverable,
+  interests = {},
+  loadError = null,
 }: {
   people: DiscoveryPerson[];
   matches: DiscoveryMatch[];
   discoverable: boolean;
+  /** Keyed by target profile id. */
+  interests?: Record<string, DiscoveryInterest>;
+  /** The people lookup failed; say so instead of showing an empty lane. */
+  loadError?: ErrorCode | null;
 }) {
   const [filter, setFilter] = useState<(typeof FILTERS)[number]['value']>('all');
   const [selectedContext, setSelectedContext] = useState<Record<string, string>>({});
@@ -90,8 +105,22 @@ export function PeopleDiscoveryClient({
         setJustMatched(true);
         toast.success('It is mutual.');
       } else {
-        toast.success('Saved privately.');
+        toast.success('Saved privately. Nothing is sent unless it’s mutual.');
       }
+      router.refresh();
+    });
+  }
+
+  function withdraw(person: DiscoveryPerson, interest: DiscoveryInterest) {
+    setPendingId(person.id);
+    startTransition(async () => {
+      const result = await withdrawIntent(interest.id);
+      setPendingId(null);
+      if (!result.ok) {
+        toast.error(result.error ?? 'Could not take that back.', result.code);
+        return;
+      }
+      toast.success(`Withdrawn. ${person.display_name} was never told either way.`);
       router.refresh();
     });
   }
@@ -150,8 +179,9 @@ export function PeopleDiscoveryClient({
         <Card tone="terracotta">
           <p className="text-sm font-bold text-terracotta-deep">You are not discoverable.</p>
           <p className="mt-1 text-sm text-ink-soft">
-            You can still browse. Turn on discoverability so others can find you
-            through shared contexts - your interest stays private unless it is mutual.
+            Discovery is see-and-be-seen: you browse people here only while they
+            can find you too. Turn it on to look around — your interest in anyone
+            stays private unless it is mutual, and you can turn it off anytime.
           </p>
           <div className="mt-3 flex items-center justify-between gap-3 border-t border-terracotta/20 pt-3">
             <span className="text-sm font-bold text-terracotta-deep">
@@ -211,6 +241,8 @@ export function PeopleDiscoveryClient({
         </div>
       )}
 
+      {discoverable && (
+      <>
       <div className="flex gap-2 overflow-x-auto pb-1">
         {FILTERS.map((option) => (
           <Chip
@@ -224,12 +256,28 @@ export function PeopleDiscoveryClient({
         ))}
       </div>
 
-      {visiblePeople.length === 0 ? (
-        <EmptyState
-          emoji="◐"
-          title="No one in this lane yet"
-          body="Discovery is opt-in. As more people choose contexts, they will show up here."
-        />
+      {loadError ? (
+        <Card>
+          <ErrorNotice
+            message={errorFor(loadError).message}
+            fix={errorFor(loadError).fix}
+            code={loadError}
+          />
+        </Card>
+      ) : visiblePeople.length === 0 ? (
+        filter === 'geography' ? (
+          <EmptyState
+            emoji="📍"
+            title="No one nearby yet"
+            body="Nearby compares your home area with people who share theirs. Turn on Location under Discoverability in Settings and add your home area to your profile to be counted — and to see who else is close."
+          />
+        ) : (
+          <EmptyState
+            emoji="◐"
+            title="No one in this lane yet"
+            body="Discovery is opt-in. As more people choose contexts, they will show up here."
+          />
+        )
       ) : (
         <div className="space-y-3">
           {visiblePeople.map((person) => {
@@ -241,14 +289,23 @@ export function PeopleDiscoveryClient({
               ]),
             ].slice(0, 8);
             const chosen = selectedContext[person.id] || contextOptions[0] || 'Connect';
+            const interest = interests[person.id];
+            const profileHref = `/u/${encodeURIComponent(person.handle)}?from=/discover`;
             return (
               <Card key={person.id}>
                 <div className="flex items-start gap-3">
-                  <Avatar name={person.display_name} seed={person.id} src={person.avatar_url} size="md" />
+                  <Link href={profileHref} aria-label={`${person.display_name}’s profile`}>
+                    <Avatar name={person.display_name} seed={person.id} src={person.avatar_url} size="md" />
+                  </Link>
                   <div className="min-w-0 flex-1">
                     <div className="flex items-start justify-between gap-2">
                       <div className="min-w-0">
-                        <p className="truncate font-display text-lg">{person.display_name}</p>
+                        <Link
+                          href={profileHref}
+                          className="block truncate font-display text-lg hover:text-terracotta-deep"
+                        >
+                          {person.display_name}
+                        </Link>
                         <p className="truncate text-xs text-ink-faint">
                           @{person.handle}
                           {person.location ? ` · ${person.location}` : ''}
@@ -280,6 +337,23 @@ export function PeopleDiscoveryClient({
                           .join(', ')}
                       </p>
                     )}
+                    {interest ? (
+                      <div className="mt-3 flex flex-col gap-2 rounded-card bg-sage-soft px-3 py-2.5 sm:flex-row sm:items-center">
+                        <p className="min-w-0 flex-1 text-sm text-sage-deep">
+                          <strong>You’re interested</strong> · {interest.activity}. They only
+                          find out if they pick you too.
+                        </p>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="ghost"
+                          disabled={pending && pendingId === person.id}
+                          onClick={() => withdraw(person, interest)}
+                        >
+                          {pending && pendingId === person.id ? 'Withdrawing' : 'Withdraw'}
+                        </Button>
+                      </div>
+                    ) : (
                     <div className="mt-3 flex flex-col gap-2 sm:flex-row">
                       <select
                         value={chosen}
@@ -311,12 +385,18 @@ export function PeopleDiscoveryClient({
                         {pending && pendingId === person.id ? 'Saving' : 'Interested'}
                       </Button>
                     </div>
+                    )}
+                    <div className="mt-2 border-t border-line pt-1.5">
+                      <BlockReportButtons targetId={person.id} name={person.display_name} />
+                    </div>
                   </div>
                 </div>
               </Card>
             );
           })}
         </div>
+      )}
+      </>
       )}
     </section>
   );

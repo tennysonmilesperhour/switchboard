@@ -8,7 +8,9 @@ import {
   canRequestOpenTable,
   hostCanEditInvitees,
   hostCanEditLine,
+  hostCanExtendLiveWindow,
   hostCanShare,
+  inviteeCanChangeAnswer,
   shareLinkNotice,
   shareLinkState,
   unfurlsPlanDetails,
@@ -125,6 +127,15 @@ describe('the invariants that keep links working', () => {
       .filter((file) => !localModules.has(file))
       .filter((file) => repeatedRule.test(readFileSync(file, 'utf8')));
     expect(offenders.map((file) => file.replace(`${process.cwd()}/`, ''))).toEqual([]);
+  });
+
+  it('lets a live window grow, and a no become a yes, only while invitations go out (D17)', () => {
+    expect(ALL_STATUSES.filter(hostCanExtendLiveWindow)).toEqual(['inviting']);
+    expect(ALL_STATUSES.filter(inviteeCanChangeAnswer)).toEqual(['inviting']);
+    // Both are narrower than editing the line, never wider.
+    for (const status of ALL_STATUSES) {
+      if (hostCanExtendLiveWindow(status)) expect(hostCanEditLine(status), status).toBe(true);
+    }
   });
 
   it('lets anyone who may change the guest list change the line too', () => {
@@ -265,6 +276,43 @@ describe('TypeScript and SQL agree on who can answer', () => {
       const sqlStatuses = [...guard[1].matchAll(/'([a-z_]+)'/g)].map((m) => m[1]);
       expect([...sqlStatuses].sort()).toEqual([...ANSWERABLE_EVENT_STATUSES].sort());
     }
+  });
+
+  /**
+   * The plan page offers "More time" and "Changed your mind?" on the strength
+   * of the two D17 predicates. If the functions behind those buttons ever
+   * accepted a different status, the page would offer a button the database
+   * refuses (or hide one it would honour). Read the latest definitions and
+   * compare.
+   */
+  it('matches the plan-status guards inside set_invite_window and respond_to_invite', () => {
+    const dir = join(process.cwd(), 'supabase', 'migrations');
+    const latest = (signature: string) => {
+      const files = readdirSync(dir)
+        .filter((name) => name.endsWith('.sql'))
+        .sort()
+        .filter((name) => readFileSync(join(dir, name), 'utf8').includes(signature));
+      expect(files.length, `no migration defines ${signature}`).toBeGreaterThan(0);
+      const sql = readFileSync(join(dir, files[files.length - 1]), 'utf8');
+      const start = sql.indexOf(signature);
+      const end = sql.indexOf('\n$$;', start);
+      return sql.slice(start, end === -1 ? undefined : end);
+    };
+
+    const windowBody = latest('create or replace function private.set_invite_window');
+    const windowGuard = windowBody.match(/v_event_status\s+is\s+distinct\s+from\s+'([a-z_]+)'/i);
+    expect(windowGuard?.[1]).toBeDefined();
+    expect(ALL_STATUSES.filter((status) => status === windowGuard?.[1])).toEqual(
+      ALL_STATUSES.filter(hostCanExtendLiveWindow),
+    );
+
+    const respondBody = latest('create or replace function private.respond_to_invite');
+    const respondGuard = respondBody.match(/v_event\.status\s*<>\s*'([a-z_]+)'/i);
+    expect(respondGuard?.[1]).toBeDefined();
+    expect(respondBody).toMatch(/status\s+not\s+in\s*\(\s*'sent'\s*,\s*'declined'\s*\)/);
+    expect(ALL_STATUSES.filter((status) => status === respondGuard?.[1])).toEqual(
+      ALL_STATUSES.filter(inviteeCanChangeAnswer),
+    );
   });
 
   it('derives canAnswer from that same set', () => {

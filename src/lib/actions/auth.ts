@@ -114,21 +114,34 @@ async function resolveIdentifierEmails(identifier: string): Promise<string[]> {
   }
   if (!isValidUsername(normalized)) throw new Error('invalid_identifier');
 
-  if (hasAdminCredentials()) {
-    const admin = createAdminClient();
-    const { data: profile } = await admin
-      .from('profiles')
-      .select('id')
-      .eq('handle', normalized)
-      .maybeSingle();
+  // A handle can only be turned into its account's real login address with
+  // the service role. Guessing the synthetic `<handle>@users.switchboard.local`
+  // instead was right only for untouched username sign-ups, so everyone else
+  // who typed their username was told their password "did not work" by a
+  // deployment that simply could not look them up (docs/AUTH.md, decision 13).
+  if (!hasAdminCredentials()) throw new UsernameLookupUnavailable();
 
-    if (profile?.id) {
-      const { data } = await admin.auth.admin.getUserById(profile.id);
-      if (data.user?.email) return [data.user.email];
-    }
+  const admin = createAdminClient();
+  const { data: profile } = await admin
+    .from('profiles')
+    .select('id')
+    .eq('handle', normalized)
+    .maybeSingle();
+
+  if (profile?.id) {
+    const { data } = await admin.auth.admin.getUserById(profile.id);
+    if (data.user?.email) return [data.user.email];
   }
 
   return [usernameToAuthEmail(normalized)];
+}
+
+/** This deployment cannot resolve a username to its account. */
+class UsernameLookupUnavailable extends Error {
+  constructor() {
+    super('username_lookup_unavailable');
+    this.name = 'UsernameLookupUnavailable';
+  }
 }
 
 export async function signInWithPasswordIdentifier({
@@ -196,6 +209,18 @@ export async function signInWithPasswordIdentifier({
     );
     return validation('That email, username, or password did not work.');
   } catch (error) {
+    if (error instanceof UsernameLookupUnavailable) {
+      // A deployment fault, named as one. The password was never checked, so
+      // nothing here may suggest it was wrong; the one route out the reader
+      // may have is the email address on their account.
+      console.error(
+        JSON.stringify({ level: 'error', area: 'auth.signin', userCode: 'SB-CONFIG-AUTH', reason: 'username_lookup_unavailable' }),
+      );
+      return failure(
+        'SB-CONFIG-AUTH',
+        'Signing in with a username isn’t available on this server right now. If your account has an email address, sign in with that instead.',
+      );
+    }
     console.error('[auth:signin:error]', error);
     return failure(
       'SB-AUTH-SIGNIN',
@@ -598,6 +623,17 @@ export async function requestPasswordReset(
   const normalized = normalizeIdentifier(identifier);
   const generic: AuthActionResult = { ok: true, identifier: normalized };
   if (!normalized) return validation('Enter your email or username.');
+  // With no mail provider nothing can ever be sent, so "we'll send
+  // instructions" would send the reader to wait on an inbox forever. This is a
+  // property of the deployment, not of any account, so saying it reveals
+  // nothing about who has one (docs/AUTH.md: a link they never received is
+  // not a route out).
+  if (!emailEnabled()) {
+    return failure(
+      'SB-CONFIG-EMAIL',
+      'Password recovery email isn’t set up on this server, so a reset link can’t be sent.',
+    );
+  }
 
   try {
     if (!(await checkRateLimit(

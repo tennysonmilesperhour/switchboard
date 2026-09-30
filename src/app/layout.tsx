@@ -6,6 +6,7 @@ import { VersionWatcher } from '@/components/system/VersionWatcher';
 import { InstallPrompt } from '@/components/system/InstallPrompt';
 import { PmfSurvey } from '@/components/system/PmfSurvey';
 import { ServiceWorkerRegistrar } from '@/components/system/ServiceWorkerRegistrar';
+import { OfflineBanner } from '@/components/system/OfflineBanner';
 import { PostHogProvider } from '@/components/system/PostHogProvider';
 import { ToastProvider } from '@/components/ui/Toast';
 import { ConfirmProvider } from '@/components/ui/ConfirmDialog';
@@ -180,6 +181,7 @@ export default async function RootLayout({
                 <InstallPrompt />
                 <PmfSurvey />
                 <ServiceWorkerRegistrar />
+                <OfflineBanner />
               </ConfirmProvider>
             </BottomOverlayProvider>
           </ToastProvider>

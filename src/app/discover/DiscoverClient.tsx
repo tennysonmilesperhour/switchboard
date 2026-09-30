@@ -10,11 +10,15 @@ import { EmptyState } from '@/components/ui/EmptyState';
 import { Switch } from '@/components/ui/Switch';
 import { runDiscovery } from '@/lib/actions/discovery';
 import type { Suggestion } from '@/lib/ai/discovery';
-import { DEFAULT_GROUP_SIZE, GROUP_SIZES, isSolo } from '@/lib/ai/discovery-options';
+import {
+  DEFAULT_GROUP_SIZE,
+  DISCOVERY_BUDGETS as BUDGETS,
+  DISCOVERY_LIMITS,
+  DISCOVERY_VIBES as VIBES,
+  GROUP_SIZES,
+  isSolo,
+} from '@/lib/ai/discovery-options';
 import { errorFor, errorRef, type ErrorCode } from '@/lib/errors';
-
-const BUDGETS = ['Free', '$', '$$', '$$$'];
-const VIBES = ['Relaxed', 'Adventurous', 'Cozy', 'Lively', 'Quiet'];
 
 export function DiscoverClient({
   defaultInterests,
@@ -38,6 +42,8 @@ export function DiscoverClient({
   const [groupSize, setGroupSize] = useState<string>(DEFAULT_GROUP_SIZE);
   const [openToMeeting, setOpenToMeeting] = useState(false);
   const [suggestions, setSuggestions] = useState<Suggestion[] | null>(null);
+  // Set when these are the built-in starters rather than tailored ideas (D25).
+  const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState('');
   const [errorCode, setErrorCode] = useState<ErrorCode | null>(null);
   const [pending, startTransition] = useTransition();
@@ -61,7 +67,10 @@ export function DiscoverClient({
         if (!result.ok) {
           setError(result.error ?? errorFor('SB-DISCOVERY-RUN').message);
           setErrorCode(result.code ?? null);
-        } else setSuggestions(result.suggestions);
+        } else {
+          setSuggestions(result.suggestions);
+          setNotice(result.notice ?? null);
+        }
       } catch {
         setError(errorFor('SB-DISCOVERY-RUN').message);
         setErrorCode('SB-DISCOVERY-RUN');
@@ -105,6 +114,7 @@ export function DiscoverClient({
               id="loc"
               value={location}
               onChange={(e) => setLocation(e.target.value)}
+              maxLength={DISCOVERY_LIMITS.location}
               placeholder="Neighborhood or city"
               className="w-full rounded-card border border-line bg-card px-3.5 py-2.5 text-sm outline-none focus:border-terracotta"
             />
@@ -115,6 +125,7 @@ export function DiscoverClient({
               id="when"
               value={when}
               onChange={(e) => setWhen(e.target.value)}
+              maxLength={DISCOVERY_LIMITS.when}
               placeholder="Friday evening…"
               className="w-full rounded-card border border-line bg-card px-3.5 py-2.5 text-sm outline-none focus:border-terracotta"
             />
@@ -215,6 +226,11 @@ export function DiscoverClient({
 
       {suggestions && suggestions.length > 0 && (
         <section aria-label="Recommendations" className="space-y-3">
+          {notice && (
+            <p role="status" className="rounded-card bg-cream px-3.5 py-2.5 text-sm text-ink-soft">
+              {notice}
+            </p>
+          )}
           {suggestions.map((suggestion, i) => (
             <Card key={suggestion.title} lifted className="animate-rise" style={{ animationDelay: `${i * 60}ms` }}>
               <div className="flex items-start justify-between gap-2">

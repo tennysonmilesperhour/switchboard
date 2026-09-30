@@ -33,6 +33,8 @@ const mocks = vi.hoisted(() => {
       title: string;
       host_id: string;
       parental_approval?: boolean;
+      status?: string;
+      share_link_active?: boolean;
     }>;
     /** share_token → event id, the way `/i/<token>` resolves a plan. */
     shareTokens: Record<string, string>;
@@ -83,13 +85,14 @@ const mocks = vi.hoisted(() => {
     return b;
   }
 
-  const rpc = vi.fn(async (name: string): Promise<{ data: unknown; error: null }> => {
+  const defaultRpc = async (name: string): Promise<{ data: unknown; error: null }> => {
     if (name === 'rsvp_via_share_token') {
       return { data: [{ outcome: 'accepted', token: 'guest-token-1' }], error: null };
     }
     if (name === 'respond_to_guest_invite') return { data: 'accepted', error: null };
     return { data: null, error: null };
-  });
+  };
+  const rpc = vi.fn(defaultRpc);
 
   // `claim_guest_invite` resolves the caller from `auth.uid()`, so it must run
   // on the session-scoped client — never the service-role one, which has no
@@ -104,6 +107,7 @@ const mocks = vi.hoisted(() => {
   return {
     db,
     rpc,
+    defaultRpc,
     userRpc,
     makeBuilder,
     checkRateLimit: vi.fn(async () => true),
@@ -145,6 +149,7 @@ import { respondViaShareLink, respondToGuestInvite } from './invites';
 
 afterEach(() => {
   vi.clearAllMocks();
+  mocks.rpc.mockImplementation(mocks.defaultRpc);
   mocks.checkRateLimit.mockResolvedValue(true);
   mocks.userRpc.mockResolvedValue({ data: 'event-1', error: null });
   mocks.db.user = null;
@@ -207,7 +212,14 @@ describe('respondViaShareLink', () => {
     );
   });
 
-  it('resolves the accepted invite id for a parental-approval follow-up', async () => {
+  it('hands a held yes straight on to the guardian step', async () => {
+    // The database holds a yes on a guardian plan as `pending_approval`
+    // (20260930011000_guardian_hold.sql); this pins what the action does with it.
+    mocks.rpc.mockImplementation(async (name: string) =>
+      name === 'rsvp_via_share_token'
+        ? { data: [{ outcome: 'pending_approval', token: 'guest-token-1' }], error: null }
+        : { data: null, error: null },
+    );
     mocks.db.user = { id: 'user-4' };
     mocks.db.profiles['user-4'] = { display_name: 'Avery' };
     mocks.db.events['event-1'] = {
@@ -220,7 +232,7 @@ describe('respondViaShareLink', () => {
     mocks.db.invites['accepted-user-4'] = {
       id: 'invite-4',
       event_id: 'event-1',
-      status: 'accepted',
+      status: 'pending_approval',
       guest_name: 'Avery',
       invitee_id: 'user-4',
     };
@@ -229,10 +241,75 @@ describe('respondViaShareLink', () => {
 
     expect(result).toMatchObject({
       ok: true,
+      outcome: 'pending_approval',
+      // The durable page the held state lives on, so a closed tab loses nothing.
+      token: 'guest-token-1',
       needsApproval: true,
       inviteId: 'invite-4',
       eventId: 'event-1',
     });
+    // A held yes is not a "someone's in" for the host: it holds no seat yet.
+    expect(mocks.notifyUsers).not.toHaveBeenCalled();
+  });
+});
+
+describe('respondViaShareLink on a plan that stopped taking answers', () => {
+  /**
+   * The share page names why a plan can't be answered (called off, already
+   * happened) with its own code. The answer used to come back as the generic
+   * SB-RSVP-CLOSED, so the page and the reply disagreed about the same plan.
+   */
+  const defaultRpc = mocks.rpc.getMockImplementation();
+  afterEach(() => {
+    if (defaultRpc) mocks.rpc.mockImplementation(defaultRpc);
+  });
+
+  it.each([
+    ['past', 'SB-LINK-PAST', /already happened/],
+    ['cancelled', 'SB-LINK-CANCELLED', /called off/],
+  ])('reports a %s plan with the code the share page shows', async (status, code, heading) => {
+    mocks.db.user = { id: 'user-5' };
+    mocks.db.profiles['user-5'] = { display_name: 'Sam' };
+    mocks.db.events['event-1'] = {
+      id: 'event-1',
+      title: 'Taco night',
+      host_id: 'host-1',
+      status,
+      share_link_active: true,
+    };
+    mocks.db.shareTokens['share-token'] = 'event-1';
+    mocks.rpc.mockImplementation(async (name: string) =>
+      name === 'rsvp_via_share_token'
+        ? { data: [{ outcome: 'not_accepting' }], error: null }
+        : { data: null, error: null },
+    );
+
+    const result = await respondViaShareLink('share-token', true, 'Sam');
+
+    expect(result).toMatchObject({ ok: false, outcome: 'not_accepting', code });
+    expect(result.error).toMatch(heading);
+  });
+
+  it('keeps SB-RSVP-CLOSED when the plan reads as answerable again', async () => {
+    mocks.db.user = { id: 'user-5' };
+    mocks.db.profiles['user-5'] = { display_name: 'Sam' };
+    mocks.db.events['event-1'] = {
+      id: 'event-1',
+      title: 'Taco night',
+      host_id: 'host-1',
+      status: 'inviting',
+      share_link_active: true,
+    };
+    mocks.db.shareTokens['share-token'] = 'event-1';
+    mocks.rpc.mockImplementation(async (name: string) =>
+      name === 'rsvp_via_share_token'
+        ? { data: [{ outcome: 'not_accepting' }], error: null }
+        : { data: null, error: null },
+    );
+
+    const result = await respondViaShareLink('share-token', true, 'Sam');
+
+    expect(result).toMatchObject({ ok: false, code: 'SB-RSVP-CLOSED' });
   });
 });
 
@@ -320,6 +397,33 @@ describe('respondToGuestInvite', () => {
     expect(mocks.rpc).not.toHaveBeenCalledWith('claim_guest_invite', expect.anything());
     // And the caller gets the id it needs to link onward.
     expect(result.eventId).toBe('event-1');
+  });
+
+  it('holds a yes on a guardian plan without telling the host someone is in', async () => {
+    mocks.rpc.mockImplementation(async (name: string) =>
+      name === 'respond_to_guest_invite'
+        ? { data: 'pending_approval', error: null }
+        : { data: null, error: null },
+    );
+    mocks.db.user = { id: 'user-3' };
+    mocks.db.invites['guest-token-1'] = {
+      id: 'invite-1',
+      event_id: 'event-1',
+      status: 'sent',
+      guest_name: 'Casey',
+    };
+    mocks.db.events['event-1'] = { id: 'event-1', title: 'Youth practice', host_id: 'host-1' };
+
+    const result = await respondToGuestInvite('guest-token-1', true);
+
+    expect(result).toMatchObject({
+      ok: true,
+      outcome: 'pending_approval',
+      needsApproval: true,
+      inviteId: 'invite-1',
+      eventId: 'event-1',
+    });
+    expect(mocks.notifyUsers).not.toHaveBeenCalled();
   });
 
   it('still records a declined answer, and keeps the claim best-effort', async () => {

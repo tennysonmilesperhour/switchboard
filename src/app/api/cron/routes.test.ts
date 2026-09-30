@@ -8,6 +8,7 @@ const mocks = vi.hoisted(() => ({
   sweepSuggestionDeadlines: vi.fn(),
   sweepDuePolls: vi.fn(),
   sweepReminders: vi.fn(),
+  sweepRitualReminders: vi.fn(),
   sweepExpired: vi.fn(),
   sweepDigests: vi.fn(),
   claimCronSweep: vi.fn(),
@@ -28,6 +29,9 @@ vi.mock('@/lib/server/poll-runner', () => ({
 }));
 vi.mock('@/lib/server/reminders', () => ({
   sweepReminders: mocks.sweepReminders,
+}));
+vi.mock('@/lib/server/ritual-reminders', () => ({
+  sweepRitualReminders: mocks.sweepRitualReminders,
 }));
 vi.mock('@/lib/server/cleanup', () => ({ sweepExpired: mocks.sweepExpired }));
 vi.mock('@/lib/server/digest', () => ({ sweepDigests: mocks.sweepDigests }));
@@ -55,12 +59,13 @@ beforeEach(() => {
   mocks.sweepSuggestionDeadlines.mockResolvedValue(3);
   mocks.sweepDuePolls.mockResolvedValue(4);
   mocks.sweepReminders.mockResolvedValue(5);
+  mocks.sweepRitualReminders.mockResolvedValue(11);
   mocks.sweepExpired.mockResolvedValue({
     signalsDeleted: 6,
     momentsClosed: 7,
     liveLocationsDeleted: 8,
   });
-  mocks.sweepDigests.mockResolvedValue(9);
+  mocks.sweepDigests.mockResolvedValue({ sent: 9, emailed: 0, retrying: 0, unreachable: 0 });
   mocks.claimCronSweep.mockResolvedValue(true);
   mocks.finishCronSweep.mockResolvedValue(undefined);
 });
@@ -95,6 +100,7 @@ describe('cron route handlers', () => {
       suggestionsClosed: 3,
       pollsResolved: 4,
       remindersSent: 5,
+      ritualRemindersSent: 11,
       signalsDeleted: 6,
       momentsClosed: 7,
       liveLocationsDeleted: 8,
@@ -105,7 +111,13 @@ describe('cron route handlers', () => {
     const response = await runDigest(cronRequest());
 
     expect(response.status).toBe(200);
-    expect(await response.json()).toEqual({ ok: true, sent: 9 });
+    expect(await response.json()).toEqual({
+      ok: true,
+      sent: 9,
+      emailed: 0,
+      retrying: 0,
+      unreachable: 0,
+    });
     expect(mocks.checkRateLimit).toHaveBeenCalledWith('cron:digest', 5, 60);
     expect(mocks.sweepDigests).toHaveBeenCalledTimes(1);
   });

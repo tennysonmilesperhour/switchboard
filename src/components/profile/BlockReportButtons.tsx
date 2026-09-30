@@ -4,14 +4,16 @@ import { useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { useToast } from '@/components/ui/Toast';
 import { useConfirm, usePrompt } from '@/components/ui/ConfirmDialog';
-import { blockProfile, reportProfile } from '@/lib/actions/connections';
+import { blockProfile, reportProfile, unblockProfile } from '@/lib/actions/connections';
 
 interface BlockReportButtonsProps {
   targetId: string;
   name: string;
+  /** The viewer has already blocked this person: offer Unblock, not Block. */
+  blocked?: boolean;
 }
 
-export function BlockReportButtons({ targetId, name }: BlockReportButtonsProps) {
+export function BlockReportButtons({ targetId, name, blocked = false }: BlockReportButtonsProps) {
   const [pending, startTransition] = useTransition();
   const router = useRouter();
   const toast = useToast();
@@ -39,6 +41,18 @@ export function BlockReportButtons({ targetId, name }: BlockReportButtonsProps) 
     })();
   }
 
+  function handleUnblock() {
+    startTransition(async () => {
+      const result = await unblockProfile(targetId);
+      if (!result.ok) {
+        toast.error(result.error ?? 'Could not unblock that person.', result.code);
+        return;
+      }
+      toast.success(`${name} is unblocked. Nothing else comes back — either of you can ask to connect again.`);
+      router.refresh();
+    });
+  }
+
   async function handleReport() {
     const reason = await askReason({
       title: `Report ${name}?`,
@@ -62,17 +76,17 @@ export function BlockReportButtons({ targetId, name }: BlockReportButtonsProps) 
         type="button"
         disabled={pending}
         onClick={handleReport}
-        className="rounded-pill px-2 py-1 text-xs font-semibold text-ink-faint hover:text-ink"
+        className="rounded-pill px-2 py-1 text-xs font-semibold text-ink-faint hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-terracotta"
       >
         Report
       </button>
       <button
         type="button"
         disabled={pending}
-        onClick={handleBlock}
-        className="rounded-pill px-2 py-1 text-xs font-semibold text-rose-deep hover:text-rose"
+        onClick={blocked ? handleUnblock : handleBlock}
+        className="rounded-pill px-2 py-1 text-xs font-semibold text-rose-deep hover:text-rose focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-terracotta"
       >
-        Block
+        {blocked ? 'Unblock' : 'Block'}
       </button>
     </div>
   );

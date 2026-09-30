@@ -29,11 +29,15 @@ export function IncomingRequestsSection({
       <div className="space-y-2">
         {incoming.map((request) => (
           <Card key={request.connectionId} tone="gold">
-            <div className="flex items-center gap-3">
+            {/* Wraps: a name plus four controls does not fit one 320px row,
+                so the buttons drop below the name instead of overflowing. */}
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
               <Avatar name={request.name} seed={request.id} size="sm" />
-              <span className="flex-1">
-                <span className="font-bold block">{request.name}</span>
-                <span className="text-xs text-ink-faint">@{request.handle}</span>
+              <span className="min-w-0 flex-1 basis-32">
+                <span className="font-bold block truncate">{request.name}</span>
+                {request.handle && (
+                  <span className="block truncate text-xs text-ink-faint">@{request.handle}</span>
+                )}
               </span>
               <Button
                 size="sm"
@@ -55,7 +59,7 @@ export function IncomingRequestsSection({
                 type="button"
                 disabled={pending}
                 onClick={() => reportRequest(request)}
-                className="rounded-pill px-2 py-1 text-xs font-semibold text-ink-faint hover:text-ink"
+                className="rounded-pill px-2 py-1 text-xs font-semibold text-ink-faint hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-terracotta"
               >
                 Report
               </button>
@@ -63,7 +67,7 @@ export function IncomingRequestsSection({
                 type="button"
                 disabled={pending}
                 onClick={() => blockRequest(request)}
-                className="rounded-pill px-2 py-1 text-xs font-semibold text-rose-deep hover:text-rose"
+                className="rounded-pill px-2 py-1 text-xs font-semibold text-rose-deep hover:text-rose focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-terracotta"
               >
                 Block
               </button>

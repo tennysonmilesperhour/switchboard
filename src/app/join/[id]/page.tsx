@@ -113,14 +113,28 @@ export default async function JoinPage({
   }
 
   // Figure out how the signed-in viewer already relates to this plan. Anyone
-  // who can actually see the event page (host, or an invitee whose invite is
-  // live) is sent straight there. People who are involved but *can't* yet view
-  // it — a co-host without an invite, or an invitee still queued in the line —
-  // get a gentle heads-up instead of a redirect that would 404, and never the
+  // who can actually see the event page (host, co-host, or an invitee whose
+  // invite is live) is sent straight there. People who are involved but
+  // *can't* yet view it — an invitee still queued in the line — get a gentle
+  // heads-up instead of a redirect that would bounce, and never the
   // ask-to-join button (asking again would just error "already involved").
+  //
+  // A co-host used to be in that second group: `can_view_event` left them out,
+  // so "Open your plan" on /i/<token> sent them to /events/<id>, which sent
+  // them here. Since 20260930010000 co-hosts pass the policy and are
+  // redirected like the host; the co-host lookup below stays as a backstop.
   let alreadyInvolved = false;
   if (event && user) {
-    const isHost = event.host_id === user.id;
+    // Ask the same row-level policy the event page reads through, rather than
+    // restating it here: if a restated copy ever disagreed with the database,
+    // /events/<id> and /join/<id> would send the viewer back and forth forever.
+    const { data: visible } = await supabase
+      .from('events')
+      .select('id')
+      .eq('id', event.id)
+      .maybeSingle();
+    if (visible) redirect(`/events/${event.id}`);
+
     const { data: existing } = admin
       ? await admin
           .from('invites')
@@ -137,11 +151,6 @@ export default async function JoinPage({
           .eq('cohost_id', user.id)
           .maybeSingle()
       : { data: null };
-    const canViewEvent =
-      isHost ||
-      (existing != null &&
-        (existing.status !== 'queued' || event.status === 'deciding'));
-    if (canViewEvent) redirect(`/events/${event.id}`);
     alreadyInvolved = existing != null || cohost != null;
 
     // A signed-in visitor with no connection to the plan is in the same
@@ -194,8 +203,8 @@ export default async function JoinPage({
       </header>
       <main className="flex-1 flex flex-col justify-center pb-24">
         {/* `alreadyInvolved` keeps the plan visible for someone who is on it but
-            can't see the event page yet (a queued invitee, a co-host without an
-            invite). Telling them their invite link "isn't active" while they are
+            can't see the event page yet (a queued invitee). Telling them their
+            invite link "isn't active" while they are
             literally on the guest list is the same misleading dead end this page
             exists to undo — open_table governs who may ASK to join, not who may
             read a plan they are already part of. */}

@@ -2,6 +2,8 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { Icon } from '@/components/ui/Icon';
+import { errorFor, errorRef, type ErrorCode } from '@/lib/errors';
+import { VoiceCapture, type CaptureFailure, type RecorderLike } from '@/lib/voice-capture';
 
 export interface RecordedClip {
   blob: Blob;
@@ -48,11 +50,38 @@ interface VoiceRecorderProps {
   maxSeconds?: number;
 }
 
+interface RecorderNotice {
+  message: string;
+  code?: ErrorCode;
+}
+
+/** What each way a recording can end without a clip tells the reader. */
+function noticeFor(reason: CaptureFailure): RecorderNotice {
+  if (reason === 'blocked') {
+    return {
+      message:
+        'Microphone access was blocked. Allow it for this site in your browser settings, then try again.',
+    };
+  }
+  if (reason === 'no-microphone') {
+    return { message: 'No microphone was found. Connect one, then try again.' };
+  }
+  if (reason === 'empty') return { message: 'That recording was empty. Try again.' };
+  // The recorder itself broke: nothing the reader did, so it carries a code.
+  const entry = errorFor('SB-VOICE-RECORD');
+  return { message: `${entry.message} ${entry.fix ?? ''}`.trim(), code: entry.code };
+}
+
 /**
  * Record → preview → keep/discard a short voice note. Fully client-side: the
  * blob is handed to the parent via `onChange` and only uploaded when the parent
- * submits. Renders nothing when the browser can't record, so text-only flows
- * remain the graceful fallback.
+ * submits. A browser that cannot record says so, and writing stays the way to
+ * send the message (G33).
+ *
+ * The microphone is released on every path out, not only a clean stop: a
+ * recorder that fails to start or errors mid-way, reaching the time limit,
+ * and leaving the page (including while the permission prompt is still open).
+ * `VoiceCapture` owns those rules and is tested on its own.
  */
 export function VoiceRecorder({
   value,
@@ -60,30 +89,40 @@ export function VoiceRecorder({
   disabled = false,
   maxSeconds = 60,
 }: VoiceRecorderProps) {
-  const [supported, setSupported] = useState(false);
+  // null until checked on the client, so server markup stays stable and an
+  // unsupported browser is never announced before we know.
+  const [supported, setSupported] = useState<boolean | null>(null);
   const [recording, setRecording] = useState(false);
+  // Waiting on the browser's microphone prompt.
+  const [requesting, setRequesting] = useState(false);
   const [elapsed, setElapsed] = useState(0);
-  const [error, setError] = useState('');
+  const [notice, setNotice] = useState<RecorderNotice | null>(null);
 
-  const recorderRef = useRef<MediaRecorder | null>(null);
-  const chunksRef = useRef<Blob[]>([]);
-  const streamRef = useRef<MediaStream | null>(null);
+  const captureRef = useRef<VoiceCapture | null>(null);
   const startedAtRef = useRef(0);
   const tickRef = useRef<number | null>(null);
+  // The clip on screen now, for revoking its preview URL on unmount.
+  const valueRef = useRef(value);
+
+  useEffect(() => {
+    valueRef.current = value;
+  }, [value]);
 
   useEffect(() => {
     const timeout = window.setTimeout(() => setSupported(canRecordAudio()), 0);
     return () => window.clearTimeout(timeout);
   }, []);
 
-  // Tear down any live stream / preview URL on unmount.
+  // Leaving the page releases the microphone (mid-recording, or with the
+  // permission prompt still open) and the preview URL.
   useEffect(() => {
     return () => {
-      stopTimer();
-      streamRef.current?.getTracks().forEach((track) => track.stop());
-      if (value) URL.revokeObjectURL(value.previewUrl);
+      if (tickRef.current !== null) window.clearInterval(tickRef.current);
+      tickRef.current = null;
+      captureRef.current?.dispose();
+      captureRef.current = null;
+      if (valueRef.current) URL.revokeObjectURL(valueRef.current.previewUrl);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   function stopTimer() {
@@ -93,70 +132,81 @@ export function VoiceRecorder({
     }
   }
 
-  async function startRecording() {
-    setError('');
+  function stopRecording() {
+    captureRef.current?.stop();
+  }
+
+  function startRecording() {
+    setNotice(null);
+    setRequesting(true);
     if (value) {
       URL.revokeObjectURL(value.previewUrl);
       onChange(null);
     }
-    let stream: MediaStream;
-    try {
-      stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-    } catch {
-      setError('Microphone access was blocked. Check your browser permissions.');
-      return;
-    }
-    streamRef.current = stream;
+    captureRef.current?.dispose();
 
     const mimeType = pickMimeType();
-    const recorder = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream);
-    recorderRef.current = recorder;
-    chunksRef.current = [];
-
-    recorder.ondataavailable = (event) => {
-      if (event.data.size > 0) chunksRef.current.push(event.data);
-    };
-    recorder.onstop = () => {
-      stopTimer();
-      streamRef.current?.getTracks().forEach((track) => track.stop());
-      streamRef.current = null;
-      const durationSeconds = Math.max(1, Math.round((Date.now() - startedAtRef.current) / 1000));
-      const blob = new Blob(chunksRef.current, {
-        type: recorder.mimeType || 'audio/webm',
-      });
-      setRecording(false);
-      setElapsed(0);
-      if (blob.size === 0) {
-        setError('That recording was empty. Try again.');
-        return;
-      }
-      onChange({ blob, previewUrl: URL.createObjectURL(blob), durationSeconds });
-    };
-
-    startedAtRef.current = Date.now();
-    recorder.start();
-    setRecording(true);
-    setElapsed(0);
-    tickRef.current = window.setInterval(() => {
-      const secs = Math.round((Date.now() - startedAtRef.current) / 1000);
-      setElapsed(secs);
-      if (secs >= maxSeconds) stopRecording();
-    }, 250);
-  }
-
-  function stopRecording() {
-    if (recorderRef.current && recorderRef.current.state !== 'inactive') {
-      recorderRef.current.stop();
-    }
+    const capture = new VoiceCapture(
+      {
+        getUserMedia: () => navigator.mediaDevices.getUserMedia({ audio: true }),
+        createRecorder: (stream) => {
+          const media = stream as MediaStream;
+          const recorder = mimeType
+            ? new MediaRecorder(media, { mimeType })
+            : new MediaRecorder(media);
+          return recorder as unknown as RecorderLike;
+        },
+        now: () => Date.now(),
+      },
+      {
+        onStart: () => {
+          startedAtRef.current = Date.now();
+          setRequesting(false);
+          setRecording(true);
+          setElapsed(0);
+          stopTimer();
+          tickRef.current = window.setInterval(() => {
+            const secs = Math.round((Date.now() - startedAtRef.current) / 1000);
+            setElapsed(secs);
+            if (secs >= maxSeconds) stopRecording();
+          }, 250);
+        },
+        onFinish: ({ blob, durationSeconds }) => {
+          stopTimer();
+          setRecording(false);
+          setElapsed(0);
+          onChange({ blob, previewUrl: URL.createObjectURL(blob), durationSeconds });
+        },
+        onFail: (reason) => {
+          stopTimer();
+          setRequesting(false);
+          setRecording(false);
+          setElapsed(0);
+          setNotice(noticeFor(reason));
+        },
+      },
+    );
+    captureRef.current = capture;
+    void capture.start();
   }
 
   function discard() {
     if (value) URL.revokeObjectURL(value.previewUrl);
     onChange(null);
-    setError('');
+    setNotice(null);
   }
 
-  if (!supported) return null;
+  if (supported === null) return null;
+
+  if (!supported) {
+    return (
+      <p className="text-xs leading-relaxed text-ink-faint">
+        Voice notes need a browser that can record audio, and this one can’t.
+        Write your message instead, or open Switchboard in an up-to-date browser
+        to record one.
+      </p>
+    );
+  }
 
   if (value) {
     return (
@@ -204,15 +254,20 @@ export function VoiceRecorder({
       <button
         type="button"
         onClick={startRecording}
-        disabled={disabled}
+        disabled={disabled || requesting}
         className="inline-flex items-center gap-1.5 rounded-pill border border-line bg-card px-3.5 py-2 text-sm font-semibold text-ink-soft hover:border-terracotta hover:text-terracotta-deep active:scale-95 transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-terracotta disabled:opacity-50"
       >
         <Icon name="mic" size={16} />
         Record voice note
       </button>
-      {error && (
+      {notice && (
         <p role="alert" className="mt-1.5 text-xs text-rose-deep">
-          {error}
+          {notice.message}
+          {notice.code && (
+            <span className="ml-1.5 font-mono text-[11px] uppercase tracking-wide opacity-70">
+              {errorRef(notice.code)}
+            </span>
+          )}
         </p>
       )}
     </div>

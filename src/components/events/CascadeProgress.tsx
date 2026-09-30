@@ -27,7 +27,7 @@ import {
 } from '@/lib/invite-rhythm';
 import { INVITE_STATUS_LABEL } from '@/lib/invite-status';
 import { inviteExpiresAt } from '@/lib/engine/cascade';
-import { WINDOW_CHOICES } from '@/lib/engine/windows';
+import { EXTEND_CHOICES, WINDOW_CHOICES } from '@/lib/engine/windows';
 import type { Invite, InviteMode } from '@/lib/types';
 import type { InviteStatus } from '@/lib/engine/cascade';
 import { normalizeInviteStatus } from '@/lib/invite-status';
@@ -47,6 +47,12 @@ interface CascadeProgressProps {
   eventId?: string;
   editable?: boolean;
   /**
+   * Whether an invitation that is already out may be given more time (D17,
+   * `hostCanExtendLiveWindow`). Narrower than `editable`: a date poll's line is
+   * editable, but nothing in it has gone out.
+   */
+  canExtend?: boolean;
+  /**
    * Contact cards keyed by invite id. Tapping a row opens the person's card,
    * which is how a host reaches an invitee who has no account (see
    * `InviteeSheet`). Absent means the rows stay read-only.
@@ -65,6 +71,7 @@ const STATUS_STYLE: Record<InviteStatus, { className: string; dot: string }> = {
   cancelled: { className: 'text-ink-faint', dot: 'bg-line' },
   waitlisted: { className: 'text-gold-deep', dot: 'bg-gold' },
   requested: { className: 'text-terracotta-deep', dot: 'bg-terracotta' },
+  pending_approval: { className: 'text-gold-deep', dot: 'bg-gold' },
 };
 
 const REOPENABLE: ReadonlySet<string> = new Set([
@@ -107,6 +114,7 @@ export function CascadeProgress({
   mode,
   eventId,
   editable,
+  canExtend,
   people,
 }: CascadeProgressProps) {
   const [pending, startTransition] = useTransition();
@@ -115,19 +123,22 @@ export function CascadeProgress({
   const toast = useToast();
   const confirm = useConfirm();
 
-  function doRemove(invite: HostInvite) {
+  async function doRemove(invite: HostInvite) {
     if (!eventId) return;
+    const live = invite.status === 'sent' || invite.status === 'queued';
+    // Ask before the transition starts. Updates made inside an async
+    // transition are held until the whole action settles, so a dialog opened
+    // in there never paints and the action waits on an answer nobody can give.
+    const ok = await confirm({
+      title: `Remove ${invite.invitee_name}?`,
+      body: live
+        ? 'They’ll be taken out of the invitation flow.'
+        : 'This clears them from the flow. You can always add them again.',
+      confirmLabel: 'Remove',
+      danger: true,
+    });
+    if (!ok) return;
     startTransition(async () => {
-      const live = invite.status === 'sent' || invite.status === 'queued';
-      const ok = await confirm({
-        title: `Remove ${invite.invitee_name}?`,
-        body: live
-          ? 'They’ll be taken out of the invitation flow.'
-          : 'This clears them from the flow. You can always add them again.',
-        confirmLabel: 'Remove',
-        danger: true,
-      });
-      if (!ok) return;
       const result = await removeInvite(eventId, invite.id);
       if (!result.ok) {
         toast.error(result.error ?? 'Could not remove that invite.', result.code);
@@ -242,6 +253,7 @@ export function CascadeProgress({
         : null;
     const canResend = editable && REOPENABLE.has(invite.status);
     const canReWindow = editable && invite.status === 'queued';
+    const canGiveMoreTime = Boolean(canExtend) && invite.status === 'sent';
     const canRestage = canReWindow && wavesMatter(mode);
     const deliveryText = invite.deliveries
       ?.map((delivery) => {
@@ -364,6 +376,25 @@ export function CascadeProgress({
             {WINDOW_CHOICES.map((c) => (
               <option key={c.windowMinutes} value={c.windowMinutes}>
                 {c.label}
+              </option>
+            ))}
+          </select>
+        )}
+        {canGiveMoreTime && (
+          <select
+            value=""
+            disabled={pending}
+            onChange={(e) => {
+              const add = Number(e.target.value);
+              if (add > 0) doWindow(invite, invite.window_minutes + add);
+            }}
+            aria-label={`Give ${invite.invitee_name} more time to answer`}
+            className="rounded-pill border border-line bg-paper px-2 py-1 text-xs font-medium text-ink outline-none focus:border-terracotta"
+          >
+            <option value="">More time</option>
+            {EXTEND_CHOICES.map((choice) => (
+              <option key={choice.addMinutes} value={choice.addMinutes}>
+                {choice.label}
               </option>
             ))}
           </select>

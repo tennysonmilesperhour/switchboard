@@ -20,8 +20,15 @@ import { EXPERIENCE_PRESETS } from '@/lib/types';
 import { BlockReportButtons } from '@/components/profile/BlockReportButtons';
 import { AnonymousMomentSafetyButtons } from './AnonymousMomentSafetyButtons';
 import { useCurrentLocation } from '@/lib/client/use-current-location';
-import { createClient } from '@/lib/supabase/client';
 import type { MomentCandidate } from '@/lib/moment-candidates';
+import { errorFor, errorRef, type ErrorCode } from '@/lib/errors';
+import { MOMENT_MATCH_RADIUS_M } from '@/lib/geo';
+
+/**
+ * How often an open check-in looks again for new people nearby, while the page
+ * is actually being looked at.
+ */
+const REFRESH_MS = 30_000;
 
 export interface MyMoment {
   id: string;
@@ -46,46 +53,52 @@ export function MomentsClient({
   const [headline, setHeadline] = useState('');
   const [hours, setHours] = useState(2);
   const [error, setError] = useState('');
+  const [errorCode, setErrorCode] = useState<ErrorCode | null>(null);
   const [pending, startTransition] = useTransition();
   const location = useCurrentLocation();
   const router = useRouter();
   const toast = useToast();
   const momentId = myMoment?.id;
 
+  // Keeping the list current, without table realtime.
+  //
+  // This used to subscribe to `moments` and `moment_interests` changes. Neither
+  // table is in the realtime publication, and both are owner-only under RLS, so
+  // even publishing them would never have delivered anyone else's check-in or
+  // curiosity: nothing ever fired. What does arrive:
+  //
+  //   - Curiosity, mutual curiosity and a match each write a notification, and
+  //     LiveNotifications (mounted app-wide, subscribed to the reader's own
+  //     notifications) refreshes the page when one lands.
+  //   - A new check-in nearby writes nothing to anyone, by design — it is
+  //     anonymous until someone is curious. So an open check-in looks again
+  //     every 30 seconds while the tab is visible, and at once on coming back
+  //     to it. Hidden tabs cost nothing.
   useEffect(() => {
-    if (!momentId) return;
-    const supabase = createClient();
-    const channel = supabase
-      .channel(`moments-${momentId}`)
-      .on(
-        'postgres_changes',
-        {
-          event: 'UPDATE',
-          schema: 'public',
-          table: 'moments',
-          filter: `id=eq.${momentId}`,
-        },
-        () => {
-          router.refresh();
-        },
-      )
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'moment_interests',
-          filter: `moment_id=eq.${momentId}`,
-        },
-        () => {
-          router.refresh();
-        },
-      )
-      .subscribe();
-    return () => {
-      supabase.removeChannel(channel);
+    if (!momentId || myMoment?.status !== 'open') return;
+    let timer: ReturnType<typeof setInterval> | null = null;
+    const start = () => {
+      if (timer === null) timer = setInterval(() => router.refresh(), REFRESH_MS);
     };
-  }, [momentId, router]);
+    const stop = () => {
+      if (timer !== null) clearInterval(timer);
+      timer = null;
+    };
+    const onVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        router.refresh();
+        start();
+      } else {
+        stop();
+      }
+    };
+    if (document.visibilityState === 'visible') start();
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => {
+      stop();
+      document.removeEventListener('visibilitychange', onVisibility);
+    };
+  }, [momentId, myMoment?.status, router]);
 
   function toggleExperience(label: string) {
     setExperiences((current) =>
@@ -130,7 +143,9 @@ export function MomentsClient({
               className="w-full rounded-card border border-line bg-card px-4 py-3 outline-none focus:border-terracotta"
             />
             <p className="text-xs text-ink-faint">
-              People at the same place see the same name - be specific enough to match.
+              With your location on, you’ll match people checked in within about{' '}
+              {MOMENT_MATCH_RADIUS_M} m, whatever they called the place. Without it,
+              you match people who typed the same name, so be specific.
             </p>
             <div className="flex flex-wrap items-center gap-2 pt-0.5">
               <button
@@ -162,8 +177,9 @@ export function MomentsClient({
             </div>
             {location.status === 'ready' && (
               <p className="text-xs text-sage-deep">
-                Your check-in will show up on the Map. Others still only see you
-                after mutual curiosity.
+                Your check-in will show up on your Map, and you’ll match people
+                within about {MOMENT_MATCH_RADIUS_M} m. Nobody sees where you are, or
+                who you are, before mutual curiosity.
               </p>
             )}
             {location.error && <p className="text-xs text-ink-faint">{location.error}</p>}
@@ -214,23 +230,37 @@ export function MomentsClient({
             />
           </div>
 
-          {error && <p role="alert" className="text-sm text-rose-deep">{error}</p>}
+          {error && (
+            <p role="alert" className="text-sm text-rose-deep">
+              {error}
+              {errorCode && <span className="ml-2 text-xs opacity-70">{errorRef(errorCode)}</span>}
+            </p>
+          )}
           <Button
             size="lg"
             className="w-full"
             disabled={pending}
             onClick={() =>
               startTransition(async () => {
-                const result = await checkIn(
-                  place,
-                  experiences,
-                  headline,
-                  hours,
-                  null,
-                  location.point,
-                );
-                if (!result.ok) setError(result.error ?? 'Something went wrong');
-                else router.refresh();
+                setError('');
+                setErrorCode(null);
+                try {
+                  const result = await checkIn(
+                    place,
+                    experiences,
+                    headline,
+                    hours,
+                    null,
+                    location.point,
+                  );
+                  if (!result.ok) {
+                    setError(result.error ?? errorFor('SB-MOMENT-SAVE').message);
+                    setErrorCode(result.code ?? null);
+                  } else router.refresh();
+                } catch {
+                  setError(errorFor('SB-MOMENT-SAVE').message);
+                  setErrorCode('SB-MOMENT-SAVE');
+                }
               })
             }
           >
@@ -315,15 +345,15 @@ export function MomentsClient({
           hint={
             candidates.length === 0
               ? 'No one else is here yet - check back in a bit'
-              : 'Same place, same time, similar interests'
+              : 'Nearby, right now — refreshes on its own'
           }
         />
         {candidates.length === 0 ? (
           <Card tone="cream">
             <p className="text-sm text-ink-soft leading-relaxed">
-              Nobody else has checked in here yet. That’s the thing about
-              a chance encounter - it can’t be rushed. You’ll get a gentle nudge if a
-              match appears. ✨
+              Nobody else has checked in nearby yet. That’s the thing about a
+              chance encounter - it can’t be rushed. This list checks again on its
+              own while you’re here, and you’ll get a nudge if someone is curious. ✨
             </p>
           </Card>
         ) : (

@@ -16,7 +16,7 @@ import type { ActionResult } from '@/lib/errors';
 import { failure, validation } from '@/lib/errors';
 import type { EventStatus, InviteMode } from '@/lib/types';
 import type { TablesInsert } from '@/lib/supabase/database.types';
-import { suggestWindow } from '@/lib/engine/windows';
+import { liveWindowRefusal, suggestWindow } from '@/lib/engine/windows';
 import { parseInviteEntries, type ParsedInviteEntry } from '@/lib/invite-entry';
 import { hostCanEditInvitees } from '@/lib/share-link';
 import { canAddInvitees, MAX_INVITEES_PER_EVENT } from '@/lib/invite-limits';
@@ -166,19 +166,58 @@ export async function addPeopleToEvent(
     additions.push(resolved);
   }
 
-  // Explicitly-picked connections (by profile id) — validate they exist.
-  const pickedIds = Array.from(new Set(input.profileIds ?? [])).filter(Boolean);
+  // Explicitly-picked connections (by profile id). The sheet offers only the
+  // caller's accepted connections, so that is all this accepts: an id that is
+  // not one is skipped, the same rule `inviteConnectionNow` applies. Read
+  // through the caller's own client — `connections_select` is participants-only,
+  // so a forged id resolves to "not connected", never to someone else's link.
+  // Anyone else can still be added deliberately, by handle, above.
+  const pickedIds = Array.from(new Set(input.profileIds ?? [])).filter(
+    (id) => Boolean(id) && id !== user.id,
+  );
   if (pickedIds.length > 0) {
+    const [asRequester, asAddressee] = await Promise.all([
+      supabase
+        .from('connections')
+        .select('addressee_id')
+        .eq('status', 'accepted')
+        .eq('requester_id', user.id)
+        .in('addressee_id', pickedIds),
+      supabase
+        .from('connections')
+        .select('requester_id')
+        .eq('status', 'accepted')
+        .eq('addressee_id', user.id)
+        .in('requester_id', pickedIds),
+    ]);
+    const linkError = asRequester.error ?? asAddressee.error;
+    if (linkError) {
+      return {
+        ...(await reportAndFail(
+          'SB-INVITE-SEND',
+          'add-people',
+          linkError,
+          { eventId },
+          'Could not verify those invitees. Try again.',
+        )),
+        skipped,
+      };
+    }
+    const connected = new Set<string>([
+      ...(asRequester.data ?? []).map((row) => row.addressee_id as string),
+      ...(asAddressee.data ?? []).map((row) => row.requester_id as string),
+    ]);
     const { data: picked } = await admin
       .from('profiles')
       .select('id, display_name')
       .in('id', pickedIds);
     for (const profile of picked ?? []) {
-      additions.push({
-        kind: 'member',
-        profileId: profile.id as string,
-        label: (profile.display_name as string) ?? 'Friend',
-      });
+      const label = (profile.display_name as string) ?? 'Friend';
+      if (!connected.has(profile.id as string)) {
+        skipped.push({ entry: label, reason: 'not one of your connections' });
+        continue;
+      }
+      additions.push({ kind: 'member', profileId: profile.id as string, label });
     }
   }
 
@@ -672,7 +711,12 @@ export async function setInviteStage(
   return { ok: true };
 }
 
-/** Change the response window on a not-yet-sent invite (host/co-host). */
+/**
+ * Change an invitation's response window (host/co-host). A queued one takes
+ * any window; one already out may only be given more time, while the plan is
+ * inviting (D17). The rules live in `set_invite_window`; a refusal comes back
+ * as the sentence for it, since each names its own way on.
+ */
 export async function setInviteWindow(
   eventId: string,
   inviteId: string,
@@ -691,6 +735,8 @@ export async function setInviteWindow(
     p_minutes: minutes,
   });
   if (error) {
+    const refusal = liveWindowRefusal(error.hint);
+    if (refusal) return validation(refusal);
     return reportAndFail('SB-INVITE-SEND', 'invite.window', error, { eventId, inviteId });
   }
   revalidatePath(`/events/${eventId}`);

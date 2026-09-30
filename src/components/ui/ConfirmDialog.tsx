@@ -42,6 +42,13 @@ const PromptContext = createContext<PromptFn | null>(null);
  * anywhere and `await confirm({...})` to gate a destructive action:
  *
  *   if (await confirm({ title: 'Remove Alex?', danger: true })) remove();
+ *
+ * Ask BEFORE `startTransition`, never inside it. The dialog opens with a state
+ * update, and an update made inside an async transition is held until the
+ * whole action settles — which it cannot, because it is waiting on this
+ * answer. The button goes busy and nothing appears. That is how "Leave zone",
+ * "Leave this board" and six other confirms shipped dead;
+ * `src/lib/confirm-outside-transition.test.ts` now refuses the pattern.
  */
 export function ConfirmProvider({ children }: { children: React.ReactNode }) {
   const [options, setOptions] = useState<ConfirmOptions | null>(null);

@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/Button';
 import { Card, SectionHeader } from '@/components/ui/Card';
 import { Avatar } from '@/components/ui/Avatar';
 import { useToast } from '@/components/ui/Toast';
-import { approveJoinRequest, declineJoinRequest } from '@/lib/actions/invites';
+import { approveJoinRequest, declineJoinRequest } from '@/lib/actions/open-table';
 
 export interface JoinRequestRow {
   inviteId: string;
@@ -37,6 +37,9 @@ export function JoinRequests({
         toast.error(result.error ?? 'Could not approve that request.', result.code);
       } else if (result.outcome === 'waitlisted') {
         toast.info(`The plan is full, so ${request.name} is on the waitlist.`);
+      } else if (result.outcome === 'pending_approval') {
+        // A guardian plan: the host's yes is not the guardian's.
+        toast.info(`${request.name} is waiting on a guardian’s OK - it counts once they approve.`);
       } else if (result.outcome === 'gone') {
         toast.info('That request was already answered.');
       } else {
@@ -51,6 +54,11 @@ export function JoinRequests({
       const result = await declineJoinRequest(request.inviteId, eventId);
       if (!result.ok) {
         toast.error(result.error ?? 'Could not decline that request.', result.code);
+      } else if (result.outcome === 'gone') {
+        toast.info('That request was already answered.');
+      } else {
+        // `/join` promises "you'll hear back either way", so they do.
+        toast.info(`We’ll let ${request.name} know it’s not this time.`);
       }
       router.refresh();
     });

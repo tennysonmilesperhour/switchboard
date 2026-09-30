@@ -3,11 +3,10 @@ import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
 import { appInviteUrl } from '@/lib/links';
 import { AppShell } from '@/components/shell/AppShell';
-import { EmptyState } from '@/components/ui/EmptyState';
 import { FindableNudge } from '@/components/profile/FindableNudge';
 import { loadFindability } from '@/lib/server/findability';
 import { PeopleClient } from './PeopleClient';
-import type { CircleRow, FriendRow, RequestRow } from './sections/types';
+import type { CircleRow, FriendRow, RequestRow, SpaceRow } from './sections/types';
 import { loadVisibleSignals } from '@/lib/server/signals';
 
 export const metadata: Metadata = { title: 'People' };
@@ -46,6 +45,22 @@ export default async function PeoplePage() {
   const avoidedIds = new Set(
     (avoidRows ?? []).map((row) => row.avoided_id),
   );
+
+  // Everyone on the viewer's Give Space list, friend or not (G35). The ids came
+  // from the viewer's own RLS-scoped rows; only public profile fields are read.
+  const { data: avoidedProfiles } = avoidedIds.size
+    ? await supabase
+        .from('profiles')
+        .select('id, display_name, handle')
+        .in('id', [...avoidedIds])
+    : { data: [] };
+  const givingSpace: SpaceRow[] = (avoidedProfiles ?? [])
+    .map((profile) => ({
+      id: profile.id,
+      name: profile.display_name || 'Someone',
+      handle: profile.handle ?? '',
+    }))
+    .sort((a, b) => a.name.localeCompare(b.name));
 
   const friends: FriendRow[] = [];
   const incoming: RequestRow[] = [];
@@ -100,6 +115,7 @@ export default async function PeoplePage() {
     name: row.name,
     emoji: row.emoji,
     memberCount: (row.household_members ?? []).length,
+    memberIds: (row.household_members ?? []).map((member) => member.member_id),
   }));
 
   // Built here, not in the client: the origin is a deployment fact, and
@@ -111,38 +127,27 @@ export default async function PeoplePage() {
   // them. Rendered above the search that fails for exactly this reason.
   const findability = await loadFindability();
 
+  // Alphabetical, so a long list is scannable. The query has no order of its
+  // own, which left friends in whatever order the rows happened to come back.
+  friends.sort((a, b) => a.name.localeCompare(b.name));
+
+  // PeopleClient renders its own "Your people live here" empty state; this page
+  // used to render a second copy of it above the form whenever the list was
+  // empty, so a brand-new account saw the same card twice.
   return (
     <AppShell title="People">
-      {friends.length === 0 && incoming.length === 0 && outgoing.length === 0 ? (
-        <div className="space-y-6">
-          <FindableNudge state={findability} />
-          <EmptyState
-            emoji="☺"
-            title="Your people live here"
-            body="Connect by handle, email, phone, or selected contacts. Then circles, signals, and Mutual Mode all come alive."
-          />
-          <PeopleClient
-            friends={friends}
-            incoming={incoming}
-            outgoing={outgoing}
-            circles={circleRows}
-            households={households}
-            inviteUrl={inviteUrl}
-          />
-        </div>
-      ) : (
-        <div className="space-y-6">
-          <FindableNudge state={findability} />
-          <PeopleClient
-            friends={friends}
-            incoming={incoming}
-            outgoing={outgoing}
-            circles={circleRows}
-            households={households}
-            inviteUrl={inviteUrl}
-          />
-        </div>
-      )}
+      <div className="space-y-6">
+        <FindableNudge state={findability} />
+        <PeopleClient
+          friends={friends}
+          incoming={incoming}
+          outgoing={outgoing}
+          circles={circleRows}
+          households={households}
+          givingSpace={givingSpace}
+          inviteUrl={inviteUrl}
+        />
+      </div>
     </AppShell>
   );
 }

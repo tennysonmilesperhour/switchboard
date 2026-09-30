@@ -2,12 +2,21 @@ import { describe, expect, it } from 'vitest';
 
 import {
   BANDS,
+  BUSY_STEP_MS,
   GRID_DAYS,
   bestSlots,
+  busyBandsFromStored,
+  busyQuarters,
+  calendarWindow,
   gridSlots,
   heatLevel,
   isGridSlot,
+  parseGridSlot,
+  planGridZone,
   recommendAvailability,
+  slotRange,
+  slotStartsAt,
+  upcomingSlotCounts,
 } from '@/lib/availability';
 
 const FROM = new Date('2026-08-18T09:30:00Z');
@@ -187,5 +196,202 @@ describe('heatLevel', () => {
 
   it('never divides by zero', () => {
     expect(heatLevel(0, 0)).toBe(0);
+  });
+});
+
+// ————————————————————————— the plan's zone (G19, D5) —————————————————————————
+
+const HOUR = 3_600_000;
+const iso = (ms: number) => new Date(ms).toISOString();
+
+describe('planGridZone', () => {
+  it('keeps a zone the runtime knows and falls back to UTC otherwise', () => {
+    expect(planGridZone('America/New_York')).toBe('America/New_York');
+    expect(planGridZone('Not/AZone')).toBe('UTC');
+    expect(planGridZone(null)).toBe('UTC');
+    expect(planGridZone('')).toBe('UTC');
+  });
+});
+
+describe('gridSlots in the plan’s zone', () => {
+  it('starts on the plan’s today, not Greenwich’s', () => {
+    // 21:00 on Friday 2 October in New York is already Saturday in UTC. The
+    // plan's grid still offers Friday, including Friday's late band.
+    const nineAtNight = new Date('2026-10-03T01:00:00Z');
+    expect(gridSlots(nineAtNight, GRID_DAYS, 'America/New_York')[0]).toBe('2026-10-02T08:00:00.000Z');
+    expect(gridSlots(nineAtNight)[0]).toBe('2026-10-03T08:00:00.000Z');
+    expect(isGridSlot('2026-10-02T22:00:00.000Z', nineAtNight, GRID_DAYS, 'America/New_York')).toBe(true);
+  });
+
+  it('does not offer yesterday to a plan ahead of Greenwich', () => {
+    // 09:00 on 2 October in Auckland (NZDT, UTC+13) is 1 October in UTC.
+    const aucklandMorning = new Date('2026-10-01T20:00:00Z');
+    const slots = gridSlots(aucklandMorning, GRID_DAYS, 'Pacific/Auckland');
+    expect(slots[0]).toBe('2026-10-02T08:00:00.000Z');
+    expect(slots).toHaveLength(GRID_DAYS * BANDS.length);
+    expect(slots.at(-1)).toBe('2026-10-08T22:00:00.000Z');
+  });
+
+  it('keeps the label encoding, so stored answers stay in their cells', () => {
+    // Every slot is still "UTC date = the plan's date, UTC hour = the band".
+    for (const slot of gridSlots(new Date('2026-10-01T12:00:00Z'), GRID_DAYS, 'Asia/Kolkata')) {
+      expect(BANDS.map((band) => band.startHour)).toContain(new Date(slot).getUTCHours());
+      expect(parseGridSlot(slot)).toBe(slot);
+    }
+  });
+});
+
+describe('slotRange in the plan’s zone', () => {
+  it('turns "Friday evening" into Friday evening on the plan’s clock', () => {
+    // New York is on EDT (UTC−4) in October: 5–10pm is 21:00–02:00 UTC.
+    expect(slotRange('2026-10-02T17:00:00.000Z', 'America/New_York')).toEqual({
+      start: Date.parse('2026-10-02T21:00:00Z'),
+      end: Date.parse('2026-10-03T02:00:00Z'),
+    });
+  });
+
+  it('lands on half-hour zones exactly', () => {
+    // India is UTC+5:30: noon to 5pm is 06:30–11:30 UTC.
+    expect(slotRange('2026-10-02T12:00:00.000Z', 'Asia/Kolkata')).toEqual({
+      start: Date.parse('2026-10-02T06:30:00Z'),
+      end: Date.parse('2026-10-02T11:30:00Z'),
+    });
+  });
+
+  it('runs the late band to the next morning on the plan’s clock across a DST change', () => {
+    // US clocks go back at 2am on Sunday 1 November 2026: Saturday's late band
+    // (10pm EDT to 8am EST) is eleven hours long, not ten.
+    const { start, end } = slotRange('2026-10-31T22:00:00.000Z', 'America/New_York');
+    expect(iso(start)).toBe('2026-11-01T02:00:00.000Z');
+    expect(iso(end)).toBe('2026-11-01T13:00:00.000Z');
+    expect((end - start) / HOUR).toBe(11);
+  });
+
+  it('is unchanged in UTC', () => {
+    expect(slotRange('2026-10-02T22:00:00.000Z')).toEqual({
+      start: Date.parse('2026-10-02T22:00:00Z'),
+      end: Date.parse('2026-10-03T08:00:00Z'),
+    });
+  });
+});
+
+describe('slotStartsAt (decision D5)', () => {
+  it('starts an evening at 6pm in the plan’s zone', () => {
+    expect(slotStartsAt('2026-10-02T17:00:00.000Z', 'America/New_York')).toBe('2026-10-02T22:00:00.000Z');
+    expect(slotStartsAt('2026-10-02T17:00:00.000Z', 'Asia/Kolkata')).toBe('2026-10-02T12:30:00.000Z');
+    expect(slotStartsAt('2026-10-02T17:00:00.000Z', 'UTC')).toBe('2026-10-02T18:00:00.000Z');
+  });
+
+  it('starts every other band at the band’s start', () => {
+    expect(slotStartsAt('2026-10-03T08:00:00.000Z', 'Europe/London')).toBe('2026-10-03T07:00:00.000Z');
+    expect(slotStartsAt('2026-10-03T12:00:00.000Z', 'Europe/London')).toBe('2026-10-03T11:00:00.000Z');
+    expect(slotStartsAt('2026-10-03T22:00:00.000Z', 'Europe/London')).toBe('2026-10-03T21:00:00.000Z');
+  });
+
+  it('accepts the slot as PostgREST spells it, and nothing that is not a slot', () => {
+    expect(slotStartsAt('2026-10-02T17:00:00+00:00', 'America/New_York')).toBe('2026-10-02T22:00:00.000Z');
+    expect(slotStartsAt('Friday at Sam’s', 'America/New_York')).toBeNull();
+    expect(slotStartsAt('2026-10-02T19:00:00.000Z', 'America/New_York')).toBeNull();
+  });
+
+  it('reads an unknown zone as UTC rather than failing', () => {
+    expect(slotStartsAt('2026-10-02T12:00:00.000Z', 'Not/AZone')).toBe('2026-10-02T12:00:00.000Z');
+  });
+});
+
+describe('parseGridSlot', () => {
+  it('canonicalises both spellings of a slot', () => {
+    expect(parseGridSlot('2026-10-02T17:00:00+00:00')).toBe('2026-10-02T17:00:00.000Z');
+    expect(parseGridSlot('2026-10-02T17:00:00.000Z')).toBe('2026-10-02T17:00:00.000Z');
+  });
+
+  it('refuses anything a grid could not have produced', () => {
+    for (const value of [null, undefined, '', 'Pizza', '2026-10-02', '2026-10-02T17:30:00Z', '2026-10-02T19:00:00Z']) {
+      expect(parseGridSlot(value)).toBeNull();
+    }
+  });
+});
+
+describe('calendar busy time', () => {
+  const NOW = new Date('2026-10-01T12:00:00Z');
+
+  it('stores busy time as the quarter-hours a meeting mostly fills', () => {
+    const window = calendarWindow(NOW);
+    const quarters = busyQuarters(
+      [
+        // 10:05–10:10: five minutes of a quarter is not a busy quarter.
+        { start: Date.parse('2026-10-02T10:05:00Z'), end: Date.parse('2026-10-02T10:10:00Z') },
+        // 14:00–14:40: two full quarters and ten minutes of the third.
+        { start: Date.parse('2026-10-02T14:00:00Z'), end: Date.parse('2026-10-02T14:40:00Z') },
+      ],
+      window,
+    );
+    expect(quarters).toEqual([
+      '2026-10-02T14:00:00.000Z',
+      '2026-10-02T14:15:00.000Z',
+      '2026-10-02T14:30:00.000Z',
+    ]);
+  });
+
+  it('marks the plan’s evening busy, not Greenwich’s', () => {
+    // 5:30–9:30pm EDT on Friday is 21:30–01:30 UTC: most of New York's Friday
+    // evening. Read as UTC bands it touched two bands and took neither, which is
+    // the "Fill from my calendar marks the wrong bands" bug.
+    const quarters = busyQuarters(
+      [{ start: Date.parse('2026-10-02T21:30:00Z'), end: Date.parse('2026-10-03T01:30:00Z') }],
+      calendarWindow(NOW),
+    );
+    expect(busyBandsFromStored(quarters, 'America/New_York', NOW)).toEqual(['2026-10-02T17:00:00.000Z']);
+    expect(busyBandsFromStored(quarters, 'UTC', NOW)).toEqual([]);
+  });
+
+  it('serves a half-hour zone exactly', () => {
+    // 5–8pm IST is 11:30–14:30 UTC: three of the evening's five hours.
+    const quarters = busyQuarters(
+      [{ start: Date.parse('2026-10-02T11:30:00Z'), end: Date.parse('2026-10-02T14:30:00Z') }],
+      calendarWindow(NOW),
+    );
+    expect(busyBandsFromStored(quarters, 'Asia/Kolkata', NOW)).toEqual(['2026-10-02T17:00:00.000Z']);
+  });
+
+  it('accepts stored rows in PostgREST’s spelling and ignores junk', () => {
+    const stored = Array.from({ length: 16 }, (_, i) =>
+      new Date(Date.parse('2026-10-02T21:00:00Z') + i * BUSY_STEP_MS).toISOString().replace('.000Z', '+00:00'),
+    );
+    expect(busyBandsFromStored([...stored, 'not a time'], 'America/New_York', NOW)).toEqual([
+      '2026-10-02T17:00:00.000Z',
+    ]);
+  });
+
+  it.each(['Pacific/Kiritimati', 'Pacific/Pago_Pago', 'UTC'])(
+    'reads a window that covers every slot of a %s plan’s week',
+    (zone) => {
+      for (const hour of [0, 9, 10, 11, 12, 23]) {
+        const now = new Date(Date.UTC(2026, 9, 1, hour, 30));
+        const window = calendarWindow(now);
+        for (const slot of gridSlots(now, GRID_DAYS, zone)) {
+          const range = slotRange(slot, zone);
+          expect(range.start).toBeGreaterThanOrEqual(window.start);
+          expect(range.end).toBeLessThanOrEqual(window.end);
+        }
+      }
+    },
+  );
+});
+
+describe('upcomingSlotCounts', () => {
+  it('keeps only this week’s slots whose start is still ahead', () => {
+    // 7pm EDT on Friday 2 October: Friday evening (6pm) has started, Friday
+    // late (10pm) has not, and last week's answers are no longer on offer.
+    const now = new Date('2026-10-02T23:00:00Z');
+    const counts = [
+      { slot: '2026-10-02T17:00:00+00:00', people: 4, mine: false },
+      { slot: '2026-10-02T22:00:00.000Z', people: 3, mine: false },
+      { slot: '2026-09-25T17:00:00.000Z', people: 9, mine: true },
+      { slot: 'garbage', people: 1, mine: false },
+    ];
+    expect(upcomingSlotCounts(counts, 'America/New_York', now).map((entry) => entry.slot)).toEqual([
+      '2026-10-02T22:00:00.000Z',
+    ]);
   });
 });

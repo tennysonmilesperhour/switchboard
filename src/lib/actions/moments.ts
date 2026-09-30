@@ -72,7 +72,17 @@ export async function checkIn(
     latitude: point?.lat ?? null,
     longitude: point?.lng ?? null,
   });
-  if (error) return reportAndFail('SB-MOMENT-SAVE', 'moment.create', error);
+  if (error) {
+    // The check-in gate's refusals are answers, not outages
+    // (enforce_zone_checkin_access).
+    if (/zone has ended/i.test(error.message)) {
+      return validation('This zone has ended, so it isn’t taking check-ins any more.');
+    }
+    if (/not part of/i.test(error.message)) {
+      return failure('SB-MOMENT-ACCESS', 'You’re no longer in this zone, so you can’t check in here.');
+    }
+    return reportAndFail('SB-MOMENT-SAVE', 'moment.create', error);
+  }
   revalidatePath('/moments');
   return { ok: true };
 }
@@ -279,8 +289,11 @@ export async function expressCuriosity(
   }
 
   // First one-sided curiosity: nudge the other person (no identity revealed)
-  // so they can come reciprocate if they'd like. Once.
-  if (firstTime) {
+  // so they can come reciprocate if they'd like. Once — and never to someone
+  // who already passed on this moment: their Moments page hides a passed
+  // candidate, so "Open Moments to see" would lead them to nothing, and "Not
+  // today" should mean not being asked again today.
+  if (firstTime && reverse?.stage !== 'passed') {
     await notifyUsers([other.user_id], {
       kind: 'moment',
       title: '✨ Someone’s curious',
