@@ -2,6 +2,9 @@ import { defineConfig, devices } from '@playwright/test';
 
 export default defineConfig({
   testDir: './e2e',
+  // Compile the routes the suites open before the first test, so a slow first
+  // compile under `next dev` can't be mistaken for a missing page.
+  globalSetup: './e2e/warm-routes.ts',
   // The authenticated journeys walk a multi-step wizard, so a genuine failure
   // needs room to report itself rather than being cut off as a timeout.
   timeout: 60_000,
