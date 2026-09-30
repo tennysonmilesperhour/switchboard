@@ -1,4 +1,4 @@
-import type { FullConfig } from '@playwright/test';
+import { chromium, type FullConfig } from '@playwright/test';
 
 /**
  * Compile every route the no-database suites open before the first test runs.
@@ -11,7 +11,13 @@ import type { FullConfig } from '@playwright/test';
  * with a timeout sized for a compile rather than for a page, keeps every
  * assertion measuring the page instead of the compiler.
  *
- * A route that fails to warm is only logged: the tests that open it still run
+ * Server Actions compile on their first call, not with their page, and a GET
+ * cannot reach one. The first failed sign-in in a run once took 8.1 seconds of
+ * compile, just past the sign-in form's own 8-second guard, so the form
+ * correctly said "Sign-in took too long" where the test expected the wrong-
+ * password message. `warmSignInAction` makes that first call here instead.
+ *
+ * Anything that fails to warm is only logged: the tests that open it still run
  * and report what the page actually did.
  */
 const ROUTES = [
@@ -49,5 +55,41 @@ export default async function warmRoutes(config: FullConfig): Promise<void> {
     } catch (error) {
       console.warn(`[warm-routes] ${route} did not answer: ${String(error)}`);
     }
+  }
+  await warmSignInAction(config, baseURL);
+}
+
+/**
+ * Submit one sign-in with an identifier that can't exist, the same input the
+ * smoke test uses. The action rejects its format before asking the auth
+ * server, so this touches no account and no database.
+ */
+async function warmSignInAction(config: FullConfig, baseURL: string): Promise<void> {
+  // Launch Chromium the way the config's Chromium project does.
+  const chromiumProject = config.projects.find(
+    (project) => (project.use?.defaultBrowserType ?? project.use?.browserName ?? 'chromium') === 'chromium',
+  );
+  const browser = await chromium
+    .launch(chromiumProject?.use?.launchOptions)
+    .catch((error: unknown) => {
+      console.warn(`[warm-routes] sign-in action not warmed, no browser: ${String(error)}`);
+      return null;
+    });
+  if (!browser) return;
+  try {
+    const page = await browser.newPage();
+    await page.goto(new URL('/login', baseURL).toString(), { timeout: COMPILE_TIMEOUT_MS });
+    await page.getByLabel('Email or username').fill('invalid!');
+    await page.getByLabel('Password', { exact: true }).fill('incorrect-password');
+    const answered = page.waitForResponse(
+      (response) => response.request().method() === 'POST' && new URL(response.url()).pathname === '/login',
+      { timeout: COMPILE_TIMEOUT_MS },
+    );
+    await page.locator('form').getByRole('button', { name: 'Sign in', exact: true }).click();
+    await answered;
+  } catch (error) {
+    console.warn(`[warm-routes] sign-in action did not answer: ${String(error)}`);
+  } finally {
+    await browser.close();
   }
 }
