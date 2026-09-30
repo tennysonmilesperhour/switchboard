@@ -26,6 +26,48 @@ medium, 1 medium-to-large and 4 large.
 
 ---
 
+## 0. Progress (updated 2026-09-30)
+
+Every code item is built, following the recommended answer to each decision
+(D1 to D27): P1 to P11, G1 to G49, and Q1 to Q4, all on PR #223. What is left
+is the owner actions in section 2, which are dashboard settings, not code.
+
+Each change was checked against a local copy of the full stack before it was
+pushed: every migration applied to a fresh database, the pgTAP security suite,
+the unit tests, generated database types, a production build, and the
+authenticated browser journeys.
+
+Running the migrations locally also found a bug in production: the household
+policies read each other in a loop, so no household could ever be saved or
+read (production had none). That is fixed with pgTAP coverage.
+
+Choices made while building that the decisions did not settle:
+
+- **Digest (D16):** reminders also skip the digest and push at once. A
+  "starting soon" reminder held until the next morning would be useless.
+- **Sabbatical (D6):** invitations still arrive, but wait in the inbox with no
+  push, text or email; Settings says so. A poll outcome sent as a plan update
+  still reaches someone on sabbatical who never answered it.
+- **Open Table (G20):** a turned-down request is deleted rather than kept, so
+  the requester can't answer their own request under D17. They can ask again,
+  up to three times a day per plan (checked in the app, not the database).
+- **Moderation (D7):** removal is soft, so reports keep what was reported, and
+  every action is audited. Authors are not told when content is removed, and
+  there is no "restore" for removed content, only for suspensions. A board-post
+  report still disappears if the author deletes the post (room-message reports
+  keep a snapshot). A suspended person's existing session is signed out on
+  their next page load; their access token still works for direct reads until
+  it expires (an hour by default), with posting blocked in the database.
+- **Rituals (D8):** after deploy, every active ritual that was never planned is
+  due that day, so the first cron run reminds both people for each of them.
+- **Link previews (G23):** only covers uploaded to our own storage, as PNG or
+  JPEG, are drawn, so the unauthenticated preview route never fetches an
+  address a host typed.
+- **Deploy order:** run the migrations before the app. `/moderation` reads a
+  function whose return shape changed.
+
+---
+
 ## 1. Decisions needed (with a recommendation)
 
 | # | Question | Recommendation | Unblocks |
@@ -209,10 +251,10 @@ After milestone 5, every feature in the index does what it says.
 These are new features, not gaps in shipped ones. They stay in
 `docs/INNOVATIONS.md` and `docs/DOCKET.md` until you choose them.
 
-- **INNOVATIONS.md** (13 ideas): Weather Guardian, Flake Insurance, Cascade
+- **INNOVATIONS.md** (14 ideas): Weather Guardian, Flake Insurance, Cascade
   Coach, Carpool Threads, Surprise Mode, Arrival Mood, Comfort and Access
-  Preferences, Matchmaker Hints, Plus-One Chains, Handle Cards, Travel Overlap,
-  Seasons Recap, Anniversary Rewind.
+  Preferences, Battery Pacing (D26), Matchmaker Hints, Plus-One Chains, Handle
+  Cards, Travel Overlap, Seasons Recap, Anniversary Rewind.
 - **DOCKET.md in design**: custom answers on every preset picker, zone
   announcements gated to people present, a Moments filter system, context on
   connect requests, "confirmed in theory" soft yeses, self-serve verified
