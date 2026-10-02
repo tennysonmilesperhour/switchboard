@@ -73,3 +73,15 @@ export function suspensionLabel(
     ...(timeZone ? { timeZone } : {}),
   })}`;
 }
+
+/**
+ * The auth server's own word that a session belongs to a suspended account.
+ *
+ * GoTrue never hands a banned account's user back: `getUser()` answers
+ * `403 user_banned` with no user, and a token refresh fails the same way. So
+ * `banned_until` on a returned user is only a fallback; this is how a session
+ * that outlived its suspension actually shows up.
+ */
+export function isSuspendedAuthError(error: { code?: string } | null | undefined): boolean {
+  return error?.code === 'user_banned';
+}

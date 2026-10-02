@@ -179,6 +179,20 @@ export default async function EventPage({
     pendingParentalApprovals,
   } = loaded;
 
+  // The room only opens for its members. Anyone else who can read the plan (an
+  // invitee who hasn't said yes, someone who declined, a member who left) was
+  // handed a Room link that ended on the 404 page. A failed read keeps the
+  // link: the room page decides for itself either way.
+  const inRoom = event.room_id
+    ? await supabase
+        .from('room_members')
+        .select('room_id')
+        .eq('room_id', event.room_id)
+        .eq('member_id', user.id)
+        .maybeSingle()
+        .then(({ data, error }) => Boolean(error || data))
+    : false;
+
   // The RSVP card renders only for an invitation still waiting on an answer.
   // Its anchor id is handed to the thread from here, so "RSVP to unlock" can
   // only ever point at a card that is actually on the page.
@@ -390,7 +404,7 @@ export default async function EventPage({
                 🎁 Wishlist
               </a>
             )}
-            {event.room_id && (
+            {event.room_id && inRoom && (
               <Link
                 href={`/rooms/${event.room_id}`}
                 className="inline-flex items-center gap-1.5 rounded-pill border border-line bg-card px-3.5 py-2 text-xs font-bold text-ink-soft shadow-lift hover:border-terracotta hover:text-terracotta-deep active:scale-[0.98] transition-all"

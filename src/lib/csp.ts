@@ -44,6 +44,26 @@ export function supabaseConnectSources(
 }
 
 /**
+ * Where stored media is served from: the Supabase origin alone, without the
+ * websocket. Images already allow any https source, so this only adds the
+ * local stack's http origin there; audio has no such allowance, and without
+ * a `media-src` every signed voice-note URL fell back to `default-src 'self'`
+ * and was refused, in production too.
+ */
+export function supabaseMediaSource(
+  configured = process.env.NEXT_PUBLIC_SUPABASE_URL,
+): string {
+  if (configured) {
+    try {
+      return new URL(configured).origin;
+    } catch {
+      // Fall through to the wildcard rather than emit a broken directive.
+    }
+  }
+  return 'https://*.supabase.co';
+}
+
+/**
  * `script-src` uses a fresh nonce for inline framework scripts and same-origin
  * bundles, with NO `'unsafe-inline'` in production. We intentionally avoid
  * `strict-dynamic`: Next/Turbopack can request follow-up chunks without a
@@ -66,7 +86,8 @@ export function buildCsp(
     "default-src 'self'",
     `script-src 'self' 'nonce-${nonce}'${isDev ? " 'unsafe-eval'" : ''}`,
     "style-src 'self' 'unsafe-inline'",
-    "img-src 'self' data: blob: https:",
+    `img-src 'self' data: blob: https: ${supabaseMediaSource(options.supabaseUrl)}`,
+    `media-src 'self' blob: ${supabaseMediaSource(options.supabaseUrl)}`,
     "font-src 'self' data:",
     `connect-src 'self' ${supabaseConnectSources(options.supabaseUrl)}`,
     "frame-src 'none'",

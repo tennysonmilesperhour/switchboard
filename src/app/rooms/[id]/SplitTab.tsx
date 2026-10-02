@@ -342,7 +342,7 @@ export function SplitTab({
               min="0"
               step="0.01"
               inputMode="decimal"
-              placeholder="Amount (USD)"
+              placeholder="Amount ($)"
               aria-label="Amount in US dollars"
               className="w-32 rounded-card border border-line bg-card px-3.5 py-2.5 text-sm outline-none focus:border-terracotta"
             />

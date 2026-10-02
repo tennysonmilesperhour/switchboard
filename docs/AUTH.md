@@ -199,6 +199,11 @@ These were open decisions; the owner accepted the recommendations in
     is signed out by the proxy on its next page load and sent to
     `/login?error=suspended`; an API call gets a coded 403; a Server Action
     from an already-open tab is refused by `requireUser` with the same code.
+    Both read the suspension from `getUser()`'s **error** (`user_banned`):
+    GoTrue never returns a banned account's user, so a check on
+    `user.banned_until` alone read the open session as signed out and sent it
+    to `/welcome` with no explanation. Found in a browser on 2026-10-02; the
+    unit tests had mocked a user that the real server never returns.
     A confirmation, magic or recovery link refused for `user_banned` lands on
     the same sentence instead of "expired or already used", and so does
     Google sign-in. Everywhere it appears, the page says the account is

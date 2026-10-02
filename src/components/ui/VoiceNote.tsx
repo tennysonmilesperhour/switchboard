@@ -3,6 +3,7 @@
 import { useRef, useState } from 'react';
 import { Icon } from '@/components/ui/Icon';
 import { formatDuration } from '@/components/ui/VoiceRecorder';
+import { useToast } from '@/components/ui/Toast';
 
 interface VoiceNoteProps {
   url: string;
@@ -16,6 +17,13 @@ export function VoiceNote({ url, durationSeconds, tone = 'solid' }: VoiceNotePro
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const [playing, setPlaying] = useState(false);
   const [remaining, setRemaining] = useState<number | null>(durationSeconds ?? null);
+  const toast = useToast();
+
+  // A note that won't play used to just stay on the play icon. Say so.
+  function failed() {
+    setPlaying(false);
+    toast.error('This voice note didn’t play.', 'SB-VOICE-PLAY');
+  }
 
   function toggle() {
     const audio = audioRef.current;
@@ -23,7 +31,11 @@ export function VoiceNote({ url, durationSeconds, tone = 'solid' }: VoiceNotePro
     if (playing) {
       audio.pause();
     } else {
-      audio.play().catch(() => setPlaying(false));
+      audio.play().catch((error: unknown) => {
+        // The reader paused before it started; nothing went wrong.
+        if (error instanceof DOMException && error.name === 'AbortError') return;
+        failed();
+      });
     }
   }
 

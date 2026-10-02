@@ -56,6 +56,18 @@ describe('shared action authentication', () => {
     }
   });
 
+  it('names the suspension when the auth server answers user_banned with no user', async () => {
+    mocks.getUser.mockResolvedValue({
+      data: { user: null },
+      error: { status: 403, code: 'user_banned', message: 'User is banned' },
+    });
+
+    const result = await requireUser();
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.code).toBe('SB-AUTH-SUSPENDED');
+  });
+
   it('lets a suspension that has run out through', async () => {
     const user = { id: 'user-1', banned_until: '2020-01-01T00:00:00Z' };
     mocks.getUser.mockResolvedValue({ data: { user } });

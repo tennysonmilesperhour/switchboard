@@ -146,7 +146,7 @@ export function RoomsInbox({ rooms }: { rooms: InboxRoom[] }) {
                 {room.unread && <span className="absolute -right-0.5 -top-0.5 size-3 rounded-full border-2 border-surface bg-terracotta" />}
               </span>
               <div className="min-w-0 flex-1">
-                <div className="flex items-baseline justify-between gap-2"><p className={`truncate ${room.unread ? 'font-extrabold' : 'font-bold'}`}>{room.title}</p><span className="shrink-0 text-[11px] text-ink-faint">{room.muted && <span className="mr-1.5">Muted ·</span>}{formatRelative(room.activityAt)}</span></div>
+                <div className="flex items-baseline justify-between gap-2"><p className={`truncate ${room.unread ? 'font-extrabold' : 'font-bold'}`}>{room.unread && <span className="sr-only">Unread: </span>}{room.title}</p><span className="shrink-0 text-[11px] text-ink-faint">{room.muted && <span className="mr-1.5">Muted ·</span>}{formatRelative(room.activityAt)}</span></div>
                 <p className="truncate text-xs text-ink-muted">{room.preview}</p>
                 {room.people.length > 0 && <p className="truncate text-[11px] text-ink-faint">{room.people.join(', ')}</p>}
               </div>
