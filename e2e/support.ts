@@ -1,4 +1,5 @@
 import { expect, test, type APIRequestContext, type BrowserContext, type Page } from '@playwright/test';
+import { createServerClient } from '@supabase/ssr';
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
@@ -85,12 +86,21 @@ async function keepSession(identifier: string, cookies: Cookies): Promise<void> 
 }
 
 /**
- * Sign in as a seeded user, spending the sign-in form once per identifier per
- * run (see "Sign-in rate limit" in e2e/README.md). Sessions are shared across
- * this run's workers through the output directory; a reused one is checked
+ * Sign in as a seeded or throwaway user without spending the sign-in form.
+ *
+ * The form allows 30 attempts per connection per ten minutes, and every
+ * journey here comes from one address. Once the suites grew past that, the
+ * thirty-first sign-in failed with SB-RATE-LIMIT and took a dozen unrelated
+ * journeys down with it. So this asks the auth server for a session with the
+ * account's real password, through the same `@supabase/ssr` cookie format the
+ * app writes, and hands the browser those cookies. The form itself is still
+ * walked where signing in is the step under test (accounts.spec.ts, the
+ * seeded sign-in journey, a suspended sign-in).
+ *
+ * Sessions are shared across this run's workers; a reused one is checked
  * against the app before it is trusted.
  */
-export async function login(page: Page, identifier: string): Promise<void> {
+export async function login(page: Page, identifier: string, password = PASSWORD): Promise<void> {
   const cached = await cachedSession(identifier);
   if (cached) {
     await page.context().addCookies(cached);
@@ -103,12 +113,58 @@ export async function login(page: Page, identifier: string): Promise<void> {
     await page.context().clearCookies();
   }
 
-  await signIn(page, identifier);
-  await keepSession(identifier, await page.context().cookies());
+  await page.context().addCookies(await sessionCookiesFor(identifier, password));
   expect(
     await signedInAs(page, identifier),
     `signed in as "${identifier}" but the app does not show that account`,
   ).toBe(true);
+  await keepSession(identifier, await page.context().cookies());
+}
+
+/** The cookies the app would set after a successful sign-in as @handle. */
+export async function sessionCookiesFor(handle: string, password = PASSWORD): Promise<Cookies> {
+  const admin = adminClient();
+  const { data: profile, error: profileError } = await admin
+    .from('profiles')
+    .select('id')
+    .eq('handle', handle)
+    .maybeSingle();
+  if (profileError || !profile) {
+    throw new Error(`No profile with handle "${handle}" (${profileError?.message ?? 'not found'})`);
+  }
+  const { data: found, error: userError } = await admin.auth.admin.getUserById(profile.id);
+  const email = found?.user?.email;
+  if (userError || !email) throw new Error(`No sign-in email for "${handle}"`);
+
+  const jar = new Map<string, string>();
+  const client = createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        getAll: () => [...jar].map(([name, value]) => ({ name, value })),
+        setAll: (cookies) => {
+          for (const { name, value } of cookies) jar.set(name, value);
+        },
+      },
+    },
+  );
+  const { error } = await client.auth.signInWithPassword({ email, password });
+  if (error) throw new Error(`The auth server refused "${handle}": ${error.message}`);
+  await expect.poll(() => jar.size, { message: 'the auth library never wrote a session cookie' }).toBeGreaterThan(0);
+  const host = new URL(test.info().project.use.baseURL ?? 'http://localhost:3000').hostname;
+  return [...jar]
+    .filter(([, value]) => value)
+    .map(([name, value]) => ({
+      name,
+      value,
+      domain: host,
+      path: '/',
+      expires: -1,
+      httpOnly: false,
+      secure: false,
+      sameSite: 'Lax' as const,
+    }));
 }
 
 /** Does the app itself agree this browser is @identifier? */

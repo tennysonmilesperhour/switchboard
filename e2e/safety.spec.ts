@@ -1,11 +1,11 @@
 import { expect, test, type Browser, type BrowserContext, type Page } from '@playwright/test';
-import { createServerClient } from '@supabase/ssr';
 import {
   adminClient,
   createAccount,
   DB,
   expectToast,
   PASSWORD,
+  sessionCookiesFor,
   signedInAs,
   submitSignIn,
   unique,
@@ -25,45 +25,11 @@ import {
  * needs as a stage. The step under test is always a click.
  */
 
-/**
- * The cookies the app's own sign-in would set for `account`, made by the same
- * library (`@supabase/ssr`) straight against the auth server.
- *
- * The app's sign-in form allows 30 attempts per connection per ten minutes,
- * shared by every spec and every agent on this machine (e2e/README.md,
- * "Sign-in rate limit"). These journeys need five or six people each, so
- * spending the form on every one of them would starve the rest of the suite.
- * The form is used where signing in is the step under test (a suspended
- * account being refused, then let back in).
- */
-async function sessionCookiesFor(account: Account) {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-  const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
-  const jar = new Map<string, string>();
-  const client = createServerClient(url, anon, {
-    cookies: {
-      getAll: () => [...jar].map(([name, value]) => ({ name, value })),
-      setAll: (cookies) => {
-        for (const { name, value } of cookies) jar.set(name, value);
-      },
-    },
-  });
-  const { error } = await client.auth.signInWithPassword({
-    email: account.email,
-    password: account.password,
-  });
-  if (error) throw error;
-  await expect.poll(() => jar.size, { message: 'the auth library never wrote a session cookie' }).toBeGreaterThan(0);
-  const host = new URL(test.info().project.use.baseURL ?? 'http://localhost:3000').hostname;
-  return [...jar]
-    .filter(([, value]) => value)
-    .map(([name, value]) => ({ name, value, domain: host, path: '/', sameSite: 'Lax' as const }));
-}
-
 /** A browser of one's own for each person, signed in, so their sessions never mix. */
 async function personPage(browser: Browser, account: Account): Promise<{ context: BrowserContext; page: Page }> {
   const context = await browser.newContext();
-  await context.addCookies(await sessionCookiesFor(account));
+  // A minted session (support.ts, login): the form is kept for the suspended sign-in below.
+  await context.addCookies(await sessionCookiesFor(account.handle, account.password));
   const page = await context.newPage();
   expect(await signedInAs(page, account.handle), `the app does not show @${account.handle} as signed in`).toBe(true);
   return { context, page };

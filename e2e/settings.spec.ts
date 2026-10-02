@@ -13,7 +13,7 @@ import {
   expectToast,
   linkIn,
   requireMailRelay,
-  signIn,
+  login,
   unique,
   waitForMail,
   type Account,
@@ -44,7 +44,7 @@ async function asAccount<T>(
   const context = await browser.newContext(options);
   try {
     const page = await context.newPage();
-    await signIn(page, account.handle, account.password);
+    await login(page, account.handle, account.password);
     return await fn(page);
   } finally {
     await context.close();

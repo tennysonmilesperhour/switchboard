@@ -702,8 +702,10 @@ test.describe('authenticated surface', () => {
     await b.getByRole('button', { name: 'Coffee' }).click();
     await b.getByRole('button', { name: /E2E Host/ }).click();
     await b.getByRole('button', { name: /Down to Connect/ }).click();
-    // The match surfaces live for the person who completes the pair.
-    await expect(b.getByText(/It.?s mutual/)).toBeVisible({ timeout: 15_000 });
+    // The match surfaces live for the person who completes the pair: on the
+    // page itself, and (now that live notifications reach the browser) as a
+    // banner too, which is why this names the page's own line.
+    await expect(b.getByText(/It.?s mutual!/)).toBeVisible({ timeout: 15_000 });
 
     await aCtx.close();
     await bCtx.close();

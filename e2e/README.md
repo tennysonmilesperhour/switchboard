@@ -128,5 +128,15 @@ takes the whole suite down — and never at the rule. Twice now:
   to back fit; a third inside ten minutes may meet `SB-RATE-LIMIT`. Reset the
   database, or wait, rather than raise the limit.
 
+  When the five feature specs joined the run (2026-10-02) it needed about 50
+  sign-ins, and the thirty-first took a dozen unrelated journeys down. So
+  `support.ts`'s `login()` no longer uses the form: `sessionCookiesFor()` asks
+  the local auth server for a session with the account's real password and
+  hands the browser the same cookies the app would write. The form is still
+  walked where signing in is the thing under test: `accounts.spec.ts`, the
+  seeded sign-in in `authed.spec.ts` (whose own helper, like
+  `invite-links.spec.ts`'s, still uses the form once per identifier), and the
+  suspended sign-in in `safety.spec.ts`.
+
 When you add a requirement to a flow these tests walk, add it to the fixture in
 the same change — and assert it where it can say what it is.
