@@ -162,7 +162,7 @@ also live in the proxy.
 ### Decided in the 2026-09 completion pass
 
 These were open decisions; the owner accepted the recommendations in
-`docs/COMPLETION-PLAN-2026-09.md` (G45, D27).
+`docs/archive/COMPLETION-PLAN-2026-09.md` (G45, D27).
 
 13. **Username sign-in without service-role credentials now says so.**
     `resolveIdentifierEmails` resolves a handle to its real login email via the

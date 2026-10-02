@@ -7,9 +7,9 @@ from working sessions. Newest thinking lives here so nothing evaporates.
 > 🔧 ops (needs the owner or a dashboard, not code)
 
 > **2026-09-29:** a completeness audit of every catalogued feature produced
-> [`COMPLETION-PLAN-2026-09.md`](COMPLETION-PLAN-2026-09.md), the ordered list
-> of what is left to finish shipped features. New work that finishes an existing
-> feature belongs there; new features still belong here.
+> [`COMPLETION-PLAN-2026-09.md`](archive/COMPLETION-PLAN-2026-09.md). Every code
+> item shipped in PR #223 and the plan is archived; its remaining owner actions
+> are carried below under Ops residuals.
 
 > **2026-09-02:** the numbered work from the September 1 audit is complete.
 > The [audit](archive/AUDIT-2026-09-01.md) and its
@@ -412,7 +412,10 @@ Code can't close these; they need the owner or a dashboard:
   workflow files. That is the account's Actions spending limit or included
   minutes, the same failure the audit found for late August. Until it clears,
   no PR gets a real CI result and the migration deploy job cannot run.
-- **Production deploy gate**: create the Vercel `production-after-schema`
+- ~~**Production deploy gate**~~ **Resolved; verified 2026-10-02:** each of
+  the last three merges to `main` (#221, #222, #223) produced exactly one
+  production deploy, created the second its migration job finished. The
+  original note follows for history. Create the Vercel `production-after-schema`
   deploy hook for `main`, save its URL as the GitHub production-environment
   secret `VERCEL_DEPLOY_HOOK_URL`, and confirm Vercel's normal Git production
   deploy for `main` is disabled. Then verify one merge produces exactly one
@@ -436,8 +439,21 @@ Code can't close these; they need the owner or a dashboard:
   `POSTHOG_PROJECT_ID` in Vercel, deploy once, and confirm a fresh client error
   resolves to source filenames and lines as described in
   [`POSTHOG_SOURCEMAPS.md`](POSTHOG_SOURCEMAPS.md).
-- **Cron plan**: Vercel Pro for the every-minute sweep, or an external
-  scheduler with the `CRON_SECRET` bearer.
+- ~~**Cron plan**~~ **Resolved; verified 2026-10-02:** production ran
+  `/api/cron/cascade` 120 times in two hours, so the every-minute schedule in
+  `vercel.json` is honoured.
+- **Unused `ADMIN_EMAILS`** is set in Vercel production and no code reads it.
+  Remove it, or say what it was meant to do.
+- **Twilio webhooks**: point the inbound and status webhooks at the app,
+  enable Advanced Opt-Out, and run the live STOP/START check in
+  [`DEPLOYMENT.md`](DEPLOYMENT.md).
+- **Google sign-in redirect**: confirm the Supabase Google provider redirects
+  to `/auth/callback` on the production domain.
+- **Optional production variables** still unset on 2026-10-02:
+  `OBSERVABILITY_WEBHOOK_URL` (ops alerts) and `SCOPE_WATCH_EMAIL` (checklist
+  notices). Maps and address search fall back to OpenStreetMap's public tiles
+  and Nominatim (`NEXT_PUBLIC_MAP_TILE_URL`, `GEOCODER_URL` unset), which is
+  fine for a pilot but not for heavy traffic.
 - **Preview environment isolation** (own Supabase project, complete config) and
   confirming the **authed-E2E GitHub job is a required check**.
 - ~~**CI on `main` is red**~~ — **root cause found and fixed 2026-08-12**

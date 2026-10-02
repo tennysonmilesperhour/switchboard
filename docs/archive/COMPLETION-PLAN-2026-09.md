@@ -1,5 +1,10 @@
 # Switchboard completion plan
 
+> **Archived 2026-10-02.** Every code item (P1 to P11, G1 to G49, Q1 to Q4) was
+> built in PR #223. The owner actions in section 2 are a historical snapshot;
+> their current state lives in [`DOCKET.md`](../DOCKET.md) under Ops residuals.
+> This file is not a living backlog.
+
 Written 2026-09-29 from a feature-by-feature audit of every entry in
 `src/lib/features.ts`, plus checks of production (Vercel deployments, runtime
 errors, environment) and the database (Supabase security and performance
