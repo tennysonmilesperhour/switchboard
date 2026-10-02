@@ -105,9 +105,16 @@ export function buildDirectory(
  * layer that says nothing is the same dead end as a count with no location: the
  * reader can't tell whether the feature is broken, empty, or not for them.
  */
-export function layerEmptyHint(key: MapLayerKey, options: { sharing: boolean }): string {
+export function layerEmptyHint(
+  key: MapLayerKey,
+  options: { sharing: boolean; nearbyFailed?: boolean },
+): string {
   switch (key) {
     case 'live':
+      // A failed check is not an empty one; the sharing card carries its code.
+      if (options.sharing && options.nearbyFailed) {
+        return 'Can’t say who’s around until the nearby check goes through. The card above says why, and it tries again on its own.';
+      }
       return options.sharing
         ? 'No one else is sharing near you right now. People appear here the moment they turn their own sharing on.'
         : 'Seeing people is mutual — turn your own sharing on above and anyone else sharing nearby appears here.';

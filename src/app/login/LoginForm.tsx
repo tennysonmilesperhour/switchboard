@@ -161,6 +161,14 @@ export function LoginForm({ next = '/', initialMode = 'signin' }: LoginFormProps
   async function signInWithGoogle() {
     setOauthError('');
     setOauthPending(true);
+    // signInWithOAuth only builds a URL on this device. With Google switched
+    // off on the auth server, following it lands on a raw JSON error page with
+    // no way back, so ask the server first and say so here instead.
+    if (!(await googleEnabled())) {
+      setOauthError('SB-OAUTH-START');
+      setOauthPending(false);
+      return;
+    }
     const supabase = createClient();
     const callback = `${window.location.origin}/auth/callback?next=${encodeURIComponent(next)}`;
     const { data, error } = await supabase.auth.signInWithOAuth({
@@ -463,4 +471,22 @@ export function LoginForm({ next = '/', initialMode = 'signin' }: LoginFormProps
       ) : null}
     </div>
   );
+}
+
+/** Whether the auth server has the Google provider on. Unknown counts as on:
+ *  a failed check must not take away a sign-in route that may work. */
+async function googleEnabled(): Promise<boolean> {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  if (!url || !key) return true;
+  try {
+    const response = await fetch(`${url.replace(/\/$/, '')}/auth/v1/settings`, {
+      headers: { apikey: key },
+    });
+    if (!response.ok) return true;
+    const settings = (await response.json()) as { external?: { google?: boolean } };
+    return settings.external?.google !== false;
+  } catch {
+    return true;
+  }
 }

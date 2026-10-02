@@ -237,6 +237,9 @@ export function SettingsSaveProvider({
   return (
     <SettingsSaveContext.Provider value={value}>
       {children}
+      {/* The bar floats over the page's end; this keeps the last controls
+          (Sign out, on a phone) scrollable out from under it. */}
+      {dirtyCount > 0 && <div aria-hidden className="h-28" />}
       {dirtyCount > 0 && (
         <div className="pointer-events-none fixed inset-x-0 bottom-24 z-40 px-4">
           <div

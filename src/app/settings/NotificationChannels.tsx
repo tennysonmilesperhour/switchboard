@@ -255,6 +255,7 @@ export function NotificationChannels({
           <input
             type="checkbox"
             checked={draft.sms.plans}
+            disabled={!phoneVerified || !draft.sms.enabled}
             onChange={(event) => withSms({ ...draft.sms, plans: event.target.checked })}
           />
           Invitations and important plan changes
@@ -263,6 +264,7 @@ export function NotificationChannels({
           <input
             type="checkbox"
             checked={draft.sms.reminders}
+            disabled={!phoneVerified || !draft.sms.enabled}
             onChange={(event) => withSms({ ...draft.sms, reminders: event.target.checked })}
           />
           Event reminders

@@ -51,7 +51,7 @@ export function PushManager({ serverConfigured = true }: { serverConfigured?: bo
   }
 
   if (!serverConfigured) {
-    return <p role="alert" className="text-sm text-rose-deep">Push is not configured on this server yet. An administrator needs to add the VAPID keys.</p>;
+    return <p role="alert" className="text-sm text-rose-deep">Push notifications aren’t available yet. Your in-app inbox, and email or texts if you’ve set them up, still reach you.</p>;
   }
 
   if (state === 'unsupported') {
