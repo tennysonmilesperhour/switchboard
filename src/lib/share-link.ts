@@ -330,11 +330,23 @@ export function shareLinkNotice(
  * What the host is told about their own link, so the state of the link is never
  * a surprise discovered through a recipient's text message.
  */
-export function hostShareGuidance(state: ShareLinkState): string | null {
+export function hostShareGuidance(
+  state: ShareLinkState,
+  options: { dateSet?: boolean } = {},
+): string | null {
   switch (state) {
     case 'live':
       return null;
     case 'deciding':
+      // The poll has closed on a date, but the invitations are still waiting
+      // on the host: saying the date "isn't settled" under the date contradicts
+      // the page.
+      if (options.dateSet) {
+        return (
+          'The date is set, and the link already shows it. Send the invitations ' +
+          'below when you’re ready; anyone with the link can say they’re in now.'
+        );
+      }
       return (
         'The date isn’t settled yet, and the link works anyway: anyone you send ' +
         'it to can see the plan and say they’re in. They’ll get the date once ' +

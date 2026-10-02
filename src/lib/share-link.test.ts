@@ -2,6 +2,7 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
+  hostShareGuidance,
   ANSWERABLE_EVENT_STATUSES,
   canAnswer,
   canReadPlan,
@@ -320,5 +321,14 @@ describe('TypeScript and SQL agree on who can answer', () => {
       const answerable = canAnswer(shareLinkState({ status, share_link_active: true }));
       expect(answerable, status).toBe(ANSWERABLE_EVENT_STATUSES.includes(status));
     }
+  });
+});
+
+describe('hostShareGuidance once the date is decided', () => {
+  it('stops saying the date is unsettled under a date the poll has set', () => {
+    expect(hostShareGuidance('deciding')).toMatch(/isn’t settled/);
+    const decided = hostShareGuidance('deciding', { dateSet: true });
+    expect(decided).toMatch(/date is set/);
+    expect(decided).not.toMatch(/isn’t settled/);
   });
 });

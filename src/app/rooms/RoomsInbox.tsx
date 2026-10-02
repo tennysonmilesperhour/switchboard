@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { searchMessages, type MessageHit } from '@/lib/actions/rooms';
 import { createClient } from '@/lib/supabase/client';
+import { subscribeAuthorized } from '@/lib/supabase/realtime';
 import Link from 'next/link';
 import { Card } from '@/components/ui/Card';
 import { Icon, type IconName } from '@/components/ui/Icon';
@@ -64,10 +65,10 @@ export function RoomsInbox({ rooms }: { rooms: InboxRoom[] }) {
         router.refresh();
       }, 500);
     };
-    let channel: ReturnType<ReturnType<typeof createClient>['channel']> | null = null;
+    let stop: (() => void) | null = null;
     try {
       const supabase = createClient();
-      channel = supabase
+      const channel = supabase
         .channel('rooms-inbox')
         .on(
           'postgres_changes',
@@ -78,15 +79,15 @@ export function RoomsInbox({ rooms }: { rooms: InboxRoom[] }) {
             filter: `room_id=in.(${ids.join(',')})`,
           },
           refresh,
-        )
-        .subscribe();
+        );
+      stop = subscribeAuthorized(supabase, channel);
     } catch {
       // Realtime unavailable: the inbox still refreshes on navigation.
-      channel = null;
+      stop = null;
     }
     return () => {
       if (timer) clearTimeout(timer);
-      if (channel) channel.unsubscribe();
+      stop?.();
     };
   }, [roomKey, router]);
 

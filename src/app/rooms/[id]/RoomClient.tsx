@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
+import { subscribeAuthorized } from '@/lib/supabase/realtime';
 import { Button } from '@/components/ui/Button';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { useToast } from '@/components/ui/Toast';
@@ -262,7 +263,7 @@ export function RoomClient({
         );
       }
     }
-    channel.subscribe((status) => {
+    const stop = subscribeAuthorized(supabase, channel, (status) => {
       // A rejoin after a dropped socket fires SUBSCRIBED again; whatever was
       // sent in the gap is not replayed, so re-read the room.
       if (status !== 'SUBSCRIBED') return;
@@ -271,7 +272,7 @@ export function RoomClient({
     });
     return () => {
       if (refreshTimer) clearTimeout(refreshTimer);
-      supabase.removeChannel(channel);
+      stop();
     };
   }, [roomId, router]);
 

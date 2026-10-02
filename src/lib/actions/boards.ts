@@ -174,7 +174,9 @@ export async function joinBoardViaCode(
   });
   if (error) return reportAndFail('SB-BOARD-SAVE', 'board.join', error);
   if (typeof slug !== 'string') return failure('SB-BOARD-UNKNOWN');
-  revalidatePath('/boards');
+  // No revalidatePath: this runs while /boards/join/[code] renders, where Next
+  // refuses it and the person who just joined saw the crash screen. /boards is
+  // rendered per request, so there is no cached list to refresh.
   return { ok: true, slug };
 }
 

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
+import { subscribeAuthorized } from '@/lib/supabase/realtime';
 import {
   bannerFromRow,
   parseNotificationRow,
@@ -74,8 +75,7 @@ export function LiveNotifications({ userId }: LiveNotificationsProps) {
       }, 400);
     };
 
-    let channel: ReturnType<ReturnType<typeof createClient>['channel']> | null =
-      null;
+    let stop: (() => void) | null = null;
 
     const onChange = (value: Record<string, unknown>) => {
       // Any change moves the bell: a new row, a bump, or a row marked read.
@@ -101,7 +101,7 @@ export function LiveNotifications({ userId }: LiveNotificationsProps) {
     try {
       const supabase = createClient();
       const filter = `user_id=eq.${userId}`;
-      channel = supabase
+      const channel = supabase
         .channel(`notifications:${userId}`)
         .on(
           'postgres_changes',
@@ -112,18 +112,18 @@ export function LiveNotifications({ userId }: LiveNotificationsProps) {
           'postgres_changes',
           { event: 'UPDATE', schema: 'public', table: 'notifications', filter },
           (payload) => onChange(payload.new),
-        )
-        .subscribe();
+        );
+      stop = subscribeAuthorized(supabase, channel);
     } catch {
       // Realtime unavailable/unconfigured (e.g. missing env in a preview) — the
       // bell and feed still work; we simply don't get live banners.
-      channel = null;
+      stop = null;
     }
 
     return () => {
       if (refreshTimer.current) clearTimeout(refreshTimer.current);
       refreshTimer.current = null;
-      if (channel) channel.unsubscribe();
+      stop?.();
     };
     // Banners state is only ever updated through the functional setter, so the
     // effect depends on nothing but the user identity and the router.

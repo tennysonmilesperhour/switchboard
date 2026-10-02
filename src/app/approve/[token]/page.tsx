@@ -3,7 +3,7 @@ import { ErrorNotice } from '@/components/ui/ErrorNotice';
 import { errorFor } from '@/lib/errors';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { loadGuardianPlanFacts } from '@/lib/server/guardian-facts';
-import { ApproveClient } from './ApproveClient';
+import { ApprovalOutcome, ApproveClient } from './ApproveClient';
 
 export const metadata: Metadata = {
   title: 'Guardian Approval | Switchboard',
@@ -42,15 +42,33 @@ export default async function ApprovalPage({
     );
   }
 
+  const facts = await loadGuardianPlanFacts(admin, approval.event_id, approval.invite_id);
+
+  // Answered: say what the answer did, for this plan and this person. This is
+  // also what the guardian sees the moment they answer, since the action
+  // revalidates and this page renders again.
   if (approval.status !== 'pending') {
+    if (facts && (approval.status === 'approved' || approval.status === 'denied')) {
+      const { data: invite } = await admin
+        .from('invites')
+        .select('status')
+        .eq('id', approval.invite_id)
+        .maybeSingle();
+      return (
+        <ApprovalOutcome
+          facts={facts}
+          outcome={approval.status}
+          waitlisted={invite?.status === 'waitlisted'}
+        />
+      );
+    }
     return (
       <div className="mx-auto max-w-md px-4 py-16 text-center">
-        <p className="text-lg font-bold">This has already been {approval.status}.</p>
+        <p className="text-lg font-bold">This request has already been answered.</p>
       </div>
     );
   }
 
-  const facts = await loadGuardianPlanFacts(admin, approval.event_id, approval.invite_id);
   if (!facts) {
     const gone = errorFor('SB-RSVP-GONE');
     return (

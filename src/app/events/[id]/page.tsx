@@ -727,6 +727,7 @@ export default async function EventPage({
             shareUrl={eventShareUrl(event.share_token)}
             state={shareState}
             eventTitle={event.title}
+            dateSet={Boolean(event.starts_at)}
           />
         )}
 

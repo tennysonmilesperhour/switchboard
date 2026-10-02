@@ -4,6 +4,7 @@ import { useEffect, useState, useTransition } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
+import { subscribeAuthorized } from '@/lib/supabase/realtime';
 import { Button } from '@/components/ui/Button';
 import { Card, SectionHeader } from '@/components/ui/Card';
 import { Chip } from '@/components/ui/Chip';
@@ -112,11 +113,8 @@ export function MutualClient({
             router.refresh();
           }
         },
-      )
-      .subscribe();
-    return () => {
-      supabase.removeChannel(channel);
-    };
+      );
+    return subscribeAuthorized(supabase, channel);
   }, [currentUserId, router]);
 
   function toggle(list: string[], value: string): string[] {

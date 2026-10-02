@@ -28,7 +28,26 @@ Two tiers:
   co-host using a host control. The deadline is moved into the past with the
   service role; the real cron sweep does the rest.
 
-`support.ts` holds what the last three share: the session cache, the
+- **`safety.spec.ts`** — moderation (reports, removal, suspension and its
+  lifting, a session that outlives its suspension), blocks in shared rooms,
+  giving space, and sabbatical mode.
+- **`rooms.spec.ts`** — a plan's room: header and members, live messages and
+  deletes, mute and leave, live tasks and expenses, split the bill, private
+  photos, load earlier, and voice notes.
+- **`people-places.spec.ts`** — households, rituals, unmatch, Ignore,
+  private-zone requests, zone and board organizer tools and invite links,
+  shared moments, and your people.
+- **`plans-more.spec.ts`** — guardian approval, the invite-list toggle, date
+  polls deciding a date, Open Table, response windows, editing after sending,
+  the capsule and Run it back.
+- **`settings.spec.ts`** — the notifications save model, SMS fallback, the
+  daily digest, notification paging, recovery email, Google sign-in error
+  codes, live-location radius, and blocked browser storage.
+
+These five came from walking every feature PR #223 built in a real browser on
+2026-10-02; each bug that walk found is now a test here.
+
+`support.ts` holds what the journeys share: the session cache, the
 service-role client for arranging state, Mailpit reads, and the cron call.
 
 ## Running the authenticated tests locally

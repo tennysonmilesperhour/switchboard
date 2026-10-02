@@ -29,33 +29,13 @@ export function ApproveClient({ token, facts, guardianName }: ApproveClientProps
     });
   }
 
-  if (result?.outcome === 'approved') {
+  if (result?.outcome === 'approved' || result?.outcome === 'denied') {
     return (
-      <div className="mx-auto max-w-md px-4 py-16 text-center">
-        <div className="rounded-card bg-sage-soft p-6">
-          <p className="text-lg font-bold text-sage-deep">Approved</p>
-          <p className="text-sm text-ink-soft mt-2">
-            You&rsquo;ve approved {facts.inviteeName} for <strong>{eventTitle}</strong>.
-            {result.inviteStatus === 'waitlisted'
-              ? ' It filled up before you answered, so they’re on the waitlist - they and the host have been told.'
-              : ' Their RSVP counts now, and they and the host have been told.'}
-          </p>
-        </div>
-      </div>
-    );
-  }
-
-  if (result?.outcome === 'denied') {
-    return (
-      <div className="mx-auto max-w-md px-4 py-16 text-center">
-        <div className="rounded-card bg-cream p-6">
-          <p className="text-lg font-bold">Denied</p>
-          <p className="text-sm text-ink-soft mt-2">
-            You&rsquo;ve denied {facts.inviteeName}&rsquo;s RSVP for <strong>{eventTitle}</strong>.
-            It no longer counts, and they and the host have been told.
-          </p>
-        </div>
-      </div>
+      <ApprovalOutcome
+        facts={facts}
+        outcome={result.outcome}
+        waitlisted={result.inviteStatus === 'waitlisted'}
+      />
     );
   }
 
@@ -139,6 +119,50 @@ export function ApproveClient({ token, facts, guardianName }: ApproveClientProps
             Deny
           </Button>
         </div>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * What an answer did. Shared with the server page, because answering
+ * revalidates and the page re-renders over this component's own state: a
+ * guardian who had just pressed Approve used to read only "This has already
+ * been approved.", as if someone else had answered first. Worded so it reads
+ * right both straight after answering and on reopening the link later.
+ */
+export function ApprovalOutcome({
+  facts,
+  outcome,
+  waitlisted,
+}: {
+  facts: GuardianPlanFacts;
+  outcome: 'approved' | 'denied';
+  waitlisted: boolean;
+}) {
+  if (outcome === 'approved') {
+    return (
+      <div className="mx-auto max-w-md px-4 py-16 text-center">
+        <div className="rounded-card bg-sage-soft p-6">
+          <p className="text-lg font-bold text-sage-deep">Approved</p>
+          <p className="text-sm text-ink-soft mt-2">
+            {facts.inviteeName}&rsquo;s RSVP for <strong>{facts.title}</strong> is approved.
+            {waitlisted
+              ? ' It filled up before the answer came in, so they’re on the waitlist - they and the host have been told.'
+              : ' It counts now, and they and the host have been told.'}
+          </p>
+        </div>
+      </div>
+    );
+  }
+  return (
+    <div className="mx-auto max-w-md px-4 py-16 text-center">
+      <div className="rounded-card bg-cream p-6">
+        <p className="text-lg font-bold">Denied</p>
+        <p className="text-sm text-ink-soft mt-2">
+          {facts.inviteeName}&rsquo;s RSVP for <strong>{facts.title}</strong> was denied. It no
+          longer counts, and they and the host have been told.
+        </p>
       </div>
     </div>
   );

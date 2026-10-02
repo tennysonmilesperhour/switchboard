@@ -188,7 +188,9 @@ export async function joinZoneViaCode(
   });
   if (error) return reportAndFail('SB-ZONE-SAVE', 'zone.join', error);
   if (typeof slug !== 'string') return failure('SB-ZONE-UNKNOWN');
-  revalidatePath('/zones');
+  // No revalidatePath: this runs while /zones/join/[code] renders, where Next
+  // refuses it and the person who just joined saw the crash screen. /zones is
+  // rendered per request, so there is no cached list to refresh.
   return { ok: true, slug };
 }
 
