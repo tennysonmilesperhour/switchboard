@@ -90,6 +90,18 @@ export function parseZoneEnd(raw: unknown, now: number = Date.now()): string | n
 }
 
 /**
+ * The `YYYY-MM-DD` an organizer picked, read back from a stored end. A picked
+ * day is saved as the close of that day in UTC ({@link parseZoneEnd}), and the
+ * zone page shows that UTC day, so the form reads it in UTC too. Read in the
+ * browser's own zone, anyone east of UTC saw the next day after saving.
+ */
+export function zoneEndDay(iso: string): string {
+  const date = new Date(iso);
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${date.getUTCFullYear()}-${pad(date.getUTCMonth() + 1)}-${pad(date.getUTCDate())}`;
+}
+
+/**
  * Escape a search term for a Postgres `ILIKE` pattern, so `%` and `_` typed by
  * a reader match themselves instead of everything. Also drops the characters
  * PostgREST's filter grammar reserves, and caps the length.

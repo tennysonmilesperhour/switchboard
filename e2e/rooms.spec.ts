@@ -383,7 +383,7 @@ test.describe('rooms', () => {
     await expect(hana.getByText('About $10.00 each for 3 people.')).toBeVisible();
     await hana.getByRole('button', { name: 'Add expense' }).click();
     const hanaRow = hana.getByRole('listitem').filter({ hasText: dinner });
-    await expect(hanaRow).toContainText('Bo Guest paid · split 3 ways');
+    await expect(hanaRow).toContainText('Bo paid · split 3 ways');
     await expect(hanaRow).toContainText('$30.00');
 
     // Everyone sees their own side and everyone else's.

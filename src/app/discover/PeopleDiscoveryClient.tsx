@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/Button';
 import { Card, SectionHeader } from '@/components/ui/Card';
 import { Chip } from '@/components/ui/Chip';
 import { EmptyState } from '@/components/ui/EmptyState';
+import { Switch } from '@/components/ui/Switch';
 import { ErrorNotice } from '@/components/ui/ErrorNotice';
 import { useToast } from '@/components/ui/Toast';
 import { BlockReportButtons } from '@/components/profile/BlockReportButtons';
@@ -187,17 +188,12 @@ export function PeopleDiscoveryClient({
             <span className="text-sm font-bold text-terracotta-deep">
               Show me in discovery
             </span>
-            <button
-              type="button"
-              role="switch"
-              aria-checked={false}
-              aria-label="Show me in people discovery"
+            <Switch
+              checked={false}
+              label="Show me in people discovery"
               disabled={discoverPending}
-              onClick={enableDiscoverability}
-              className="relative inline-flex h-6 w-11 shrink-0 items-center rounded-full bg-white/70 transition-colors disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-terracotta focus-visible:ring-offset-2"
-            >
-              <span className="inline-block size-5 translate-x-0.5 rounded-full bg-terracotta shadow transition-transform" />
-            </button>
+              onCheckedChange={enableDiscoverability}
+            />
           </div>
           <p className="mt-2 text-xs text-ink-faint">
             Fine-tune what people see - location, interests, mutual friends - anytime in{' '}

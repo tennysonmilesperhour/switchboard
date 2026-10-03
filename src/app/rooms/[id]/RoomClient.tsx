@@ -388,7 +388,7 @@ export function RoomClient({
     setMenu(null);
     const ok = await confirm({
       title: 'Delete this message?',
-      body: 'It’s removed for everyone in this room. Anything it filed into the tabs stays unless it was a photo.',
+      body: 'It’s removed for everyone in this room. If it was a photo, the photo comes out of the Photos tab too. Anything else it filed into the tabs, like a place, task, or link, stays there.',
       confirmLabel: 'Delete',
       danger: true,
     });

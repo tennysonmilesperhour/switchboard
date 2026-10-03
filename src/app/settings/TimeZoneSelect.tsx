@@ -1,6 +1,7 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { canonicalZone, timeZoneOptions } from '@/lib/time-zones';
 
 /**
  * The profile's time zone, which quiet hours, the daily summary and text
@@ -53,10 +54,15 @@ export function TimeZoneSelect({
     selectRef.current?.dispatchEvent(new Event('change', { bubbles: true }));
   }, [value]);
 
-  // The saved zone and the device's own are always offered, even when this
-  // runtime's list spells them differently (Asia/Kolkata vs Asia/Calcutta).
-  const options = [...new Set([value, ...(deviceZone ? [deviceZone] : []), ...zones])];
-  const offerDevice = deviceZone && deviceZone !== value;
+  // The saved zone and the device's own are always offered as spelled, even
+  // when this runtime's list spells them differently (Asia/Kolkata vs
+  // Asia/Calcutta). Each place appears once, as "City (GMT+h)".
+  const options = useMemo(
+    () => timeZoneOptions(zones, [initial, value, deviceZone]),
+    [zones, initial, value, deviceZone],
+  );
+  const offerDevice =
+    deviceZone && canonicalZone(deviceZone) !== canonicalZone(value) ? deviceZone : null;
 
   return (
     <div className="space-y-1.5">
@@ -69,19 +75,19 @@ export function TimeZoneSelect({
         className="w-full rounded-card border border-line bg-paper px-3 py-2.5 text-sm"
       >
         {options.map((zone) => (
-          <option key={zone} value={zone}>
-            {zone.replaceAll('_', ' ')}
+          <option key={zone.value} value={zone.value}>
+            {zone.label}
           </option>
         ))}
       </select>
       {offerDevice && (
         <p className="text-xs text-ink-soft">
-          This device is set to {deviceZone.replaceAll('_', ' ')}.{' '}
+          This device is set to {canonicalZone(offerDevice).replaceAll('_', ' ')}.{' '}
           <button
             type="button"
             onClick={() => {
               pendingNotify.current = true;
-              setValue(deviceZone);
+              setValue(offerDevice);
             }}
             className="font-bold text-terracotta-deep underline underline-offset-2"
           >

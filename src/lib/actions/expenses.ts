@@ -36,7 +36,9 @@ export interface ExpenseInput {
  * who logged an expense or who paid it may change it, and the shares always add
  * up to the amount. The checks below exist to give a useful sentence first.
  */
-export async function saveExpense(input: ExpenseInput): Promise<ActionResult> {
+export async function saveExpense(
+  input: ExpenseInput,
+): Promise<ActionResult & { expenseId?: string }> {
   const auth = await requireUser();
   if (!auth.ok) return auth;
   const { supabase } = auth;
@@ -71,7 +73,7 @@ export async function saveExpense(input: ExpenseInput): Promise<ActionResult> {
     return validation('That settle-up link isn’t a web address. Paste your Venmo or PayPal link.');
   }
 
-  const { error } = await supabase.rpc('save_expense', {
+  const { data: expenseId, error } = await supabase.rpc('save_expense', {
     p_room: roomId,
     p_description: trimmed,
     p_amount_cents: amountCents,
@@ -92,7 +94,8 @@ export async function saveExpense(input: ExpenseInput): Promise<ActionResult> {
   }
 
   revalidatePath(`/rooms/${roomId}`);
-  return { ok: true };
+  // The id lets the form wait until the refreshed ledger shows the row.
+  return { ok: true, expenseId: expenseId ?? undefined };
 }
 
 export async function deleteExpense(
