@@ -69,7 +69,9 @@ jobs:
   authenticated-e2e:
     name: Authenticated E2E
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    # Setup takes about 4 minutes and the 11 journey files about 21 on a hosted
+    # runner (2026-10-03); 25 cut the run off mid-suite with nothing failing.
+    timeout-minutes: 40
     # Test-only values for the throwaway local stack, not secrets. Job-level so
     # the build, the `npm run start` server Playwright launches and the specs
     # all read the same ones. CRON_SECRET lets the plan-lifecycle journeys run
