@@ -191,10 +191,12 @@ describe('a co-host', () => {
     });
   });
 
-  it('is never shown as a guest on the plan they help run, even holding an invitation', async () => {
+  it('can still answer an invitation they hold, while running the plan', async () => {
     const page = await load(COHOST);
 
-    expect(page.myInvite).toBeNull();
+    // Hiding it left a co-host who was invited no way to answer, and on a
+    // timed line their invitation lapsed to "No response".
+    expect(page.myInvite).not.toBeNull();
     expect(page.canAccessThread).toBe(true);
     expect(rpcCallsTo('event_invite_list')).toEqual([]);
   });

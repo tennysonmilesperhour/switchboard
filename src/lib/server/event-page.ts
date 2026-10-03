@@ -275,7 +275,10 @@ export async function loadEventPage(
 
   const cohostIds = (cohostResult.data ?? []).map((row) => row.cohost_id as string);
   const canManage = isHost || cohostIds.includes(user.id);
-  const myInvite = canManage ? null : myInviteResult.data;
+  // A co-host is often also an invitee (D1). Hiding their invitation left them
+  // no way to answer it, and on a timed line it lapsed to "No response". The
+  // primary host never holds one.
+  const myInvite = isHost ? null : myInviteResult.data;
   const eventZone = isValidTimeZone(event.time_zone)
     ? event.time_zone
     : isValidTimeZone(hostProfile?.timezone)
@@ -655,6 +658,12 @@ export async function loadEventPage(
 
   const planWhen = formatDateTimeRange(event.starts_at, event.ends_at, eventZone);
   const hostName = canManage ? (hostProfile?.display_name ?? null) : null;
+  // While the date is still being polled nobody has been sent anything, so a
+  // queued row is not "waiting in line" (CascadeProgress says the same).
+  const statusLabelFor = (status: string) =>
+    event.status === 'deciding' && normalizeInviteStatus(status) === 'queued'
+      ? 'Not invited yet - goes out when the group decides'
+      : INVITE_STATUS_LABEL[normalizeInviteStatus(status)];
   const inviteePerson = (input: EventPageAttendee): InviteePerson => {
     const isGuest = !input.inviteeId;
     if (!canManage) {
@@ -665,7 +674,7 @@ export async function loadEventPage(
         avatarUrl: input.avatarUrl,
         seed: input.inviteeId ?? input.inviteId,
         isGuest,
-        statusLabel: INVITE_STATUS_LABEL[normalizeInviteStatus(input.status)],
+        statusLabel: statusLabelFor(input.status),
         contact: null,
         inviteUrl: null,
         messages: null,
@@ -686,7 +695,7 @@ export async function loadEventPage(
       avatarUrl: input.avatarUrl,
       seed: input.inviteeId ?? input.inviteId,
       isGuest,
-      statusLabel: INVITE_STATUS_LABEL[normalizeInviteStatus(input.status)],
+      statusLabel: statusLabelFor(input.status),
       contact: input.guestContact?.trim() || null,
       inviteUrl,
       messages: {

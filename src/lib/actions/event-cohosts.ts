@@ -5,7 +5,7 @@ import { requireUser } from '@/lib/server/require-user';
 import type { ActionResult } from '@/lib/errors';
 import { failure, validation } from '@/lib/errors';
 import { notifyUsers } from '@/lib/server/notify';
-import { reportAndFail } from '@/lib/server/observability';
+import { reportAndFail, reportOperationalError } from '@/lib/server/observability';
 
 /**
  * Who may be made a co-host (decision D1), in the reader's terms. Returned for
@@ -98,6 +98,21 @@ export async function addCoHost(
     return reportAndFail('SB-PLAN-SAVE', 'event.cohost-add', error, { eventId });
   }
 
+  // Handing someone the plan puts them down as going, if they hold an open
+  // invitation: otherwise it sat unanswered and, on a timed line, lapsed to
+  // "No response" while they were helping run it. The database applies the
+  // RSVP's own rules (no seat on a guardian hold, none on a full plan), and
+  // they can still change their answer on the plan. Best-effort: being a
+  // co-host doesn't depend on it.
+  const { data: rsvp, error: rsvpError } = await supabase.rpc('accept_cohost_invite', {
+    p_event: eventId,
+    p_cohost: profile.id,
+  });
+  if (rsvpError) {
+    await reportOperationalError('event.cohost-add', rsvpError, { eventId, step: 'rsvp' });
+  }
+  const goingNow = rsvp === 'accepted';
+
   // Bring them into the Living Room so they can coordinate. Best-effort:
   // they may already be a member.
   if (event.room_id) {
@@ -117,7 +132,9 @@ export async function addCoHost(
   await notifyUsers([profile.id], {
     kind: 'cohost_added',
     title: 'You’re co-hosting',
-    body: `${hostProfile?.display_name?.trim() || 'The host'} made you a co-host of ${event.title}.`,
+    body: `${hostProfile?.display_name?.trim() || 'The host'} made you a co-host of ${event.title}.${
+      goingNow ? ' You’re down as going; change it on the plan if that’s wrong.' : ''
+    }`,
     url: `/events/${eventId}`,
   });
 
