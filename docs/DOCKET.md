@@ -443,7 +443,8 @@ Code can't close these; they need the owner or a dashboard:
   `/api/cron/cascade` 120 times in two hours, so the every-minute schedule in
   `vercel.json` is honoured.
 - **Unused `ADMIN_EMAILS`** is set in Vercel production and no code reads it.
-  Remove it, or say what it was meant to do.
+  Delete it in Vercel (Project → Settings → Environment Variables); the
+  Vercel connector can edit variables but not delete them.
 - **Twilio webhooks**: point the inbound and status webhooks at the app,
   enable Advanced Opt-Out, and run the live STOP/START check in
   [`DEPLOYMENT.md`](DEPLOYMENT.md).

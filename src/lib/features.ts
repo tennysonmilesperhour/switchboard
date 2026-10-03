@@ -206,7 +206,7 @@ export const FEATURE_GROUPS: readonly FeatureGroup[] = [
         id: 'co-hosts',
         title: 'Co-hosts',
         blurb:
-          'Hand a friend or someone on the guest list the host powers — editing the chain, approving requests, closing polls — because most plans have two organizers. They get a note and the plan shows up in their calendar.',
+          'Hand a friend or someone on the guest list the host powers — editing the chain, approving requests, closing polls — because most plans have two organizers. They get a note, the plan shows up in their calendar, and if they were invited they’re down as going (they can change that).',
         where: 'Your plan’s page → Co-hosts',
         start: { href: '/plans', label: 'Your plans' },
       },
