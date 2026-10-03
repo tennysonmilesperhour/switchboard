@@ -1,5 +1,6 @@
 import { NotificationChannels } from './NotificationChannels';
 import { TimeZoneSelect } from './TimeZoneSelect';
+import { timeZoneOptions } from '@/lib/time-zones';
 import type { Metadata } from 'next';
 import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
@@ -106,6 +107,11 @@ export default async function SettingsPage({
   const notificationsKnown =
     profileKnown && contactsKnown && !failed.sms && !failed.routes;
   const timeZones = [...new Set(['UTC', ...Intl.supportedValuesOf('timeZone')])];
+  // Labelled here, once: the browser's own zone data can spell and offset
+  // zones differently, and labels computed again during hydration made React
+  // throw the whole Settings page away (error #418, seen in CI).
+  const savedZone = profile?.timezone || 'UTC';
+  const timeZoneChoices = timeZoneOptions(timeZones, [savedZone]);
 
   const interests: string[] = profile?.interests ?? [];
   const downTo: string[] = profile?.down_to ?? [];
@@ -480,8 +486,8 @@ export default async function SettingsPage({
                           <TimeZoneSelect
                             id="timezone"
                             name="timezone"
-                            initial={profile?.timezone || 'UTC'}
-                            zones={timeZones}
+                            initial={savedZone}
+                            options={timeZoneChoices}
                           />
                           <p className="text-xs text-ink-faint">
                             Quiet hours, the daily summary and text messages all follow it.

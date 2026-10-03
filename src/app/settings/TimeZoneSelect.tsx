@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { canonicalZone, timeZoneOptions } from '@/lib/time-zones';
+import { canonicalZone, timeZoneOptions, type TimeZoneOption } from '@/lib/time-zones';
 
 /**
  * The profile's time zone, which quiet hours, the daily summary and text
@@ -17,12 +17,13 @@ export function TimeZoneSelect({
   name,
   id,
   initial,
-  zones,
+  options: serverOptions,
 }: {
   name: string;
   id: string;
   initial: string;
-  zones: string[];
+  /** Built on the server, so hydration renders exactly what the server did. */
+  options: TimeZoneOption[];
 }) {
   const [value, setValue] = useState(initial);
   const [deviceZone, setDeviceZone] = useState<string | null>(null);
@@ -54,13 +55,21 @@ export function TimeZoneSelect({
     selectRef.current?.dispatchEvent(new Event('change', { bubbles: true }));
   }, [value]);
 
-  // The saved zone and the device's own are always offered as spelled, even
-  // when this runtime's list spells them differently (Asia/Kolkata vs
-  // Asia/Calcutta). Each place appears once, as "City (GMT+h)".
-  const options = useMemo(
-    () => timeZoneOptions(zones, [initial, value, deviceZone]),
-    [zones, initial, value, deviceZone],
-  );
+  // The server's list already holds the saved zone. The device's own zone is
+  // only known after mount; if the list spells it differently (Asia/Kolkata vs
+  // Asia/Calcutta), it is offered as spelled, ahead of the rest.
+  const options = useMemo(() => {
+    const exact = new Set(serverOptions.map((option) => option.value));
+    const extra = [value, deviceZone].filter(
+      (zone): zone is string => Boolean(zone) && !exact.has(zone as string),
+    );
+    if (extra.length === 0) return serverOptions;
+    const added = timeZoneOptions([], extra);
+    const rest = serverOptions.filter(
+      (option) => !added.some((a) => canonicalZone(a.value) === canonicalZone(option.value)),
+    );
+    return [...added, ...rest];
+  }, [serverOptions, value, deviceZone]);
   const offerDevice =
     deviceZone && canonicalZone(deviceZone) !== canonicalZone(value) ? deviceZone : null;
 
