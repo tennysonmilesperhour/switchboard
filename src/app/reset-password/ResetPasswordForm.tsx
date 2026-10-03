@@ -64,6 +64,10 @@ export function ResetPasswordForm() {
         </p>
       ) : null}
       {complete ? (
+        // A full load on purpose: the new password replaced the session cookies,
+        // and the proxy and layout must read those, not the recovery session a
+        // client transition would carry (docs/AUTH.md).
+        // eslint-disable-next-line @next/next/no-location-assign-relative-destination
         <Button type="button" size="lg" className="w-full" onClick={() => window.location.assign('/')}>
           Continue
         </Button>

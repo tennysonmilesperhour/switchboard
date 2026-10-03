@@ -425,6 +425,10 @@ export function EventWizard({
       });
       if (result.ok && result.eventId) {
         const suffix = result.warning ? '?delivery=attention' : '';
+        // A full load on purpose: the new plan changes the shell around the
+        // page too (Calendar, the rooms list, the bell), and a client
+        // transition would keep those from before it existed.
+        // eslint-disable-next-line @next/next/no-location-assign-relative-destination
         window.location.assign(`/events/${result.eventId}${suffix}`);
         return;
       }
