@@ -58,6 +58,12 @@ interface CascadeProgressProps {
    * `InviteeSheet`). Absent means the rows stay read-only.
    */
   people?: Record<string, InviteePerson>;
+  /**
+   * The plan's date is still being polled, so nothing has gone out. A queued
+   * row there is not waiting a turn in any line, and saying so contradicted
+   * the footer on every plan that has no line at all.
+   */
+  deciding?: boolean;
 }
 
 // Colour and motion per status; the wording itself comes from the shared label
@@ -116,6 +122,7 @@ export function CascadeProgress({
   editable,
   canExtend,
   people,
+  deciding = false,
 }: CascadeProgressProps) {
   const [pending, startTransition] = useTransition();
   const [openPerson, setOpenPerson] = useState<InviteePerson | null>(null);
@@ -239,7 +246,10 @@ export function CascadeProgress({
   function row(invite: HostInvite): ReactNode {
     const status = normalizeInviteStatus(invite.status);
     const style = STATUS_STYLE[status];
-    const statusLabel = INVITE_STATUS_LABEL[status];
+    const statusLabel =
+      deciding && status === 'queued'
+        ? 'Not invited yet - goes out when the group decides'
+        : INVITE_STATUS_LABEL[status];
     const expiresAt =
       invite.status === 'sent'
         ? inviteExpiresAt({
@@ -296,7 +306,7 @@ export function CascadeProgress({
             {invite.status === 'sent' && expiresAt
               ? ` · moves on ${formatRelative(expiresAt.toISOString())}`
               : ''}
-            {invite.status === 'queued'
+            {invite.status === 'queued' && !deciding
               ? ` · ${formatWindow(invite.window_minutes)} window`
               : ''}
             {invite.status === 'declined' && invite.decline_note === 'keep_asking'
@@ -499,7 +509,7 @@ export function CascadeProgress({
         </p>
       )}
       <p className="text-plate text-plate-inset text-xs leading-relaxed text-ink-faint">
-        {isStaggered(mode)
+        {isStaggered(mode) || deciding
           ? ''
           : 'Everyone on this list was invited at the same moment - there is no line and nobody is waiting a turn. '}
         {people

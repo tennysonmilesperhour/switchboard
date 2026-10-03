@@ -683,6 +683,7 @@ export default async function EventPage({
               editable={lineEditable}
               canExtend={canManage && hostCanExtendLiveWindow(event.status)}
               people={inviteeCards}
+              deciding={event.status === 'deciding'}
             />
           </section>
         )}

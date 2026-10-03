@@ -432,7 +432,7 @@ test.describe('people and places', () => {
       await expectToast(page, `${hal.name} removed.`);
       await h.reload();
       await expect(h.getByRole('heading', { name: `${name} is private` })).toBeVisible();
-      await expect(h.getByText('removed you from this zone', { exact: false })).toBeVisible();
+      await expect(h.getByText('You were removed from this zone', { exact: false })).toBeVisible();
       await expect(h.getByText('You can ask once more from', { exact: false })).toBeVisible();
       await shot(h, 'zone-removed');
     } finally {
@@ -828,8 +828,8 @@ test.describe('people and places', () => {
       await shot(page, 'people-profile');
 
       // G36: Vi's own profile offers a link to copy, and it opens for someone else.
+      // The link is on the contact card itself, not only inside the QR dialog.
       await page.goto('/profile');
-      await page.getByRole('button', { name: 'Show QR' }).click();
       const copy = page.getByRole('button', { name: 'Copy profile link' });
       await expect(copy).toBeVisible();
       const link = (await copy.getAttribute('title'))!;
@@ -837,6 +837,8 @@ test.describe('people and places', () => {
       await copy.click();
       await expect(page.getByRole('button', { name: 'Copied' }).first()).toBeVisible();
       expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(link);
+      await page.getByRole('button', { name: 'Show QR' }).click();
+      await expect(page.getByRole('dialog').getByText(link)).toBeVisible();
       await shot(page, 'profile-share');
 
       await yaraSide.page.goto(new URL(link).pathname);

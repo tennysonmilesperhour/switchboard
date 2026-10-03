@@ -423,13 +423,13 @@ export function MutualClient({
                   <>
                     <Link
                       href={`/events/new?title=${encodeURIComponent(ritual.activity)}&ritual=${ritual.id}&invite=${ritual.otherId}`}
-                      className="rounded-pill px-2 py-1 text-xs font-bold text-terracotta-deep hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-terracotta"
+                      className="inline-flex min-h-11 items-center rounded-pill px-2.5 text-xs font-bold text-terracotta-deep hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-terracotta"
                     >
                       Plan it
                     </Link>
                     <button
                       type="button"
-                      className="rounded-pill px-2 py-1 text-xs text-ink-faint hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-terracotta"
+                      className="inline-flex min-h-11 items-center rounded-pill px-2.5 text-xs text-ink-faint hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-terracotta"
                       disabled={pending}
                       onClick={() => skip(ritual)}
                     >
@@ -440,7 +440,7 @@ export function MutualClient({
                 {ritual.status !== 'proposed' && (
                   <button
                     type="button"
-                    className="rounded-pill px-2 py-1 text-xs text-ink-faint hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-terracotta"
+                    className="inline-flex min-h-11 items-center rounded-pill px-2.5 text-xs text-ink-faint hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-terracotta"
                     disabled={pending}
                     onClick={() =>
                       startTransition(async () => {
@@ -462,7 +462,7 @@ export function MutualClient({
                 )}
                 <button
                   type="button"
-                  className="rounded-pill px-2 py-1 text-xs text-ink-faint hover:text-rose-deep focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-terracotta"
+                  className="inline-flex min-h-11 items-center rounded-pill px-2.5 text-xs text-ink-faint hover:text-rose-deep focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-terracotta"
                   disabled={pending}
                   onClick={() =>
                     ritual.status === 'proposed' && !ritual.isMine

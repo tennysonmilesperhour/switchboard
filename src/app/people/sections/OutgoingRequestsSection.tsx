@@ -36,7 +36,7 @@ export function OutgoingRequestsSection({
             <button
               type="button"
               disabled={pending}
-              className="shrink-0 rounded-pill px-2 py-1 text-xs font-semibold text-terracotta-deep hover:text-terracotta-deep focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-terracotta"
+              className="shrink-0 inline-flex min-h-11 items-center rounded-pill px-2.5 text-xs font-semibold text-terracotta-deep hover:text-terracotta-deep focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-terracotta"
               onClick={() => resendOutgoing(request)}
             >
               Resend
@@ -44,7 +44,7 @@ export function OutgoingRequestsSection({
             <button
               type="button"
               disabled={pending}
-              className="shrink-0 rounded-pill px-2 py-1 text-xs text-ink-faint hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-terracotta"
+              className="shrink-0 inline-flex min-h-11 items-center rounded-pill px-2.5 text-xs text-ink-faint hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-terracotta"
               onClick={() => cancelOutgoing(request)}
             >
               Cancel

@@ -90,6 +90,13 @@ export function ProfileShare({
             Show QR
           </button>
         </div>
+        {profileUrl && (
+          // The /u/ link used to live only inside the QR dialog, where people
+          // looking for "my profile link" never found it.
+          <div className="flex justify-center border-t border-line px-4 py-1.5">
+            <CopyButton text={profileUrl} label="Copy profile link" className="min-h-11" />
+          </div>
+        )}
       </div>
 
       {open ? (

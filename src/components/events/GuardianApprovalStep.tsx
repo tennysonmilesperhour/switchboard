@@ -109,7 +109,10 @@ export function GuardianApprovalStep({
         This plan needs a parent or guardian to approve your RSVP. Until they
         do, it doesn’t count and doesn’t hold a spot.
       </p>
-      {lastSent && (
+      {/* A failed send just now already has its alert, with the code. The
+          refreshed request then reads as undelivered too, and the two said the
+          same thing twice. The status line is for the reader arriving later. */}
+      {lastSent && !(undelivered && error) && (
         <p role="status" className="mt-2 text-sm text-ink">
           {undelivered ? (
             <>
