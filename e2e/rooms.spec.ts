@@ -205,7 +205,7 @@ test.describe('rooms', () => {
   test('the room says who is here, links back to the plan, and explains mute and leave', async () => {
     // Found from the inbox, not by URL.
     await hana.goto('/rooms');
-    await hana.getByRole('link', { name: new RegExp(title) }).click();
+    await hana.getByRole('main').getByRole('link', { name: new RegExp(title) }).click();
     await hana.waitForURL(`**${roomUrl}`);
 
     await expect(hana.getByText('Bo and Cy', { exact: true })).toBeVisible();
@@ -227,7 +227,7 @@ test.describe('rooms', () => {
     await expectToast(hana, 'Muted. This room won’t notify you.');
     await expect(hana.getByText(/Muted: this room won’t send you notifications/)).toBeVisible();
     await hana.goto('/rooms');
-    await expect(hana.getByRole('link', { name: new RegExp(title) })).toContainText('Muted ·');
+    await expect(hana.getByRole('main').getByRole('link', { name: new RegExp(title) })).toContainText('Muted ·');
     await hana.goBack();
     await hana.getByRole('button', { name: 'Unmute this room' }).click();
     await expectToast(hana, 'Unmuted.');
@@ -240,7 +240,8 @@ test.describe('rooms', () => {
 
   test('messages reach the room and the inbox live, and a sender can delete their own', async () => {
     await boPage.goto('/rooms');
-    const boInboxRow = boPage.getByRole('link', { name: new RegExp(title) });
+    // Inside main: a live notification banner for the same room is a link too.
+    const boInboxRow = boPage.getByRole('main').getByRole('link', { name: new RegExp(title) });
     await expect(boInboxRow).toBeVisible();
     await cyPage.goto(roomUrl);
     await expect(cyPage.getByRole('tablist', { name: 'Room sections' })).toBeVisible();
@@ -618,7 +619,7 @@ test.describe('rooms', () => {
     await cyPage.getByRole('button', { name: 'Leave this room' }).click();
     await confirmDialog(cyPage, 'Leave');
     await cyPage.waitForURL('**/rooms');
-    await expect(cyPage.getByRole('link', { name: new RegExp(title) })).toHaveCount(0);
+    await expect(cyPage.getByRole('main').getByRole('link', { name: new RegExp(title) })).toHaveCount(0);
 
     // The others see one fewer person.
     await boPage.goto(roomUrl);

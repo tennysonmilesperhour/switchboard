@@ -672,12 +672,42 @@ test.describe('plans, more', () => {
       await page.goto(`${eventUrl}/capsule`);
       await page.getByPlaceholder('The moment I want to remember is…').fill(line);
       await page.getByRole('button', { name: 'Add to the capsule' }).click();
-      await expect(page.getByText(line)).toBeVisible();
+      // The saved line, in the capsule itself: the text box still holds what was
+      // typed, so matching the words alone passed before the save had landed,
+      // and closing the browser then abandoned it.
+      await expect(page.locator('blockquote').getByText(line)).toBeVisible();
     });
     // The friend who said no can read it, but not write in it.
+    const { data: saved } = await adminClient()
+      .from('capsule_entries')
+      .select('id')
+      .eq('event_id', eventId)
+      .eq('line', line);
+    expect(saved, 'the guest’s line was never stored').toHaveLength(1);
     await asPerson(browser, friend.handle, async (page) => {
       await page.goto(`${eventUrl}/capsule`);
-      await expect(page.getByText(line)).toBeVisible();
+      try {
+        await expect(page.locator('blockquote').getByText(line)).toBeVisible();
+      } catch (cause) {
+        // Seen once in CI and not locally: say what the friend's access was.
+        const { data: invite } = await adminClient()
+          .from('invites')
+          .select('status, responded_at')
+          .eq('event_id', eventId)
+          .eq('invitee_id', friend.id)
+          .maybeSingle();
+        const { data: plan } = await adminClient()
+          .from('events')
+          .select('status, starts_at')
+          .eq('id', eventId)
+          .single();
+        throw new Error(
+          `The declined friend cannot see the capsule line. invite=${JSON.stringify(invite)} ` +
+            `plan=${JSON.stringify(plan)} url=${page.url()} ` +
+            `page=${(await page.locator('main').innerText().catch(() => '')).slice(0, 300)}`,
+          { cause },
+        );
+      }
       await expect(
         page.getByText('The capsule is written by the people who went and the plan’s hosts.'),
       ).toBeVisible();
