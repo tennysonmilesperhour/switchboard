@@ -75,7 +75,8 @@ end;
 $$;
 
 revoke all on function private.accept_cohost_invite(uuid, uuid) from public, anon;
-grant execute on function private.accept_cohost_invite(uuid, uuid) to authenticated;
+grant execute on function private.accept_cohost_invite(uuid, uuid)
+  to authenticated, service_role;
 
 create or replace function public.accept_cohost_invite(p_event uuid, p_cohost uuid)
 returns text
