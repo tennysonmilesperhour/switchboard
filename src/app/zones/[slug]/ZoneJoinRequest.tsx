@@ -102,7 +102,7 @@ export function ZoneJoinRequest({ zoneId, zoneName, initialState }: ZoneJoinRequ
 
   const decided = (reason: 'denied' | 'removed') =>
     reason === 'removed'
-      ? 'A moderator removed you from this zone.'
+      ? 'You were removed from this zone.'
       : 'The organizer passed on your request.';
 
   return (

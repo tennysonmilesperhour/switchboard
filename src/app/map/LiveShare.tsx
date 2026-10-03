@@ -111,7 +111,9 @@ export function LiveShare({
   mySharing: LiveLocation | null;
   /** Where the viewer's own pin is now — including every position tick. */
   onSelfChange: (point: MapPoint | null) => void;
-  onNearbyChange: (markers: MapMarker[]) => void;
+  /** `failed` when the check did not go through, so nothing may read the
+   *  empty list as "nobody is around". */
+  onNearbyChange: (markers: MapMarker[], failed?: boolean) => void;
   /** Fired once, when the viewer turns sharing on here. Separate from
    *  `onSelfChange` so the map can move for the deliberate act and stay put for
    *  the position updates that follow. */
@@ -175,7 +177,7 @@ export function LiveShare({
       // were current. Clear them, and say the check didn't go through.
       setNearbyError(result.code ?? 'SB-LOCATION-LOAD');
       setNearbyCount(null);
-      onNearbyChange([]);
+      onNearbyChange([], true);
       return;
     }
     const people = result.people ?? [];

@@ -50,6 +50,7 @@ export function MapExplorer({
 }) {
   const [enabled, setEnabled] = useState<Record<MapLayerKey, boolean>>(ALL_ON);
   const [liveMarkers, setLiveMarkers] = useState<MapMarker[]>([]);
+  const [nearbyFailed, setNearbyFailed] = useState(false);
   const [selfPoint, setSelfPoint] = useState<MapPoint | null>(
     mySharing ? { lat: mySharing.latitude, lng: mySharing.longitude } : null,
   );
@@ -124,7 +125,10 @@ export function MapExplorer({
     [focusOn],
   );
 
-  const handleNearby = useCallback((next: MapMarker[]) => setLiveMarkers(next), []);
+  const handleNearby = useCallback((next: MapMarker[], failed = false) => {
+    setLiveMarkers(next);
+    setNearbyFailed(failed);
+  }, []);
   const handleSelf = useCallback((point: MapPoint | null) => setSelfPoint(point), []);
   // Turning sharing on is a request to be shown where you are; a position tick
   // from the watch that follows is not, so only this moves the map.
@@ -238,6 +242,7 @@ export function MapExplorer({
         sections={sections}
         emptyLayers={emptyLayers}
         sharing={Boolean(selfPoint)}
+        nearbyFailed={nearbyFailed}
         focusedId={focus?.markerId ?? null}
         onShow={showMarker}
       />

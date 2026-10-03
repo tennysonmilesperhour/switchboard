@@ -145,3 +145,48 @@ test('treats a suspension that has run out as no suspension', async () => {
   expect(response.headers.get('x-middleware-next')).toBe('1');
   expect(signOut).not.toHaveBeenCalled();
 });
+
+/** What the auth server really returns for a suspended account's session. */
+function bannedSession() {
+  const signOut = vi.fn();
+  createServerClient.mockImplementation(
+    (_url: string, _key: string, options: { cookies: { setAll: (c: unknown[]) => void } }) => ({
+      auth: {
+        getUser: async () => ({
+          data: { user: null },
+          error: { status: 403, code: 'user_banned', message: 'User is banned' },
+        }),
+        signOut: async (args: unknown) => {
+          signOut(args);
+          options.cookies.setAll([
+            { name: 'sb-project-auth-token', value: '', options: { path: '/', maxAge: 0 } },
+          ]);
+          return { error: null };
+        },
+      },
+    }),
+  );
+  vi.stubEnv('VERCEL_ENV', '');
+  vi.stubEnv('NEXT_PUBLIC_SUPABASE_URL', 'https://project.supabase.co');
+  vi.stubEnv('NEXT_PUBLIC_SUPABASE_ANON_KEY', 'anon');
+  return { signOut };
+}
+
+test('reads the auth server\'s user_banned answer as a suspension, not a sign-out', async () => {
+  const { signOut } = bannedSession();
+  const response = await proxy(new NextRequest('https://switchboardsocial.me/plans'));
+  expect(response.headers.get('location')).toBe('https://switchboardsocial.me/login?error=suspended');
+  expect(signOut).toHaveBeenCalledWith({ scope: 'local' });
+});
+
+test('lets a banned session\'s Server Action through to requireUser instead of redirecting it', async () => {
+  bannedSession();
+  const response = await proxy(
+    new NextRequest('https://switchboardsocial.me/rooms/r1', {
+      method: 'POST',
+      headers: { 'next-action': 'abc123' },
+    }),
+  );
+  expect(response.headers.get('x-middleware-next')).toBe('1');
+  expect(response.headers.has('location')).toBe(false);
+});

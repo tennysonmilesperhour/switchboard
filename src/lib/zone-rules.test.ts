@@ -3,6 +3,7 @@ import {
   defaultZoneEnd,
   ilikeTerm,
   parseZoneEnd,
+  zoneEndDay,
   zoneIsActive,
   zoneRequestState,
   ZONE_MAX_DAYS,
@@ -78,6 +79,49 @@ describe('zone end dates (D23)', () => {
   it('knows an ended zone from a running one', () => {
     expect(zoneIsActive(iso(NOW + DAY), NOW)).toBe(true);
     expect(zoneIsActive(iso(NOW - 1), NOW)).toBe(false);
+  });
+});
+
+describe('a picked end date reads back as the same day (D23)', () => {
+  const localDay = (iso: string) => {
+    const date = new Date(iso);
+    const pad = (n: number) => String(n).padStart(2, '0');
+    return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+  };
+
+  function inZone<T>(zone: string, run: () => T): T {
+    const previous = process.env.TZ;
+    process.env.TZ = zone;
+    try {
+      return run();
+    } finally {
+      if (previous === undefined) delete process.env.TZ;
+      else process.env.TZ = previous;
+    }
+  }
+
+  const zones = [
+    'America/Los_Angeles',
+    'Pacific/Pago_Pago',
+    'UTC',
+    'Asia/Tokyo',
+    'Pacific/Kiritimati',
+  ];
+
+  it.each(zones)('in %s the form shows the day that was picked', (zone) => {
+    inZone(zone, () => {
+      for (const picked of ['2026-10-05', '2026-11-01', '2027-03-14']) {
+        const saved = parseZoneEnd(picked, NOW);
+        expect(saved).not.toBeNull();
+        expect(zoneEndDay(saved!)).toBe(picked);
+      }
+    });
+  });
+
+  it('reading the stored end in the browser’s own calendar was a day late east of UTC', () => {
+    const saved = parseZoneEnd('2026-10-05', NOW)!;
+    expect(inZone('America/Los_Angeles', () => localDay(saved))).toBe('2026-10-05');
+    expect(inZone('Asia/Tokyo', () => localDay(saved))).toBe('2026-10-06');
   });
 });
 

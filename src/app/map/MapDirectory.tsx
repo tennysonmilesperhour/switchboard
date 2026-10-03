@@ -14,6 +14,7 @@ export function MapDirectory({
   sections,
   emptyLayers,
   sharing,
+  nearbyFailed = false,
   focusedId,
   onShow,
 }: {
@@ -22,6 +23,8 @@ export function MapDirectory({
   emptyLayers: MapLayerKey[];
   /** Whether the viewer is currently sharing their own live location. */
   sharing: boolean;
+  /** The last nearby check failed, so an empty Live layer is unknown, not empty. */
+  nearbyFailed?: boolean;
   focusedId?: string | null;
   onShow: (marker: MapMarker) => void;
 }) {
@@ -86,7 +89,7 @@ export function MapDirectory({
           <span className="font-bold text-ink-soft">
             <span aria-hidden>{LAYER_META[key].emoji}</span> {LAYER_META[key].label}:
           </span>{' '}
-          {layerEmptyHint(key, { sharing })}
+          {layerEmptyHint(key, { sharing, nearbyFailed })}
         </p>
       ))}
     </section>

@@ -59,7 +59,7 @@ export function IncomingRequestsSection({
                 type="button"
                 disabled={pending}
                 onClick={() => reportRequest(request)}
-                className="rounded-pill px-2 py-1 text-xs font-semibold text-ink-faint hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-terracotta"
+                className="inline-flex min-h-11 items-center rounded-pill px-2.5 text-xs font-semibold text-ink-faint hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-terracotta"
               >
                 Report
               </button>
@@ -67,7 +67,7 @@ export function IncomingRequestsSection({
                 type="button"
                 disabled={pending}
                 onClick={() => blockRequest(request)}
-                className="rounded-pill px-2 py-1 text-xs font-semibold text-rose-deep hover:text-rose focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-terracotta"
+                className="inline-flex min-h-11 items-center rounded-pill px-2.5 text-xs font-semibold text-rose-deep hover:text-rose focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-terracotta"
               >
                 Block
               </button>

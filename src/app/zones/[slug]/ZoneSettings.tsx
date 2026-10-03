@@ -8,6 +8,7 @@ import { useToast } from '@/components/ui/Toast';
 import { useConfirm } from '@/components/ui/ConfirmDialog';
 import { deleteZone, updateZoneDetails } from '@/lib/actions/zones';
 import { EXPERIENCE_PRESETS } from '@/lib/types';
+import { zoneEndDay } from '@/lib/zone-rules';
 
 interface ZoneSettingsProps {
   zoneId: string;
@@ -18,13 +19,6 @@ interface ZoneSettingsProps {
   endsAt: string;
   /** Only the organizer may delete; moderators may edit. */
   isOrganizer: boolean;
-}
-
-/** `YYYY-MM-DD` for a date input, in the reader's own calendar. */
-function dayOf(iso: string): string {
-  const date = new Date(iso);
-  const pad = (n: number) => String(n).padStart(2, '0');
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
 }
 
 /**
@@ -45,7 +39,7 @@ export function ZoneSettings({
   const [name, setName] = useState(initialName);
   const [description, setDescription] = useState(initialDescription ?? '');
   const [experiences, setExperiences] = useState<string[]>(initialExperiences);
-  const [endsOn, setEndsOn] = useState(dayOf(endsAt));
+  const [endsOn, setEndsOn] = useState(zoneEndDay(endsAt));
   const [pending, startTransition] = useTransition();
   const toast = useToast();
   const confirm = useConfirm();

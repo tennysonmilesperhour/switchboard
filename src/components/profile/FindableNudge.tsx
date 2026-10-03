@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { Card } from '@/components/ui/Card';
 import { Icon } from '@/components/ui/Icon';
 import type { FindabilityState } from '@/lib/findability';
+import { readDeviceFlag, writeDeviceFlag } from '@/components/system/device-storage';
 
 const DISMISS_KEY = 'sb-findable-nudge-dismissed';
 
@@ -29,7 +30,7 @@ export function FindableNudge({ state }: { state: FindabilityState }) {
   useEffect(() => {
     let cancelled = false;
     void Promise.resolve().then(() => {
-      if (!cancelled) setDismissed(localStorage.getItem(DISMISS_KEY) === '1');
+      if (!cancelled) setDismissed(readDeviceFlag(DISMISS_KEY) === '1');
     });
     return () => {
       cancelled = true;
@@ -53,7 +54,7 @@ export function FindableNudge({ state }: { state: FindabilityState }) {
           type="button"
           aria-label="Dismiss findability tip"
           onClick={() => {
-            localStorage.setItem(DISMISS_KEY, '1');
+            writeDeviceFlag(DISMISS_KEY, '1');
             setDismissed(true);
           }}
           className="-m-2 inline-flex size-11 shrink-0 items-center justify-center rounded-full text-ink-faint hover:bg-card/70 hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-terracotta"

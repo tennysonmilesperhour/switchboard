@@ -21,8 +21,13 @@ cp .env.example .env.local   # fill in Supabase keys (see below)
 npm run dev
 ```
 
-1. Create a Supabase project and run the SQL files in `supabase/migrations/` in timestamp order.
-2. Put the project URL + anon key + service-role key in `.env.local`.
+1. Start a local database with the [Supabase CLI](https://supabase.com/docs/guides/local-development)
+   (Docker required): `supabase start` applies every file in
+   `supabase/migrations/` in order. Run `supabase init` first if there is no
+   `supabase/config.toml`. For a hosted project, `supabase link` then
+   `supabase db push`; never paste migrations by hand except to clear a backlog
+   (see [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md)).
+2. Put the API URL + anon key + service-role key that `supabase start` prints in `.env.local`.
 3. Optional: `ANTHROPIC_API_KEY` for real AI features (graceful fallback without).
 4. Optional: `npx web-push generate-vapid-keys` → enables push notifications.
 
@@ -74,6 +79,10 @@ candidates instead.
 ```bash
 npm run dev      # local dev
 npm test         # vitest unit tests (cascade, scoring, windows)
+npm run lint     # eslint
+npx tsc --noEmit # typecheck
 npm run build    # production build
-npx playwright test  # e2e (needs a running dev server + seeded env)
+supabase test db # pgTAP security tests against the local database
+npm run e2e      # public browser tests; Playwright starts the dev server
+E2E_DB=1 npm run e2e  # signed-in journeys too: seed first, see e2e/README.md
 ```

@@ -636,6 +636,13 @@ const REGISTRY = {
     fix: 'Try recording again, or write your message instead.',
     actor: 'reader',
   },
+  // A saved voice note the browser refused or failed to play: a blocked or
+  // expired link, or an unsupported format. Nothing reaches the server.
+  'SB-VOICE-PLAY': {
+    message: 'This voice note didn’t play.',
+    fix: 'Reload the page to get a fresh link, then try again.',
+    actor: 'reader',
+  },
   'SB-SCOPE-BOARD': {
     message: 'The shared checklist didn’t load.',
     fix: 'Reload the page. Your ticks are saved as you make them.',

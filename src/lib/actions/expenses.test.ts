@@ -50,7 +50,7 @@ describe('saveExpense', () => {
   it('sends the payer, the participants and cents to save_expense', async () => {
     const result = await saveExpense(input({ payerId: SAM, settleUrl: 'venmo.com/u/sam' }));
 
-    expect(result).toEqual({ ok: true });
+    expect(result).toEqual({ ok: true, expenseId: 'e1' });
     expect(mocks.rpc).toHaveBeenCalledWith('save_expense', {
       p_room: ROOM,
       p_description: 'Pizza',

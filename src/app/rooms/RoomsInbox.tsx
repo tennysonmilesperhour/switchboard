@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { searchMessages, type MessageHit } from '@/lib/actions/rooms';
 import { createClient } from '@/lib/supabase/client';
+import { subscribeAuthorized } from '@/lib/supabase/realtime';
 import Link from 'next/link';
 import { Card } from '@/components/ui/Card';
 import { Icon, type IconName } from '@/components/ui/Icon';
@@ -64,10 +65,10 @@ export function RoomsInbox({ rooms }: { rooms: InboxRoom[] }) {
         router.refresh();
       }, 500);
     };
-    let channel: ReturnType<ReturnType<typeof createClient>['channel']> | null = null;
+    let stop: (() => void) | null = null;
     try {
       const supabase = createClient();
-      channel = supabase
+      const channel = supabase
         .channel('rooms-inbox')
         .on(
           'postgres_changes',
@@ -78,15 +79,15 @@ export function RoomsInbox({ rooms }: { rooms: InboxRoom[] }) {
             filter: `room_id=in.(${ids.join(',')})`,
           },
           refresh,
-        )
-        .subscribe();
+        );
+      stop = subscribeAuthorized(supabase, channel);
     } catch {
       // Realtime unavailable: the inbox still refreshes on navigation.
-      channel = null;
+      stop = null;
     }
     return () => {
       if (timer) clearTimeout(timer);
-      if (channel) channel.unsubscribe();
+      stop?.();
     };
   }, [roomKey, router]);
 
@@ -146,7 +147,7 @@ export function RoomsInbox({ rooms }: { rooms: InboxRoom[] }) {
                 {room.unread && <span className="absolute -right-0.5 -top-0.5 size-3 rounded-full border-2 border-surface bg-terracotta" />}
               </span>
               <div className="min-w-0 flex-1">
-                <div className="flex items-baseline justify-between gap-2"><p className={`truncate ${room.unread ? 'font-extrabold' : 'font-bold'}`}>{room.title}</p><span className="shrink-0 text-[11px] text-ink-faint">{room.muted && <span className="mr-1.5">Muted ·</span>}{formatRelative(room.activityAt)}</span></div>
+                <div className="flex items-baseline justify-between gap-2"><p className={`truncate ${room.unread ? 'font-extrabold' : 'font-bold'}`}>{room.unread && <span className="sr-only">Unread: </span>}{room.title}</p><span className="shrink-0 text-[11px] text-ink-faint">{room.muted && <span className="mr-1.5">Muted ·</span>}{formatRelative(room.activityAt)}</span></div>
                 <p className="truncate text-xs text-ink-muted">{room.preview}</p>
                 {room.people.length > 0 && <p className="truncate text-[11px] text-ink-faint">{room.people.join(', ')}</p>}
               </div>

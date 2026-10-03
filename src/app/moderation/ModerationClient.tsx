@@ -16,6 +16,7 @@ import {
   suspendReportedAccount,
 } from '@/lib/actions/moderation';
 import { SUSPENSION_CHOICES, suspensionLabel } from '@/lib/suspension';
+import { alreadyHandled, splitQueue } from '@/lib/moderation-queue';
 
 export interface OpenReport {
   id: string;
@@ -48,14 +49,35 @@ export interface OpenReport {
 const PHOTO_BODY = '📷 Photo';
 
 export function ModerationClient({ reports }: { reports: OpenReport[] }) {
+  // Reports someone already acted on sort below the rest, still open so the
+  // decision can be closed, never hidden.
+  const { open, handled } = splitQueue(reports);
   return (
-    <ul className="space-y-3">
-      {reports.map((report) => (
-        <li key={report.id}>
-          <ReportCard report={report} />
-        </li>
-      ))}
-    </ul>
+    <div className="space-y-4">
+      {open.length > 0 && (
+        <ul className="space-y-3">
+          {open.map((report) => (
+            <li key={report.id}>
+              <ReportCard report={report} />
+            </li>
+          ))}
+        </ul>
+      )}
+      {handled.length > 0 && (
+        <div className="space-y-3">
+          <p className="text-[11px] font-bold uppercase tracking-wide text-ink-faint">
+            Already handled, waiting to be marked actioned
+          </p>
+          <ul className="space-y-3">
+            {handled.map((report) => (
+              <li key={report.id}>
+                <ReportCard report={report} />
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -148,7 +170,7 @@ function ReportCard({ report }: { report: OpenReport }) {
     const ok = await confirm({
       title: isMessage ? 'Remove this message?' : 'Remove this post?',
       body: isMessage
-        ? 'Nobody in the room will see it again, and anything it filed into the room’s tabs goes with it. It stays in this report so the decision can be read later.'
+        ? 'Nobody in the room will see it again. Everything it filed into the room’s tabs is removed too: photos, places, tasks, links, and notes. It stays in this report so the decision can be read later.'
         : 'Nobody on the board will see it again, and its author can’t edit it. It stays in this report so the decision can be read later.',
       confirmLabel: 'Remove',
       danger: true,
@@ -183,8 +205,13 @@ function ReportCard({ report }: { report: OpenReport }) {
     );
   }
 
+  const handledLabel = alreadyHandled(report);
+
   return (
     <Card>
+      {handledLabel ? (
+        <p className="mb-1.5 text-xs font-bold text-sage-deep">{handledLabel}</p>
+      ) : null}
       <p className="text-sm">
         <span className="font-bold">{report.reporter_name ?? 'Someone'}</span>
         <span className="text-ink-soft">

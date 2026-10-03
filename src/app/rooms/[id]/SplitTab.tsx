@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState, useTransition } from 'react';
+import { useEffect, useMemo, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/Button';
 import { Chip } from '@/components/ui/Chip';
@@ -70,6 +70,13 @@ export function SplitTab({
   const [participants, setParticipants] = useState<string[]>(memberIds);
   const [formError, setFormError] = useState<Pick<ActionResult, 'error' | 'code'> | null>(null);
   const [pending, startTransition] = useTransition();
+  // A saved expense the refreshed ledger doesn't show yet. The form keeps what
+  // was typed and the button keeps saying "Saving…" until the row is on screen,
+  // so the gap between the save and the refresh never reads as "it didn't save".
+  const [submitting, setSubmitting] = useState(false);
+  const [landing, setLanding] = useState<{ id: string | null; from: ExpenseRow[] } | null>(null);
+  const formBusy = submitting || landing !== null;
+  const saving = pending || formBusy;
   const router = useRouter();
   const toast = useToast();
   const confirm = useConfirm();
@@ -102,6 +109,28 @@ export function SplitTab({
     setFormError(null);
   }
 
+  // The refreshed list arrived with the saved row in it: now clear the form.
+  if (
+    landing &&
+    expenses !== landing.from &&
+    (landing.id === null || expenses.some((expense) => expense.id === landing.id))
+  ) {
+    setLanding(null);
+    resetForm();
+  }
+
+  // If the refresh never brings the row (a dropped connection), the save still
+  // happened; don't leave the form stuck on "Saving…".
+  useEffect(() => {
+    if (!landing) return;
+    const timer = window.setTimeout(() => {
+      setLanding(null);
+      resetForm();
+    }, 10_000);
+    return () => window.clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- resetForm only touches setters and props captured at save time
+  }, [landing]);
+
   function startEdit(expense: ExpenseRow) {
     setEditingId(expense.id);
     setDescription(expense.description);
@@ -124,23 +153,30 @@ export function SplitTab({
 
   function submit(event: React.FormEvent) {
     event.preventDefault();
-    if (!description.trim() || !amount.trim()) return;
+    if (saving || !description.trim() || !amount.trim()) return;
     setFormError(null);
+    const before = expenses;
+    setSubmitting(true);
     startTransition(async () => {
-      const result = await saveExpense({
-        roomId,
-        expenseId: editingId,
-        description,
-        amount,
-        payerId,
-        participantIds: participants,
-        settleUrl,
-      });
+      let result: Awaited<ReturnType<typeof saveExpense>>;
+      try {
+        result = await saveExpense({
+          roomId,
+          expenseId: editingId,
+          description,
+          amount,
+          payerId,
+          participantIds: participants,
+          settleUrl,
+        });
+      } finally {
+        setSubmitting(false);
+      }
       if (!result.ok) {
         setFormError({ error: result.error ?? 'Could not save that.', code: result.code });
         return;
       }
-      resetForm();
+      setLanding({ id: result.expenseId ?? editingId, from: before });
       router.refresh();
     });
   }
@@ -273,7 +309,7 @@ export function SplitTab({
                     )}
                   </p>
                   <p className="text-xs text-ink-faint mt-0.5">
-                    {nameOf(expense.payer_id)} paid ·{' '}
+                    {first(nameOf(expense.payer_id))} paid ·{' '}
                     {split.length > 0
                       ? `split ${split.length} ${split.length === 1 ? 'way' : 'ways'} (${split
                           .map((share) => first(nameOf(share.member_id)))
@@ -329,6 +365,7 @@ export function SplitTab({
           <input
             value={description}
             onChange={(e) => setDescription(e.target.value)}
+            readOnly={formBusy}
             placeholder="What was it for?"
             aria-label="Expense description"
             maxLength={120}
@@ -338,11 +375,12 @@ export function SplitTab({
             <input
               value={amount}
               onChange={(e) => setAmount(e.target.value)}
+              readOnly={formBusy}
               type="number"
               min="0"
               step="0.01"
               inputMode="decimal"
-              placeholder="Amount (USD)"
+              placeholder="Amount ($)"
               aria-label="Amount in US dollars"
               className="w-32 rounded-card border border-line bg-card px-3.5 py-2.5 text-sm outline-none focus:border-terracotta"
             />
@@ -351,6 +389,7 @@ export function SplitTab({
               <select
                 value={payerId}
                 onChange={(e) => setPayerId(e.target.value)}
+                disabled={formBusy}
                 aria-label="Who paid"
                 className="min-w-0 flex-1 bg-transparent py-2.5 outline-none"
               >
@@ -369,7 +408,7 @@ export function SplitTab({
                 <Chip
                   key={member.id}
                   selected={participants.includes(member.id)}
-                  disabled={pending}
+                  disabled={saving}
                   onClick={() => toggleParticipant(member.id)}
                 >
                   {member.id === currentUserId ? 'You' : first(member.name)}
@@ -387,6 +426,7 @@ export function SplitTab({
           <input
             value={settleUrl}
             onChange={(e) => setSettleUrl(e.target.value)}
+            readOnly={formBusy}
             placeholder="Venmo/PayPal link (optional)"
             aria-label="Settle-up link"
             className="w-full rounded-card border border-line bg-card px-3.5 py-2.5 text-sm outline-none focus:border-terracotta"
@@ -406,13 +446,13 @@ export function SplitTab({
               type="submit"
               size="sm"
               disabled={
-                pending || !description.trim() || !amount.trim() || participants.length === 0
+                saving || !description.trim() || !amount.trim() || participants.length === 0
               }
             >
-              {editingId ? 'Save changes' : 'Add expense'}
+              {formBusy ? 'Saving…' : editingId ? 'Save changes' : 'Add expense'}
             </Button>
             {editingId && (
-              <Button type="button" size="sm" variant="ghost" disabled={pending} onClick={resetForm}>
+              <Button type="button" size="sm" variant="ghost" disabled={saving} onClick={resetForm}>
                 Cancel
               </Button>
             )}

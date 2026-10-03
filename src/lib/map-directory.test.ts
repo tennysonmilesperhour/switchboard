@@ -122,6 +122,12 @@ describe('layerEmptyHint', () => {
     expect(layerEmptyHint('live', { sharing: true })).toMatch(/no one else/i);
   });
 
+  it('never reads a failed nearby check as nobody being around', () => {
+    const hint = layerEmptyHint('live', { sharing: true, nearbyFailed: true });
+    expect(hint).toMatch(/nearby check/i);
+    expect(hint).not.toMatch(/no one else/i);
+  });
+
   it('points an empty Plans layer at the control that fills it', () => {
     expect(layerEmptyHint('plans', { sharing: false })).toMatch(/Locate my plans/);
   });

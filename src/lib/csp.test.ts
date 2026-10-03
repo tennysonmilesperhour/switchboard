@@ -64,6 +64,15 @@ describe('buildCsp', () => {
     );
   });
 
+  it('lets signed voice notes and photos load from the Supabase origin', () => {
+    const local = csp({ supabaseUrl: 'http://127.0.0.1:54321' });
+    expect(local).toContain("media-src 'self' blob: http://127.0.0.1:54321");
+    expect(local).toMatch(/img-src [^;]*http:\/\/127\.0\.0\.1:54321/);
+    const hosted = csp({ supabaseUrl: 'https://abc.supabase.co' });
+    expect(hosted).toContain("media-src 'self' blob: https://abc.supabase.co");
+    expect(hosted, 'only our project, not every Supabase project').not.toContain('*.supabase.co');
+  });
+
   it('keeps the directives that make an injected script useless', () => {
     const policy = csp({ isDev: false });
     for (const directive of [

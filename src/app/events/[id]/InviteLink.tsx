@@ -17,6 +17,8 @@ interface InviteLinkProps {
   shareUrl: string;
   /** What the link does right now, from `@/lib/share-link`. */
   state: ShareLinkState;
+  /** The plan has a date, even if the invitations haven't gone out yet. */
+  dateSet?: boolean;
   eventTitle: string;
 }
 
@@ -35,7 +37,7 @@ interface InviteLinkProps {
  * answers open up once the date is set — instead of the old silence, which
  * ended with recipients reporting a dead link the host had no way to see.
  */
-export function InviteLink({ eventId, shareUrl, state, eventTitle }: InviteLinkProps) {
+export function InviteLink({ eventId, shareUrl, state, eventTitle, dateSet = false }: InviteLinkProps) {
   const [pending, startTransition] = useTransition();
   const router = useRouter();
   const toast = useToast();
@@ -79,7 +81,7 @@ export function InviteLink({ eventId, shareUrl, state, eventTitle }: InviteLinkP
   }
 
   const shareable = hostCanShare(state);
-  const guidance = hostShareGuidance(state);
+  const guidance = hostShareGuidance(state, { dateSet });
 
   return (
     <section>

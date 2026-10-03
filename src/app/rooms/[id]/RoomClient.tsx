@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
+import { subscribeAuthorized } from '@/lib/supabase/realtime';
 import { Button } from '@/components/ui/Button';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { useToast } from '@/components/ui/Toast';
@@ -129,6 +130,17 @@ export function RoomClient({
   const [tab, setTab] = useState<TabKey>('chat');
   const [draft, setDraft] = useState('');
   const [pending, startTransition] = useTransition();
+  // Text messages still on their way to the server. The bubble shows at once,
+  // so closing the tab in that second would lose a message the reader saw sent.
+  const [sending, setSending] = useState(0);
+  useEffect(() => {
+    if (sending === 0) return;
+    const warn = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+    };
+    window.addEventListener('beforeunload', warn);
+    return () => window.removeEventListener('beforeunload', warn);
+  }, [sending]);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const [menu, setMenu] = useState<string | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -228,6 +240,20 @@ export function RoomClient({
           if (incoming.image_url) signPhoto(incoming.id);
         },
       );
+    // A sender deleting their own message. Realtime can't filter deletes by
+    // room and only carries the deleted row's id, so drop it by id: an id from
+    // another room matches nothing here.
+    channel = channel.on(
+      'postgres_changes',
+      { event: 'DELETE', schema: 'public', table: 'messages' },
+      (payload) => {
+        const gone = (payload.old as { id?: unknown } | null)?.id;
+        if (typeof gone !== 'string') return;
+        setMessages((current) =>
+          current.some((m) => m.id === gone) ? current.filter((m) => m.id !== gone) : current,
+        );
+      },
+    );
     for (const table of ['room_items', 'expenses', 'expense_shares'] as const) {
       for (const event of ['INSERT', 'UPDATE'] as const) {
         channel = channel.on(
@@ -237,7 +263,7 @@ export function RoomClient({
         );
       }
     }
-    channel.subscribe((status) => {
+    const stop = subscribeAuthorized(supabase, channel, (status) => {
       // A rejoin after a dropped socket fires SUBSCRIBED again; whatever was
       // sent in the gap is not replayed, so re-read the room.
       if (status !== 'SUBSCRIBED') return;
@@ -246,7 +272,7 @@ export function RoomClient({
     });
     return () => {
       if (refreshTimer) clearTimeout(refreshTimer);
-      supabase.removeChannel(channel);
+      stop();
     };
   }, [roomId, router]);
 
@@ -315,6 +341,7 @@ export function RoomClient({
       created_at: new Date().toISOString(),
     };
     setMessages((current) => [...current, optimistic]);
+    setSending((count) => count + 1);
     startTransition(async () => {
       // On failure the placeholder goes and the text goes back in the box —
       // and the reader is told why, so a vanished message isn't a mystery.
@@ -334,6 +361,8 @@ export function RoomClient({
       } catch {
         unsend();
         toast.error('Your message didn’t send. Check your connection and try again.');
+      } finally {
+        setSending((count) => count - 1);
       }
     });
   }
@@ -359,7 +388,7 @@ export function RoomClient({
     setMenu(null);
     const ok = await confirm({
       title: 'Delete this message?',
-      body: 'It’s removed for everyone in this room. Anything it filed into the tabs stays unless it was a photo.',
+      body: 'It’s removed for everyone in this room. If it was a photo, the photo comes out of the Photos tab too. Anything else it filed into the tabs, like a place, task, or link, stays there.',
       confirmLabel: 'Delete',
       danger: true,
     });
@@ -525,6 +554,11 @@ export function RoomClient({
             <div ref={bottomRef} />
           </div>
 
+          {sending > 0 && (
+            <p role="status" className="pt-1 text-right text-xs text-ink-faint">
+              Sending…
+            </p>
+          )}
           {canWrite && (
             <form onSubmit={submit} className="flex gap-2 pt-2 border-t border-line">
               <input
@@ -587,7 +621,9 @@ export function RoomClient({
               body={
                 tab === 'photo'
                   ? 'Tap 📷 in the chat to share a photo. Everything shared shows up here.'
-                  : 'When someone shares something useful in chat, it lands here automatically.'
+                  : tab === 'note' && !smartFiling
+                    ? 'Notes are filed here when smart filing is on.'
+                    : 'When someone shares something useful in chat, it lands here automatically.'
               }
             />
           ) : tab === 'photo' ? (

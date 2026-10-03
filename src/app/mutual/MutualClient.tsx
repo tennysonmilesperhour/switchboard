@@ -4,6 +4,7 @@ import { useEffect, useState, useTransition } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
+import { subscribeAuthorized } from '@/lib/supabase/realtime';
 import { Button } from '@/components/ui/Button';
 import { Card, SectionHeader } from '@/components/ui/Card';
 import { Chip } from '@/components/ui/Chip';
@@ -112,11 +113,8 @@ export function MutualClient({
             router.refresh();
           }
         },
-      )
-      .subscribe();
-    return () => {
-      supabase.removeChannel(channel);
-    };
+      );
+    return subscribeAuthorized(supabase, channel);
   }, [currentUserId, router]);
 
   function toggle(list: string[], value: string): string[] {
@@ -425,13 +423,13 @@ export function MutualClient({
                   <>
                     <Link
                       href={`/events/new?title=${encodeURIComponent(ritual.activity)}&ritual=${ritual.id}&invite=${ritual.otherId}`}
-                      className="rounded-pill px-2 py-1 text-xs font-bold text-terracotta-deep hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-terracotta"
+                      className="inline-flex min-h-11 items-center rounded-pill px-2.5 text-xs font-bold text-terracotta-deep hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-terracotta"
                     >
                       Plan it
                     </Link>
                     <button
                       type="button"
-                      className="rounded-pill px-2 py-1 text-xs text-ink-faint hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-terracotta"
+                      className="inline-flex min-h-11 items-center rounded-pill px-2.5 text-xs text-ink-faint hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-terracotta"
                       disabled={pending}
                       onClick={() => skip(ritual)}
                     >
@@ -442,7 +440,7 @@ export function MutualClient({
                 {ritual.status !== 'proposed' && (
                   <button
                     type="button"
-                    className="rounded-pill px-2 py-1 text-xs text-ink-faint hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-terracotta"
+                    className="inline-flex min-h-11 items-center rounded-pill px-2.5 text-xs text-ink-faint hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-terracotta"
                     disabled={pending}
                     onClick={() =>
                       startTransition(async () => {
@@ -464,7 +462,7 @@ export function MutualClient({
                 )}
                 <button
                   type="button"
-                  className="rounded-pill px-2 py-1 text-xs text-ink-faint hover:text-rose-deep focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-terracotta"
+                  className="inline-flex min-h-11 items-center rounded-pill px-2.5 text-xs text-ink-faint hover:text-rose-deep focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-terracotta"
                   disabled={pending}
                   onClick={() =>
                     ritual.status === 'proposed' && !ritual.isMine

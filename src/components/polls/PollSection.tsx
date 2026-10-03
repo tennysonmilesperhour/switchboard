@@ -3,6 +3,7 @@
 import { useEffect, useOptimistic, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
+import { subscribeAuthorized } from '@/lib/supabase/realtime';
 import { Button } from '@/components/ui/Button';
 import { Card, SectionHeader } from '@/components/ui/Card';
 import { ImageInput } from '@/components/ui/ImageInput';
@@ -266,11 +267,11 @@ export function PollSection({
           clearTimeout(timer);
           timer = setTimeout(() => router.refresh(), TALLY_REFRESH_MS);
         },
-      )
-      .subscribe();
+      );
+    const stop = subscribeAuthorized(supabase, channel);
     return () => {
       clearTimeout(timer);
-      supabase.removeChannel(channel);
+      stop();
     };
   }, [poll.id, router]);
 

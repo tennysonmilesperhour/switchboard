@@ -3518,6 +3518,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      accept_cohost_invite: {
+        Args: { p_cohost: string; p_event: string }
+        Returns: string
+      }
       app_schema_status: { Args: never; Returns: Json }
       app_schema_version: { Args: never; Returns: string }
       apply_cascade_updates: {
