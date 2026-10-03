@@ -18,7 +18,6 @@ interface ApproveClientProps {
 }
 
 export function ApproveClient({ token, facts, guardianName }: ApproveClientProps) {
-  const eventTitle = facts.title;
   const [result, setResult] = useState<ResolveApprovalResult | null>(null);
   const [pending, startTransition] = useTransition();
 
