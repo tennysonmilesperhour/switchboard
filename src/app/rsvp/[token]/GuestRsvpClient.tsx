@@ -21,7 +21,8 @@ import {
 
 interface GuestRsvpClientProps {
   token: string;
-  guestName: string;
+  /** Who to greet once they're in; null greets them without a name. */
+  guestName: string | null;
   initialStatus: string;
   questions?: RsvpQuestion[];
   /** When present (event has a start time), the accepted state offers add-to-calendar links. */
@@ -163,7 +164,7 @@ export function GuestRsvpClient({
           <span className="inline-flex items-center justify-center size-5 rounded-full bg-sage text-white">
             <Icon name="check" size={13} />
           </span>
-          You’re in, {guestName}!
+          {guestName ? `You’re in, ${guestName}!` : 'You’re in!'}
         </p>
         <p className="text-sm text-ink-soft mt-1">
           The host has been told. See you there.

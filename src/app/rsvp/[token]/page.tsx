@@ -3,7 +3,7 @@ import { normalizePhoneNumber } from '@/lib/phone';
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { createAdminClient, hasAdminCredentials } from '@/lib/supabase/admin';
-import { getUser } from '@/lib/supabase/server';
+import { createClient, getUser } from '@/lib/supabase/server';
 import { reportOperationalError } from '@/lib/server/observability';
 import { safeHttpUrl, serializeJsonLd } from '@/lib/security';
 import { inviteOpenGraph, unfurlSummary } from '@/lib/invite-links';
@@ -11,6 +11,7 @@ import { errorFor, errorRef } from '@/lib/errors';
 import { resolveEventZone } from '@/lib/server/event-zone';
 import { shareLinkNotice } from '@/lib/share-link';
 import { guardianStepFor } from '@/lib/guardian-approval';
+import { rsvpGreetingName } from '@/lib/invitee-contact';
 import { ErrorNotice } from '@/components/ui/ErrorNotice';
 import { InvitePlanDetails } from '@/components/events/InvitePlanDetails';
 import { RsvpSignInGate } from '@/components/events/RsvpSignInGate';
@@ -153,6 +154,16 @@ export default async function GuestRsvpPage({
   // every visit. Only to the person who said yes — the token alone is a
   // forwardable link — and masked even then (see GuardianRequestView).
   const viewerOwnsInvite = Boolean(user && invite?.invitee_id === user.id);
+  // Their own name, read with their own session, only when the invite is theirs:
+  // the token is a forwardable link, and whoever holds it is not who said yes.
+  const viewerName = user && viewerOwnsInvite
+    ? await createClient()
+        .then((supabase) =>
+          supabase.from('profiles').select('display_name').eq('id', user.id).maybeSingle(),
+        )
+        .then(({ data }) => data?.display_name ?? null)
+        .catch(() => null)
+    : null;
   const { data: guardianRows } =
     admin && invite && event?.parental_approval && viewerOwnsInvite &&
     (invite.status === 'pending_approval' || invite.status === 'declined')
@@ -280,7 +291,7 @@ export default async function GuestRsvpPage({
             ) : (
               <GuestRsvpClient
                 token={token}
-                guestName={invite.guest_name ?? 'there'}
+                guestName={rsvpGreetingName(viewerName, invite.guest_name)}
                 initialStatus={invite.status}
                 questions={questions}
                 authed={Boolean(user)}

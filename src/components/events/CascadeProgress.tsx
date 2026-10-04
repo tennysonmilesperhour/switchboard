@@ -332,92 +332,100 @@ export function CascadeProgress({
         </span>
       </>
     );
+    const hasControls = canRestage || canReWindow || canGiveMoreTime || canResend;
+    // The name and status get a line to themselves before the controls do: on a
+    // phone a "More time" menu beside them squeezed "Lena Fischer" to "Lena
+    // Fisc…" and the status onto five lines. The controls wrap below instead.
     return (
-      <div className="flex items-center gap-3">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
         {tappable ? (
           <button
             type="button"
             onClick={() => setOpenPerson(person)}
             aria-label={`Contact ${invite.invitee_name}`}
-            className="flex min-w-0 flex-1 items-center gap-3 rounded-card text-left transition-opacity hover:opacity-80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-terracotta"
+            className="flex min-w-0 grow basis-52 items-center gap-3 rounded-card text-left transition-opacity hover:opacity-80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-terracotta"
           >
             {identity}
           </button>
         ) : (
-          <span className="flex min-w-0 flex-1 items-center gap-3">{identity}</span>
+          <span className="flex min-w-0 grow basis-52 items-center gap-3">{identity}</span>
         )}
-        {canRestage && (
-          <select
-            value={invite.group_stage}
-            disabled={pending}
-            onChange={(e) => doStage(invite, Number(e.target.value))}
-            aria-label={`Wave for ${invite.invitee_name}`}
-            className="rounded-pill border border-line bg-paper px-2 py-1 text-xs font-medium text-ink outline-none focus:border-terracotta"
-          >
-            {/* A row outside the offered range (a plan from before the cap)
-                still shows where it is, as the window select does. */}
-            {!waveChoices.includes(invite.group_stage) && (
-              <option value={invite.group_stage}>
-                Wave {invite.group_stage + 1}
-              </option>
+        {hasControls && (
+          <div className="ml-auto flex shrink-0 flex-wrap items-center justify-end gap-2">
+            {canRestage && (
+              <select
+                value={invite.group_stage}
+                disabled={pending}
+                onChange={(e) => doStage(invite, Number(e.target.value))}
+                aria-label={`Wave for ${invite.invitee_name}`}
+                className="rounded-pill border border-line bg-paper px-2 py-1 text-xs font-medium text-ink outline-none focus:border-terracotta"
+              >
+                {/* A row outside the offered range (a plan from before the cap)
+                    still shows where it is, as the window select does. */}
+                {!waveChoices.includes(invite.group_stage) && (
+                  <option value={invite.group_stage}>
+                    Wave {invite.group_stage + 1}
+                  </option>
+                )}
+                {waveChoices.map((stage) => (
+                  <option key={stage} value={stage}>
+                    Wave {stage + 1}
+                  </option>
+                ))}
+              </select>
             )}
-            {waveChoices.map((stage) => (
-              <option key={stage} value={stage}>
-                Wave {stage + 1}
-              </option>
-            ))}
-          </select>
-        )}
-        {canReWindow && (
-          <select
-            value={invite.window_minutes}
-            disabled={pending}
-            onChange={(e) => doWindow(invite, Number(e.target.value))}
-            aria-label={`Response window for ${invite.invitee_name}`}
-            className="rounded-pill border border-line bg-paper px-2 py-1 text-xs font-medium text-ink outline-none focus:border-terracotta"
-          >
-            {!WINDOW_CHOICES.some(
-              (c) => c.windowMinutes === invite.window_minutes,
-            ) && (
-              <option value={invite.window_minutes}>
-                {formatWindow(invite.window_minutes)}
-              </option>
+            {canReWindow && (
+              <select
+                value={invite.window_minutes}
+                disabled={pending}
+                onChange={(e) => doWindow(invite, Number(e.target.value))}
+                aria-label={`Response window for ${invite.invitee_name}`}
+                className="rounded-pill border border-line bg-paper px-2 py-1 text-xs font-medium text-ink outline-none focus:border-terracotta"
+              >
+                {!WINDOW_CHOICES.some(
+                  (c) => c.windowMinutes === invite.window_minutes,
+                ) && (
+                  <option value={invite.window_minutes}>
+                    {formatWindow(invite.window_minutes)}
+                  </option>
+                )}
+                {WINDOW_CHOICES.map((c) => (
+                  <option key={c.windowMinutes} value={c.windowMinutes}>
+                    {c.label}
+                  </option>
+                ))}
+              </select>
             )}
-            {WINDOW_CHOICES.map((c) => (
-              <option key={c.windowMinutes} value={c.windowMinutes}>
-                {c.label}
-              </option>
-            ))}
-          </select>
-        )}
-        {canGiveMoreTime && (
-          <select
-            value=""
-            disabled={pending}
-            onChange={(e) => {
-              const add = Number(e.target.value);
-              if (add > 0) doWindow(invite, invite.window_minutes + add);
-            }}
-            aria-label={`Give ${invite.invitee_name} more time to answer`}
-            className="rounded-pill border border-line bg-paper px-2 py-1 text-xs font-medium text-ink outline-none focus:border-terracotta"
-          >
-            <option value="">More time</option>
-            {EXTEND_CHOICES.map((choice) => (
-              <option key={choice.addMinutes} value={choice.addMinutes}>
-                {choice.label}
-              </option>
-            ))}
-          </select>
-        )}
-        {canResend && (
-          <button
-            type="button"
-            disabled={pending}
-            onClick={() => doResend(invite)}
-            className="rounded-pill px-2 py-1 text-xs font-semibold text-terracotta-deep hover:bg-terracotta-soft focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-terracotta"
-          >
-            Resend
-          </button>
+            {canGiveMoreTime && (
+              <select
+                value=""
+                disabled={pending}
+                onChange={(e) => {
+                  const add = Number(e.target.value);
+                  if (add > 0) doWindow(invite, invite.window_minutes + add);
+                }}
+                aria-label={`Give ${invite.invitee_name} more time to answer`}
+                className="rounded-pill border border-line bg-paper px-2 py-1 text-xs font-medium text-ink outline-none focus:border-terracotta"
+              >
+                <option value="">More time</option>
+                {EXTEND_CHOICES.map((choice) => (
+                  <option key={choice.addMinutes} value={choice.addMinutes}>
+                    {choice.label}
+                  </option>
+                ))}
+              </select>
+            )}
+            {canResend && (
+              <button
+                type="button"
+                disabled={pending}
+                onClick={() => doResend(invite)}
+                className="rounded-pill px-2 py-1 text-xs font-semibold text-terracotta-deep hover:bg-terracotta-soft focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-terracotta"
+              >
+                Resend
+              </button>
+            )}
+          </div>
         )}
       </div>
     );
