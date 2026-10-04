@@ -161,7 +161,9 @@ export function PeopleStep({
                       >
                         <Avatar name={friend.name} seed={friend.id} size="sm" />
                         <span className="flex-1 min-w-0">
-                          <span className="font-bold text-sm block truncate">{friend.name}</span>
+                          {/* Two lines before an ellipsis: in a two-column grid on a
+                              phone, one line cut "Jordan Reyes" to "Jordan Re…". */}
+                          <span className="font-bold text-sm block line-clamp-2 break-words">{friend.name}</span>
                           <span className="text-[11px] text-ink-faint block truncate">
                             {friend.sabbatical ? '🍃 On sabbatical' : `@${friend.handle}`}
                           </span>

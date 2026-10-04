@@ -172,7 +172,7 @@ export function AppearancePicker({
               <span className="mt-2 flex items-center gap-1.5">
                 <span className="font-bold text-ink">{theme.name}</span>
                 {selected && (
-                  <span className="text-xs font-bold text-terracotta-deep">✓ on</span>
+                  <span className="shrink-0 whitespace-nowrap text-xs font-bold text-terracotta-deep">✓ on</span>
                 )}
                 {locked && <span aria-hidden>🔒</span>}
               </span>

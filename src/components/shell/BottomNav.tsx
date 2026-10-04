@@ -122,8 +122,10 @@ function MoreSheet({
       bottomOnly
       panelClassName="animate-rise max-h-[calc(100dvh-1rem)] w-full max-w-lg overflow-y-auto rounded-t-card bg-card p-4 pb-[calc(env(safe-area-inset-bottom)+1rem)] shadow-float"
     >
-        <div className="mb-3 flex items-center gap-2">
-          <div className="h-1 flex-1 rounded-full bg-line" aria-hidden />
+        {/* The grab handle sits centred above the title, where a sheet's
+            handle belongs; in the title row it drew as a long bar beside it. */}
+        <div className="mx-auto mb-1 h-1 w-10 rounded-full bg-line" aria-hidden />
+        <div className="mb-3 flex items-center justify-between gap-2">
           <h2 id="more-features-title" className="text-base font-extrabold text-ink">
             More
           </h2>

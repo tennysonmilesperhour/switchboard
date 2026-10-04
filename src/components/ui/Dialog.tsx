@@ -139,11 +139,14 @@ export function Dialog({
   const portal = document.getElementById(PORTAL_ID);
   if (!portal) throw new Error(`Dialog requires #${PORTAL_ID}`);
 
+  // A bottom sheet meets the bottom edge (its top corners are the rounded
+  // ones); with the padding every other layout keeps, a strip of the page
+  // showed beneath it.
   const placement = layout === 'center'
-    ? 'items-center'
+    ? 'items-center p-4'
     : layout === 'bottom-sheet'
-      ? 'items-end'
-      : 'items-end sm:items-center';
+      ? 'items-end justify-center px-4 pt-4 pb-0'
+      : 'items-end sm:items-center p-4';
 
   return createPortal(
     <dialog
@@ -160,7 +163,7 @@ export function Dialog({
       onMouseDown={(event) => {
         if (closeOnBackdrop && event.target === event.currentTarget) closeRef.current();
       }}
-      className={`app-dialog fixed inset-0 z-50 m-0 h-full max-h-none w-full max-w-none border-0 bg-transparent p-4 text-inherit outline-none ${placement}`}
+      className={`app-dialog fixed inset-0 z-50 m-0 h-full max-h-none w-full max-w-none border-0 bg-transparent text-inherit outline-none ${placement}`}
     >
       <div className={panelClassName}>{children}</div>
     </dialog>,

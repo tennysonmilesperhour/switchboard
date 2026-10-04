@@ -72,6 +72,25 @@ export function looksLikeContactString(value: string | null | undefined): boolea
   return isEmail(trimmed) || looksLikePhoneNumber(trimmed);
 }
 
+/**
+ * Who to greet once someone has said yes on their invitation page.
+ *
+ * Their own profile name when the invite is theirs, otherwise the name the host
+ * typed for them, unless that is really an email or phone number. Null means
+ * greet them without a name: a guest who answered with an account has no
+ * `guest_name`, and the old "there" fallback read "You’re in, there!".
+ */
+export function rsvpGreetingName(
+  viewerName: string | null | undefined,
+  guestName: string | null | undefined,
+): string | null {
+  const viewer = viewerName?.trim();
+  if (viewer) return viewer;
+  const guest = guestName?.trim();
+  if (guest && !looksLikeContactString(guest)) return guest;
+  return null;
+}
+
 export interface OutboundMessage {
   /** Used as the mail subject; ignored by SMS, which is body-only. */
   subject: string;

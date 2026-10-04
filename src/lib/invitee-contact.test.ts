@@ -7,6 +7,7 @@ import {
   messageActionLabel,
   messageHref,
   planInviteMessage,
+  rsvpGreetingName,
   smsHref,
   telHref,
 } from './invitee-contact';
@@ -48,6 +49,26 @@ describe('looksLikeContactString', () => {
     expect(looksLikeContactString('Ada Lovelace')).toBe(false);
     expect(looksLikeContactString('')).toBe(false);
     expect(looksLikeContactString(null)).toBe(false);
+  });
+});
+
+describe('rsvpGreetingName', () => {
+  it('greets the signed-in owner by their profile name first', () => {
+    expect(rsvpGreetingName('Jordan Reyes', 'Casey')).toBe('Jordan Reyes');
+  });
+
+  it('falls back to the name the host typed', () => {
+    expect(rsvpGreetingName(null, '  Casey Guest ')).toBe('Casey Guest');
+  });
+
+  it('never greets someone by their email or phone number', () => {
+    expect(rsvpGreetingName(null, 'casey@example.com')).toBeNull();
+    expect(rsvpGreetingName(undefined, '(555) 123-4567')).toBeNull();
+  });
+
+  it('has no name at all for an account holder who answered a shared link', () => {
+    expect(rsvpGreetingName(null, null)).toBeNull();
+    expect(rsvpGreetingName('  ', '')).toBeNull();
   });
 });
 
