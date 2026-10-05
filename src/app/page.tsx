@@ -424,7 +424,9 @@ export default async function HomePage() {
                 color="pink"
                 attendeesLabel="Pick something below, or start from scratch. Switchboard sorts out the details."
                 actions={
-                  <span className="rounded-btn bg-white/25 px-5 py-2.5 text-sm font-bold backdrop-blur-sm">
+                  // A solid surface with the theme's own ink: white text on a
+                  // quarter-white pill over the pink card fell below 4.5:1.
+                  <span className="rounded-btn bg-card px-5 py-2.5 text-sm font-bold text-ink shadow-lift">
                     Start something
                   </span>
                 }
