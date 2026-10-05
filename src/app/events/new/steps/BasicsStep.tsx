@@ -232,16 +232,24 @@ export function BasicsStep({
           </p>
           <div className="space-y-1.5">
             <label htmlFor="capacity" className={FIELD_LABEL}>
-              How many spots? <span className="font-normal text-ink-faint">(leave blank for one-on-one)</span>
+              How many spots? <span className="font-normal text-ink-faint">(optional)</span>
             </label>
+            {/* What blank means depends on the rhythm picked two steps later:
+                no limit for everyone at once or in waves, one spot when asking
+                one at a time. "Leave blank for one-on-one" was only true of the
+                last, and read wrong on a plan sent to a whole group. */}
             <input
               id="capacity" type="number" min={1} step={1} value={capacity}
               onChange={(e) => setCapacity(e.target.value)}
-              placeholder="1"
+              placeholder="No limit"
               aria-invalid={capacityError !== null}
-              aria-describedby={capacityError ? 'capacity-error' : undefined}
+              aria-describedby={capacityError ? 'capacity-hint capacity-error' : 'capacity-hint'}
               className={`${FIELD} w-36`}
             />
+            <p id="capacity-hint" className="text-plate text-plate-inset text-xs text-ink-faint">
+              Leave it blank for no limit. If you ask people one at a time, the
+              first yes fills it.
+            </p>
             {capacityError && (
               <p
                 id="capacity-error"
