@@ -16,6 +16,7 @@ import {
   type MapPoint,
 } from '@/lib/geo';
 import { createPositionSender, type Fix, type PositionSender } from '@/lib/client/position-sender';
+import { insecurePage, INSECURE_PAGE, locate, LOCATION_DENIED } from '@/lib/client/geolocate';
 import {
   getNearbyPeople,
   refreshLocationPoint,
@@ -65,11 +66,11 @@ const GEO_OPTIONS: PositionOptions = {
 function geoErrorMessage(error: GeolocationPositionError): string {
   switch (error.code) {
     case error.PERMISSION_DENIED:
-      return 'Location permission was denied. You can enable it in your browser settings.';
+      return LOCATION_DENIED;
     case error.POSITION_UNAVAILABLE:
       return 'Your location is unavailable right now. Try again in a moment.';
     case error.TIMEOUT:
-      return 'Timed out getting your location. Try again.';
+      return 'Couldn’t get a location fix. Step near a window or outside, and try again.';
     default:
       return 'Could not read your location.';
   }
@@ -290,8 +291,25 @@ export function LiveShare({
     return () => window.clearTimeout(timeout);
   }, [sharing, expiresAt, endShareLocally]);
 
+  // Back from a locked screen or another app: say "still here" at once and
+  // look again, rather than waiting on the next heartbeat and poll.
+  useEffect(() => {
+    if (!sharing) return;
+    const onVisible = () => {
+      if (document.visibilityState !== 'visible') return;
+      sender.current?.wake();
+      void pollNearby();
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => document.removeEventListener('visibilitychange', onVisible);
+  }, [sharing, pollNearby]);
+
   async function start(nextVisibility: LocationVisibility = visibility) {
     if (!supported) return;
+    if (insecurePage()) {
+      toast.error(INSECURE_PAGE);
+      return;
+    }
     setBusy(true);
     // An unanswered prompt never calls back, and the Geolocation timeout only
     // starts once permission is given: say so rather than "Turning on…" for
@@ -301,7 +319,7 @@ export function LiveShare({
       toast.error(LOCATION_PROMPT_WAITING);
     }, LOCATION_PROMPT_WAIT_MS);
     try {
-      navigator.geolocation.getCurrentPosition(
+      locate(navigator.geolocation, GEO_OPTIONS).then(
         async (pos) => {
           window.clearTimeout(waiting);
           setBusy(true);
@@ -335,12 +353,11 @@ export function LiveShare({
             setBusy(false);
           }
         },
-        (error) => {
+        (error: GeolocationPositionError) => {
           window.clearTimeout(waiting);
           setBusy(false);
           toast.error(geoErrorMessage(error));
         },
-        GEO_OPTIONS,
       );
     } catch {
       // If the call itself throws, neither callback runs; don't leave the

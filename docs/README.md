@@ -15,6 +15,7 @@ files are historical evidence, never a source of current product truth.
 | [`CLIENT-FEEDBACK-LOOP.md`](CLIENT-FEEDBACK-LOOP.md) | The checklist's feedback box and the twice-daily job that works it: what may merge unattended, and what always waits for a person. |
 | [`DEPLOYMENT.md`](DEPLOYMENT.md) | How the app and database ship; env vars, cron, and moderators. |
 | [`CI.md`](CI.md) | Shared database tests, bounded setup, and agent push batching. |
+| [`LIVE-GPS-TEST.md`](LIVE-GPS-TEST.md) | Two-phone checklist for the map, check-ins and discovery. |
 | [`DESIGN-SYSTEM.md`](DESIGN-SYSTEM.md) | The shipped visual system: tokens, type, and component conventions. |
 | [`NAMING.md`](NAMING.md) | Canonical user-facing names and the decisions behind them. |
 | [`analytics.md`](analytics.md) | Every tracked analytics event and the anonymity guardrail. |

@@ -35,6 +35,13 @@ export interface PositionSender {
   push: (fix: Fix) => void;
   /** The share was (re)started with `fix`, which the caller already stored. */
   sent: (fix: Fix) => void;
+  /**
+   * The page is showing again after being hidden (a locked phone, another
+   * app). It may have gone quiet long enough to drop off the map, and a
+   * first fix in the same cell would otherwise send nothing until the next
+   * heartbeat: send the latest fix now (within the gap).
+   */
+  wake: () => void;
   stop: () => void;
 }
 
@@ -94,6 +101,9 @@ export function createPositionSender(send: (fix: Fix) => void, clock: Clock = re
       latest = fix;
       lastCell = cellOf(fix.point);
       lastAt = clock.now();
+    },
+    wake() {
+      if (latest) writeSoon();
     },
     stop() {
       if (trailing !== null) clock.clearTimeout(trailing);

@@ -883,6 +883,33 @@ test.describe('people and places', () => {
     }
   });
 
+  test('indoors, a GPS lock that never comes falls back to a Wi-Fi fix', async ({ browser }) => {
+    const qi = await person('Qi');
+    const lat = Number((40 + Math.random() * 8).toFixed(3));
+    const lng = Number((-120 + Math.random() * 20).toFixed(3));
+    const { context, page } = await signedIn(browser, qi, {
+      geolocation: { latitude: lat, longitude: lng, accuracy: 40 },
+      permissions: ['geolocation'],
+    });
+    // A building: every high-accuracy ask times out, a network fix answers.
+    await page.addInitScript(() => {
+      const geo = navigator.geolocation;
+      const ask = geo.getCurrentPosition.bind(geo);
+      geo.getCurrentPosition = (ok, fail, options) => {
+        if (!options?.enableHighAccuracy) return ask(ok, fail, options);
+        setTimeout(() => fail?.({ code: 3, message: 'Timeout expired', PERMISSION_DENIED: 1, POSITION_UNAVAILABLE: 2, TIMEOUT: 3 } as GeolocationPositionError), 50);
+      };
+    });
+    try {
+      await page.goto('/moments');
+      await page.getByRole('button', { name: /Use my current location/ }).click();
+      await expect(page.getByRole('button', { name: /📍/ }).first()).toHaveAttribute('aria-pressed', 'true');
+      await expect(page.getByText(/location fix/)).toHaveCount(0);
+    } finally {
+      await context.close();
+    }
+  });
+
   test('a location prompt nobody answers stops waiting and says so', async ({ browser }) => {
     test.setTimeout(90_000);
     const ana = await person('Ana');

@@ -8,6 +8,7 @@ import {
   LOCATION_PROMPT_WAITING,
   type MapPoint,
 } from '@/lib/geo';
+import { insecurePage, INSECURE_PAGE, locate, LOCATION_DENIED } from '@/lib/client/geolocate';
 
 export type LocationStatus = 'idle' | 'locating' | 'ready' | 'approximate' | 'error' | 'unsupported';
 
@@ -30,11 +31,11 @@ const OPTIONS: PositionOptions = {
 function messageFor(error: GeolocationPositionError): string {
   switch (error.code) {
     case error.PERMISSION_DENIED:
-      return 'Location permission denied. You can still type where you are.';
+      return `${LOCATION_DENIED} You can still type where you are.`;
     case error.POSITION_UNAVAILABLE:
       return 'Your location is unavailable right now.';
     case error.TIMEOUT:
-      return 'Timed out getting your location.';
+      return 'Couldn’t get a location fix. Step near a window or outside, and try again.';
     default:
       return 'Could not read your location.';
   }
@@ -58,6 +59,11 @@ export function useCurrentLocation(): CurrentLocation {
       setError('This browser can’t share a location.');
       return null;
     }
+    if (insecurePage()) {
+      setStatus('error');
+      setError(INSECURE_PAGE);
+      return null;
+    }
     setStatus('locating');
     setError(null);
     return new Promise<MapPoint | null>((resolve) => {
@@ -68,7 +74,7 @@ export function useCurrentLocation(): CurrentLocation {
         setError(LOCATION_PROMPT_WAITING);
         resolve(null);
       }, LOCATION_PROMPT_WAIT_MS);
-      navigator.geolocation.getCurrentPosition(
+      locate(navigator.geolocation, OPTIONS).then(
         (pos) => {
           window.clearTimeout(waiting);
           const accuracy = pos.coords.accuracy ?? null;
@@ -90,13 +96,12 @@ export function useCurrentLocation(): CurrentLocation {
           setStatus('ready');
           resolve(next);
         },
-        (err) => {
+        (err: GeolocationPositionError) => {
           window.clearTimeout(waiting);
           setStatus('error');
           setError(messageFor(err));
           resolve(null);
         },
-        OPTIONS,
       );
     });
   }, []);

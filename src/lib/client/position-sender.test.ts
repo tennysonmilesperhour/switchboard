@@ -65,4 +65,15 @@ describe('createPositionSender', () => {
     expect(sent).toEqual([]);
     sender.stop();
   });
+
+  it('sends at once when the page shows again, so a phone back from its pocket is back on the map', () => {
+    const sender = createPositionSender((fix) => sent.push(fix));
+    sender.sent(at(39.739));
+    vi.advanceTimersByTime(MIN_GAP_MS);
+    sender.push(at(39.7391)); // same cell: nothing new to say
+    expect(sent).toEqual([]);
+    sender.wake();
+    expect(sent).toEqual([at(39.7391)]);
+    sender.stop();
+  });
 });
