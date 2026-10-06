@@ -6,7 +6,17 @@ import { Button } from '@/components/ui/Button';
 import { useToast } from '@/components/ui/Toast';
 import { formatRelative } from '@/lib/format';
 import { errorRef, type ErrorCode } from '@/lib/errors';
-import { coarsenCoordinate, type MapMarker, type MapPoint } from '@/lib/geo';
+import {
+  coarsenCoordinate,
+  formatDistance,
+  isApproximateFix,
+  LOCATION_PROMPT_WAIT_MS,
+  LOCATION_PROMPT_WAITING,
+  type MapMarker,
+  type MapPoint,
+} from '@/lib/geo';
+import { createPositionSender, type Fix, type PositionSender } from '@/lib/client/position-sender';
+import { insecurePage, INSECURE_PAGE, locate, LOCATION_DENIED } from '@/lib/client/geolocate';
 import {
   getNearbyPeople,
   refreshLocationPoint,
@@ -18,14 +28,6 @@ import type { LiveLocation, LocationVisibility, NearbyPerson } from '@/lib/types
 // How often we re-ask "who's near me" while sharing. Live enough to feel present
 // without hammering the rate-limited RPC.
 const POLL_MS = 20_000;
-
-// The fewest seconds between position updates sent while the viewer stays in
-// the same coarse (~110 m) cell. `watchPosition` fires every few seconds on a
-// moving phone, and every tick used to be sent: the 300-an-hour budget was gone
-// in minutes, after which the pin silently stopped following its owner. The
-// server only ever stores the coarse cell, so a tick inside the same cell
-// carries nothing new; a new cell is sent at once.
-const REFRESH_MIN_MS = 30_000;
 
 const RADIUS_CHOICES: { label: string; meters: number }[] = [
   { label: 'This spot', meters: 1_000 },
@@ -64,11 +66,11 @@ const GEO_OPTIONS: PositionOptions = {
 function geoErrorMessage(error: GeolocationPositionError): string {
   switch (error.code) {
     case error.PERMISSION_DENIED:
-      return 'Location permission was denied. You can enable it in your browser settings.';
+      return LOCATION_DENIED;
     case error.POSITION_UNAVAILABLE:
       return 'Your location is unavailable right now. Try again in a moment.';
     case error.TIMEOUT:
-      return 'Timed out getting your location. Try again.';
+      return 'Couldn’t get a location fix. Step near a window or outside, and try again.';
     default:
       return 'Could not read your location.';
   }
@@ -138,14 +140,16 @@ export function LiveShare({
   const [approxPoint, setApproxPoint] = useState<MapPoint | null>(
     mySharing ? { lat: mySharing.latitude, lng: mySharing.longitude } : null,
   );
+  // How precise the device says its latest fix is; see APPROXIMATE_FIX_M.
+  const [accuracyM, setAccuracyM] = useState<number | null>(mySharing?.accuracy_m ?? null);
 
   const watchId = useRef<number | null>(null);
   const pollTimer = useRef<ReturnType<typeof setInterval> | null>(null);
   const lastPoint = useRef<MapPoint | null>(
     mySharing ? { lat: mySharing.latitude, lng: mySharing.longitude } : null,
   );
-  /** The last position actually sent, and when: see REFRESH_MIN_MS. */
-  const lastSent = useRef<{ cell: string; at: number } | null>(null);
+  /** Which fixes reach the server, and when: see position-sender.ts. */
+  const sender = useRef<PositionSender | null>(null);
   // The radius the active poll loop should use; a ref so changing it doesn't
   // need to tear down and rebuild the interval. Synced in an effect (refs must
   // not be written during render).
@@ -163,6 +167,8 @@ export function LiveShare({
       clearInterval(pollTimer.current);
       pollTimer.current = null;
     }
+    sender.current?.stop();
+    sender.current = null;
   }, []);
 
   const pollNearby = useCallback(async () => {
@@ -196,7 +202,6 @@ export function LiveShare({
   const endShareLocally = useCallback(
     (announce: boolean) => {
       clearTimers();
-      lastSent.current = null;
       setSharing(false);
       setNearbyCount(null);
       setNearbyError(null);
@@ -207,35 +212,37 @@ export function LiveShare({
     },
     [clearTimers, onNearbyChange, onSelfChange, toast],
   );
-  const startWatch = useCallback(() => {
-    if (watchId.current !== null || typeof navigator === 'undefined') return;
-    watchId.current = navigator.geolocation.watchPosition(
-      (pos) => {
-        const point = { lat: pos.coords.latitude, lng: pos.coords.longitude };
-        lastPoint.current = point;
-        setApproxPoint(point);
-        onSelfChange(point);
-        const cell = `${coarsenCoordinate(point.lat)},${coarsenCoordinate(point.lng)}`;
-        const now = Date.now();
-        const previous = lastSent.current;
-        if (previous && previous.cell === cell && now - previous.at < REFRESH_MIN_MS) return;
-        lastSent.current = { cell, at: now };
-        void refreshLocationPoint(point.lat, point.lng, pos.coords.accuracy ?? null).then(
-          (result) => {
-            // The share ended on the server (it ran out, or was stopped from
-            // another tab). Stop following and say so, instead of sending a
-            // position every tick that nothing will ever store.
-            if (!result.ok && result.error === 'not_sharing') endShareLocally(true);
-          },
-        );
-      },
-      () => {
-        // A single failed watch tick isn't worth interrupting the user; the
-        // last good point stays on the map until the next success.
-      },
-      GEO_OPTIONS,
-    );
-  }, [onSelfChange, endShareLocally]);
+  const startWatch = useCallback(
+    (initial: Fix | null) => {
+      if (watchId.current !== null || typeof navigator === 'undefined') return;
+      sender.current = createPositionSender((fix) => {
+        void refreshLocationPoint(fix.point.lat, fix.point.lng, fix.accuracyM).then((result) => {
+          // The share ended on the server (it ran out, or was stopped from
+          // another tab). Stop following and say so, instead of sending a
+          // position every tick that nothing will ever store.
+          if (!result.ok && result.error === 'not_sharing') endShareLocally(true);
+        });
+      });
+      if (initial) sender.current.sent(initial);
+      watchId.current = navigator.geolocation.watchPosition(
+        (pos) => {
+          const point = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+          const accuracy = pos.coords.accuracy ?? null;
+          lastPoint.current = point;
+          setApproxPoint(point);
+          setAccuracyM(accuracy);
+          onSelfChange(point);
+          sender.current?.push({ point, accuracyM: accuracy });
+        },
+        () => {
+          // A single failed watch tick isn't worth interrupting the user; the
+          // last good point stays on the map until the next success.
+        },
+        GEO_OPTIONS,
+      );
+    },
+    [onSelfChange, endShareLocally],
+  );
 
   const startPoll = useCallback(() => {
     if (pollTimer.current !== null) return;
@@ -260,7 +267,9 @@ export function LiveShare({
       }
       if (mySharing) {
         onSelfChange({ lat: mySharing.latitude, lng: mySharing.longitude });
-        startWatch();
+        // Not marked as sent: the first fix on this page refreshes the share,
+        // which may have gone quiet while the page was closed.
+        startWatch(null);
         startPoll();
       }
     }, 0);
@@ -282,12 +291,38 @@ export function LiveShare({
     return () => window.clearTimeout(timeout);
   }, [sharing, expiresAt, endShareLocally]);
 
+  // Back from a locked screen or another app: say "still here" at once and
+  // look again, rather than waiting on the next heartbeat and poll.
+  useEffect(() => {
+    if (!sharing) return;
+    const onVisible = () => {
+      if (document.visibilityState !== 'visible') return;
+      sender.current?.wake();
+      void pollNearby();
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => document.removeEventListener('visibilitychange', onVisible);
+  }, [sharing, pollNearby]);
+
   async function start(nextVisibility: LocationVisibility = visibility) {
     if (!supported) return;
+    if (insecurePage()) {
+      toast.error(INSECURE_PAGE);
+      return;
+    }
     setBusy(true);
+    // An unanswered prompt never calls back, and the Geolocation timeout only
+    // starts once permission is given: say so rather than "Turning on…" for
+    // ever. A late answer still starts the share.
+    const waiting = window.setTimeout(() => {
+      setBusy(false);
+      toast.error(LOCATION_PROMPT_WAITING);
+    }, LOCATION_PROMPT_WAIT_MS);
     try {
-      navigator.geolocation.getCurrentPosition(
+      locate(navigator.geolocation, GEO_OPTIONS).then(
         async (pos) => {
+          window.clearTimeout(waiting);
+          setBusy(true);
           try {
             const point = { lat: pos.coords.latitude, lng: pos.coords.longitude };
             const result = await shareLocation({
@@ -304,12 +339,13 @@ export function LiveShare({
             }
             lastPoint.current = point;
             setApproxPoint(point);
+            setAccuracyM(pos.coords.accuracy ?? null);
             setSharing(true);
             setVisibility(nextVisibility);
             setExpiresAt(result.expiresAt ?? null);
             onSelfChange(point);
             onShareStart(point);
-            startWatch();
+            startWatch({ point, accuracyM: pos.coords.accuracy ?? null });
             startPoll();
           } catch {
             toast.error('Could not start sharing. Try again.', 'SB-LOCATION-SAVE');
@@ -317,15 +353,16 @@ export function LiveShare({
             setBusy(false);
           }
         },
-        (error) => {
+        (error: GeolocationPositionError) => {
+          window.clearTimeout(waiting);
           setBusy(false);
           toast.error(geoErrorMessage(error));
         },
-        GEO_OPTIONS,
       );
     } catch {
       // If the call itself throws, neither callback runs; don't leave the
       // button stuck on "Turning on…".
+      window.clearTimeout(waiting);
       setBusy(false);
       toast.error('Could not read your location.');
     }
@@ -352,7 +389,7 @@ export function LiveShare({
       setBusy(false);
       // Still live on the server, so still live here: Stop stays available.
       if (!ended) {
-        startWatch();
+        startWatch(null);
         startPoll();
       }
     }
@@ -465,6 +502,13 @@ export function LiveShare({
               <p role="status" className="mt-1 text-xs text-ink-faint">
                 Couldn’t check who’s nearby just now. It’ll try again shortly.{' '}
                 <span className="opacity-70">{errorRef(nearbyError)}</span>
+              </p>
+            )}
+            {isApproximateFix(accuracyM) && (
+              <p className="mt-1 text-xs text-ink-faint">
+                Your device is giving an approximate location (within{' '}
+                {formatDistance(accuracyM as number)}), so your pin and who’s nearby are
+                rough. Turn on Precise Location for this browser for a closer match.
               </p>
             )}
             {approx && (

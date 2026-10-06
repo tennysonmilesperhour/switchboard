@@ -2,8 +2,11 @@ import { describe, expect, test } from 'vitest';
 import {
   coarsenCoordinate,
   distanceMeters,
+  APPROXIMATE_FIX_M,
   formatDistance,
+  isApproximateFix,
   isValidCoordinate,
+  MOMENT_MATCH_RADIUS_M,
   nominatimSearchUrl,
   nominatimUrl,
   parseNominatimResult,
@@ -172,5 +175,25 @@ describe('formatDistance', () => {
   test('is empty for NaN / negative', () => {
     expect(formatDistance(Number.NaN)).toBe('');
     expect(formatDistance(-5)).toBe('');
+  });
+});
+
+describe('isApproximateFix', () => {
+  test('treats iOS approximate and cell-tower fixes as approximate', () => {
+    expect(isApproximateFix(3000)).toBe(true);
+    expect(isApproximateFix(1200)).toBe(true);
+  });
+
+  test('keeps GPS, indoor Wi-Fi and unreported accuracy as usable', () => {
+    expect(isApproximateFix(8)).toBe(false);
+    expect(isApproximateFix(65)).toBe(false);
+    expect(isApproximateFix(APPROXIMATE_FIX_M)).toBe(false);
+    expect(isApproximateFix(null)).toBe(false);
+    expect(isApproximateFix(Number.NaN)).toBe(false);
+  });
+
+  test('is loose enough for the check-in radius it protects', () => {
+    // A usable fix must not be so rough it could not tell 200 m from 2 km.
+    expect(APPROXIMATE_FIX_M).toBeLessThan(MOMENT_MATCH_RADIUS_M * 2);
   });
 });

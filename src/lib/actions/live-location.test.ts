@@ -74,6 +74,10 @@ function from(table: string) {
     call.steps.push(['maybeSingle']);
     return answers[table] ?? { data: null, error: null };
   };
+  builder.single = async () => {
+    call.steps.push(['single']);
+    return answers[table] ?? { data: null, error: null };
+  };
   builder.then = (resolve: (value: Result) => unknown) =>
     Promise.resolve(answers[table] ?? { data: null, error: null }).then(resolve);
   return builder;
@@ -166,6 +170,15 @@ describe('shareLocation', () => {
     expectFailure(result, 'SB-RATE-LIMIT', 'Too many location updates. Try again in a moment.');
     expect(mocks.checkRateLimit).toHaveBeenCalledWith('live-share:user-1', 300, 3600);
     expect(mocks.from).not.toHaveBeenCalled();
+  });
+
+  it('refuses to start a share during a sabbatical, and writes nothing', async () => {
+    answers.profiles = { data: { sabbatical: true }, error: null };
+
+    const result = await share();
+
+    expectFailure(result, 'SB-LOCATION-PAUSED');
+    expect(stepsOf('live_locations')).toEqual([]);
   });
 
   it('stores only a coarsened point, on the caller’s own row, for two hours by default', async () => {

@@ -78,6 +78,16 @@ export async function shareLocation(input: ShareLocationInput): Promise<ShareRes
   if (!(await checkRateLimit(`live-share:${user.id}`, 300, 60 * 60))) {
     return failure('SB-RATE-LIMIT', 'Too many location updates. Try again in a moment.');
   }
+  // A sabbatical takes you off the map both ways (20261006130000), so a share
+  // started now would show you nobody and nobody you: say why instead.
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('sabbatical')
+    .eq('id', user.id)
+    .single();
+  if (profile?.sabbatical) {
+    return failure('SB-LOCATION-PAUSED');
+  }
 
   const expiresAt = new Date(Date.now() + clampHours(input.hours) * 3_600_000).toISOString();
   const headline = input.headline?.trim().slice(0, 90) || null;

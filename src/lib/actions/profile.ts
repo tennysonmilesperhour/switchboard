@@ -579,10 +579,13 @@ export async function updateSabbatical(formData: FormData): Promise<ActionResult
     return reportAndFail('SB-SETTINGS-SAVE', 'settings.sabbatical', error, { userId: user.id });
   }
 
-  // Entering a quiet season pulls down any live availability signal so you
-  // stop appearing on friends' radars right away.
+  // Entering a quiet season pulls down any live availability signal and any
+  // live location share, so you stop appearing on radars and the map right away.
   if (on) {
-    await supabase.from('availability_signals').delete().eq('user_id', user.id);
+    await Promise.all([
+      supabase.from('availability_signals').delete().eq('user_id', user.id),
+      supabase.from('live_locations').delete().eq('user_id', user.id),
+    ]);
   }
 
   revalidatePath('/settings');

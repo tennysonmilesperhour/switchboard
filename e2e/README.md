@@ -36,7 +36,7 @@ Two tiers:
   photos, load earlier, and voice notes.
 - **`people-places.spec.ts`** — households, rituals, unmatch, Ignore,
   private-zone requests, zone and board organizer tools and invite links,
-  shared moments, and your people.
+  shared moments, a nearby discovery match, and your people.
 - **`plans-more.spec.ts`** — guardian approval, the invite-list toggle, date
   polls deciding a date, Open Table, response windows, editing after sending,
   the capsule and Run it back.

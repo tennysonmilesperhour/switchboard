@@ -12,6 +12,7 @@ import { VenuePerks } from '@/components/venues/VenuePerks';
 import { IntentLaunchpad } from './IntentLaunchpad';
 import { supportEmail } from '@/lib/contact';
 import { venueAreaKey } from '@/lib/venue-area';
+import { ownContexts } from '@/lib/discovery-context';
 import { ilikeTerm } from '@/lib/zone-rules';
 import { reportOperationalError } from '@/lib/server/observability';
 import type { ErrorCode } from '@/lib/errors';
@@ -43,7 +44,7 @@ export default async function DiscoverPage({
   // perks they see (D14).
   const { data: profile } = await supabase
     .from('profiles')
-    .select('interests, discoverable, location')
+    .select('interests, discoverable, location, discovery_contexts, down_to')
     .eq('id', user.id)
     .single();
   const area = venueAreaKey(profile?.location);
@@ -180,6 +181,7 @@ export default async function DiscoverPage({
             matches={matches}
             discoverable={Boolean(profile?.discoverable)}
             interests={interestByTarget}
+            myContexts={ownContexts(profile?.discovery_contexts, profile?.down_to)}
             loadError={peopleError}
           />
           <OpenTables

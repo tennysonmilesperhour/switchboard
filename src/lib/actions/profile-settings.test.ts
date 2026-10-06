@@ -13,14 +13,25 @@ const mocks = vi.hoisted(() => {
   const update = vi.fn();
   const eq = vi.fn(async () => ({ error: null }));
   update.mockImplementation(() => ({ eq }));
-  return { update, eq };
+  /** Tables a row was deleted from, with the column and value it was scoped to. */
+  const deleted: Array<[string, string, unknown]> = [];
+  const from = (table: string) => ({
+    update,
+    delete: () => ({
+      eq: async (column: string, value: unknown) => {
+        deleted.push([table, column, value]);
+        return { error: null };
+      },
+    }),
+  });
+  return { update, eq, deleted, from };
 });
 
 vi.mock('@/lib/server/require-user', () => ({
   requireUser: vi.fn(),
   requireUserOrRedirect: vi.fn(async () => ({
     user: { id: 'user-1' },
-    supabase: { from: () => ({ update: mocks.update }) },
+    supabase: { from: mocks.from },
   })),
 }));
 vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }));
@@ -37,7 +48,7 @@ vi.mock('@/lib/server/observability', () => ({
   reportOperationalError: vi.fn(),
 }));
 
-import { updateQuietHours } from './profile';
+import { updateQuietHours, updateSabbatical } from './profile';
 
 function form(start: string, end: string): FormData {
   const data = new FormData();
@@ -49,6 +60,30 @@ function form(start: string, end: string): FormData {
 beforeEach(() => {
   mocks.update.mockClear();
   mocks.eq.mockClear();
+  mocks.deleted.length = 0;
+});
+
+describe('updateSabbatical', () => {
+  function sabbatical(on: boolean): FormData {
+    const data = new FormData();
+    if (on) data.set('sabbatical', 'on');
+    return data;
+  }
+
+  it('takes down the live signal and the live location share when it starts', async () => {
+    expect(await updateSabbatical(sabbatical(true))).toEqual({ ok: true });
+    expect(mocks.deleted).toEqual(
+      expect.arrayContaining([
+        ['availability_signals', 'user_id', 'user-1'],
+        ['live_locations', 'user_id', 'user-1'],
+      ]),
+    );
+  });
+
+  it('deletes nothing when it ends', async () => {
+    expect(await updateSabbatical(sabbatical(false))).toEqual({ ok: true });
+    expect(mocks.deleted).toEqual([]);
+  });
 });
 
 describe('updateQuietHours', () => {

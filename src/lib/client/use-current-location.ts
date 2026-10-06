@@ -1,9 +1,16 @@
 'use client';
 
 import { useCallback, useState } from 'react';
-import type { MapPoint } from '@/lib/geo';
+import {
+  formatDistance,
+  isApproximateFix,
+  LOCATION_PROMPT_WAIT_MS,
+  LOCATION_PROMPT_WAITING,
+  type MapPoint,
+} from '@/lib/geo';
+import { insecurePage, INSECURE_PAGE, locate, LOCATION_DENIED } from '@/lib/client/geolocate';
 
-export type LocationStatus = 'idle' | 'locating' | 'ready' | 'error' | 'unsupported';
+export type LocationStatus = 'idle' | 'locating' | 'ready' | 'approximate' | 'error' | 'unsupported';
 
 interface CurrentLocation {
   status: LocationStatus;
@@ -24,11 +31,11 @@ const OPTIONS: PositionOptions = {
 function messageFor(error: GeolocationPositionError): string {
   switch (error.code) {
     case error.PERMISSION_DENIED:
-      return 'Location permission denied. You can still type where you are.';
+      return `${LOCATION_DENIED} You can still type where you are.`;
     case error.POSITION_UNAVAILABLE:
       return 'Your location is unavailable right now.';
     case error.TIMEOUT:
-      return 'Timed out getting your location.';
+      return 'Couldn’t get a location fix. Step near a window or outside, and try again.';
     default:
       return 'Could not read your location.';
   }
@@ -52,23 +59,49 @@ export function useCurrentLocation(): CurrentLocation {
       setError('This browser can’t share a location.');
       return null;
     }
+    if (insecurePage()) {
+      setStatus('error');
+      setError(INSECURE_PAGE);
+      return null;
+    }
     setStatus('locating');
     setError(null);
     return new Promise<MapPoint | null>((resolve) => {
-      navigator.geolocation.getCurrentPosition(
+      // An unanswered prompt never calls back: say so instead of "Locating…"
+      // for ever. A late answer still lands (the callbacks below run anyway).
+      const waiting = window.setTimeout(() => {
+        setStatus('error');
+        setError(LOCATION_PROMPT_WAITING);
+        resolve(null);
+      }, LOCATION_PROMPT_WAIT_MS);
+      locate(navigator.geolocation, OPTIONS).then(
         (pos) => {
+          window.clearTimeout(waiting);
+          const accuracy = pos.coords.accuracy ?? null;
+          setAccuracyM(accuracy);
+          // A point kilometres off would pin the check-in to the wrong place
+          // and match strangers there instead of the people in the room.
+          if (isApproximateFix(accuracy)) {
+            setPoint(null);
+            setStatus('approximate');
+            setError(
+              `Your device only gave an approximate location (within ${formatDistance(accuracy as number)}), so it isn’t pinned and you’ll match by the place name. Turn on Precise Location for this browser and try again.`,
+            );
+            resolve(null);
+            return;
+          }
           const next = { lat: pos.coords.latitude, lng: pos.coords.longitude };
           setPoint(next);
-          setAccuracyM(pos.coords.accuracy ?? null);
+          setError(null);
           setStatus('ready');
           resolve(next);
         },
-        (err) => {
+        (err: GeolocationPositionError) => {
+          window.clearTimeout(waiting);
           setStatus('error');
           setError(messageFor(err));
           resolve(null);
         },
-        OPTIONS,
       );
     });
   }, []);

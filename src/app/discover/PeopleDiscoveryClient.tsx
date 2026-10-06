@@ -16,6 +16,7 @@ import { downToConnect, withdrawIntent } from '@/lib/actions/mutual';
 import { setDiscoverable } from '@/lib/actions/profile';
 import { formatRelative } from '@/lib/format';
 import { errorFor, type ErrorCode } from '@/lib/errors';
+import { discoveryContextChoice } from '@/lib/discovery-context';
 
 export interface DiscoveryPerson {
   id: string;
@@ -60,11 +61,14 @@ export function PeopleDiscoveryClient({
   matches,
   discoverable,
   interests = {},
+  myContexts = [],
   loadError = null,
 }: {
   people: DiscoveryPerson[];
   matches: DiscoveryMatch[];
   discoverable: boolean;
+  /** The reader's own contexts, so a tap defaults to one both people offer. */
+  myContexts?: string[];
   /** Keyed by target profile id. */
   interests?: Record<string, DiscoveryInterest>;
   /** The people lookup failed; say so instead of showing an empty lane. */
@@ -89,11 +93,7 @@ export function PeopleDiscoveryClient({
 
   function quietConnect(person: DiscoveryPerson) {
     const context =
-      selectedContext[person.id] ||
-      person.contexts[0] ||
-      person.shared_down_to[0] ||
-      person.shared_interests[0] ||
-      'Connect';
+      selectedContext[person.id] || discoveryContextChoice(person, myContexts).defaultContext;
     setPendingId(person.id);
     startTransition(async () => {
       const result = await downToConnect(person.id, context, 'discover_connect');
@@ -277,14 +277,11 @@ export function PeopleDiscoveryClient({
       ) : (
         <div className="space-y-3">
           {visiblePeople.map((person) => {
-            const contextOptions = [
-              ...new Set([
-                ...person.contexts,
-                ...person.shared_down_to,
-                ...person.shared_interests,
-              ]),
-            ].slice(0, 8);
-            const chosen = selectedContext[person.id] || contextOptions[0] || 'Connect';
+            const { options: contextOptions, defaultContext } = discoveryContextChoice(
+              person,
+              myContexts,
+            );
+            const chosen = selectedContext[person.id] || defaultContext;
             const interest = interests[person.id];
             const profileHref = `/u/${encodeURIComponent(person.handle)}?from=/discover`;
             return (

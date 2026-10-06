@@ -588,7 +588,10 @@ test.describe('people and places', () => {
       await expect(mine).toContainText(`Can help: ${nia.name}`);
       // Post actions are thumb-sized (44 px).
       for (const label of ['Mark complete', 'edit', 'remove', 'make it a plan']) {
-        const box = await mine.getByRole('button', { name: label, exact: true }).boundingBox();
+        // boundingBox() does not wait: a button still rendering measures 0.
+        const button = mine.getByRole('button', { name: label, exact: true });
+        await expect(button).toBeVisible();
+        const box = await button.boundingBox();
         expect(box?.height ?? 0, `"${label}" is ${box?.height}px tall`).toBeGreaterThanOrEqual(44);
       }
       await shot(page, 'board-can-help');
@@ -734,6 +737,209 @@ test.describe('people and places', () => {
           .catch(() => {});
         await side.context.close();
       }
+    }
+  });
+
+  test('two people near each other in discovery match on one tap each, whatever order they listed their contexts', async ({
+    browser,
+  }) => {
+    test.setTimeout(120_000);
+    // Each card used to default to the other person's first context, so Ula
+    // saved Vic's first and Vic saved Ula's: both chose each other and never
+    // matched. Same two contexts here, listed in opposite orders.
+    const ula = await person('Ula');
+    const vic = await person('Vic');
+    const wes = await person('Wes');
+    const contexts = [unique('Board games '), unique('Bouldering ')];
+    // Discovery is shared by every run and lists shared interests first, so
+    // these three share one nobody else has. A home spot of this run's own.
+    const interest = unique('origami');
+    const lat = Number((40 + Math.random() * 8).toFixed(3));
+    const lng = Number((-120 + Math.random() * 20).toFixed(3));
+    const profile = (discovery_contexts: string[], home_latitude: number) => ({
+      discoverable: true,
+      discovery_geography: true,
+      discovery_interests: true,
+      interests: [interest],
+      discovery_contexts,
+      home_latitude,
+      home_longitude: lng,
+    });
+    const admin = adminClient();
+    for (const [account, update] of [
+      [ula, profile(contexts, lat)],
+      // ~10 km north: near.
+      [vic, profile([...contexts].reverse(), lat + 0.09)],
+      // ~200 km north: discoverable, but not near.
+      [wes, profile(contexts, lat + 1.8)],
+    ] as const) {
+      const { error } = await admin.from('profiles').update(update).eq('id', account.id);
+      expect(error, error?.message).toBeNull();
+    }
+
+    const cardFor = (p: Page, other: Account) =>
+      p
+        .locator('div', { has: p.getByRole('link', { name: other.name, exact: true }) })
+        .filter({ has: p.getByRole('button', { name: 'Interested' }) })
+        .last();
+
+    const ulaSide = await signedIn(browser, ula);
+    const vicSide = await signedIn(browser, vic);
+    try {
+      const u = ulaSide.page;
+      await u.goto('/discover');
+      await u.getByRole('button', { name: 'Nearby', exact: true }).click();
+      await expect(cardFor(u, vic)).toBeVisible();
+      await expect(u.getByRole('link', { name: wes.name, exact: true })).toHaveCount(0);
+      await cardFor(u, vic).getByRole('button', { name: 'Interested' }).click();
+      await expectToast(u, 'Saved privately. Nothing is sent unless it’s mutual.');
+
+      const v = vicSide.page;
+      await v.goto('/discover');
+      await v.getByRole('button', { name: 'Nearby', exact: true }).click();
+      await cardFor(v, ula).getByRole('button', { name: 'Interested' }).click();
+      await expectToast(v, 'It is mutual.');
+      await shot(v, 'discovery-nearby-match');
+
+      const { data: match } = await admin
+        .from('matches')
+        .select('activity')
+        .eq('kind', 'discover_connect')
+        .or(`user_a.eq.${ula.id},user_b.eq.${ula.id}`)
+        .single();
+      expect(match?.activity).toBe([...contexts].sort()[0]);
+    } finally {
+      await ulaSide.context.close();
+      await vicSide.context.close();
+    }
+  });
+
+  // What real phones do to a location fix, simulated: a still phone wobbling
+  // across a cell edge, an approximate fix (iOS with Precise Location off), and
+  // a permission prompt nobody answers. Each was a real failure before.
+  test('a still phone wobbling on a cell edge sends a couple of updates, not one a second', async ({
+    browser,
+  }) => {
+    test.setTimeout(90_000);
+    const ana = await person('Ana');
+    const lat = Number((40 + Math.random() * 8).toFixed(3));
+    const lng = Number((-120 + Math.random() * 20).toFixed(3));
+    // lat + 0.0005 is the rounding edge between two ~110 m cells; ±2 m either side.
+    const side = (s: 1 | -1) => ({ latitude: lat + 0.0005 + s * 0.00002, longitude: lng, accuracy: 12 });
+    const { context, page } = await signedIn(browser, ana, {
+      geolocation: side(-1),
+      permissions: ['geolocation'],
+    });
+    // refreshLocationPoint's arguments are (lat, lng, accuracy).
+    const writes: string[] = [];
+    page.on('request', (request) => {
+      const body = request.postData() ?? '';
+      if (request.method() === 'POST' && request.headers()['next-action'] && /^\[-?\d+\.\d+,-?\d+\.\d+/.test(body)) {
+        writes.push(body);
+      }
+    });
+    try {
+      await page.goto('/map');
+      await page.getByRole('button', { name: /Share my location/ }).click();
+      await expect(page.getByText('You’re live on the map')).toBeVisible({ timeout: 20_000 });
+      for (let i = 0; i < 25; i += 1) {
+        await context.setGeolocation(side(i % 2 === 0 ? 1 : -1));
+        await page.waitForTimeout(1000);
+      }
+      // One a second used to go out (the hourly budget gone in five minutes).
+      expect(writes.length, writes.join('\n')).toBeLessThanOrEqual(2);
+    } finally {
+      await page.getByRole('button', { name: 'Stop' }).click().catch(() => {});
+      await context.close();
+    }
+  });
+
+  test('an approximate fix is not pinned to a check-in, and says why', async ({ browser }) => {
+    const rae = await person('Rae');
+    const lat = Number((40 + Math.random() * 8).toFixed(3));
+    const lng = Number((-120 + Math.random() * 20).toFixed(3));
+    // What iOS reports with Precise Location off: a point km away, ±3 km.
+    const { context, page } = await signedIn(browser, rae, {
+      geolocation: { latitude: lat + 0.027, longitude: lng, accuracy: 3000 },
+      permissions: ['geolocation'],
+    });
+    try {
+      await page.goto('/moments');
+      await page.getByLabel('Where are you?').fill(unique('Café '));
+      await page.getByRole('button', { name: /Use my current location/ }).click();
+      await expect(page.getByText(/only gave an approximate location \(within 3\.0 km\)/)).toBeVisible();
+      await expect(page.getByRole('button', { name: /📍/ }).first()).toHaveAttribute('aria-pressed', 'false');
+      await page.getByRole('button', { name: /Coffee Conversation/ }).click();
+      await page.getByRole('button', { name: 'Check in ✨' }).click();
+      await expect(page.getByText('Checked in', { exact: true })).toBeVisible();
+
+      const { data } = await adminClient()
+        .from('moments')
+        .select('latitude, longitude')
+        .eq('user_id', rae.id)
+        .eq('status', 'open')
+        .single();
+      expect(data).toEqual({ latitude: null, longitude: null });
+    } finally {
+      await page.getByRole('button', { name: 'Check out', exact: true }).click().catch(() => {});
+      await context.close();
+    }
+  });
+
+  test('indoors, a GPS lock that never comes falls back to a Wi-Fi fix', async ({ browser }) => {
+    const qi = await person('Qi');
+    const lat = Number((40 + Math.random() * 8).toFixed(3));
+    const lng = Number((-120 + Math.random() * 20).toFixed(3));
+    const { context, page } = await signedIn(browser, qi, {
+      geolocation: { latitude: lat, longitude: lng, accuracy: 40 },
+      permissions: ['geolocation'],
+    });
+    // A building: every high-accuracy ask times out, a network fix answers.
+    await page.addInitScript(() => {
+      const geo = navigator.geolocation;
+      const ask = geo.getCurrentPosition.bind(geo);
+      geo.getCurrentPosition = (ok, fail, options) => {
+        if (!options?.enableHighAccuracy) return ask(ok, fail, options);
+        setTimeout(() => fail?.({ code: 3, message: 'Timeout expired', PERMISSION_DENIED: 1, POSITION_UNAVAILABLE: 2, TIMEOUT: 3 } as GeolocationPositionError), 50);
+      };
+    });
+    try {
+      await page.goto('/moments');
+      await page.getByRole('button', { name: /Use my current location/ }).click();
+      await expect(page.getByRole('button', { name: /📍/ }).first()).toHaveAttribute('aria-pressed', 'true');
+      await expect(page.getByText(/location fix/)).toHaveCount(0);
+    } finally {
+      await context.close();
+    }
+  });
+
+  test('a location prompt nobody answers stops waiting and says so', async ({ browser }) => {
+    test.setTimeout(90_000);
+    const ana = await person('Ana');
+    // A prompt that sits there: the request never calls back. Simulated, since
+    // a headless browser with no permission may refuse at once instead.
+    const { context, page } = await signedIn(browser, ana);
+    await context.addInitScript(() => {
+      navigator.geolocation.getCurrentPosition = () => {};
+    });
+    const moments = await context.newPage();
+    try {
+      await page.goto('/map');
+      await moments.goto('/moments');
+      await page.getByRole('button', { name: /Share my location/ }).click();
+      await moments.getByRole('button', { name: /Use my current location/ }).click();
+      await expect(page.getByRole('button', { name: /Turning on/ })).toBeVisible();
+
+      // The wait is 20 s (LOCATION_PROMPT_WAIT_MS), longer than a toast check.
+      await expect(page.getByRole('status', { name: 'Notifications' })).toContainText(
+        'Still waiting for location permission.',
+        { timeout: 30_000 },
+      );
+      await expect(page.getByRole('button', { name: /Share my location/ })).toBeEnabled();
+      await expect(moments.getByText(/Still waiting for location permission\./)).toBeVisible({ timeout: 25_000 });
+      await expect(moments.getByRole('button', { name: /Use my current location/ })).toBeEnabled();
+    } finally {
+      await context.close();
     }
   });
 
