@@ -804,6 +804,11 @@ const REGISTRY = {
     fix: 'Reload the page.',
     actor: 'reader',
   },
+  'SB-LOCATION-PAUSED': {
+    message: 'Live location is paused while you’re on sabbatical.',
+    fix: 'End your sabbatical in Settings before sharing your location.',
+    actor: 'reader',
+  },
   // The address lookup service itself failed or is throttling us. Distinct
   // from "that address matched nothing", which is the reader's to fix and is
   // reported without a code: checking the spelling cannot fix an outage.

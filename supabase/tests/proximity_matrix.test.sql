@@ -13,7 +13,7 @@
 -- prints every mismatching combination, so a failure names the case.
 
 begin;
-select plan(12);
+select plan(13);
 
 -- ————————————————————————— two people —————————————————————————
 insert into auth.users (id, email) values
@@ -183,6 +183,43 @@ select is(
   'find_nearby_people: between two "anyone sharing" people, seeing is mutual at every distance (including right at the 5 km edge) and relationship'
 );
 select diag(cell) from mismatches where section = 'live-symmetry';
+
+-- A sabbatical takes a person off the map both ways: nobody sees them, and
+-- they see nobody, whatever scope either chose.
+do $$
+declare a_sab boolean; b_sab boolean; scope text; a_sees boolean; b_sees boolean;
+begin
+  perform pg_temp.relate('connected');
+  foreach a_sab in array array[false, true] loop
+  foreach b_sab in array array[false, true] loop
+  foreach scope in array array['sharers', 'connections'] loop
+    update public.profiles set sabbatical = a_sab where id = pg_temp.ana();
+    update public.profiles set sabbatical = b_sab where id = pg_temp.bo();
+    delete from public.live_locations where user_id in (pg_temp.ana(), pg_temp.bo());
+    insert into public.live_locations (user_id, latitude, longitude, visibility, expires_at) values
+      (pg_temp.ana(), 39.7392, -104.9903, scope, now() + interval '1 hour'),
+      (pg_temp.bo(), 39.7420, -104.9903, scope, now() + interval '1 hour');
+    perform pg_temp.act_as(pg_temp.ana());
+    a_sees := exists (select 1 from public.find_nearby_people(5000) n where n.user_id = pg_temp.bo());
+    perform pg_temp.back();
+    perform pg_temp.act_as(pg_temp.bo());
+    b_sees := exists (select 1 from public.find_nearby_people(5000) n where n.user_id = pg_temp.ana());
+    perform pg_temp.back();
+    if a_sees is distinct from not (a_sab or b_sab) or b_sees is distinct from not (a_sab or b_sab) then
+      insert into mismatches values ('live-sabbatical',
+        format('ana_sab=%s bo_sab=%s scope=%s: ana_sees=%s bo_sees=%s', a_sab, b_sab, scope, a_sees, b_sees));
+    end if;
+  end loop; end loop; end loop;
+  update public.profiles set sabbatical = false where id in (pg_temp.ana(), pg_temp.bo());
+  delete from public.live_locations where user_id in (pg_temp.ana(), pg_temp.bo());
+end $$;
+
+select is(
+  (select count(*)::int from mismatches where section = 'live-sabbatical'),
+  0,
+  'find_nearby_people: anyone on sabbatical is off the map both ways, seen by nobody and seeing nobody'
+);
+select diag(cell) from mismatches where section = 'live-sabbatical';
 
 -- ═════════════════════════ 2. people discovery ═════════════════════════
 -- Bo is listed for Ana exactly when both are discoverable, neither is on

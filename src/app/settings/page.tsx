@@ -541,9 +541,9 @@ export default async function SettingsPage({
                   <span>
                     <span className="font-medium">Take a quiet season</span>
                     <span className="block text-sm text-ink-soft mt-0.5 leading-relaxed">
-                      You’ll drop out of friends’ radars, discovery, Mutual and
-                      matchmaking, your live signal is cleared, and rituals stop
-                      reminding you both.
+                      You’ll drop out of friends’ radars, the map, discovery,
+                      Mutual and matchmaking, your live signal and location share
+                      are cleared, and rituals stop reminding you both.
                     </span>
                     <span className="block text-sm text-ink-soft mt-1.5 leading-relaxed">
                       Only plans you’re already in can still notify you: changes,
