@@ -588,7 +588,10 @@ test.describe('people and places', () => {
       await expect(mine).toContainText(`Can help: ${nia.name}`);
       // Post actions are thumb-sized (44 px).
       for (const label of ['Mark complete', 'edit', 'remove', 'make it a plan']) {
-        const box = await mine.getByRole('button', { name: label, exact: true }).boundingBox();
+        // boundingBox() does not wait: a button still rendering measures 0.
+        const button = mine.getByRole('button', { name: label, exact: true });
+        await expect(button).toBeVisible();
+        const box = await button.boundingBox();
         expect(box?.height ?? 0, `"${label}" is ${box?.height}px tall`).toBeGreaterThanOrEqual(44);
       }
       await shot(page, 'board-can-help');
@@ -913,8 +916,12 @@ test.describe('people and places', () => {
   test('a location prompt nobody answers stops waiting and says so', async ({ browser }) => {
     test.setTimeout(90_000);
     const ana = await person('Ana');
-    // No permission granted and none denied: the prompt just sits there.
+    // A prompt that sits there: the request never calls back. Simulated, since
+    // a headless browser with no permission may refuse at once instead.
     const { context, page } = await signedIn(browser, ana);
+    await context.addInitScript(() => {
+      navigator.geolocation.getCurrentPosition = () => {};
+    });
     const moments = await context.newPage();
     try {
       await page.goto('/map');
