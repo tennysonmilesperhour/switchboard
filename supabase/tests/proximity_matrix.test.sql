@@ -13,7 +13,7 @@
 -- prints every mismatching combination, so a failure names the case.
 
 begin;
-select plan(13);
+select plan(15);
 
 -- ————————————————————————— two people —————————————————————————
 insert into auth.users (id, email) values
@@ -220,6 +220,60 @@ select is(
   'find_nearby_people: anyone on sabbatical is off the map both ways, seen by nobody and seeing nobody'
 );
 select diag(cell) from mismatches where section = 'live-sabbatical';
+
+-- A pin is live while its phone is heard from: silent for 15 minutes (a locked
+-- screen stops the page), it leaves the map; one write brings it back. The
+-- write time is backdated with triggers off, since the database stamps it.
+do $$
+declare silent interval; seen boolean;
+begin
+  perform pg_temp.relate('none');
+  foreach silent in array array['1 minute', '14 minutes', '16 minutes', '1 hour']::interval[] loop
+    delete from public.live_locations where user_id in (pg_temp.ana(), pg_temp.bo());
+    insert into public.live_locations (user_id, latitude, longitude, visibility, expires_at) values
+      (pg_temp.ana(), 39.7392, -104.9903, 'sharers', now() + interval '2 hours'),
+      (pg_temp.bo(), 39.7420, -104.9903, 'sharers', now() + interval '2 hours');
+    set local session_replication_role = replica;
+    update public.live_locations set updated_at = now() - silent where user_id = pg_temp.bo();
+    set local session_replication_role = origin;
+    perform pg_temp.act_as(pg_temp.ana());
+    seen := exists (select 1 from public.find_nearby_people(5000) n where n.user_id = pg_temp.bo());
+    perform pg_temp.back();
+    if seen is distinct from (silent < interval '15 minutes') then
+      insert into mismatches values ('freshness', format('silent %s: seen=%s', silent, seen));
+    end if;
+  end loop;
+
+  -- Bo's phone wakes and sends one fix: back on the map.
+  perform pg_temp.act_as(pg_temp.bo());
+  update public.live_locations set latitude = 39.7421 where user_id = pg_temp.bo();
+  perform pg_temp.back();
+  perform pg_temp.act_as(pg_temp.ana());
+  seen := exists (select 1 from public.find_nearby_people(5000) n where n.user_id = pg_temp.bo());
+  perform pg_temp.back();
+  if not seen then insert into mismatches values ('freshness', 'one write after silence did not bring the pin back'); end if;
+end $$;
+
+select is(
+  (select count(*)::int from mismatches where section = 'freshness'),
+  0,
+  'find_nearby_people: a pin silent for 15 minutes leaves the map, and its next write brings it back'
+);
+select diag(cell) from mismatches where section = 'freshness';
+
+-- The write time is the server's: a client cannot date its pin into the future
+-- to stay "live" without being heard from.
+do $$
+begin
+  perform pg_temp.act_as(pg_temp.bo());
+  update public.live_locations set updated_at = now() + interval '1 year' where user_id = pg_temp.bo();
+  perform pg_temp.back();
+end $$;
+
+select ok(
+  (select updated_at <= now() from public.live_locations where user_id = pg_temp.bo()),
+  'live_locations.updated_at is stamped by the database, whatever the client writes'
+);
 
 -- ═════════════════════════ 2. people discovery ═════════════════════════
 -- Bo is listed for Ana exactly when both are discoverable, neither is on

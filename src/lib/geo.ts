@@ -118,6 +118,31 @@ export function formatDistance(meters: number): string {
  */
 export const MOMENT_MATCH_RADIUS_M = 200;
 
+/**
+ * A fix less precise than this is approximate: iOS with Precise Location off
+ * reports a point kilometres from the person (accuracy ~3,000 m and up), and a
+ * cell-tower fallback is often 1 km or more. Such a point cannot say who is
+ * within MOMENT_MATCH_RADIUS_M, so a check-in does not attach it (it matches by
+ * the typed name instead), and the map says the pin is rough. Indoor GPS and
+ * Wi-Fi fixes are usually 10 to 100 m, well inside it.
+ */
+export const APPROXIMATE_FIX_M = 300;
+
+/** True when the browser said how precise a fix is, and it is too rough to place someone. */
+export function isApproximateFix(accuracyM: number | null | undefined): boolean {
+  return typeof accuracyM === 'number' && Number.isFinite(accuracyM) && accuracyM > APPROXIMATE_FIX_M;
+}
+
+/**
+ * How long to wait on the browser before saying so. The Geolocation timeout
+ * only starts once permission is granted, so a prompt nobody answers (or one
+ * hidden behind another tab) left "Locating…" up for ever.
+ */
+export const LOCATION_PROMPT_WAIT_MS = 20_000;
+
+export const LOCATION_PROMPT_WAITING =
+  'Still waiting for location permission. Answer the prompt, or allow location for this site in your browser settings.';
+
 const NOMINATIM_ENDPOINT = 'https://nominatim.openstreetmap.org/search';
 
 /** The public OpenStreetMap search endpoint, used when nothing else is set. */

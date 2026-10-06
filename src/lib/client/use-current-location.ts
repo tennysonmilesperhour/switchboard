@@ -1,9 +1,15 @@
 'use client';
 
 import { useCallback, useState } from 'react';
-import type { MapPoint } from '@/lib/geo';
+import {
+  formatDistance,
+  isApproximateFix,
+  LOCATION_PROMPT_WAIT_MS,
+  LOCATION_PROMPT_WAITING,
+  type MapPoint,
+} from '@/lib/geo';
 
-export type LocationStatus = 'idle' | 'locating' | 'ready' | 'error' | 'unsupported';
+export type LocationStatus = 'idle' | 'locating' | 'ready' | 'approximate' | 'error' | 'unsupported';
 
 interface CurrentLocation {
   status: LocationStatus;
@@ -55,15 +61,37 @@ export function useCurrentLocation(): CurrentLocation {
     setStatus('locating');
     setError(null);
     return new Promise<MapPoint | null>((resolve) => {
+      // An unanswered prompt never calls back: say so instead of "Locating…"
+      // for ever. A late answer still lands (the callbacks below run anyway).
+      const waiting = window.setTimeout(() => {
+        setStatus('error');
+        setError(LOCATION_PROMPT_WAITING);
+        resolve(null);
+      }, LOCATION_PROMPT_WAIT_MS);
       navigator.geolocation.getCurrentPosition(
         (pos) => {
+          window.clearTimeout(waiting);
+          const accuracy = pos.coords.accuracy ?? null;
+          setAccuracyM(accuracy);
+          // A point kilometres off would pin the check-in to the wrong place
+          // and match strangers there instead of the people in the room.
+          if (isApproximateFix(accuracy)) {
+            setPoint(null);
+            setStatus('approximate');
+            setError(
+              `Your device only gave an approximate location (within ${formatDistance(accuracy as number)}), so it isn’t pinned and you’ll match by the place name. Turn on Precise Location for this browser and try again.`,
+            );
+            resolve(null);
+            return;
+          }
           const next = { lat: pos.coords.latitude, lng: pos.coords.longitude };
           setPoint(next);
-          setAccuracyM(pos.coords.accuracy ?? null);
+          setError(null);
           setStatus('ready');
           resolve(next);
         },
         (err) => {
+          window.clearTimeout(waiting);
           setStatus('error');
           setError(messageFor(err));
           resolve(null);

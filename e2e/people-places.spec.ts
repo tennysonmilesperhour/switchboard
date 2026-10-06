@@ -811,6 +811,104 @@ test.describe('people and places', () => {
     }
   });
 
+  // What real phones do to a location fix, simulated: a still phone wobbling
+  // across a cell edge, an approximate fix (iOS with Precise Location off), and
+  // a permission prompt nobody answers. Each was a real failure before.
+  test('a still phone wobbling on a cell edge sends a couple of updates, not one a second', async ({
+    browser,
+  }) => {
+    test.setTimeout(90_000);
+    const ana = await person('Ana');
+    const lat = Number((40 + Math.random() * 8).toFixed(3));
+    const lng = Number((-120 + Math.random() * 20).toFixed(3));
+    // lat + 0.0005 is the rounding edge between two ~110 m cells; ±2 m either side.
+    const side = (s: 1 | -1) => ({ latitude: lat + 0.0005 + s * 0.00002, longitude: lng, accuracy: 12 });
+    const { context, page } = await signedIn(browser, ana, {
+      geolocation: side(-1),
+      permissions: ['geolocation'],
+    });
+    // refreshLocationPoint's arguments are (lat, lng, accuracy).
+    const writes: string[] = [];
+    page.on('request', (request) => {
+      const body = request.postData() ?? '';
+      if (request.method() === 'POST' && request.headers()['next-action'] && /^\[-?\d+\.\d+,-?\d+\.\d+/.test(body)) {
+        writes.push(body);
+      }
+    });
+    try {
+      await page.goto('/map');
+      await page.getByRole('button', { name: /Share my location/ }).click();
+      await expect(page.getByText('You’re live on the map')).toBeVisible({ timeout: 20_000 });
+      for (let i = 0; i < 25; i += 1) {
+        await context.setGeolocation(side(i % 2 === 0 ? 1 : -1));
+        await page.waitForTimeout(1000);
+      }
+      // One a second used to go out (the hourly budget gone in five minutes).
+      expect(writes.length, writes.join('\n')).toBeLessThanOrEqual(2);
+    } finally {
+      await page.getByRole('button', { name: 'Stop' }).click().catch(() => {});
+      await context.close();
+    }
+  });
+
+  test('an approximate fix is not pinned to a check-in, and says why', async ({ browser }) => {
+    const rae = await person('Rae');
+    const lat = Number((40 + Math.random() * 8).toFixed(3));
+    const lng = Number((-120 + Math.random() * 20).toFixed(3));
+    // What iOS reports with Precise Location off: a point km away, ±3 km.
+    const { context, page } = await signedIn(browser, rae, {
+      geolocation: { latitude: lat + 0.027, longitude: lng, accuracy: 3000 },
+      permissions: ['geolocation'],
+    });
+    try {
+      await page.goto('/moments');
+      await page.getByLabel('Where are you?').fill(unique('Café '));
+      await page.getByRole('button', { name: /Use my current location/ }).click();
+      await expect(page.getByText(/only gave an approximate location \(within 3\.0 km\)/)).toBeVisible();
+      await expect(page.getByRole('button', { name: /📍/ }).first()).toHaveAttribute('aria-pressed', 'false');
+      await page.getByRole('button', { name: /Coffee Conversation/ }).click();
+      await page.getByRole('button', { name: 'Check in ✨' }).click();
+      await expect(page.getByText('Checked in', { exact: true })).toBeVisible();
+
+      const { data } = await adminClient()
+        .from('moments')
+        .select('latitude, longitude')
+        .eq('user_id', rae.id)
+        .eq('status', 'open')
+        .single();
+      expect(data).toEqual({ latitude: null, longitude: null });
+    } finally {
+      await page.getByRole('button', { name: 'Check out', exact: true }).click().catch(() => {});
+      await context.close();
+    }
+  });
+
+  test('a location prompt nobody answers stops waiting and says so', async ({ browser }) => {
+    test.setTimeout(90_000);
+    const ana = await person('Ana');
+    // No permission granted and none denied: the prompt just sits there.
+    const { context, page } = await signedIn(browser, ana);
+    const moments = await context.newPage();
+    try {
+      await page.goto('/map');
+      await moments.goto('/moments');
+      await page.getByRole('button', { name: /Share my location/ }).click();
+      await moments.getByRole('button', { name: /Use my current location/ }).click();
+      await expect(page.getByRole('button', { name: /Turning on/ })).toBeVisible();
+
+      // The wait is 20 s (LOCATION_PROMPT_WAIT_MS), longer than a toast check.
+      await expect(page.getByRole('status', { name: 'Notifications' })).toContainText(
+        'Still waiting for location permission.',
+        { timeout: 30_000 },
+      );
+      await expect(page.getByRole('button', { name: /Share my location/ })).toBeEnabled();
+      await expect(moments.getByText(/Still waiting for location permission\./)).toBeVisible({ timeout: 25_000 });
+      await expect(moments.getByRole('button', { name: /Use my current location/ })).toBeEnabled();
+    } finally {
+      await context.close();
+    }
+  });
+
   // LiveNotifications once joined its realtime channel before the user's token
   // resolved, so owner-only RLS dropped every event: no live banner, no bell
   // update, no refresh of /moments (src/lib/supabase/realtime.ts).
