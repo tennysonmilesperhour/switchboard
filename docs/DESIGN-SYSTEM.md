@@ -124,6 +124,24 @@ ink), **Dusk** (warm dark, candle amber), and **Transit** (one signal color) —
 the first three of the five directions explored before launch and shelved in
 `archive/DESIGN-DIRECTIONS.md`.
 
+Three more presets also swap the type, the corner radii and the shadows, so
+they read as a different app rather than the default in another color:
+
+- **Afterparty** (after Partiful): plum-black, party pink, Bricolage Grotesque
+  display over Figtree. Dark, so it sets `color-scheme: dark`.
+- **Guestlist** (after Luma): cool white, hairline-ring shadows, solid black
+  buttons, Geist throughout, 16px cards.
+- **Prompt** (after Hinge): white page, one plum, Newsreader display over Hanken
+  Grotesk, 10px cards. Headings drop to weight 500, because an 800-weight serif
+  is a faux bold.
+
+They do it through the same tokens: `--font-display` / `--font-sans`,
+`--radius-card` / `--radius-btn`, and `--shadow-*`. Components already use
+`rounded-card`, `shadow-lift` and the font variables, so none of them changed.
+The faces are loaded in `layout.tsx` with `preload: false`: the browser only
+fetches a face when rendered text uses it, so the default theme downloads none
+of them. Settings previews each preset's name in its own face.
+
 Rules for adding one, enforced by `src/lib/themes-app.test.ts`:
 
 - **Redefine every token in `REQUIRED_TOKENS`, in full.** A half-swapped
@@ -138,6 +156,9 @@ Rules for adding one, enforced by `src/lib/themes-app.test.ts`:
   `rose` still means decline. A theme changes the register, never the meaning.
 - **Register it in `src/lib/themes-app.ts`** and in the migration's CHECK
   constraint, so an unknown value can never reach `<html>`.
+  `themes-app.test.ts` reads the newest migration that defines
+  `profiles_appearance_theme_check` and fails unless it admits exactly the ids
+  in `APP_THEMES`, so a preset the database would refuse cannot ship.
 
 Note that `.plan-*` gradients are derived from the `--color-plan-*` tokens with
 `color-mix`, not written as literal hex. They were the last hardcoded colors in
