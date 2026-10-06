@@ -170,7 +170,12 @@ export function AppearancePicker({
                 ))}
               </span>
               <span className="mt-2 flex items-center gap-1.5">
-                <span className="font-bold text-ink">{theme.name}</span>
+                <span
+                  className="font-bold text-ink"
+                  style={theme.font ? { fontFamily: theme.font } : undefined}
+                >
+                  {theme.name}
+                </span>
                 {selected && (
                   <span className="shrink-0 whitespace-nowrap text-xs font-bold text-terracotta-deep">✓ on</span>
                 )}

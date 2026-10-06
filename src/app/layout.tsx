@@ -1,6 +1,13 @@
 import type { Metadata, Viewport } from 'next';
 import { cache } from 'react';
-import { Work_Sans } from 'next/font/google';
+import {
+  Bricolage_Grotesque,
+  Figtree,
+  Geist,
+  Hanken_Grotesk,
+  Newsreader,
+  Work_Sans,
+} from 'next/font/google';
 import './globals.css';
 import { VersionWatcher } from '@/components/system/VersionWatcher';
 import { InstallPrompt } from '@/components/system/InstallPrompt';
@@ -28,6 +35,49 @@ const workSans = Work_Sans({
   display: 'swap',
   variable: '--font-work',
 });
+
+/*
+ * Faces for the appearance presets that bring their own type (see
+ * `[data-theme="afterparty"]` and friends in globals.css). Declared here so the
+ * variables exist on <html> for every theme, but never preloaded: a browser
+ * only fetches a face when some rendered text uses it, so someone on the
+ * default theme downloads none of these. The Settings picker previews each
+ * preset's name in its own face, which is the one place they all load.
+ */
+const bricolage = Bricolage_Grotesque({
+  subsets: ['latin'],
+  display: 'swap',
+  preload: false,
+  variable: '--font-bricolage',
+});
+const figtree = Figtree({
+  subsets: ['latin'],
+  display: 'swap',
+  preload: false,
+  variable: '--font-figtree',
+});
+const geist = Geist({
+  subsets: ['latin'],
+  display: 'swap',
+  preload: false,
+  variable: '--font-geist',
+});
+const newsreader = Newsreader({
+  subsets: ['latin'],
+  display: 'swap',
+  preload: false,
+  variable: '--font-newsreader',
+});
+const hanken = Hanken_Grotesk({
+  subsets: ['latin'],
+  display: 'swap',
+  preload: false,
+  variable: '--font-hanken',
+});
+
+const FONT_VARIABLES = [workSans, bricolage, figtree, geist, newsreader, hanken]
+  .map((font) => font.variable)
+  .join(' ');
 
 const METADATA_ORIGIN = appOriginOrUndefined();
 
@@ -168,7 +218,7 @@ export default async function RootLayout({
       data-theme={theme ?? undefined}
       data-wallpaper={wallpaper ? 'on' : undefined}
       style={themeVars as React.CSSProperties}
-      className={`${workSans.variable} antialiased`}
+      className={`${FONT_VARIABLES} antialiased`}
     >
       <body className="min-h-[100svh]">
         <PostHogProvider>

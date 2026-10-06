@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
@@ -252,6 +252,32 @@ describe('availableThemes', () => {
 
   it('offers everything once it is', () => {
     expect(availableThemes(true)).toHaveLength(APP_THEMES.length);
+  });
+});
+
+/**
+ * A preset the database refuses is a theme that "saves" and reverts: the
+ * picker shows it, the UPDATE fails the CHECK, and the person sees an error
+ * for picking something the app offered them. The newest migration that
+ * defines the constraint must admit exactly the ids this module ships.
+ */
+describe('the appearance_theme CHECK constraint', () => {
+  it('admits exactly the presets the app offers', () => {
+    const dir = join(process.cwd(), 'supabase/migrations');
+    const latest = readdirSync(dir)
+      .filter((file) => file.endsWith('.sql'))
+      .sort()
+      .map((file) => readFileSync(join(dir, file), 'utf8'))
+      .filter((sql) => /add constraint profiles_appearance_theme_check/.test(sql))
+      .at(-1);
+    expect(latest, 'no migration defines the constraint').toBeDefined();
+
+    const check = latest!.match(
+      /check\s*\(\s*appearance_theme\s+in\s*\(([^)]*)\)/i,
+    )?.[1];
+    expect(check, 'could not read the CHECK list').toBeDefined();
+    const allowed = [...check!.matchAll(/'([^']+)'/g)].map((m) => m[1]).sort();
+    expect(allowed).toEqual(APP_THEMES.map((theme) => theme.id).sort());
   });
 });
 

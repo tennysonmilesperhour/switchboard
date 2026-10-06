@@ -44,9 +44,23 @@ export interface AppTheme {
    * Picking it opens an editor instead of just applying.
    */
   custom?: boolean;
+  /**
+   * The preset's own display face, as a CSS `font-family` value, for presets
+   * that swap the type as well as the palette. The picker sets each name in
+   * it, because a typeface is the half of these looks a swatch can't show.
+   */
+  font?: string;
 }
 
-export type AppThemeId = 'default' | 'dusk' | 'almanac' | 'transit' | 'custom';
+export type AppThemeId =
+  | 'default'
+  | 'dusk'
+  | 'almanac'
+  | 'transit'
+  | 'afterparty'
+  | 'guestlist'
+  | 'prompt'
+  | 'custom';
 
 export const APP_THEMES: readonly AppTheme[] = [
   {
@@ -73,6 +87,27 @@ export const APP_THEMES: readonly AppTheme[] = [
     blurb: 'Departure-board discipline. One signal color, nothing spare.',
     swatches: ['#faf8f5', '#ffffff', '#d14700'],
     earned: true,
+  },
+  {
+    id: 'afterparty',
+    name: 'Afterparty',
+    blurb: 'Plum-black, party pink, poster type. Every plan is an event.',
+    swatches: ['#160e26', '#241939', '#c2186b'],
+    font: 'var(--font-bricolage), sans-serif',
+  },
+  {
+    id: 'guestlist',
+    name: 'Guestlist',
+    blurb: 'Cool white, fine lines, black buttons. Calm and exact.',
+    swatches: ['#f7f7f6', '#ffffff', '#131316'],
+    font: 'var(--font-geist), sans-serif',
+  },
+  {
+    id: 'prompt',
+    name: 'Prompt',
+    blurb: 'White page, a serif voice, one plum. Every plan reads like an ask.',
+    swatches: ['#ffffff', '#f6f3f7', '#5b2a86'],
+    font: 'var(--font-newsreader), Georgia, serif',
   },
   {
     id: 'custom',

@@ -225,6 +225,184 @@
   --brand-gradient: linear-gradient(96deg, #d14700 0%, #b03a1a 55%, #7a2f2f 120%);
 }
 
+/* ----- Presets that bring their own type and shape -----
+ *
+ * The three below go one step past a palette: each also swaps the faces
+ * (`--font-display`, `--font-sans`), the corner radii and the shadows, because
+ * a reskin that keeps Work Sans and 21px corners still reads as the default
+ * app in a different color. They stay token-only all the same. Every radius
+ * in the app is already `rounded-card` / `rounded-btn` / `rounded-pill`, and
+ * every face resolves through `--font-*`, so no component learns these exist.
+ * The faces are declared in `layout.tsx` without preloading, so they cost
+ * nothing to anyone not using them.
+ */
+
+/* Afterparty: a plum-black room, party inks, poster type. After Partiful. */
+[data-theme="afterparty"] {
+  color-scheme: dark;
+  --color-paper: #160e26;
+  --color-cream: #221735;
+  --color-card: #241939;
+  --color-ink: #fbf6ff;
+  --color-ink-soft: #c9bde0;
+  --color-ink-faint: #9a8cb5;
+  --color-line: #3a2c55;
+
+  --color-terracotta: #c2186b;
+  --color-terracotta-deep: #ff7ab8;
+  --color-terracotta-soft: #3a1533;
+
+  --color-sage: #1d7a59;
+  --color-sage-deep: #7fe0b8;
+  --color-sage-soft: #16302a;
+
+  --color-gold: #e8c43a;
+  --color-gold-soft: #322a12;
+  /* Lemon reads on the dark surfaces, where a light theme's deep amber would not. */
+  --color-gold-deep: #ffe66d;
+
+  --color-rose-soft: #3a1a26;
+  --color-rose-deep: #ff8a9e;
+
+  --color-plan-pink: #c2186b;
+  --color-plan-purple: #6d3fd6;
+  --color-plan-blue: #2563b8;
+  --color-plan-jade: #11795b;
+  --color-plan-orange: #a0520f;
+  --color-plan-magenta: #a3218f;
+
+  --brand-gradient: linear-gradient(96deg, #c2186b 0%, #a61a8f 55%, #6d3fd6 120%);
+
+  --font-display: var(--font-bricolage), var(--font-work), system-ui, sans-serif;
+  --font-sans: var(--font-figtree), var(--font-work), system-ui, sans-serif;
+
+  --radius-card: 1.625rem; /* 26px */
+  --radius-btn: 999px;
+
+  --shadow-lift: 0 2px 6px rgb(0 0 0 / 0.45), 0 1px 2px rgb(0 0 0 / 0.3);
+  --shadow-float: 0 10px 32px rgb(0 0 0 / 0.55), 0 0 0 1px rgb(255 92 168 / 0.12);
+  --shadow-card: 0 4px 0 rgb(0 0 0 / 0.35), 0 10px 24px rgb(0 0 0 / 0.4);
+}
+
+/* Guestlist: cool white, hairlines, black buttons, nothing spare. After Luma. */
+[data-theme="guestlist"] {
+  --color-paper: #f7f7f6;
+  --color-cream: #efefed;
+  --color-card: #ffffff;
+  --color-ink: #131316;
+  --color-ink-soft: #55555c;
+  --color-ink-faint: #74747b;
+  --color-line: #e4e4e2;
+
+  --color-terracotta: #131316;
+  --color-terracotta-deep: #4338ca;
+  --color-terracotta-soft: #ececfb;
+
+  --color-sage: #15803d;
+  --color-sage-deep: #166534;
+  --color-sage-soft: #dcfce7;
+
+  --color-gold: #ca8a04;
+  --color-gold-soft: #fef3c7;
+  --color-gold-deep: #854d0e;
+
+  --color-rose-soft: #fee2e2;
+  --color-rose-deep: #b91c1c;
+
+  --color-plan-pink: #be185d;
+  --color-plan-purple: #7c3aed;
+  --color-plan-blue: #2563eb;
+  --color-plan-jade: #047857;
+  --color-plan-orange: #c2410c;
+  --color-plan-magenta: #a21caf;
+
+  /* A solid black button, written as three equal stops so it is still the
+     same gradient token every other preset fills. */
+  --brand-gradient: linear-gradient(96deg, #131316 0%, #131316 55%, #131316 120%);
+
+  --font-display: var(--font-geist), var(--font-work), system-ui, sans-serif;
+  --font-sans: var(--font-geist), var(--font-work), system-ui, sans-serif;
+
+  --radius-card: 1rem; /* 16px */
+  --radius-btn: 0.75rem; /* 12px */
+
+  /* Hairline rings instead of drop shadows: the surface is marked by its edge. */
+  --shadow-lift: 0 0 0 1px rgb(19 19 22 / 0.08), 0 1px 2px rgb(19 19 22 / 0.04);
+  --shadow-float: 0 0 0 1px rgb(19 19 22 / 0.06), 0 12px 30px rgb(19 19 22 / 0.12);
+  --shadow-card: 0 0 0 1px rgb(19 19 22 / 0.06), 0 8px 20px rgb(19 19 22 / 0.1);
+}
+
+/* Prompt: white page, black ink, one plum, a serif that answers. After Hinge. */
+[data-theme="prompt"] {
+  --color-paper: #ffffff;
+  --color-cream: #f6f3f7;
+  --color-card: #fbf9fc;
+  --color-ink: #111111;
+  --color-ink-soft: #4a4450;
+  --color-ink-faint: #6b6470;
+  --color-line: #ebe7ee;
+
+  --color-terracotta: #5b2a86;
+  --color-terracotta-deep: #5b2a86;
+  --color-terracotta-soft: #efe6f6;
+
+  --color-sage: #1f7a4d;
+  --color-sage-deep: #17603c;
+  --color-sage-soft: #e1f0e7;
+
+  --color-gold: #a16207;
+  --color-gold-soft: #fbf0d9;
+  --color-gold-deep: #6b4205;
+
+  --color-rose-soft: #fbe4e6;
+  --color-rose-deep: #a8283a;
+
+  --color-plan-pink: #9c3b5f;
+  --color-plan-purple: #5b2a86;
+  --color-plan-blue: #2f5a8a;
+  --color-plan-jade: #2e6b55;
+  --color-plan-orange: #8f5520;
+  --color-plan-magenta: #7d3a73;
+
+  --brand-gradient: linear-gradient(96deg, #5b2a86 0%, #4e2475 55%, #3f1c5e 120%);
+
+  --font-display: var(--font-newsreader), Georgia, serif;
+  --font-sans: var(--font-hanken), var(--font-work), system-ui, sans-serif;
+
+  --radius-card: 0.625rem; /* 10px */
+  --radius-btn: 999px;
+
+  --shadow-lift: 0 0 0 1px rgb(17 17 17 / 0.06);
+  --shadow-float: 0 10px 30px rgb(17 17 17 / 0.12), 0 0 0 1px rgb(17 17 17 / 0.05);
+  --shadow-card: 0 0 0 1px rgb(17 17 17 / 0.06);
+}
+
+/* A serif display face is set at a book weight, not the default theme's 800.
+ * The weight variables are reset on the heading itself, so a `font-extrabold`
+ * utility on an h1 resolves to the same weight instead of a faux-bold serif. */
+[data-theme="prompt"] :is(h1, h2, h3, .font-display) {
+  --font-weight-bold: 500;
+  --font-weight-extrabold: 500;
+  --font-weight-black: 500;
+  font-weight: 500;
+  letter-spacing: -0.015em;
+}
+
+/* Guestlist sets its headings semibold: Geist at 800 shouts, and this look
+ * is meant to be the quiet one. Same mechanism as Prompt above. */
+[data-theme="guestlist"] :is(h1, h2, h3, .font-display) {
+  --font-weight-bold: 600;
+  --font-weight-extrabold: 600;
+  --font-weight-black: 600;
+  font-weight: 600;
+  letter-spacing: -0.03em;
+}
+
+/* Poster type runs tighter than the default theme's headings. */
+[data-theme="afterparty"] :is(h1, h2) {
+  letter-spacing: -0.035em;
+}
+
 /* Custom: three chosen colors, everything else derived.
  *
  * Unlike the presets above, this block is not the theme — `customThemeVars` in

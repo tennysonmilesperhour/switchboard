@@ -1,5 +1,5 @@
 begin;
-select plan(13);
+select plan(16);
 
 -- SB-01 (20260710120000) took the table-level SELECT grant off public.profiles
 -- and replaced it with an explicit column allowlist. That makes the table
@@ -101,6 +101,27 @@ select matches(
   ),
   'custom',
   'the appearance CHECK constraint admits the custom preset'
+);
+
+-- The reskin presets (20261006150000) are accepted too. The full set is
+-- cross-checked against src/lib/themes-app.ts by themes-app.test.ts.
+select matches(
+  (select pg_get_constraintdef(oid) from pg_constraint
+   where conname = 'profiles_appearance_theme_check'),
+  'afterparty',
+  'the appearance CHECK constraint admits the afterparty preset'
+);
+select matches(
+  (select pg_get_constraintdef(oid) from pg_constraint
+   where conname = 'profiles_appearance_theme_check'),
+  'guestlist',
+  'the appearance CHECK constraint admits the guestlist preset'
+);
+select matches(
+  (select pg_get_constraintdef(oid) from pg_constraint
+   where conname = 'profiles_appearance_theme_check'),
+  'prompt',
+  'the appearance CHECK constraint admits the prompt preset'
 );
 
 select * from finish();
