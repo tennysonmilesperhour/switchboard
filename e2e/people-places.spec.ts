@@ -737,6 +737,80 @@ test.describe('people and places', () => {
     }
   });
 
+  test('two people near each other in discovery match on one tap each, whatever order they listed their contexts', async ({
+    browser,
+  }) => {
+    test.setTimeout(120_000);
+    // Each card used to default to the other person's first context, so Ula
+    // saved Vic's first and Vic saved Ula's: both chose each other and never
+    // matched. Same two contexts here, listed in opposite orders.
+    const ula = await person('Ula');
+    const vic = await person('Vic');
+    const wes = await person('Wes');
+    const contexts = [unique('Board games '), unique('Bouldering ')];
+    // Discovery is shared by every run and lists shared interests first, so
+    // these three share one nobody else has. A home spot of this run's own.
+    const interest = unique('origami');
+    const lat = Number((40 + Math.random() * 8).toFixed(3));
+    const lng = Number((-120 + Math.random() * 20).toFixed(3));
+    const profile = (discovery_contexts: string[], home_latitude: number) => ({
+      discoverable: true,
+      discovery_geography: true,
+      discovery_interests: true,
+      interests: [interest],
+      discovery_contexts,
+      home_latitude,
+      home_longitude: lng,
+    });
+    const admin = adminClient();
+    for (const [account, update] of [
+      [ula, profile(contexts, lat)],
+      // ~10 km north: near.
+      [vic, profile([...contexts].reverse(), lat + 0.09)],
+      // ~200 km north: discoverable, but not near.
+      [wes, profile(contexts, lat + 1.8)],
+    ] as const) {
+      const { error } = await admin.from('profiles').update(update).eq('id', account.id);
+      expect(error, error?.message).toBeNull();
+    }
+
+    const cardFor = (p: Page, other: Account) =>
+      p
+        .locator('div', { has: p.getByRole('link', { name: other.name, exact: true }) })
+        .filter({ has: p.getByRole('button', { name: 'Interested' }) })
+        .last();
+
+    const ulaSide = await signedIn(browser, ula);
+    const vicSide = await signedIn(browser, vic);
+    try {
+      const u = ulaSide.page;
+      await u.goto('/discover');
+      await u.getByRole('button', { name: 'Nearby', exact: true }).click();
+      await expect(cardFor(u, vic)).toBeVisible();
+      await expect(u.getByRole('link', { name: wes.name, exact: true })).toHaveCount(0);
+      await cardFor(u, vic).getByRole('button', { name: 'Interested' }).click();
+      await expectToast(u, 'Saved privately. Nothing is sent unless it’s mutual.');
+
+      const v = vicSide.page;
+      await v.goto('/discover');
+      await v.getByRole('button', { name: 'Nearby', exact: true }).click();
+      await cardFor(v, ula).getByRole('button', { name: 'Interested' }).click();
+      await expectToast(v, 'It is mutual.');
+      await shot(v, 'discovery-nearby-match');
+
+      const { data: match } = await admin
+        .from('matches')
+        .select('activity')
+        .eq('kind', 'discover_connect')
+        .or(`user_a.eq.${ula.id},user_b.eq.${ula.id}`)
+        .single();
+      expect(match?.activity).toBe([...contexts].sort()[0]);
+    } finally {
+      await ulaSide.context.close();
+      await vicSide.context.close();
+    }
+  });
+
   // LiveNotifications once joined its realtime channel before the user's token
   // resolved, so owner-only RLS dropped every event: no live banner, no bell
   // update, no refresh of /moments (src/lib/supabase/realtime.ts).

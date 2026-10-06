@@ -490,7 +490,12 @@ report from `/moderation`, not just record a status:
   `/login?error=suspended`, and `requireUser` refuses a Server Action from a tab
   that was already open; and `private.is_suspended` sits in the `messages` and
   `board_posts` write policies, so an access token issued before the suspension
-  cannot add what a moderator removes for the rest of its lifetime. A moderator
+  cannot add what a moderator removes for the rest of its lifetime. It also
+  takes the account off the map (`find_nearby_people`), out of people discovery
+  (`list_discoverable_people`), and out of Mutual: an active connect interest
+  can be neither sent by nor aimed at a suspended account, so nobody is matched
+  into a room with someone who cannot sign in
+  (20261006120000_suspended_not_offered.sql). A moderator
   cannot suspend themselves or another moderator (moderator authority is the
   operator's to remove). Open-ended suspensions are stored a century out,
   because GoTrue has no "forever"; a moderator can lift any suspension early,
