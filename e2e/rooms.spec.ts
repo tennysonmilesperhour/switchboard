@@ -631,6 +631,6 @@ test.describe('rooms', () => {
   test('the plan page does not send someone who left the room to a dead end', async () => {
     await cyPage.goto(`/events/${eventId}`);
     await expect(cyPage.getByRole('heading', { name: title, level: 1 })).toBeVisible();
-    await expect(cyPage.getByRole('link', { name: '❋ Room', exact: true })).toHaveCount(0);
+    await expect(cyPage.getByRole('link', { name: 'Room', exact: true })).toHaveCount(0);
   });
 });
