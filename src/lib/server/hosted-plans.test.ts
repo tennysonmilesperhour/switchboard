@@ -14,7 +14,7 @@ vi.mock('@/lib/server/email', () => ({
   looksLikeEmail: (value: string | null) => Boolean(value?.includes('@')),
 }));
 
-import { noticeHostedPlansEnding } from './hosted-plans';
+import { prepareHostedPlanCancellations, sendHostedPlanCancellations } from './hosted-plans';
 
 const HOST = 'host-1';
 
@@ -40,9 +40,9 @@ beforeEach(() => {
   mocks.eventsOr.mockResolvedValue({ data: [{ id: 'e1', title: 'Game night' }], error: null });
 });
 
-describe('noticeHostedPlansEnding', () => {
+describe('hosted-plan cancellation snapshot and delivery', () => {
   it('tells accepted guests and co-hosts, never the departing host', async () => {
-    const count = await noticeHostedPlansEnding(
+    const snapshot = await prepareHostedPlanCancellations(
       admin(
         [
           { event_id: 'e1', invitee_id: 'guest-1', guest_contact: null },
@@ -54,7 +54,10 @@ describe('noticeHostedPlansEnding', () => {
       HOST,
     );
 
-    expect(count).toBe(1);
+    expect(snapshot.planCount).toBe(1);
+    expect(mocks.notifyUsers).not.toHaveBeenCalled();
+    expect(mocks.sendEmails).not.toHaveBeenCalled();
+    await sendHostedPlanCancellations(snapshot);
     expect(mocks.notifyUsers).toHaveBeenCalledWith(
       ['guest-1', 'cohost-1'],
       expect.objectContaining({ kind: 'event_cancelled', url: '/plans' }),
@@ -67,9 +70,10 @@ describe('noticeHostedPlansEnding', () => {
   it('does nothing when the host has no upcoming plans', async () => {
     mocks.eventsOr.mockResolvedValue({ data: [], error: null });
 
-    const count = await noticeHostedPlansEnding(admin([], []), HOST);
+    const snapshot = await prepareHostedPlanCancellations(admin([], []), HOST);
+    await sendHostedPlanCancellations(snapshot);
 
-    expect(count).toBe(0);
+    expect(snapshot.planCount).toBe(0);
     expect(mocks.notifyUsers).not.toHaveBeenCalled();
     expect(mocks.sendEmails).not.toHaveBeenCalled();
   });
