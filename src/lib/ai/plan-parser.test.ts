@@ -111,3 +111,16 @@ describe('extractMode', () => {
     expect(extractMode('coffee downtown')).toBe('individual');
   });
 });
+
+describe('extractLocation', () => {
+  it('reads a place after at/in', async () => {
+    const { extractLocation } = await import('./plan-parser');
+    expect(extractLocation('Dinner Friday at The Rusty Spoon, invite Sam')).toBe('The Rusty Spoon');
+    expect(extractLocation('drinks in Brooklyn tomorrow')).toBe('Brooklyn');
+  });
+  it('ignores times and weekdays', async () => {
+    const { extractLocation } = await import('./plan-parser');
+    expect(extractLocation('coffee at 9am')).toBeNull();
+    expect(extractLocation('lunch at Friday')).toBeNull();
+  });
+});

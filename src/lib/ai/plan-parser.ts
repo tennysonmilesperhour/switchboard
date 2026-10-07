@@ -168,6 +168,21 @@ export function extractMode(text: string): ParsedPlan['mode'] {
 }
 
 /**
+ * Pull a place from "at The Rusty Spoon" / "in Brooklyn". Takes a run of
+ * capitalised words after at/in/@ and stops before a time or date word, so
+ * "at 7pm" and "at 8" never read as a place.
+ */
+export function extractLocation(text: string): string | null {
+  const match = text.match(
+    /(?:\bat|\bin|@)\s+((?:the\s+)?[A-Z][\w'’&.-]*(?:\s+(?:of\s+|the\s+|&\s+)?[A-Z][\w'’&.-]*){0,4})/,
+  );
+  if (!match) return null;
+  const place = match[1].trim().replace(/[.,]+$/, '');
+  if (WEEKDAYS.includes(place.toLowerCase())) return null;
+  return place.slice(0, 80) || null;
+}
+
+/**
  * No-key fallback: title from the text, invitees by fuzzy name match, plus a
  * best-effort date/time/mode extracted with deterministic rules so the draft
  * isn't empty when ANTHROPIC_API_KEY is unset.
@@ -186,7 +201,7 @@ function parseWithRules(
     title: text.split(/[,.]/)[0].slice(0, 60).trim() || 'New plan',
     date: extractDate(text, today),
     time: extractTime(text),
-    locationName: null,
+    locationName: extractLocation(text),
     capacity: null,
     inviteeNames,
     mode: extractMode(text),
