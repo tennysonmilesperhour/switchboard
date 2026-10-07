@@ -77,13 +77,6 @@ const users: Shape = (
     <path d="M16 4.7a3.5 3.5 0 0 1 0 6.6M18 14.2a6.5 6.5 0 0 1 3.5 5.8" />
   </>
 );
-const handshake: Shape = (
-  <>
-    <path d="M3 10l4-3 4 1 3-1.5 4 3.5" />
-    <path d="M3 10v5l5 4 2-1.5M21 11.5V16l-5 3.5-4-3" />
-    <path d="M9 14l2.5 2M12.5 12l2.5 2" />
-  </>
-);
 const book: Shape = (
   <>
     <path d="M5 4.5A1.5 1.5 0 0 1 6.5 3H19v14H6.5A1.5 1.5 0 0 0 5 18.5v-14z" />
@@ -356,7 +349,7 @@ const MAP: Record<string, Shape> = {
   '🎤': mic,
   '👂': ear,
   '🎲': dice,
-  '🤝': handshake,
+  '🤝': heart,
   '🙋': hand,
   '🤲': hand,
   '👋': hand,

@@ -364,7 +364,7 @@ export function SignalBar({ active, circles, people, groups, defaultCircleId }: 
               type="button"
               aria-pressed={selected}
               onClick={() => toggleStatus(signal)}
-              className={`flex min-h-14 items-center gap-3 rounded-2xl border px-3.5 py-2.5 text-left text-sm font-bold leading-tight outline-none transition-all duration-150 active:scale-[0.97] focus-visible:ring-2 focus-visible:ring-terracotta ${
+              className={`flex min-h-16 items-center gap-3 rounded-2xl border px-3.5 py-2.5 text-left text-sm font-bold leading-tight outline-none transition-all duration-150 active:scale-[0.97] focus-visible:ring-2 focus-visible:ring-terracotta ${
                 selected
                   ? 'border-terracotta bg-terracotta text-white shadow-lift'
                   : 'border-line bg-card text-ink hover:border-terracotta'
