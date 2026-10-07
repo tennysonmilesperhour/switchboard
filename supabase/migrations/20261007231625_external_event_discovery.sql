@@ -65,6 +65,7 @@ create index external_events_city_start_idx on public.external_events (city, sta
 create index external_event_listings_event_idx on public.external_event_listings (event_id);
 create index external_event_listings_source_seen_idx on public.external_event_listings (source_id, last_seen_at);
 create index external_event_submissions_owner_idx on public.external_event_submissions (submitted_by, created_at desc);
+create index external_event_preferences_event_idx on public.external_event_preferences (event_id);
 
 alter table public.event_sources enable row level security;
 alter table public.external_events enable row level security;
