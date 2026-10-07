@@ -5,10 +5,17 @@ import { AppShell } from '@/components/shell/AppShell';
 import { SOCIAL_BY_ID } from '@/lib/socials';
 import { parseProfileLinks, parseProfileSocials } from '@/lib/supabase/json';
 import { ProfileEditForm } from './ProfileEditForm';
+import { FactsEditor, type EditableFact } from './FactsEditor';
 
 export const metadata: Metadata = { title: 'Edit profile' };
 
-export default async function EditProfilePage() {
+export default async function EditProfilePage({
+  searchParams,
+}: {
+  searchParams: Promise<{ fact?: string | string[] }>;
+}) {
+  const { fact: factParam } = await searchParams;
+  const factNotice = Array.isArray(factParam) ? factParam[0] : factParam;
   const supabase = await createClient();
   const {
     data: { user },
@@ -31,6 +38,21 @@ export default async function EditProfilePage() {
   const { data: homePoint } = await supabase
     .rpc('my_home_point')
     .maybeSingle<{ latitude: number; longitude: number }>();
+
+  // The owner reads all of their own entries, hidden ones included
+  // (`profile_facts_select`). Writes go through server actions only.
+  const { data: factRows } = await supabase
+    .from('profile_facts')
+    .select('id, kind, label, tier, shown')
+    .eq('user_id', user.id)
+    .order('created_at', { ascending: true });
+  const facts: EditableFact[] = (factRows ?? []).map((row) => ({
+    id: row.id,
+    kind: row.kind === 'employer' ? 'employer' : 'school',
+    label: row.label,
+    tier: row.tier === 'email' || row.tier === 'vouched' ? row.tier : 'claimed',
+    shown: row.shown,
+  }));
 
   const links = parseProfileLinks(profile?.links ?? []);
   const socials = parseProfileSocials(profile?.socials ?? []).filter(
@@ -60,6 +82,7 @@ export default async function EditProfilePage() {
         contactPhone={privateProfile?.contact_phone ?? ''}
         contactPublic={Boolean(profile?.contact_public)}
       />
+      <FactsEditor facts={facts} notice={factNotice ?? null} />
     </AppShell>
   );
 }

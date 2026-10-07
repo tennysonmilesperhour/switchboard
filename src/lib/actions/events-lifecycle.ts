@@ -327,7 +327,7 @@ export async function updateEventDetails(
       await notifyUsers(recipients, {
         kind: imminentChange(before.starts_at, input.startsAt || null) ? 'event_urgent_change' : 'event_updated',
         urgentUntil: urgentChangeDeadline(before.starts_at, input.startsAt || null),
-        title: 'Plan updated ✏️',
+        title: 'Plan updated',
         body: `The ${changed} for ${title} changed. Tap for the latest.`,
         url: `/events/${eventId}`,
       });

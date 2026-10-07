@@ -12,6 +12,7 @@ import {
   filterFeatureGroups,
   type Feature,
 } from '@/lib/features';
+import { Glyph } from '@/components/ui/Glyph';
 
 /**
  * The index is long on purpose — it's a reference, not a tour — so the search
@@ -81,7 +82,7 @@ export function FeatureIndexClient({
               href={`#${group.id}`}
               className="inline-flex items-center gap-1 rounded-pill border border-line bg-card px-3 py-1.5 text-[13px] font-semibold text-ink-soft hover:border-terracotta hover:text-terracotta-deep focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-terracotta"
             >
-              <span aria-hidden>{group.emoji}</span>
+              <Glyph emoji={group.emoji} size={14} />
               {group.title}
             </a>
           ))}
@@ -105,9 +106,7 @@ export function FeatureIndexClient({
                   on a sky. */}
               <div className="text-plate text-plate-inset min-w-0">
                 <h2 className="font-display text-xl text-ink">
-                  <span aria-hidden className="mr-1.5">
-                    {group.emoji}
-                  </span>
+                  <Glyph emoji={group.emoji} size={20} className="mr-1.5 inline align-text-bottom" />
                   {group.title}
                 </h2>
                 <p className="mt-0.5 text-sm text-ink-faint">{group.hint}</p>

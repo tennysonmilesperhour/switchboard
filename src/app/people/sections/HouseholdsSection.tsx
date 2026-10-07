@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/Button';
 import { Card, SectionHeader } from '@/components/ui/Card';
 import { Chip } from '@/components/ui/Chip';
 import type { FriendRow, HouseholdRow } from './types';
+import { Glyph } from '@/components/ui/Glyph';
 
 interface HouseholdsSectionProps {
   friends: FriendRow[];
@@ -57,7 +58,7 @@ export function HouseholdsSection({
   return (
     <section>
       <SectionHeader
-        title="Households 🏡"
+        title="Households"
         hint="Invite a whole family or roommate crew with one tap"
       />
       {/* D9: the household chip picks the set; one person picks one person. */}
@@ -77,7 +78,7 @@ export function HouseholdsSection({
             return (
               <div key={household.id} className="rounded-card bg-cream px-3.5 py-3 text-sm">
                 <div className="flex items-center gap-3">
-                  <span className="text-lg" aria-hidden>{household.emoji}</span>
+                  <Glyph emoji={household.emoji} size={18} />
                   <span className="min-w-0 flex-1">
                     <span className="block truncate font-bold">{household.name}</span>
                     {/* Names, not just a count: there is no other way to see

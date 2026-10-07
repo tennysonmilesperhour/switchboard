@@ -280,7 +280,7 @@ export async function expressCuriosity(
     if (!alreadyRevealed) {
       await notifyUsers([other.user_id], {
         kind: 'moment',
-        title: '✨ The interest is mutual',
+        title: 'The interest is mutual',
         body: 'Someone near you is curious too - take a look.',
         url: '/moments',
       });
@@ -297,7 +297,7 @@ export async function expressCuriosity(
   if (firstTime && reverse?.stage !== 'passed') {
     await notifyUsers([other.user_id], {
       kind: 'moment',
-      title: '✨ Someone’s curious',
+      title: 'Someone’s curious',
       body: 'A person near you would like to connect. Open Moments to see.',
       url: '/moments',
     });
@@ -392,7 +392,7 @@ export async function acceptMoment(
     .from('rooms')
     .insert({
       kind: 'moment',
-      title: `✨ ${mine.place_name}`,
+      title: `${mine.place_name}`,
       created_by: mine.user_id,
     })
     .select('id')
@@ -433,7 +433,7 @@ export async function acceptMoment(
   // in /notifications even if the recipient never enabled push or is offline.
   await notifyUsers([mine.user_id, other.user_id], {
     kind: 'match',
-    title: '✨ You’d both love to share this moment',
+    title: 'You’d both love to share this moment',
     body: 'A conversation is open - say hi and pick a spot.',
     url: `/rooms/${room.id}`,
   });

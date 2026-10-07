@@ -23,6 +23,7 @@ import { UploadError, uploadImage } from '@/lib/client/upload-image';
 import { formatRelative } from '@/lib/format';
 import type { RoomItemKind } from '@/lib/types';
 import { MessageBubble } from './MessageBubble';
+import { FindEachOther } from './FindEachOther';
 import { RoomHeader, type RoomMemberInfo, type RoomReadOnly } from './RoomHeader';
 import { SplitTab, type ExpenseRow, type ExpenseShareRow } from './SplitTab';
 import {
@@ -31,6 +32,7 @@ import {
   prependEarlierMessages,
   type RoomMessage,
 } from './room-messages';
+import { Glyph } from '@/components/ui/Glyph';
 
 export type { RoomMessage } from './room-messages';
 export type { ExpenseRow } from './SplitTab';
@@ -154,6 +156,11 @@ export function RoomClient({
   // A match room the other person left has nobody to talk to.
   const alone = roomKind === 'match' && members.every((member) => member.id === currentUserId);
   const canWrite = !readOnly && !alone;
+  // Exact location between two people who matched (20261008120000): the
+  // two-person rooms only, while both are still here and nothing has closed it.
+  const otherMember = members.find((member) => member.id !== currentUserId);
+  const findEachOther =
+    (roomKind === 'match' || roomKind === 'moment') && canWrite && Boolean(otherMember);
   const nameOf = (id: string) => memberNames[id] ?? 'Someone who left';
 
   useEffect(() => {
@@ -472,6 +479,10 @@ export function RoomClient({
         readOnly={readOnly}
       />
 
+      {findEachOther && (
+        <FindEachOther roomId={roomId} otherName={otherMember?.name ?? 'them'} />
+      )}
+
       <div
         role="tablist"
         aria-label="Room sections"
@@ -495,7 +506,8 @@ export function RoomClient({
                 active ? 'bg-ink text-paper' : 'bg-cream text-ink-soft hover:bg-line'
               }`}
             >
-              {tabDef.emoji} {tabDef.label}
+              <Glyph emoji={tabDef.emoji} size={14} className="mr-1 inline align-text-bottom" />
+              {tabDef.label}
               {count > 0 && <span className="ml-1 opacity-60">{count}</span>}
             </button>
           );
@@ -577,7 +589,7 @@ export function RoomClient({
                 aria-label="Send a photo"
                 className="shrink-0 rounded-pill border border-line bg-card px-3 py-2.5 text-lg leading-none outline-none hover:border-terracotta focus-visible:ring-2 focus-visible:ring-terracotta disabled:opacity-50"
               >
-                {uploadingPhoto ? '…' : '📷'}
+                {uploadingPhoto ? '…' : <Glyph emoji="📷" size={20} />}
               </button>
               <input
                 value={draft}
@@ -620,7 +632,7 @@ export function RoomClient({
               title={tab === 'photo' ? 'No photos yet' : 'Nothing filed yet'}
               body={
                 tab === 'photo'
-                  ? 'Tap 📷 in the chat to share a photo. Everything shared shows up here.'
+                  ? 'Tap the camera in the chat to share a photo. Everything shared shows up here.'
                   : tab === 'note' && !smartFiling
                     ? 'Notes are filed here when smart filing is on.'
                     : 'When someone shares something useful in chat, it lands here automatically.'
@@ -694,7 +706,7 @@ export function RoomClient({
                     <p
                       className={`font-medium ${item.done ? 'line-through text-ink-faint' : ''}`}
                     >
-                      {item.kind === 'address' ? '📍 ' : ''}
+                      {item.kind === 'address' && <Glyph emoji="📍" size={14} className="mr-1 inline align-text-bottom" />}
                       {item.title}
                     </p>
                   )}

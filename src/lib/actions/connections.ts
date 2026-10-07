@@ -199,7 +199,7 @@ async function notifyConnectionRequested(
     .maybeSingle();
   await notifyUsers([addresseeId], {
     kind: 'connection_request',
-    title: 'New connection request 👋',
+    title: 'New connection request',
     body: `${requester?.display_name ?? 'Someone'} wants to connect on Switchboard.`,
     url: '/people',
   });
@@ -453,7 +453,7 @@ export async function acceptConnection(connectionId: string): Promise<Connection
       .maybeSingle();
     await notifyUsers([updated.requester_id], {
       kind: 'connection_accepted',
-      title: 'You’re connected 🎉',
+      title: 'You’re connected',
       body: `${me?.display_name ?? 'Someone'} accepted your connection request.`,
       url: '/people',
     });

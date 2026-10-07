@@ -206,7 +206,7 @@ export function DiscoverClient({
         </div>
 
         <Button type="submit" size="lg" className="w-full" disabled={pending}>
-          {pending ? 'Curating…' : 'Find something great ✨'}
+          {pending ? 'Curating…' : 'Find something great'}
         </Button>
         {error && (
           <p role="alert" className="text-sm text-rose-deep">
@@ -243,7 +243,7 @@ export function DiscoverClient({
                 {suggestion.description}
               </p>
               <p className="text-xs text-terracotta-deep mt-2">
-                ✨ {suggestion.why}
+                {suggestion.why}
               </p>
               {suggestion.category && (
                 <span className="mt-2 inline-block rounded-pill bg-cream px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-ink-faint">

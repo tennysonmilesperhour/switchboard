@@ -35,7 +35,7 @@ export function JoinViaLinkClient({
   if (asked) {
     return (
       <div className="rounded-card bg-sage-soft p-5">
-        <p className="font-extrabold text-lg text-sage-deep">You’re on the list to join ✓</p>
+        <p className="font-extrabold text-lg text-sage-deep">You’re on the list to join</p>
         <p className="text-sm text-ink-soft mt-1">
           {eventTitle}’s host will get your request and let you know. You can
           follow along on the plan page.

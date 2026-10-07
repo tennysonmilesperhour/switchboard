@@ -7,6 +7,7 @@ import { Card, SectionHeader } from '@/components/ui/Card';
 import { Avatar } from '@/components/ui/Avatar';
 import { PlanCard, planColor } from '@/components/ui/PlanCard';
 import { SignalBar } from '@/components/signals/SignalBar';
+import { Glyph } from '@/components/ui/Glyph';
 import { GettingStarted } from '@/components/home/GettingStarted';
 import { Greeting } from '@/components/home/Greeting';
 import { PillarRow } from '@/components/home/PillarRow';
@@ -364,13 +365,13 @@ export default async function HomePage() {
             response behind discovery or setup UI. */}
         {failed.has('invites') && (
           <section>
-            <SectionHeader title="Waiting on you 💌" />
+            <SectionHeader title="Waiting on you" />
             <SectionError section="invites" />
           </section>
         )}
         {waitingOnYou.length > 0 && (
           <section>
-            <SectionHeader title="Waiting on you 💌" />
+            <SectionHeader title="Waiting on you" />
             <div className="space-y-2">
               {waitingOnYou.map(({ id, event }) => {
                 return (
@@ -452,6 +453,32 @@ export default async function HomePage() {
           </div>
         )}
 
+        {/* The composer always renders. It used to wait for the first accepted
+            connection, which meant a new account's Home silently omitted a
+            whole feature — and the feature index still pointed here, so anyone
+            who followed it found nothing and read that as broken rather than as
+            waiting. It now shows its own "nobody to tell yet" state, and
+            refuses out loud instead of being absent. `hasConnections` was also
+            the wrong test: a signal aimed at a board reaches fellow members you
+            are not connected to, so someone on a board with no friends could
+            use this and never saw it. SignalBar decides from the reach it was
+            actually handed. */}
+        <div id="signals" className="scroll-mt-20">
+          {/* The composer decides "nobody to tell yet" from these reads, so a
+              failed one would refuse out loud for the wrong reason. */}
+          {failed.has('signals') ? (
+            <SectionError section="signals" />
+          ) : (
+            <SignalBar
+              active={mySignals ?? []}
+              circles={circles ?? []}
+              people={peopleForSignals}
+              groups={signalGroups ?? []}
+              defaultCircleId={defaultSignalCircleId}
+            />
+          )}
+        </div>
+
         {/* Exactly one guidance card. Once first-run setup retires, the
             passport takes its place rather than stacking another explainer.
             The checklist stays mounted even then, because Settings' "show
@@ -488,32 +515,6 @@ export default async function HomePage() {
           hasConnections={hasConnections || failed.has('connections')}
           showAround={aroundAvailable === true}
         />
-
-        {/* The composer always renders. It used to wait for the first accepted
-            connection, which meant a new account's Home silently omitted a
-            whole feature — and the feature index still pointed here, so anyone
-            who followed it found nothing and read that as broken rather than as
-            waiting. It now shows its own "nobody to tell yet" state, and
-            refuses out loud instead of being absent. `hasConnections` was also
-            the wrong test: a signal aimed at a board reaches fellow members you
-            are not connected to, so someone on a board with no friends could
-            use this and never saw it. SignalBar decides from the reach it was
-            actually handed. */}
-        <div id="signals" className="scroll-mt-20">
-          {/* The composer decides "nobody to tell yet" from these reads, so a
-              failed one would refuse out loud for the wrong reason. */}
-          {failed.has('signals') ? (
-            <SectionError section="signals" />
-          ) : (
-            <SignalBar
-              active={mySignals ?? []}
-              circles={circles ?? []}
-              people={peopleForSignals}
-              groups={signalGroups ?? []}
-              defaultCircleId={defaultSignalCircleId}
-            />
-          )}
-        </div>
 
         {/* Matchmaker introductions */}
         {failed.has('introductions') && <SectionError section="introductions" />}
@@ -634,7 +635,7 @@ export default async function HomePage() {
                         <span className="flex-1 text-sm">
                           <strong>{name}</strong>{' '}
                           <span className="text-ink-soft">
-                            is {signal.emoji} {signal.label}
+                            is <Glyph emoji={signal.emoji} size={14} className="inline -mt-0.5" /> {signal.label}
                           </span>
                         </span>
                         <span className="flex flex-col items-end gap-0.5">

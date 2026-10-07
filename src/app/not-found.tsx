@@ -1,3 +1,4 @@
+import { Glyph } from '@/components/ui/Glyph';
 import Link from 'next/link';
 
 /** 404: warm, brief, and pointed back home. */
@@ -5,7 +6,7 @@ export default function NotFound() {
   return (
     <div className="mx-auto flex min-h-dvh max-w-lg flex-col items-center justify-center gap-4 px-8 text-center">
       <span className="text-4xl" aria-hidden>
-        🧭
+        <Glyph emoji="🧭" size={40} />
       </span>
       <h1 className="text-2xl font-extrabold tracking-tight text-ink">
         Nothing here

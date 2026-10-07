@@ -49,6 +49,18 @@ revoke insert, update, delete on public.expense_shares from anon, authenticated;
 -- functions (20260930070000); nobody may write or rewrite it from the API.
 revoke insert, update, delete on public.moderation_actions from anon, authenticated;
 
+-- Verified profile facts carry a trust tier (claimed / email / vouched) that is
+-- authority-like state: it is written only by server actions holding the service
+-- role and by the vouch definer functions (20261008130000). Vouches and the
+-- mailed-link requests are written only by those paths too. RLS already denies
+-- the writes, but a denied UPDATE matches zero rows in silence, so keep the
+-- refusal loud here as in production.
+revoke insert, update, delete on public.profile_facts from anon, authenticated;
+revoke insert, update, delete on public.fact_vouches from anon, authenticated;
+revoke all on public.fact_verification_requests from anon, authenticated;
+-- Signals are append-only for their owner (no UPDATE grant in production).
+revoke update on public.discovery_signals from anon, authenticated;
+
 -- SELECT everywhere EXCEPT tables with explicit column allowlists.
 --
 -- SB-01 (20260710120000_lock_sensitive_profile_columns.sql) dropped the

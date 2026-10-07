@@ -20,6 +20,7 @@ import {
   ZONE_NEAR_ME_METERS,
   zoneIsActive,
 } from '@/lib/zone-rules';
+import { Glyph } from '@/components/ui/Glyph';
 
 export const metadata: Metadata = { title: 'Zones' };
 
@@ -334,12 +335,12 @@ export default async function ZonesPage({
                     {[
                       {
                         value: 'public',
-                        label: '🌍 Anyone',
+                        label: 'Anyone',
                         hint: 'A conference, festival, or campus',
                       },
                       {
                         value: 'private',
-                        label: '🔒 Only people I let in',
+                        label: 'Only people I let in',
                         hint: 'A trip, an offsite, a small group',
                       },
                     ].map((option, index) => (
@@ -376,7 +377,8 @@ export default async function ZonesPage({
                           value={experience.label}
                           className="sr-only"
                         />
-                        {experience.emoji} {experience.label}
+                        <Glyph emoji={experience.emoji} size={14} className="mr-1 inline align-text-bottom" />
+                        {experience.label}
                       </label>
                     ))}
                   </div>
@@ -400,7 +402,8 @@ function ZoneCard({ zone, distance }: { zone: ZoneRow; distance?: string }) {
       <Card className="group-hover:border-terracotta transition-colors">
         <div className="flex items-start justify-between gap-2">
           <p className="font-bold">
-            {zone.visibility === 'private' ? '🔒' : '✨'} {zone.name}
+            {zone.visibility === 'private' && <Glyph emoji="🔒" size={14} className="inline align-text-bottom mr-1" />}
+            {zone.name}
           </p>
           {distance && (
             <span className="shrink-0 text-xs font-semibold text-ink-faint">{distance}</span>
@@ -412,7 +415,7 @@ function ZoneCard({ zone, distance }: { zone: ZoneRow; distance?: string }) {
         <p className="text-xs text-ink-faint mt-1">
           {active ? `Open until ${formatDate(zone.ends_at)}` : `Ended ${formatDate(zone.ends_at)}`}
           {' · '}
-          {toMapPoint(zone.latitude, zone.longitude) ? '📍 On the map' : 'Not on the map yet'}
+          {toMapPoint(zone.latitude, zone.longitude) ? 'On the map' : 'Not on the map yet'}
         </p>
       </Card>
     </Link>

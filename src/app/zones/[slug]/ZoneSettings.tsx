@@ -9,6 +9,7 @@ import { useConfirm } from '@/components/ui/ConfirmDialog';
 import { deleteZone, updateZoneDetails } from '@/lib/actions/zones';
 import { EXPERIENCE_PRESETS } from '@/lib/types';
 import { zoneEndDay } from '@/lib/zone-rules';
+import { Glyph } from '@/components/ui/Glyph';
 
 interface ZoneSettingsProps {
   zoneId: string;
@@ -158,7 +159,8 @@ export function ZoneSettings({
                       : 'border-line bg-paper text-ink-soft'
                   }`}
                 >
-                  {option.emoji} {option.label}
+                  <Glyph emoji={option.emoji} size={14} className="mr-1 inline align-text-bottom" />
+                  {option.label}
                 </button>
               ))}
             </div>

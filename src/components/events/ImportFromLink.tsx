@@ -1,5 +1,6 @@
 'use client';
 
+import { Glyph } from '@/components/ui/Glyph';
 import { useState, useTransition } from 'react';
 import { Button } from '@/components/ui/Button';
 import { importEventFromLink, type ImportResult } from '@/lib/actions/import';
@@ -48,7 +49,7 @@ export function ImportFromLink({
         onClick={() => setOpen(true)}
         className="w-full rounded-card border border-dashed border-line bg-cream px-4 py-3 text-sm text-ink-soft hover:border-terracotta hover:text-terracotta-deep transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-terracotta"
       >
-        🔗 Already have a plan elsewhere? Bring it in from a link.
+        <Glyph emoji="🔗" size={14} className="inline -mt-0.5 mr-1" />Already have a plan elsewhere? Bring it in from a link.
       </button>
     );
   }

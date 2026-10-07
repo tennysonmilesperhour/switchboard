@@ -1,5 +1,6 @@
 'use client';
 
+import { Glyph } from '@/components/ui/Glyph';
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { Button } from '@/components/ui/Button';
@@ -61,7 +62,7 @@ export default function Error({
   return (
     <div className="mx-auto flex min-h-dvh max-w-lg flex-col items-center justify-center gap-4 px-8 text-center">
       <span className="text-4xl" aria-hidden>
-        {offline ? '📡' : '🌫️'}
+        <Glyph emoji={offline ? '📡' : '🌫️'} size={40} />
       </span>
       <h1 className="text-2xl font-extrabold tracking-tight text-ink">
         {offline ? 'You’re offline' : 'Something slipped'}

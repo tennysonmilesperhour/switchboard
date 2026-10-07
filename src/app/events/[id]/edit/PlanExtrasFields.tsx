@@ -1,5 +1,6 @@
 'use client';
 
+import { Glyph } from '@/components/ui/Glyph';
 import { ImageInput } from '@/components/ui/ImageInput';
 import { EVENT_THEMES } from '@/lib/themes';
 import { MAX_PLAN_QUESTIONS, REMINDER_SCHEDULE_COPY, type NewQuestion } from '@/lib/plan-extras';
@@ -94,7 +95,7 @@ export function PlanExtrasFields({
           className="mt-1 size-4 accent-terracotta"
         />
         <span>
-          <span className="font-bold">Send reminders ⏰</span>
+          <span className="font-bold">Send reminders</span>
           <span className="block text-sm text-ink-soft mt-0.5">{REMINDER_SCHEDULE_COPY}</span>
         </span>
       </label>
@@ -107,7 +108,7 @@ export function PlanExtrasFields({
           className="mt-1 size-4 accent-terracotta"
         />
         <span>
-          <span className="font-bold">Open Table 🍽️</span>
+          <span className="font-bold">Open Table</span>
           <span className="block text-sm text-ink-soft mt-0.5">
             If seats stay empty, friends of your guests can ask to join. You approve every request.
             {!hasCapacity && ' It needs a capacity above, so there are seats to offer.'}
@@ -145,7 +146,7 @@ export function PlanExtrasFields({
                 onClick={() => set({ newQuestions: value.newQuestions.filter((_, i) => i !== index) })}
                 className="text-ink-faint hover:text-rose-deep px-1"
               >
-                ✕
+                <Glyph emoji="✕" size={14} />
               </button>
             </div>
             <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-xs font-semibold text-ink-soft">

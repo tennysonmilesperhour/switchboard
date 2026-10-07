@@ -95,7 +95,7 @@ export function RecentMatches({ matches }: { matches: RecentMatch[] }) {
 
   return (
     <section>
-      <SectionHeader title="Recent matches ✨" />
+      <SectionHeader title="Recent matches" />
       <div className="space-y-2">
         {visible.map((match) => (
           <SwipeableMatch key={match.id} match={match} onClear={() => clear(match)} />

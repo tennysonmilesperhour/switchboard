@@ -1,3 +1,4 @@
+import { Glyph } from '@/components/ui/Glyph';
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { createAdminClient, hasAdminCredentials } from '@/lib/supabase/admin';
@@ -244,7 +245,7 @@ export default async function SharedInvitePage({
       <main className="flex-1 flex flex-col justify-center pb-24">
         {!event || !readable ? (
           <div className="text-center">
-            <p className="text-4xl mb-3" aria-hidden>🍂</p>
+            <p className="mb-3" aria-hidden><Glyph emoji="🍂" size={40} /></p>
             <h1 className="font-extrabold tracking-tight text-2xl">
               {notice?.heading ?? 'This invite link isn’t active'}
             </h1>

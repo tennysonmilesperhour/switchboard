@@ -114,7 +114,7 @@ export function OpenTables({
                 </p>
                 {requested.has(table.event_id) ? (
                   <span className="text-xs text-sage-deep font-bold">
-                    Asked ✓
+                    Asked
                   </span>
                 ) : (
                   <Button

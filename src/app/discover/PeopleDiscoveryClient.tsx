@@ -17,21 +17,23 @@ import { setDiscoverable } from '@/lib/actions/profile';
 import { formatRelative } from '@/lib/format';
 import { errorFor, type ErrorCode } from '@/lib/errors';
 import { discoveryContextChoice } from '@/lib/discovery-context';
+import { Glyph } from '@/components/ui/Glyph';
+import { TrustLabel } from '@/components/profile/FactList';
+import { recordDiscoverySignal } from '@/lib/actions/discovery-prefs';
+import type { DiscoveryPerson } from '@/lib/discovery-people';
+import {
+  FIT_LABEL,
+  SELVES,
+  SELF_INFO,
+  activityForLane,
+  describeMoodRemaining,
+  itemKey,
+  moodInfo,
+  stripLane,
+  type Self,
+} from '@/lib/discovery-lanes';
 
-export interface DiscoveryPerson {
-  id: string;
-  display_name: string;
-  handle: string;
-  avatar_url: string | null;
-  tagline: string | null;
-  location: string | null;
-  pronouns: string | null;
-  categories: string[];
-  contexts: string[];
-  shared_interests: string[];
-  shared_down_to: string[];
-  mutual_friend_count: number;
-}
+export type { DiscoveryPerson };
 
 export interface DiscoveryMatch {
   id: string;
@@ -50,6 +52,14 @@ const FILTERS = [
   { value: 'mutual friends', label: 'Mutuals' },
 ] as const;
 
+/** Items a card showed, as the keys weights are stored under. */
+function sharedKeys(person: DiscoveryPerson): string[] {
+  return [
+    ...person.shared_interests.map((label) => itemKey('interest', label)),
+    ...person.shared_down_to.map((label) => itemKey('down_to', label)),
+  ];
+}
+
 /** The reader's own open "Interested" mark on someone, by their profile id. */
 export interface DiscoveryInterest {
   id: string;
@@ -60,6 +70,9 @@ export function PeopleDiscoveryClient({
   people,
   matches,
   discoverable,
+  self = 'friends',
+  laneOn = true,
+  mood = null,
   interests = {},
   myContexts = [],
   loadError = null,
@@ -67,6 +80,12 @@ export function PeopleDiscoveryClient({
   people: DiscoveryPerson[];
   matches: DiscoveryMatch[];
   discoverable: boolean;
+  /** The lane being browsed. */
+  self?: Self;
+  /** Whether the reader has this lane on. */
+  laneOn?: boolean;
+  /** The reader's own active mood, if any. */
+  mood?: { preset: string; expires_at: string } | null;
   /** The reader's own contexts, so a tap defaults to one both people offer. */
   myContexts?: string[];
   /** Keyed by target profile id. */
@@ -96,18 +115,36 @@ export function PeopleDiscoveryClient({
       selectedContext[person.id] || discoveryContextChoice(person, myContexts).defaultContext;
     setPendingId(person.id);
     startTransition(async () => {
-      const result = await downToConnect(person.id, context, 'discover_connect');
+      // The lane rides in the saved text, so a dating tap and a friends tap on
+      // the same context are different asks and cannot match each other.
+      const result = await downToConnect(person.id, activityForLane(self, context), 'discover_connect');
       setPendingId(null);
       if (!result.ok) {
         toast.error(result.error ?? 'Could not save that quietly.', result.code);
         return;
       }
+      // Private history, used only to offer suggestions. Never blocks the tap.
+      void recordDiscoverySignal(person.id, self, 'accepted', sharedKeys(person));
       if (result.matched) {
         setJustMatched(true);
         toast.success('It is mutual.');
       } else {
         toast.success('Saved privately. Nothing is sent unless it’s mutual.');
       }
+      router.refresh();
+    });
+  }
+
+  function pass(person: DiscoveryPerson) {
+    setPendingId(person.id);
+    startTransition(async () => {
+      const result = await recordDiscoverySignal(person.id, self, 'passed', sharedKeys(person));
+      setPendingId(null);
+      if (!result.ok) {
+        toast.error(result.error ?? 'Could not save that.', result.code);
+        return;
+      }
+      toast.success(`Okay. ${person.display_name} won’t be told, and won’t reappear here for a month.`);
       router.refresh();
     });
   }
@@ -144,16 +181,48 @@ export function PeopleDiscoveryClient({
         title="People discovery"
         hint="Opt-in, context-specific, and private until both people choose each other"
         action={
-          <Link href="/settings" className="text-sm font-bold text-terracotta-deep hover:text-terracotta-deep">
-            Settings
+          <Link
+            href={`/discover/preferences?lane=${self}`}
+            className="text-sm font-bold text-terracotta-deep hover:text-terracotta-deep"
+          >
+            Discovery settings
           </Link>
         }
       />
 
+      <nav aria-label="Lanes" className="flex gap-2 overflow-x-auto pb-1">
+        {SELVES.map((option) => (
+          <Link
+            key={option}
+            href={`/discover?lane=${option}#browse`}
+            aria-current={option === self ? 'page' : undefined}
+            className={`shrink-0 rounded-pill border px-4 py-2 text-sm font-semibold transition-colors ${
+              option === self
+                ? 'border-terracotta bg-terracotta text-white'
+                : 'border-line bg-card text-ink-soft hover:border-terracotta'
+            }`}
+          >
+            {SELF_INFO[option].label}
+          </Link>
+        ))}
+      </nav>
+
+      {mood ? (
+        <Link href={`/discover/preferences?lane=${self}`} className="block">
+          <Card tone="sage">
+            <p className="text-sm text-sage-deep">
+              <strong>{moodInfo(mood.preset)?.label ?? 'Custom mood'}</strong> ·{' '}
+              {describeMoodRemaining(mood.expires_at)}. Only people who clear your current bar
+              are shown. <span className="font-bold underline">Change</span>
+            </p>
+          </Card>
+        </Link>
+      ) : null}
+
       <Link href="/people" className="block group">
         <Card className="group-hover:border-terracotta transition-colors">
           <div className="flex items-center gap-3">
-            <span className="text-xl" aria-hidden>👋</span>
+            <Glyph emoji="👋" size={20} />
             <span className="min-w-0 flex-1 text-sm">
               <span className="block font-bold">Already know someone?</span>
               <span className="block text-xs text-ink-faint">
@@ -205,6 +274,21 @@ export function PeopleDiscoveryClient({
         </Card>
       )}
 
+      {discoverable && !laneOn && (
+        <Card tone="cream">
+          <p className="text-sm font-bold">
+            {SELF_INFO[self].label} is {mood ? 'resting or ' : ''}off.
+          </p>
+          <p className="mt-1 text-sm text-ink-soft">
+            {SELF_INFO[self].blurb} Turn it on in discovery settings to browse here and be found
+            here.
+          </p>
+          <Link href={`/discover/preferences?lane=${self}`} className="mt-3 inline-block">
+            <Button size="sm">Open discovery settings</Button>
+          </Link>
+        </Card>
+      )}
+
       {justMatched && (
         <Card tone="sage" lifted className="animate-rise">
           <p className="font-display text-xl text-sage-deep">It is mutual.</p>
@@ -237,7 +321,7 @@ export function PeopleDiscoveryClient({
         </div>
       )}
 
-      {discoverable && (
+      {discoverable && laneOn && (
       <>
       <div className="flex gap-2 overflow-x-auto pb-1">
         {FILTERS.map((option) => (
@@ -316,6 +400,21 @@ export function PeopleDiscoveryClient({
                         {person.tagline}
                       </p>
                     )}
+                    {person.blurb && (
+                      <p className="mt-1 text-sm italic leading-relaxed text-ink-soft">
+                        {person.blurb}
+                      </p>
+                    )}
+                    {person.shared_facts.length > 0 && (
+                      <ul className="mt-2 space-y-1">
+                        {person.shared_facts.map((fact) => (
+                          <li key={`${fact.kind}:${fact.label}`} className="flex flex-wrap items-center gap-1.5 text-xs text-ink-soft">
+                            <span>Also at <strong>{fact.label}</strong></span>
+                            <TrustLabel tier={fact.tier} />
+                          </li>
+                        ))}
+                      </ul>
+                    )}
                     <div className="mt-2 flex flex-wrap gap-1.5">
                       {person.categories.map((category) => (
                         <span key={category} className="rounded-pill bg-cream px-2 py-1 text-xs text-ink-soft">
@@ -330,10 +429,11 @@ export function PeopleDiscoveryClient({
                           .join(', ')}
                       </p>
                     )}
+                    <p className="mt-1 text-xs font-semibold text-ink-faint">{FIT_LABEL[person.fit]}</p>
                     {interest ? (
                       <div className="mt-3 flex flex-col gap-2 rounded-card bg-sage-soft px-3 py-2.5 sm:flex-row sm:items-center">
                         <p className="min-w-0 flex-1 text-sm text-sage-deep">
-                          <strong>You’re interested</strong> · {interest.activity}. They only
+                          <strong>You’re interested</strong> · {stripLane(interest.activity)}. They only
                           find out if they pick you too.
                         </p>
                         <Button
@@ -376,6 +476,15 @@ export function PeopleDiscoveryClient({
                         onClick={() => quietConnect(person)}
                       >
                         {pending && pendingId === person.id ? 'Saving' : 'Interested'}
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="ghost"
+                        disabled={pending && pendingId === person.id}
+                        onClick={() => pass(person)}
+                      >
+                        Not for me
                       </Button>
                     </div>
                     )}

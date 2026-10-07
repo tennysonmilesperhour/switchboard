@@ -454,7 +454,7 @@ export function PeopleClient({
         toast.error(result.error ?? 'Could not send that introduction.', result.code);
         return;
       }
-      setMatchStatus('Introduction sent, quietly. 🤫');
+      setMatchStatus('Introduction sent, quietly.');
       setMatchA('');
       setMatchB('');
       setMatchNote('');

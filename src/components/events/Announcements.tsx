@@ -1,5 +1,6 @@
 'use client';
 
+import { Glyph } from '@/components/ui/Glyph';
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/Button';
@@ -111,7 +112,7 @@ export function Announcements({
           {announcements.map((item) => (
             <li key={item.id} className="rounded-card bg-cream px-3.5 py-3">
               <p className="text-sm text-ink whitespace-pre-wrap leading-relaxed">
-                📣 {item.body}
+                <Glyph emoji="📣" size={14} className="inline -mt-0.5 mr-1" />{item.body}
               </p>
               <p className="text-xs text-ink-faint mt-1.5">
                 {item.author_name} · {formatRelative(item.created_at)}

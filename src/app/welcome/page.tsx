@@ -1,3 +1,4 @@
+import { Glyph } from '@/components/ui/Glyph';
 import Link from 'next/link';
 import type { Metadata } from 'next';
 import { safeNextPath } from '@/lib/security';
@@ -135,7 +136,7 @@ export default async function WelcomePage({
           >
             <div className="flex items-start gap-4">
               <span className="text-2xl mt-0.5" aria-hidden>
-                {feature.emoji}
+                <Glyph emoji={feature.emoji} size={26} />
               </span>
               <div>
                 <h2 className="text-lg font-extrabold tracking-tight text-ink">

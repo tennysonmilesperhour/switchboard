@@ -23,6 +23,7 @@ import { useCurrentLocation } from '@/lib/client/use-current-location';
 import type { MomentCandidate } from '@/lib/moment-candidates';
 import { errorFor, errorRef, type ErrorCode } from '@/lib/errors';
 import { MOMENT_MATCH_RADIUS_M } from '@/lib/geo';
+import { Glyph } from '@/components/ui/Glyph';
 
 /**
  * How often an open check-in looks again for new people nearby, while the page
@@ -115,14 +116,16 @@ export function MomentsClient({
           href="/zones"
           className="block rounded-card border border-dashed border-line bg-cream px-4 py-3 text-sm text-ink-soft hover:border-terracotta hover:text-terracotta-deep transition-colors"
         >
-          🎪 At a conference, cruise, or festival? Check in through its{' '}
+          <Glyph emoji="🎪" size={16} className="mr-1.5 inline align-text-bottom" />
+          At a conference, cruise, or festival? Check in through its{' '}
           <strong>zone</strong> instead.
         </Link>
         <Link
           href="/map"
           className="block rounded-card border border-dashed border-line bg-cream px-4 py-3 text-sm text-ink-soft hover:border-terracotta hover:text-terracotta-deep transition-colors"
         >
-          🧭 Want to be seen live? Turn on location on the <strong>Map</strong> to
+          <Glyph emoji="🧭" size={16} className="mr-1.5 inline align-text-bottom" />
+          Want to be seen live? Turn on location on the <strong>Map</strong> to
           appear to others sharing nearby, right now.
         </Link>
         <p className="text-sm text-ink-soft leading-relaxed -mt-1">
@@ -159,7 +162,8 @@ export function MomentsClient({
                     : 'border-line bg-card text-ink-soft hover:border-terracotta hover:text-terracotta-deep'
                 }`}
               >
-                📍 {location.status === 'locating'
+                <Glyph emoji="📍" size={14} className="mr-1 inline align-text-bottom" />
+                {location.status === 'locating'
                   ? 'Locating…'
                   : location.status === 'ready'
                     ? 'Pinned to the map'
@@ -264,7 +268,7 @@ export function MomentsClient({
               })
             }
           >
-            {pending ? 'Checking in…' : 'Check in ✨'}
+            {pending ? 'Checking in…' : 'Check in'}
           </Button>
         </div>
       </div>
@@ -320,7 +324,7 @@ export function MomentsClient({
         <section>
           <SectionHeader title="It’s a match" hint="You both said yes" />
           <Card tone="gold" lifted className="animate-rise">
-            <p className="font-display text-lg">✨ You’re sharing this moment</p>
+            <p className="font-display text-lg">You’re sharing this moment</p>
             <p className="text-sm text-ink-soft mt-1 leading-relaxed">
               You both chose to connect. A private conversation is open - say hi
               and pick a spot.
@@ -353,7 +357,7 @@ export function MomentsClient({
             <p className="text-sm text-ink-soft leading-relaxed">
               Nobody else has checked in nearby yet. That’s the thing about a
               chance encounter - it can’t be rushed. This list checks again on its
-              own while you’re here, and you’ll get a nudge if someone is curious. ✨
+              own while you’re here, and you’ll get a nudge if someone is curious.
             </p>
           </Card>
         ) : (
@@ -363,7 +367,7 @@ export function MomentsClient({
                 {candidate.intro ? (
                   <>
                     <p className="text-xs uppercase tracking-wide text-terracotta-deep font-bold">
-                      ✨ Mutual curiosity
+                      Mutual curiosity
                     </p>
                     <p className="font-display text-xl mt-1">{candidate.intro.name}</p>
                     {candidate.intro.headline && (
@@ -383,7 +387,7 @@ export function MomentsClient({
                     </div>
                     {candidate.stage === 'accepted' ? (
                       <p className="text-sm text-sage-deep mt-3">
-                        You said yes - waiting for them. 🤞
+                        You said yes - waiting for them.
                       </p>
                     ) : (
                       <div className="flex gap-2 mt-3">
@@ -407,7 +411,7 @@ export function MomentsClient({
                             })
                           }
                         >
-                          🤝 I’d love to share this moment
+                          I’d love to share this moment
                         </Button>
                         <Button
                           variant="ghost"
@@ -525,7 +529,7 @@ export function MomentsClient({
 
       <p className="text-xs text-ink-faint leading-relaxed">
         Three moments of consent: you’re open to the experience → you’d like to
-        learn more → 🤝 you’d love to share it. Identity unfolds gradually, and
+        learn more → you’d love to share it. Identity unfolds gradually, and
         only ever mutually.
       </p>
     </div>

@@ -75,7 +75,7 @@ export async function requestToJoin(eventId: string): Promise<RespondResult> {
   if (event && managers.length > 0) {
     await notifyUsers(managers, {
       kind: 'join_request',
-      title: 'Someone wants in 👋',
+      title: 'Someone wants in',
       body: `A new request to join ${event.title} is waiting for your OK.`,
       url: `/events/${event.id}`,
     });
@@ -114,7 +114,7 @@ export async function approveJoinRequest(
       await noteGiveSpaceOverlapFor(invite.invitee_id, eventId);
       await notifyUsers([invite.invitee_id], {
         kind: 'join_approved',
-        title: 'You are in 🎉',
+        title: 'You are in',
         body: `The host welcomed you to ${event?.title ?? 'the event'}.`,
         url: `/events/${eventId}`,
       });

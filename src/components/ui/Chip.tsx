@@ -1,6 +1,7 @@
 'use client';
 
 import type { ButtonHTMLAttributes } from 'react';
+import { Glyph } from '@/components/ui/Glyph';
 
 interface ChipProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   selected?: boolean;
@@ -26,7 +27,7 @@ export function Chip({
       } ${className}`}
       {...props}
     >
-      {emoji ? <span aria-hidden>{emoji}</span> : null}
+      {emoji ? <Glyph emoji={emoji} size={16} /> : null}
       {children}
     </button>
   );

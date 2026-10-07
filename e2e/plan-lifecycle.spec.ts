@@ -198,7 +198,7 @@ test.describe('plan lifecycle', () => {
         await expect(wizard.getByText('1 person selected')).toBeVisible();
       },
       Invites: async (wizard) => {
-        await wizard.getByText('Let the group decide what to do 🗳️').click();
+        await wizard.getByText('Let the group decide what to do').click();
         for (const idea of [winner, other]) {
           await wizard.getByPlaceholder('An idea, a place, or a time').fill(idea);
           await wizard.getByRole('button', { name: 'Add', exact: true }).click();
@@ -308,7 +308,7 @@ test.describe('plan lifecycle', () => {
       await expect(cohost.getByRole('heading', { name: 'Co-hosts', exact: true })).toHaveCount(0);
 
       await cohost.getByRole('button', { name: /Lock it in - confirm the plan/ }).click();
-      await expect(cohost.getByText('✓ Confirmed')).toBeVisible();
+      await expect(cohost.getByText('Confirmed')).toBeVisible();
       await expect(cohost.getByRole('button', { name: /Lock it in/ })).toHaveCount(0);
     });
 
@@ -321,6 +321,6 @@ test.describe('plan lifecycle', () => {
 
     // The host sees what their co-host did.
     await page.reload();
-    await expect(page.getByText('✓ Confirmed')).toBeVisible();
+    await expect(page.getByText('Confirmed')).toBeVisible();
   });
 });

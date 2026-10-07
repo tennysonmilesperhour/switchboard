@@ -58,7 +58,7 @@ export function ritualReminderNotice(
 ): { title: string; body: string; url: string } {
   const who = otherName?.trim() || 'your friend';
   return {
-    title: 'A ritual is due 🔁',
+    title: 'A ritual is due',
     body: `Time for ${activity.toLowerCase()} with ${who}. Plan it, or skip this one.`,
     url: '/mutual',
   };

@@ -132,7 +132,7 @@ export async function respondToIntroduction(
         const activity = proposal.activity ? String(proposal.activity).toLowerCase() : null;
         await notifyUsers([proposal.person_a, proposal.person_b], {
           kind: 'match',
-          title: '✨ It’s a match',
+          title: 'It’s a match',
           body: activity ? `You both said yes to ${activity}. Say hi!` : 'You both said yes. Say hi!',
           url,
         });

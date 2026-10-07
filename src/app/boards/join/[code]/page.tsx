@@ -4,6 +4,7 @@ import { createClient } from '@/lib/supabase/server';
 import { AppShell } from '@/components/shell/AppShell';
 import { joinBoardViaCode } from '@/lib/actions/boards';
 import { errorFor, errorRef } from '@/lib/errors';
+import { Glyph } from '@/components/ui/Glyph';
 
 export const metadata = { title: 'Join board' };
 
@@ -35,9 +36,7 @@ export default async function JoinBoardPage({
   return (
     <AppShell title="Join board" back="/boards">
       <div className="rounded-card border border-line bg-card p-6 text-center">
-        <p className="text-4xl" aria-hidden>
-          🏘️
-        </p>
+        <Glyph emoji="🏘️" size={40} className="mx-auto text-ink-soft" />
         <h2 className="mt-3 text-xl font-black text-ink">{dead.message}</h2>
         {dead.fix && <p className="mt-2 text-sm leading-relaxed text-ink-soft">{dead.fix}</p>}
         <p className="mt-3 font-mono text-[11px] uppercase tracking-wide text-ink-faint">

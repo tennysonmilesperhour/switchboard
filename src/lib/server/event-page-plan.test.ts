@@ -311,7 +311,7 @@ describe('the thread', () => {
   it('quotes a few words, or says it was a voice note', () => {
     expect(threadExcerpt('  see   you\nthere ', false)).toBe('see you there');
     expect(threadExcerpt('x'.repeat(120), false)).toBe(`${'x'.repeat(89)}…`);
-    expect(threadExcerpt(null, true)).toBe('🎤 Voice note');
+    expect(threadExcerpt(null, true)).toBe('Voice note');
     expect(threadExcerpt('   ', false)).toBeNull();
   });
 });

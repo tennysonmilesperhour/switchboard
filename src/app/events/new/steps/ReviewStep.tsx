@@ -1,5 +1,6 @@
 'use client';
 
+import { Glyph } from '@/components/ui/Glyph';
 import { Card } from '@/components/ui/Card';
 import { ReorderableList } from '@/components/ui/ReorderableList';
 import { HostSuggestions } from '@/components/events/HostSuggestions';
@@ -100,7 +101,7 @@ export function ReviewStep({
             </p>
             {recurrence !== 'none' && (
               <p className="mt-2 inline-flex items-center gap-1.5 rounded-pill bg-terracotta-soft px-3 py-1 text-xs font-bold text-terracotta-deep">
-                🔁 {recurrenceLabel(recurrence, Number(customDays) || null)}
+                <Glyph emoji="🔁" size={14} className="inline -mt-0.5 mr-1" />{recurrenceLabel(recurrence, Number(customDays) || null)}
               </p>
             )}
           </Card>
@@ -110,7 +111,7 @@ export function ReviewStep({
           {looksOutdoor && (
             <Card tone="gold">
               <p className="text-sm leading-relaxed">
-                🌤️ This looks like an outdoor plan - worth a quick peek at the
+                <Glyph emoji="🌤" size={14} className="inline -mt-0.5 mr-1" />This looks like an outdoor plan - worth a quick peek at the
                 forecast before you send it, so you have a plan B if the weather
                 turns.
               </p>
@@ -134,15 +135,15 @@ export function ReviewStep({
                 </h4>
                 <p className="mt-0.5 text-xs text-ink-faint">
                   {ordered
-                    ? 'Drag anyone by the handle to change the order, or tap ✕ to take them off.'
-                    : 'Tap ✕ to take anyone off before it goes out.'}
+                    ? 'Drag anyone by the handle to change the order, or tap the x to take them off.'
+                    : 'Tap the x to take anyone off before it goes out.'}
                 </p>
               </div>
 
               {!enablePoll && !staggered && (
                 <Card tone="cream" className="mb-2">
                   <p className="text-sm leading-relaxed text-ink-soft">
-                    📣 <strong>Everyone hears at the same moment.</strong>{' '}
+                    <Glyph emoji="📣" size={14} className="inline -mt-0.5 mr-1" /><strong>Everyone hears at the same moment.</strong>{' '}
                     {rhythmLine(inviteMode, invitees.length)}
                   </p>
                   {invitees.length > 1 && (
@@ -225,7 +226,7 @@ export function ReviewStep({
           {enablePoll && (
             <Card tone="gold">
               <p className="text-sm leading-relaxed">
-                🗳️ This plan starts in <strong>deciding mode</strong> - invitees
+                <Glyph emoji="🗳" size={14} className="inline -mt-0.5 mr-1" />This plan starts in <strong>deciding mode</strong> - invitees
                 will suggest and rank ideas first. You’ll send the invitations once
                 the group settles on what to do.
               </p>

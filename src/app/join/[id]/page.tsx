@@ -1,3 +1,4 @@
+import { Glyph } from '@/components/ui/Glyph';
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
@@ -210,7 +211,7 @@ export default async function JoinPage({
             read a plan they are already part of. */}
         {!event || (!shareable && !alreadyInvolved) ? (
           <div className="text-center">
-            <p className="text-4xl mb-3" aria-hidden>🍂</p>
+            <p className="mb-3" aria-hidden><Glyph emoji="🍂" size={40} /></p>
             <h1 className="font-extrabold tracking-tight text-2xl">
               {notice?.heading ?? 'This invite link isn’t active'}
             </h1>

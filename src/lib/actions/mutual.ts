@@ -109,7 +109,7 @@ export async function downToConnect(
   if (matched) {
     await notifyUsers([user.id, targetId], {
       kind: 'match',
-      title: '✨ It’s mutual',
+      title: 'It’s mutual',
       body:
         kind === 'down_to_connect'
           ? `You both want to ${cleanActivity.toLowerCase()}. Say hi!`
