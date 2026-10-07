@@ -54,7 +54,6 @@ export interface AppTheme {
 
 export type AppThemeId =
   | 'default'
-  | 'dusk'
   | 'almanac'
   | 'transit'
   | 'afterparty'
@@ -74,12 +73,6 @@ export const APP_THEMES: readonly AppTheme[] = [
     name: 'Almanac',
     blurb: 'Cream paper and ink, like a well-kept planner.',
     swatches: ['#f6f1e5', '#fffdf7', '#9c2f24'],
-  },
-  {
-    id: 'dusk',
-    name: 'Dusk',
-    blurb: 'Warm dark, candle amber. For evening people.',
-    swatches: ['#1e1712', '#2a211a', '#9b6c32'],
   },
   {
     id: 'transit',
