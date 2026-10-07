@@ -60,6 +60,26 @@ people 100–300 m apart may or may not match. Under ~80 m always should.
 | Both in Discover › Nearby | Each lists the other (homes within ~15 km always; 100 km+ never) |
 | Both tap Interested on each other, leaving the context as it is | Second tap: "It is mutual." and a private room |
 
+## 4. Find each other (exact location after a match)
+
+Needs a match room first: either both tap Interested on each other in Discover
+(section 3), or both step through a Moment to "matched" (section 2). Either
+opens a chat for the two of you under Chats.
+
+| Do | Expect |
+|---|---|
+| A: open the match chat › 📍 Find each other › Share my exact location, allow | "You're sharing. Waiting for B to share theirs." B gets a chat message saying A is sharing |
+| B: open the same chat › 📍 Find each other | No map and no pin for A yet (you only see theirs once you share) |
+| B: Share my exact location | Within ~5 s each sees "A is about N m <direction> of you", a map with both pins, and "Walk to A" |
+| Stand 50 m apart, then walk toward each other | The distance shrinks within ~5–10 s, no reload |
+| Tap "Walk to …" | Apple Maps (iPhone) or Google Maps opens with walking directions to the other person |
+| A taps Stop sharing | B is back to "Waiting for A" within ~5 s |
+| Leave it on and lock A's phone for 15+ minutes | A drops off B's screen; unlocking brings A back within ~5 s |
+
+Exact means exact: no 110 m blur here, so "about 40 m north" should match
+what you see. Within ~15 m it just says "right around you", because the two
+phones' own GPS error is bigger than that.
+
 ## If something is off
 
 Note the time, both phones’ models and browsers, and any **SB-** code shown.

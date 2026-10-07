@@ -506,6 +506,14 @@ export const FEATURE_GROUPS: readonly FeatureGroup[] = [
         href: '/map',
       },
       {
+        id: 'find-each-other',
+        title: 'Find each other',
+        blurb:
+          'Once you’ve matched with someone, share your exact location with just them for an hour, see theirs on a map with how far and which way, and get walking directions. You only see theirs while you share yours.',
+        where: 'The chat a match or a moment opened → 📍 Find each other, at the top',
+        start: { href: '/rooms', label: 'Your chats' },
+      },
+      {
         id: 'boards',
         title: 'Neighborhood boards',
         blurb:

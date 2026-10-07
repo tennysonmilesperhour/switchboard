@@ -68,12 +68,18 @@ export function LeafletCanvas({
   markers,
   focus,
   fitNonce = 0,
+  heightClass = 'h-[60vh]',
+  maxFitZoom = 15,
 }: {
   markers: MapMarker[];
   /** Pan/zoom to one marker and open its popup. See {@link MapFocus}. */
   focus?: MapFocus | null;
   /** Bump to re-frame the viewport around everything currently plotted. */
   fitNonce?: number;
+  /** Tailwind height for the map box. */
+  heightClass?: string;
+  /** How far a fit may zoom in. Street level (18) for two people finding each other. */
+  maxFitZoom?: number;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<L.Map | null>(null);
@@ -214,7 +220,9 @@ export function LeafletCanvas({
         bounds.push([marker.lat, marker.lng]);
       }
       if (bounds.length > 0 && !didFitRef.current) {
-        map.fitBounds(bounds, { padding: [40, 40], maxZoom: 14 });
+        // The explorer's first view stays a neighbourhood (14); a caller asking
+        // for street level gets it from the start.
+        map.fitBounds(bounds, { padding: [40, 40], maxZoom: maxFitZoom > 15 ? maxFitZoom : 14 });
         didFitRef.current = true;
       }
       if (openPopupId) {
@@ -227,7 +235,7 @@ export function LeafletCanvas({
     return () => {
       cancelled = true;
     };
-  }, [markers, drainFocus]);
+  }, [markers, drainFocus, maxFitZoom]);
 
   // Bring one marker into view and open its popup — the map half of "show me
   // where this is". The coordinate rides on the request rather than being read
@@ -250,8 +258,8 @@ export function LeafletCanvas({
     if (bounds.length === 0) return;
     didFitRef.current = true;
     map.closePopup();
-    map.fitBounds(bounds, { padding: [40, 40], maxZoom: 15 });
-  }, [fitNonce]);
+    map.fitBounds(bounds, { padding: [40, 40], maxZoom: maxFitZoom });
+  }, [fitNonce, maxFitZoom]);
 
   // `isolate` (isolation: isolate) gives the map its own stacking context.
   // Leaflet sets high z-indexes on its panes and controls (zoom buttons and
@@ -263,7 +271,7 @@ export function LeafletCanvas({
     <div className="relative">
       <div
         ref={containerRef}
-        className="isolate h-[60vh] w-full overflow-hidden rounded-card border border-line"
+        className={`isolate ${heightClass} w-full overflow-hidden rounded-card border border-line`}
       />
       {touch && (
         <button

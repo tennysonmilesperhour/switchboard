@@ -12,6 +12,7 @@ export async function sweepExpired(): Promise<{
   signalsDeleted: number;
   momentsClosed: number;
   liveLocationsDeleted: number;
+  exactLocationsDeleted: number;
   contactVerificationRequestsDeleted: number;
   rateLimitsDeleted: number;
   notificationsDeleted: number;
@@ -36,7 +37,7 @@ export async function sweepExpired(): Promise<{
     throw new Error('Retention sweep failed', { cause: retentionError });
   }
 
-  const [signalsResult, momentsResult, liveResult] = await Promise.all([
+  const [signalsResult, momentsResult, liveResult, exactResult] = await Promise.all([
     admin
       .from('availability_signals')
       .delete()
@@ -55,10 +56,17 @@ export async function sweepExpired(): Promise<{
       .delete()
       .lt('expires_at', now)
       .select('user_id'),
+    // Exact points shared between two matched people. Precise data, so it goes
+    // as soon as the window ends rather than waiting for the next share.
+    admin
+      .from('room_exact_locations')
+      .delete()
+      .lt('expires_at', now)
+      .select('user_id'),
   ]);
 
   const cleanupError =
-    signalsResult.error ?? momentsResult.error ?? liveResult.error;
+    signalsResult.error ?? momentsResult.error ?? liveResult.error ?? exactResult.error;
   if (cleanupError) {
     throw new Error('Ephemeral cleanup failed', { cause: cleanupError });
   }
@@ -67,6 +75,7 @@ export async function sweepExpired(): Promise<{
     signalsDeleted: signalsResult.data?.length ?? 0,
     momentsClosed: momentsResult.data?.length ?? 0,
     liveLocationsDeleted: liveResult.data?.length ?? 0,
+    exactLocationsDeleted: exactResult.data?.length ?? 0,
     contactVerificationRequestsDeleted:
       retention.contact_verification_requests_deleted,
     rateLimitsDeleted: retention.rate_limits_deleted,
