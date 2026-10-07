@@ -198,7 +198,7 @@ test.describe('plan lifecycle', () => {
         await expect(wizard.getByText('1 person selected')).toBeVisible();
       },
       Invites: async (wizard) => {
-        await wizard.getByText('Let the group decide what to do 🗳️').click();
+        await wizard.getByText('Let the group decide what to do').click();
         for (const idea of [winner, other]) {
           await wizard.getByPlaceholder('An idea, a place, or a time').fill(idea);
           await wizard.getByRole('button', { name: 'Add', exact: true }).click();
