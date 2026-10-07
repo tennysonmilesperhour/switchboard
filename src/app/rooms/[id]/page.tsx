@@ -161,13 +161,23 @@ export default async function RoomPage({
   const event = events?.[0] ?? null;
   const canLeave =
     room.kind === 'match' ||
+    room.kind === 'direct' ||
     (room.kind === 'event' && (!event || ENDED_EVENT_STATUSES.has(event.status)));
 
+  // A conversation started from a status is with exactly one other person, and
+  // the room offers to turn it into a plan with them.
+  const peer =
+    room.kind === 'direct' && otherIds.length === 1
+      ? { id: otherIds[0], name: memberNames[otherIds[0]] ?? 'them' }
+      : null;
+
   return (
-    <AppShell title={room.title} back="/rooms">
+    <AppShell title={peer?.name ?? room.title} back="/rooms">
       <RoomClient
         roomId={room.id}
         roomKind={room.kind}
+        roomTitle={room.title}
+        peer={peer}
         currentUserId={user.id}
         members={memberInfo}
         memberNames={senderNames}
