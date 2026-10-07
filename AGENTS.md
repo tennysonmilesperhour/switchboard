@@ -141,3 +141,25 @@ and the getting-started card.
   that promises a feature is worse than no index.
 - Renaming a nav destination fails the test until the index agrees, so the index
   can never know less than the navigation it explains.
+
+# Walkthroughs
+
+**`src/lib/walkthroughs.ts`** holds the self-playing demos at `/tour/<id>`: the
+short primary one shown once after onboarding, and the deeper ones listed at the
+top of `/features`. Each step is a staged screen in
+`src/components/walkthroughs/TourScenes.tsx`, drawn to look like the real one.
+Made-up data means drift is invisible: a demo keeps playing a flow that no
+longer exists and nothing errors.
+
+- **Every PR that changes a user-facing flow checks the walkthroughs.** If the
+  change renames, moves, removes, or visibly reworks something a scene shows
+  (labels, button names, step order, where it lives), update the step's
+  caption and scene in the same PR. Say in the PR description which
+  walkthroughs you checked, or that none show the changed surface.
+- Each step names the feature-index ids it depicts. `walkthroughs.test.ts`
+  fails when one of those ids leaves `src/lib/features.ts`, so removing a
+  feature fails until the walkthrough is updated with it.
+- **Only show what ships.** A demo that animates an unshipped feature is a
+  louder lie than an index entry that names one.
+- Keep them quick: 3 to 7 steps, a sentence or two each. Skip stays on every
+  frame of the first-run tour (`docs/AUTH.md`: no state is a dead end).

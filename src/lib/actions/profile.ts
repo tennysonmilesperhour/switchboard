@@ -12,6 +12,7 @@ import { SOCIAL_BY_ID } from '@/lib/socials';
 import { USERNAME_PATTERN, isEmail } from '@/lib/auth-identity';
 import { normalizePhoneNumber } from '@/lib/phone';
 import { safeNextPath } from '@/lib/security';
+import { firstRunTourPath } from '@/lib/walkthroughs';
 import { reportAndFail, reportOperationalError } from '@/lib/server/observability';
 import { resolveTheme, themeById } from '@/lib/themes-app';
 import { parseCustomAppearance } from '@/lib/theme-custom';
@@ -373,7 +374,10 @@ export async function completeOnboarding(formData: FormData): Promise<void> {
 
   // Return to the destination the user was originally headed for (e.g. an invite
   // deep link that funnelled them through onboarding), validated to same-site.
-  redirect(afterOnboarding);
+  // Someone with nowhere particular to be gets the short walkthrough first; it
+  // can be skipped from its first frame and ends at Home. An invite deep link
+  // goes straight through — they came to answer something, not to be toured.
+  redirect(afterOnboarding === '/' ? firstRunTourPath('/') : afterOnboarding);
 }
 
 export async function updateInterests(formData: FormData): Promise<ActionResult> {
