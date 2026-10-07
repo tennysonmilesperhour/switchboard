@@ -10,6 +10,8 @@ import { ConnectButton } from '@/components/profile/ConnectButton';
 import { BlockReportButtons } from '@/components/profile/BlockReportButtons';
 import { GiveSpaceButton } from '@/components/profile/GiveSpaceButton';
 import { SabbaticalNote } from '@/components/profile/SabbaticalNote';
+import { FactList, type FactTier, type ProfileFact } from '@/components/profile/FactList';
+import { VouchButton } from '@/components/profile/VouchButton';
 import { SOCIAL_BY_ID, hrefFor, displayHandle } from '@/lib/socials';
 import {
   getRelationship,
@@ -129,6 +131,30 @@ export default async function PublicProfilePage({
           loadCompatibility(profile.id),
         ])
       : [[], null];
+
+  // Where they studied or work, with how far each claim has been checked. A
+  // connection who is confirmed at the same place can vouch for it.
+  const [{ data: factRows }, { data: myFactRows }, { data: myVouchRows }] = await Promise.all([
+    supabase
+      .from('profile_facts')
+      .select('id, kind, label, tier, org_key')
+      .eq('user_id', profile.id)
+      .eq('shown', true)
+      .order('created_at', { ascending: true }),
+    supabase.from('profile_facts').select('kind, org_key, tier').eq('user_id', user.id),
+    supabase.from('fact_vouches').select('fact_id').eq('voucher_id', user.id),
+  ]);
+  const facts: Array<ProfileFact & { orgKey: string }> = (factRows ?? []).map((row) => ({
+    id: row.id,
+    kind: row.kind === 'employer' ? 'employer' : 'school',
+    label: row.label,
+    tier: (row.tier === 'email' || row.tier === 'vouched' ? row.tier : 'claimed') as FactTier,
+    orgKey: row.org_key,
+  }));
+  const myConfirmed = new Set(
+    (myFactRows ?? []).filter((row) => row.tier === 'email').map((row) => `${row.kind}:${row.org_key}`),
+  );
+  const myVouches = new Set((myVouchRows ?? []).map((row) => row.fact_id));
 
   const displayName = profile.display_name || 'Someone';
   const links = parseProfileLinks(profile.links);
@@ -301,6 +327,32 @@ export default async function PublicProfilePage({
             ) : null}
           </div>
         </div>
+
+        {facts.length > 0 ? (
+          <section>
+            <div className="rounded-card border border-line bg-card p-4">
+              <h2 className="mb-2 font-display text-lg">School and work</h2>
+              <FactList
+                facts={facts}
+                action={(fact) => {
+                  const full = facts.find((f) => f.id === fact.id);
+                  const canVouch =
+                    relationship.status === 'accepted' &&
+                    full !== undefined &&
+                    full.tier !== 'email' &&
+                    myConfirmed.has(`${full.kind}:${full.orgKey}`);
+                  return canVouch ? (
+                    <VouchButton
+                      factId={fact.id}
+                      name={displayName}
+                      vouched={myVouches.has(fact.id)}
+                    />
+                  ) : null;
+                }}
+              />
+            </div>
+          </section>
+        ) : null}
 
         {/* Compatibility — a read computed from both your behaviors, shown only
             because you and {name} both turned it on. Neither of you sees the
