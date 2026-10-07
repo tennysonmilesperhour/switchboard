@@ -9,7 +9,7 @@
 -- refusal can never be read back as a stranger's mood or weights.
 
 begin;
-select plan(52);
+select plan(53);
 
 -- ————————————————————————— fixtures —————————————————————————
 insert into auth.users (id, email) values
@@ -124,7 +124,7 @@ select pg_temp.back();
 select is((select tier from public.profile_facts where id = '00000000-0000-0000-0000-00000000f004'),
   'vouched', 'two email-verified connections make it vouched');
 select pg_temp.act_as(pg_temp.b());
-select public.withdraw_vouch('00000000-0000-0000-0000-00000000f004');
+select is(public.withdraw_vouch('00000000-0000-0000-0000-00000000f004'), 'ok', 'a vouch can be withdrawn');
 select pg_temp.back();
 select is((select tier from public.profile_facts where id = '00000000-0000-0000-0000-00000000f004'),
   'claimed', 'withdrawing one takes it back to a claim');
