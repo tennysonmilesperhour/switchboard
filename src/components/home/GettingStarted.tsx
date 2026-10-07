@@ -3,6 +3,7 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import Link from 'next/link';
 import { Card } from '@/components/ui/Card';
+import { Glyph } from '@/components/ui/Glyph';
 import { Icon } from '@/components/ui/Icon';
 import { clearDeviceFlag, readDeviceFlag, writeDeviceFlag } from '@/components/system/device-storage';
 
@@ -103,7 +104,7 @@ export function GettingStarted({
       // first friend is already the step above.
       hint: friendDone
         ? 'Tap a signal above — it turns off by itself'
-        : 'The composer is below — it starts working once you’ve added someone',
+        : 'The signals above start working once you’ve added someone',
     },
     {
       done: findableDone,
@@ -130,7 +131,9 @@ export function GettingStarted({
         {items.map((item) => {
           const row = (
             <>
-              <span aria-hidden className="mt-0.5">{item.done ? '✓' : '○'}</span>
+              <span aria-hidden className="mt-0.5">
+                <Glyph emoji={item.done ? '✓' : '○'} size={16} />
+              </span>
               <span className="min-w-0">
                 <span
                   className={

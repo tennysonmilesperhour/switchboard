@@ -227,7 +227,7 @@ export function BoardMembers({
               disabled={pending}
               onClick={createLink}
             >
-              {pending ? 'Creating…' : 'Create a shareable invite link 🔗'}
+              {pending ? 'Creating…' : 'Create a shareable invite link'}
             </Button>
           )}
         </div>

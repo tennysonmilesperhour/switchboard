@@ -1,5 +1,6 @@
 'use client';
 
+import { Glyph } from '@/components/ui/Glyph';
 import type { Dispatch, SetStateAction } from 'react';
 import { Button } from '@/components/ui/Button';
 import { ImageInput } from '@/components/ui/ImageInput';
@@ -153,7 +154,7 @@ export function BasicsStep({
               mistake: said out loud so the host can see which day it lands on. */}
           {endsNextDay && (
             <p className="text-plate text-plate-inset text-sm text-ink-soft">
-              🌙 Ends the next day, after midnight.
+              <Glyph emoji="🌙" size={14} className="inline -mt-0.5 mr-1" />Ends the next day, after midnight.
             </p>
           )}
           <div className="space-y-1.5">
@@ -191,7 +192,7 @@ export function BasicsStep({
             </div>
             {recurrence !== 'none' && (
               <p className="text-plate text-plate-inset text-xs text-ink-faint">
-                🔁 We’ll tag this as a standing plan. When it’s behind you, one
+                <Glyph emoji="🔁" size={14} className="inline -mt-0.5 mr-1" />We’ll tag this as a standing plan. When it’s behind you, one
                 tap gathers the same crew for the next one.
               </p>
             )}
@@ -321,7 +322,7 @@ export function BasicsStep({
                       }
                       className="text-ink-faint hover:text-rose-deep px-1"
                     >
-                      ✕
+                      <Glyph emoji="✕" size={14} />
                     </button>
                   </div>
                   <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
@@ -372,7 +373,7 @@ export function BasicsStep({
                           className="flex items-center gap-2"
                         >
                           <span aria-hidden className="text-ink-faint text-sm">
-                            ○
+                            <Glyph emoji="○" size={12} />
                           </span>
                           <input
                             value={option}
@@ -400,7 +401,7 @@ export function BasicsStep({
                               }
                               className="text-ink-faint hover:text-rose-deep px-1"
                             >
-                              ✕
+                              <Glyph emoji="✕" size={14} />
                             </button>
                           )}
                         </div>

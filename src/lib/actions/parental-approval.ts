@@ -559,7 +559,7 @@ async function afterGuardianAnswer(
     await notifyUsers([inviteeId], outcome === 'approved'
       ? {
           kind: 'parental_approval',
-          title: waitlisted ? 'Approved - on the waitlist' : 'You’re in 🎉',
+          title: waitlisted ? 'Approved - on the waitlist' : 'You’re in',
           body: waitlisted
             ? `Your guardian approved ${title}, but it filled up first, so you’re on the waitlist.`
             : `Your guardian approved ${title}. Your RSVP counts now.`,

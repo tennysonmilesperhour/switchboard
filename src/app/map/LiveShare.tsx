@@ -87,7 +87,7 @@ function peopleToMarkers(people: NearbyPerson[]): MapMarker[] {
   return people.map((person) => ({
     id: person.user_id,
     layer: 'live' as const,
-    label: person.emoji ? `${person.emoji} ${person.display_name}` : person.display_name,
+    label: person.display_name,
     sub: [person.headline ?? undefined, person.interests.slice(0, 3).join(' · ') || undefined]
       .filter(Boolean)
       .join(' · '),
@@ -461,7 +461,7 @@ export function LiveShare({
     return (
       <Card tone="cream">
         <p className="text-sm text-ink-soft leading-relaxed">
-          🧭 This browser can’t share a live location. Everything else on the map
+          This browser can’t share a live location. Everything else on the map
           still works.
         </p>
       </Card>
@@ -552,7 +552,7 @@ export function LiveShare({
 
   return (
     <Card tone="cream">
-      <p className="font-display text-lg">🧭 Share your location live</p>
+      <p className="font-display text-lg">Share your location live</p>
       <p className="mt-1 text-sm text-ink-soft leading-relaxed">
         Turn location on to appear on the map and see other people who are also
         sharing right now. It’s off by default, only ever an{' '}
@@ -565,7 +565,7 @@ export function LiveShare({
           value={note}
           onChange={(e) => setNote(e.target.value)}
           maxLength={90}
-          placeholder="A line others see (optional): “at the market ☕”"
+          placeholder="A line others see (optional): “at the market”"
           aria-label="A short note shown to people nearby"
           className="w-full rounded-card border border-line bg-card px-3.5 py-2.5 text-sm outline-none focus:border-terracotta"
         />
@@ -586,7 +586,7 @@ export function LiveShare({
       </div>
 
       <Button size="lg" className="mt-3 w-full" disabled={busy} onClick={() => start()}>
-        {busy ? 'Turning on…' : 'Share my location 🟢'}
+        {busy ? 'Turning on…' : 'Share my location'}
       </Button>
     </Card>
   );

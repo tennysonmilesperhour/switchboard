@@ -1,3 +1,4 @@
+import { Glyph } from '@/components/ui/Glyph';
 import type { Metadata } from 'next';
 import type { ReactNode } from 'react';
 import Link from 'next/link';
@@ -153,7 +154,7 @@ export default function SmsCompliancePage() {
                 SMS starts off. After verification, check the agreement and save your SMS preferences. Push controls are separate.
               </p>
             </div>
-            <p className="rounded-card border border-line p-3 text-sm">☐ I agree to receive these text messages.</p>
+            <p className="rounded-card border border-line p-3 text-sm"><Glyph emoji="☐" size={16} className="mr-2 inline-block align-text-bottom" />I agree to receive these text messages.</p>
             {['Invitations and important plan changes', 'Event reminders'].map((item) => (
               <div
                 key={item}

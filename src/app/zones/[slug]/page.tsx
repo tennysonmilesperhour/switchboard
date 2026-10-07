@@ -12,6 +12,7 @@ import { ZoneSettings } from './ZoneSettings';
 import { ZoneLeave } from './ZoneLeave';
 import { zoneIsActive, zoneRequestState } from '@/lib/zone-rules';
 import { formatDate } from '@/lib/format';
+import { Glyph } from '@/components/ui/Glyph';
 
 export default async function ZonePage({
   params,
@@ -133,7 +134,7 @@ export default async function ZonePage({
             {zone.visibility === 'private' ? 'Private zone' : 'Zone'}
           </p>
           <h2 className="font-extrabold tracking-tight text-3xl mt-1.5 text-balance">
-            ✨ {zone.name}
+            {zone.name}
           </h2>
           {zone.description && (
             <p className="text-sm opacity-70 mt-2 leading-relaxed">{zone.description}</p>
@@ -158,7 +159,8 @@ export default async function ZonePage({
               href={mapFocusHref('zones', zone.id)}
               className="mt-3 inline-flex items-center gap-1.5 rounded-pill bg-paper/15 px-3 py-1.5 text-xs font-bold text-paper underline underline-offset-2"
             >
-              📍 Show this zone on the map
+              <Glyph emoji="📍" size={14} />
+              Show this zone on the map
             </Link>
           ) : (
             <p className="mt-3 text-xs opacity-60">

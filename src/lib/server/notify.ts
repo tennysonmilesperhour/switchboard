@@ -371,7 +371,7 @@ export async function notifyInterestReceived(targetId: string): Promise<void> {
 
   await notifyUsers([targetId], {
     kind: 'interest_received',
-    title: '✨ Someone’s down to connect',
+    title: 'Someone’s down to connect',
     body:
       'Someone you’re connected with is up for an activity with you. Open Mutual Mode and pick who you’re down to — if it lines up, you’ll both find out.',
     url: '/mutual',

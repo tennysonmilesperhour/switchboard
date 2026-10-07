@@ -17,12 +17,13 @@ const TILES = tileConfig(
 /** Pins are 44px targets: the smallest a thumb can reliably hit. */
 const PIN_PX = 44;
 
-const LAYER_EMOJI: Record<MapLayerKey, string> = {
-  plans: '📅',
-  zones: '✨',
-  places: '📍',
-  live: '🟢',
-  you: '🧭',
+/** Pin colours per layer, drawn as a small dot rather than an emoji. */
+const LAYER_COLOUR: Record<MapLayerKey, string> = {
+  plans: '#c2562f',
+  zones: '#b8892e',
+  places: '#4f6f52',
+  live: '#2f8f5b',
+  you: '#2563eb',
 };
 
 /**
@@ -194,15 +195,13 @@ export function LeafletCanvas({
         const isSelf = marker.layer === 'you';
         const icon = leaflet.divIcon({
           className: isSelf ? 'sb-map-pin sb-map-pin-you' : 'sb-map-pin',
-          html: `<div style="font-size:${isSelf ? 26 : 22}px;line-height:${PIN_PX}px;width:${PIN_PX}px;height:${PIN_PX}px;text-align:center;${
-            isSelf ? 'filter:drop-shadow(0 0 3px rgba(0,0,0,.35))' : ''
-          }">${LAYER_EMOJI[marker.layer]}</div>`,
+          html: `<div style="display:flex;align-items:center;justify-content:center;width:${PIN_PX}px;height:${PIN_PX}px"><span style="display:block;box-sizing:border-box;width:${isSelf ? 20 : 16}px;height:${isSelf ? 20 : 16}px;border-radius:50%;background:${LAYER_COLOUR[marker.layer]};border:3px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.4)"></span></div>`,
           iconSize: [PIN_PX, PIN_PX],
           iconAnchor: [PIN_PX / 2, PIN_PX / 2],
         });
         const pin = leaflet
           // `title` gives the keyboard-focusable pin an accessible name; an
-          // emoji-only divIcon otherwise reads as an unlabelled button.
+          // glyph-only divIcon otherwise reads as an unlabelled button.
           .marker([marker.lat, marker.lng], {
             icon,
             title: marker.label,

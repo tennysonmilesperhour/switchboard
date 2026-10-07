@@ -172,7 +172,7 @@ async function notifyThreadParticipants(
       ? `${body.slice(0, 139)}…`
       : body
     : hasVoice
-      ? '🎤 Voice note'
+      ? 'Voice note'
       : '';
   const url = `/events/${event.id}`;
 

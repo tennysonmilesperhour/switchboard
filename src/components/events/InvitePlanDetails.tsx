@@ -1,3 +1,4 @@
+import { Glyph } from '@/components/ui/Glyph';
 import { formatDateTimeRange } from '@/lib/format';
 import { googleCalendarUrl, outlookCalendarUrl } from '@/lib/calendar-links';
 import { mapsSearchUrl } from '@/lib/maps';
@@ -141,7 +142,7 @@ export function InvitePlanDetails({
                 rel="noopener noreferrer"
                 className={CHIP}
               >
-                📅 Google Calendar
+                <Glyph emoji="📅" size={14} />Google Calendar
               </a>
               <a
                 href={outlookCalendarUrl(calendarEvent)}
@@ -149,13 +150,13 @@ export function InvitePlanDetails({
                 rel="noopener noreferrer"
                 className={CHIP}
               >
-                📅 Outlook
+                <Glyph emoji="📅" size={14} />Outlook
               </a>
             </>
           )}
           {wishlist && (
             <a href={wishlist} target="_blank" rel="noopener noreferrer" className={CHIP}>
-              🎁 Wishlist
+              <Glyph emoji="🎁" size={14} />Wishlist
             </a>
           )}
         </div>

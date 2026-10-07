@@ -153,7 +153,7 @@ export function InviteLink({ eventId, shareUrl, state, eventTitle, dateSet = fal
               disabled={pending}
               onClick={() => toggle(true)}
             >
-              {pending ? 'Turning on…' : 'Turn on invite link 🔗'}
+              {pending ? 'Turning on…' : 'Turn on invite link'}
             </Button>
           )}
         </Card>

@@ -14,6 +14,7 @@ import {
   setZoneMemberRole,
   setZoneVisibility,
 } from '@/lib/actions/zones';
+import { Glyph } from '@/components/ui/Glyph';
 
 interface Member {
   member_id: string;
@@ -148,7 +149,10 @@ export function ZoneAccess({
       <Card className="space-y-4">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
-            <p className="font-bold text-ink">{isPrivate ? '🔒 Private' : '🌍 Public'}</p>
+            <p className="flex items-center gap-1.5 font-bold text-ink">
+              <Glyph emoji={isPrivate ? '🔒' : '🌍'} size={16} />
+              {isPrivate ? 'Private' : 'Public'}
+            </p>
             <p className="mt-0.5 text-xs leading-relaxed text-ink-faint">
               {isPrivate
                 ? 'Only people you let in can find this zone, see who’s here, or check in.'

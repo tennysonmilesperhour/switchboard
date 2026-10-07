@@ -1,5 +1,6 @@
 'use client';
 
+import { Glyph } from '@/components/ui/Glyph';
 import { useEffect, useRef, useState, useTransition } from 'react';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
@@ -166,7 +167,7 @@ export function DescribePlan({ onDraft }: { onDraft: (draft: PlanDraft) => void 
         onClick={() => setOpen(true)}
         className="w-full rounded-card border border-dashed border-line bg-cream px-4 py-3.5 text-sm text-ink-soft hover:border-terracotta hover:text-terracotta-deep hover:bg-terracotta-soft active:scale-[0.99] transition-all text-left"
       >
-        <span className="font-bold text-terracotta-deep">✨ Or just describe it:</span>{' '}
+        <span className="font-bold text-terracotta-deep"><Glyph emoji="✨" size={14} className="inline -mt-0.5 mr-1" />Or just describe it:</span>{' '}
         “Coffee tomorrow at 9am, try Alex first, then Jordan”
       </button>
     );

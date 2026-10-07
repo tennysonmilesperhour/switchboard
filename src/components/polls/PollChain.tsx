@@ -1,3 +1,4 @@
+import { Glyph } from '@/components/ui/Glyph';
 import { Card } from '@/components/ui/Card';
 
 interface DecidedStep {
@@ -48,7 +49,7 @@ export function PollChain({
         {decided.map((step) => (
           <li key={step.id} className="flex items-start gap-2 text-sm">
             <span aria-hidden className="mt-0.5 text-sage-deep">
-              ✓
+              <Glyph emoji="✓" size={14} />
             </span>
             <span className="min-w-0">
               <span className="text-ink-faint">{step.question}</span>{' '}
@@ -59,7 +60,7 @@ export function PollChain({
 
         <li className="flex items-start gap-2 text-sm">
           <span aria-hidden className="mt-0.5">
-            {activeDecided ? '✓' : '→'}
+            {activeDecided ? <Glyph emoji="✓" size={14} /> : '→'}
           </span>
           <span className="min-w-0 font-bold text-ink">{activeQuestion}</span>
         </li>
@@ -67,7 +68,7 @@ export function PollChain({
         {pending.map((step) => (
           <li key={step.id} className="flex items-start gap-2 text-sm">
             <span aria-hidden className="mt-0.5 text-ink-faint">
-              ○
+              <Glyph emoji="○" size={14} />
             </span>
             <span className="min-w-0 text-ink-faint">
               {step.question}

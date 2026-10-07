@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo, useState, useTransition } from 'react';
-import { Chip } from '@/components/ui/Chip';
+import { Glyph } from '@/components/ui/Glyph';
 import { Card } from '@/components/ui/Card';
 import { MultiSelectChips } from '@/components/ui/MultiSelectChips';
 import { useToast } from '@/components/ui/Toast';
@@ -62,6 +62,8 @@ interface Status {
 /** How many people to show before a search box is worth the space. */
 const PEOPLE_SEARCH_THRESHOLD = 8;
 const PEOPLE_SHOWN_MAX = 40;
+/** Custom statuses all draw the same neutral symbol; nobody picks a cartoon. */
+const CUSTOM_STATUS_EMOJI = '✨';
 
 /**
  * The availability composer.
@@ -86,7 +88,6 @@ export function SignalBar({ active, circles, people, groups, defaultCircleId }: 
   const [draft, setDraft] = useState<Status[]>([]);
   const [audience, setAudience] = useState<SignalAudience>(freshAudience);
   const [editingLabel, setEditingLabel] = useState<string | null>(null);
-  const [customEmoji, setCustomEmoji] = useState('✨');
   const [customLabel, setCustomLabel] = useState('');
   const [showPeople, setShowPeople] = useState(false);
   const [showGroups, setShowGroups] = useState(false);
@@ -133,7 +134,7 @@ export function SignalBar({ active, circles, people, groups, defaultCircleId }: 
     setDraft((current) =>
       current.some((s) => s.label === label)
         ? current
-        : [...current, { emoji: customEmoji.trim() || '✨', label }],
+        : [...current, { emoji: CUSTOM_STATUS_EMOJI, label }],
     );
     setCustomLabel('');
   }
@@ -260,7 +261,7 @@ export function SignalBar({ active, circles, people, groups, defaultCircleId }: 
     <div className="space-y-3" aria-busy={pending}>
       {nobodyToTell && (
         <Card tone="cream">
-          <p className="font-display text-lg">🟢 Nobody to tell yet</p>
+          <p className="font-display text-lg">Nobody to tell yet</p>
           <p className="mt-1 text-sm text-ink-soft leading-relaxed">
             A status reaches the people you are connected to and the groups you
             are in, so right now it would reach no one. Add someone and the
@@ -305,8 +306,9 @@ export function SignalBar({ active, circles, people, groups, defaultCircleId }: 
                   className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 rounded-card bg-card/70 px-3 py-2"
                 >
                   <div className="min-w-0">
-                    <p className="text-sm font-bold text-ink">
-                      <span aria-hidden>{signal.emoji}</span> {signal.label}
+                    <p className="inline-flex items-center gap-1.5 text-sm font-bold text-ink">
+                      <Glyph emoji={signal.emoji} size={16} className="text-sage-deep" />
+                      {signal.label}
                     </p>
                     <p className="text-xs text-ink-faint">
                       {reach} · off {formatRelative(signal.expires_at)}
@@ -353,27 +355,35 @@ export function SignalBar({ active, circles, people, groups, defaultCircleId }: 
           .
         </p>
       )}
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3" role="group" aria-label="Statuses">
-        {[...SIGNAL_PRESETS, ...customStatuses].map((signal) => (
-          <Chip
-            key={signal.label}
-            emoji={signal.emoji}
-            selected={draftLabels.has(signal.label)}
-            onClick={() => toggleStatus(signal)}
-            className="w-full justify-center whitespace-nowrap"
-          >
-            {signal.label}
-          </Chip>
-        ))}
+      <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-4" role="group" aria-label="Statuses">
+        {[...SIGNAL_PRESETS, ...customStatuses].map((signal) => {
+          const selected = draftLabels.has(signal.label);
+          return (
+            <button
+              key={signal.label}
+              type="button"
+              aria-pressed={selected}
+              onClick={() => toggleStatus(signal)}
+              className={`flex min-h-14 items-center gap-3 rounded-2xl border px-3.5 py-2.5 text-left text-sm font-bold leading-tight outline-none transition-all duration-150 active:scale-[0.97] focus-visible:ring-2 focus-visible:ring-terracotta ${
+                selected
+                  ? 'border-terracotta bg-terracotta text-white shadow-lift'
+                  : 'border-line bg-card text-ink hover:border-terracotta'
+              }`}
+            >
+              <span
+                aria-hidden
+                className={`inline-flex size-8 shrink-0 items-center justify-center rounded-full ${
+                  selected ? 'bg-white/20 text-white' : 'bg-cream text-terracotta-deep'
+                }`}
+              >
+                <Glyph emoji={signal.emoji} size={18} />
+              </span>
+              <span className="min-w-0">{signal.label}</span>
+            </button>
+          );
+        })}
       </div>
       <div className="flex gap-2">
-        <input
-          aria-label="Status emoji"
-          value={customEmoji}
-          onChange={(event) => setCustomEmoji(event.target.value)}
-          maxLength={4}
-          className="w-14 rounded-xl border border-line bg-card px-2 py-2 text-center"
-        />
         <input
           aria-label="Custom status"
           value={customLabel}

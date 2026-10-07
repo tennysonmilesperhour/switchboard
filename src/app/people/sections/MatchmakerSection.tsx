@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/Button';
 import { Card, SectionHeader } from '@/components/ui/Card';
 import { ACTIVITY_PRESETS } from '@/lib/types';
 import type { FriendRow } from './types';
+import { Glyph } from '@/components/ui/Glyph';
 
 interface MatchmakerSectionProps {
   friends: FriendRow[];
@@ -39,7 +40,7 @@ export function MatchmakerSection({
   return (
         <section>
           <SectionHeader
-            title="Play matchmaker 🤝"
+            title="Play matchmaker"
             hint="Introduce two friends. Revealed only if they both say yes."
           />
           <Card>
@@ -80,7 +81,7 @@ export function MatchmakerSection({
               >
                 {ACTIVITY_PRESETS.map((activity) => (
                   <option key={activity.label} value={activity.label}>
-                    {activity.emoji} {activity.label}
+                    <Glyph emoji={activity.emoji} size={14} className="mr-1 inline align-text-bottom" />{activity.label}
                   </option>
                 ))}
               </select>

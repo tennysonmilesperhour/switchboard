@@ -1,5 +1,6 @@
 'use client';
 
+import { Glyph } from '@/components/ui/Glyph';
 import { useMemo, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { Avatar } from '@/components/ui/Avatar';
@@ -228,7 +229,7 @@ export function AddInvitees({
               selected
               onClick={() => setEntries((c) => c.filter((x) => x !== entry))}
             >
-              {entry} ✕
+              <span className="inline-flex items-center gap-1">{entry}<Glyph emoji="✕" size={12} /></span>
             </Chip>
           ))}
         </div>
@@ -290,7 +291,7 @@ export function AddInvitees({
                       </span>
                       {connection.sabbatical ? (
                         <span className="block truncate text-xs text-ink-faint">
-                          🍃 On sabbatical
+                          <span className="inline-flex items-center gap-1"><Glyph emoji="🍃" size={12} />On sabbatical</span>
                         </span>
                       ) : connection.handle ? (
                         <span className="block truncate text-xs text-ink-faint">
@@ -310,7 +311,14 @@ export function AddInvitees({
                         : 'border-line bg-card text-ink-soft hover:border-terracotta hover:text-terracotta-deep'
                     }`}
                   >
-                    {queued ? 'In line ✓' : 'In line'}
+                    {queued ? (
+                      <span className="inline-flex items-center gap-1">
+                        In line
+                        <Glyph emoji="✓" size={12} />
+                      </span>
+                    ) : (
+                      'In line'
+                    )}
                   </button>
                 </li>
               );

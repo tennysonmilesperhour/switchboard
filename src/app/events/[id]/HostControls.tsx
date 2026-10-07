@@ -122,7 +122,7 @@ export function HostControls({ event, pollDecided, isPrimaryHost }: HostControls
           disabled={pending}
           onClick={() => run(() => markHappened(event.id))}
         >
-          Mark it happened 🎉
+          Mark it happened
         </Button>
       ) : (
         <>
@@ -135,7 +135,7 @@ export function HostControls({ event, pollDecided, isPrimaryHost }: HostControls
                 href={`/events/${event.id}/edit#startsAt`}
                 className="flex w-full items-center justify-center gap-2 rounded-btn bg-brand-gradient px-7 py-4 text-base font-bold text-white shadow-lift outline-none transition-all duration-150 hover:brightness-105 focus-visible:ring-2 focus-visible:ring-terracotta focus-visible:ring-offset-2 focus-visible:ring-offset-paper active:scale-[0.98]"
               >
-                Set the date 📅
+                Set the date
               </Link>
               <p className="text-plate text-plate-inset text-center text-xs text-ink-soft">
                 The group has decided, but the plan has no date yet. Set one and the invitations can go out.
@@ -150,7 +150,7 @@ export function HostControls({ event, pollDecided, isPrimaryHost }: HostControls
               onClick={() => run(() => startInviting(event.id))}
             >
               {sendStep === 'ready'
-                ? 'Send the invitations 🪜'
+                ? 'Send the invitations'
                 : 'Waiting for the group to decide…'}
             </Button>
           )}
@@ -162,7 +162,7 @@ export function HostControls({ event, pollDecided, isPrimaryHost }: HostControls
               disabled={pending}
               onClick={() => run(() => confirmEvent(event.id))}
             >
-              Lock it in - confirm the plan ✓
+              Lock it in - confirm the plan
             </Button>
           )}
         </>

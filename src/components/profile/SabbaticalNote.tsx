@@ -1,4 +1,5 @@
 import type { SabbaticalStatus } from '@/lib/sabbatical';
+import { Glyph } from '@/components/ui/Glyph';
 
 /**
  * Someone's sabbatical note, where D6 shows it: their public profile and the
@@ -21,7 +22,7 @@ export function SabbaticalNote({
   return (
     <div className={`rounded-card border border-line bg-cream px-3.5 py-3 text-left ${className}`}>
       <p className="text-sm font-bold text-ink">
-        <span aria-hidden>🍃 </span>
+        <Glyph emoji="🍃" size={14} className="mr-1 inline" />
         {name} is on sabbatical
       </p>
       {status.note ? (

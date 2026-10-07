@@ -78,7 +78,7 @@ export function CalendarSubscribe({ token }: { token: string }) {
           onClick={subscribe}
           className="inline-flex items-center gap-1.5 rounded-btn bg-brand-gradient px-4 py-2.5 text-sm font-bold text-white shadow-lift active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-terracotta"
         >
-          📅 Subscribe
+          Subscribe
         </button>
         <button
           type="button"

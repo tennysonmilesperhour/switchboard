@@ -1,5 +1,7 @@
 /* Deterministic initials avatar - no image dependency. */
 
+import { Glyph } from '@/components/ui/Glyph';
+
 const HUES = [340, 265, 220, 160, 45, 10, 300];
 
 function hueFor(seed: string): number {
@@ -100,10 +102,10 @@ export function Avatar({
     <span className="relative inline-flex">
       {face}
       <span
-        className="absolute -bottom-0.5 -right-0.5 rounded-full bg-paper px-0.5 text-[10px] leading-none shadow-sm"
+        className="absolute -bottom-0.5 -right-0.5 inline-flex size-4 items-center justify-center rounded-full bg-paper text-ink-soft shadow-sm"
         aria-hidden
       >
-        {signal.emoji}
+        <Glyph emoji={signal.emoji} size={11} />
       </span>
       <span className="sr-only">{`${name} is up for ${signal.label} right now`}</span>
     </span>

@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { Card } from '@/components/ui/Card';
+import { Glyph } from '@/components/ui/Glyph';
 
 /**
  * Three different things this page can do, named for what each one is.
@@ -44,9 +45,7 @@ export function IntentLaunchpad() {
             <Link key={intent.title} href={intent.href} className="group block">
               <Card className="group-hover:border-terracotta transition-colors">
                 <div className="flex items-center gap-3">
-                  <span className="text-xl" aria-hidden>
-                    {intent.emoji}
-                  </span>
+                  <Glyph emoji={intent.emoji} size={20} />
                   <span className="min-w-0 flex-1 text-sm">
                     <span className="block font-bold">{intent.title}</span>
                     <span className="block text-xs text-ink-faint">{intent.subtitle}</span>
@@ -67,9 +66,7 @@ export function IntentLaunchpad() {
             >
               <Card className="group-hover:border-terracotta transition-colors">
                 <div className="flex items-center gap-3">
-                  <span className="text-xl" aria-hidden>
-                    {intent.emoji}
-                  </span>
+                  <Glyph emoji={intent.emoji} size={20} />
                   <span className="min-w-0 flex-1 text-sm">
                     <span className="block font-bold">{intent.title}</span>
                     <span className="block text-xs text-ink-faint">{intent.subtitle}</span>

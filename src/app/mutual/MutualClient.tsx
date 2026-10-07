@@ -19,6 +19,7 @@ import { endRitual, pauseRitual, proposeRitual, respondToRitual, skipRitual } fr
 import { ritualDueLabel } from '@/lib/rituals';
 import { formatRelative } from '@/lib/format';
 import { ACTIVITY_PRESETS } from '@/lib/types';
+import { Glyph } from '@/components/ui/Glyph';
 
 export interface MutualFriend {
   id: string;
@@ -225,12 +226,12 @@ export function MutualClient({
       <p className="text-sm text-ink-soft leading-relaxed -mt-1">
         Pick an activity and the people you’d enjoy it with. Nothing is sent -
         if they independently pick you too, you <strong>both</strong> find out.
-        If not, no one ever knows. 🤫
+        If not, no one ever knows.
       </p>
 
       {justMatched && (
         <Card tone="sage" lifted className="animate-rise">
-          <p className="font-display text-xl text-sage-deep">✨ It’s mutual!</p>
+          <p className="font-display text-xl text-sage-deep">It’s mutual!</p>
           <p className="text-sm text-ink-soft mt-1">
             You matched - check your matches below and say hi.
           </p>
@@ -257,7 +258,7 @@ export function MutualClient({
                   </div>
                   {match.roomId && (
                     <Link href={`/rooms/${match.roomId}`}>
-                      <Button size="sm">Say hi 💬</Button>
+                      <Button size="sm">Say hi</Button>
                     </Link>
                   )}
                 </div>
@@ -362,7 +363,7 @@ export function MutualClient({
           disabled={pending || activities.length === 0 || people.length === 0}
           onClick={connect}
         >
-          {pending ? 'Saving quietly…' : 'Down to Connect 🤝'}
+          {pending ? 'Saving quietly…' : 'Down to Connect'}
         </Button>
         <p className="text-xs text-ink-faint text-center -mt-4">
           Completely private until it’s mutual.
@@ -380,7 +381,7 @@ export function MutualClient({
       {/* Standing rituals */}
       <section>
         <SectionHeader
-          title="Standing rituals 🔁"
+          title="Standing rituals"
           hint="Regular things with regular people, without the scheduling chore"
         />
         {rituals.length > 0 && (
@@ -502,7 +503,7 @@ export function MutualClient({
                 >
                   {ACTIVITY_PRESETS.map((activity) => (
                     <option key={activity.label} value={activity.label}>
-                      {activity.emoji} {activity.label}
+                      <Glyph emoji={activity.emoji} size={14} className="mr-1 inline align-text-bottom" />{activity.label}
                     </option>
                   ))}
                 </select>

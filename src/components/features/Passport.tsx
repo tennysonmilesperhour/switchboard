@@ -22,7 +22,7 @@ export function Passport({ state }: { state: PassportState }) {
     <Card tone={done ? 'sage' : 'cream'} className="space-y-3">
       <div className="flex items-baseline justify-between gap-3">
         <p className="font-display text-lg text-ink">
-          {done ? 'You’ve tried all of it 🎉' : 'What you’ve tried'}
+          {done ? 'You’ve tried all of it' : 'What you’ve tried'}
         </p>
         <p className="shrink-0 text-sm font-bold text-ink-soft">
           {earned} of {total}
@@ -86,7 +86,7 @@ export function GroupProgress({
         earned === total ? 'bg-sage-soft text-sage-deep' : 'bg-cream text-ink-faint'
       }`}
     >
-      {earned === total ? '✓ tried' : `${earned}/${total} tried`}
+      {earned === total ? 'Tried' : `${earned}/${total} tried`}
     </span>
   );
 }

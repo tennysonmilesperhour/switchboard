@@ -129,7 +129,7 @@ export function NotificationsFeed({
   return (
     <section>
       <SectionHeader
-        title="Recent 🔔"
+        title="Recent"
         hint={
           totalUnread > 0
             ? `${totalUnread} unread — tap one to mark it read`

@@ -301,7 +301,7 @@ describe('postAnnouncement: fan-out', () => {
     ]);
 
     expect(stepsOf('admin', 'messages')).toEqual([
-      ['insert', { room_id: 'room-1', sender_id: 'host-1', body: '📣 Door code is 4412' }],
+      ['insert', { room_id: 'room-1', sender_id: 'host-1', body: 'Door code is 4412' }],
     ]);
   });
 
@@ -316,7 +316,7 @@ describe('postAnnouncement: fan-out', () => {
       expect.objectContaining({ kind: 'announcement' }),
     );
     expect(stepsOf('admin', 'messages')).toEqual([
-      ['insert', { room_id: 'room-1', sender_id: 'cohost-1', body: '📣 Moved inside — it’s raining' }],
+      ['insert', { room_id: 'room-1', sender_id: 'cohost-1', body: 'Moved inside — it’s raining' }],
     ]);
     // A guest's email names who actually wrote it, never "your host".
     expect(stepsOf('admin', 'profiles')).toContainEqual(['eq', 'id', 'cohost-1']);

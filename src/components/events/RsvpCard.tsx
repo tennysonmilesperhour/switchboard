@@ -101,7 +101,7 @@ export function RsvpCard({
   return (
     <Card tone="gold" lifted className="animate-rise">
       <p className="font-extrabold text-xl tracking-tight">
-        {reconsider ? 'Changed your mind? 💛' : 'You’re invited 💌'}
+        {reconsider ? 'Changed your mind?' : 'You’re invited'}
       </p>
       {expiresAtIso && (
         <p className="text-sm text-ink-soft mt-0.5">
@@ -139,7 +139,7 @@ export function RsvpCard({
             disabled={pending}
             onClick={() => respond(true)}
           >
-            I’m in ✓
+            I’m in
           </Button>
           <Button
             variant="secondary"
@@ -175,7 +175,7 @@ export function RsvpCard({
             disabled={pending}
             onClick={() => respond(false, 'keep_asking')}
           >
-            Can’t this time - keep asking! 💛
+            Can’t this time - keep asking!
           </Button>
           <Button
             variant="ghost"
