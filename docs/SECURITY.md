@@ -857,7 +857,7 @@ through one security-definer function that encodes the privacy contract.
   boundary test cannot undo the rounding through repeated spoofed caller
   positions.
 - **Opt-in and ephemeral.** Nothing is stored until the user taps "Share my
-  location"; every row carries an `expires_at` (clamped 1–8 h), is ignored past
+  location"; every row carries an `expires_at` (clamped 15 min–8 h; the person picks 30 min to 8 h), is ignored past
   it, and is swept by the retention cron (`sweepExpired`). "Stop" deletes it.
 - **No authority column.** `visibility`/`expires_at` govern only the owner's own
   exposure — they are preferences, not privileges over others or shared
