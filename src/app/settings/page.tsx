@@ -316,6 +316,14 @@ export default async function SettingsPage({
             <SectionHeader
               title="Discoverability"
               hint="Choose how new people can find you. Interest stays private unless it is mutual."
+              action={
+                <Link
+                  href="/discover/preferences"
+                  className="text-sm font-bold text-terracotta-deep"
+                >
+                  Lanes and mood
+                </Link>
+              }
             />
             <Card>
               {!profileKnown ? <Unavailable /> : (

@@ -502,7 +502,7 @@ test.describe('authenticated surface', () => {
         await page.getByRole('button', { name: /E2E Guest/ }).click();
         await expect(page.getByText('1 person selected')).toBeVisible({ timeout: 5_000 });
       }
-      if (step === 3) await page.getByText('Let the group decide what to do 🗳️').click();
+      if (step === 3) await page.getByText('Let the group decide what to do').click();
     });
     await expect(submit).toBeVisible({ timeout: 5_000 });
     await submit.click();
