@@ -13,6 +13,8 @@ import { IntentLaunchpad } from './IntentLaunchpad';
 import { supportEmail } from '@/lib/contact';
 import { venueAreaKey } from '@/lib/venue-area';
 import { ownContexts } from '@/lib/discovery-context';
+import { toDiscoveryPerson } from '@/lib/discovery-people';
+import { isSelf, laneOfActivity, moodIsActive, type Self } from '@/lib/discovery-lanes';
 import { ilikeTerm } from '@/lib/zone-rules';
 import { reportOperationalError } from '@/lib/server/observability';
 import type { ErrorCode } from '@/lib/errors';
@@ -25,12 +27,14 @@ const MAX_FOCUS_LENGTH = 60;
 export default async function DiscoverPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string | string[] }>;
+  searchParams: Promise<{ q?: string | string[]; lane?: string | string[] }>;
 }) {
   // `?q=<interest>` is how the You page's "still waiting for a first outing"
   // tags arrive: it seeds the idea generator with that one interest. Untrusted,
   // so it is trimmed, capped, and only ever rendered as text.
-  const { q } = await searchParams;
+  const { q, lane } = await searchParams;
+  const laneParam = Array.isArray(lane) ? lane[0] : lane;
+  const self: Self = isSelf(laneParam) ? laneParam : 'friends';
   const focusInterest =
     (Array.isArray(q) ? q[0] : q)?.trim().slice(0, MAX_FOCUS_LENGTH) || null;
   const supabase = await createClient();
@@ -58,6 +62,8 @@ export default async function DiscoverPage({
     { data: discoveryMatches },
     { data: myInterests },
     myRequestsResult,
+    { data: moodRow },
+    { data: laneRow },
   ] =
     await Promise.all([
       supabase.rpc('list_open_tables'),
@@ -77,7 +83,7 @@ export default async function DiscoverPage({
         .select('id, name, area, perk, url, status, review_note, reviewed_at')
         .eq('claimed_by', user.id)
         .order('created_at', { ascending: false }),
-      supabase.rpc('list_discoverable_people', { p_category: 'all' }),
+      supabase.rpc('list_discovery_candidates', { p_self: self }),
       supabase
         .from('matches')
         .select('id, user_a, user_b, activity, room_id, created_at')
@@ -103,6 +109,20 @@ export default async function DiscoverPage({
         .eq('status', 'requested')
         .order('created_at', { ascending: false })
         .limit(10),
+      // Own mood and own lane settings, so the page can say why it looks the
+      // way it does. Both are owner-only under RLS.
+      supabase
+        .from('discovery_mood')
+        .select('preset, bar_shift, only_selves, include_items, expires_at')
+        .eq('user_id', user.id)
+        .gt('expires_at', new Date().toISOString())
+        .maybeSingle(),
+      supabase
+        .from('discovery_selves')
+        .select('enabled')
+        .eq('user_id', user.id)
+        .eq('self', self)
+        .maybeSingle(),
     ]);
 
   // A failed lookup must not read as an empty room ("No one in this lane
@@ -138,7 +158,7 @@ export default async function DiscoverPage({
   const venues = venuesResult.data;
   const interestByTarget = Object.fromEntries(
     (myInterests ?? [])
-      .filter((intent) => intent.target_id)
+      .filter((intent) => intent.target_id && laneOfActivity(intent.activity) === self)
       .map((intent) => [intent.target_id as string, { id: intent.id, activity: intent.activity }]),
   );
 
@@ -177,9 +197,14 @@ export default async function DiscoverPage({
         </div>
         <div id="browse" className="scroll-mt-20 space-y-8">
           <PeopleDiscoveryClient
-            people={people ?? []}
+            people={(people ?? []).map(toDiscoveryPerson)}
             matches={matches}
             discoverable={Boolean(profile?.discoverable)}
+            self={self}
+            // No row means the friends lane follows the discoverable switch and
+            // the others are off, exactly as the database reads it.
+            laneOn={laneRow ? laneRow.enabled : self === 'friends' && Boolean(profile?.discoverable)}
+            mood={moodRow && moodIsActive(moodRow) ? moodRow : null}
             interests={interestByTarget}
             myContexts={ownContexts(profile?.discovery_contexts, profile?.down_to)}
             loadError={peopleError}
