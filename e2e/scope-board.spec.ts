@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { SCOPE_ITEM_IDS } from '../src/lib/scope-checklist';
 
 const boardPath = '**/api/scope-progress';
 const mark = { at: '2026-09-25T10:00:00Z', by: 'Reviewer' };
@@ -27,7 +28,7 @@ test('an unavailable board explains what is local and never counts invented item
   await page.route(boardPath, (route) => route.fulfill({ status: 503, body: '{}' }));
   await page.goto('/scope-verification');
   await expect(page.locator('#revDone')).toHaveText('1');
-  await expect(page.locator('#cntLeft')).toHaveText('34');
+  await expect(page.locator('#cntLeft')).toHaveText(String(SCOPE_ITEM_IDS.length - 1));
   await expect(page.locator('#boardNote')).toContainText('could not be loaded');
   await expect(page.locator('#boardNote')).toContainText('SB-SCOPE-BOARD');
   await expect(page.locator('#notesList')).toContainText('Notes could not be loaded');
