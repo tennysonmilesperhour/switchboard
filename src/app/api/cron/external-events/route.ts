@@ -3,8 +3,10 @@ import { collectExternalEvents } from '@/lib/server/external-event-collector';
 import { checkRateLimit } from '@/lib/server/rate-limit';
 import { bearerMatches } from '@/lib/server/secret';
 import { describeError } from '@/lib/server/observability';
+import { createAdminClient } from '@/lib/supabase/admin';
+import type { Json } from '@/lib/supabase/database.types';
 
-export const maxDuration = 60;
+export const maxDuration = 300;
 
 export async function GET(request: Request) {
   const secret = process.env.CRON_SECRET;
@@ -16,7 +18,13 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: 'Too many requests' }, { status: 429 });
   }
   try {
+    const admin = createAdminClient();
+    const lease = await admin.rpc('try_claim_external_event_collection', { p_lease_seconds: 240 });
+    if (lease.error) throw lease.error;
+    if (!lease.data) return NextResponse.json({ ok: true, skipped: 'overlap' });
     const summary = await collectExternalEvents();
+    const finish = await admin.rpc('finish_external_event_collection', { p_counts: summary as unknown as Json });
+    if (finish.error) throw finish.error;
     console.info(JSON.stringify({ level: 'info', area: 'cron.external-events', summary, at: new Date().toISOString() }));
     return NextResponse.json({ ok: true, ...summary });
   } catch (error) {

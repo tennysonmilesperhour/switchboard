@@ -56,10 +56,14 @@ export default async function DiscoverPage({
   const areaTerm = area ? ilikeTerm(area) : '';
   const externalEventsResult = await supabase
     .from('external_events')
-    .select('id,title,description,starts_at,venue_name,city,category,canonical_url,ticket_url,price_label')
+    .select('id,title,description,starts_at,ends_at,venue_name,city,category,canonical_url,ticket_url,price_label,is_free,age_label,accessibility,confidence,last_seen_at')
     .gte('ends_at', new Date().toISOString())
     .order('starts_at', { ascending: true })
-    .limit(24);
+    .limit(100);
+  const { data: externalPreferences } = await supabase
+    .from('external_event_preferences')
+    .select('event_id,state')
+    .eq('user_id', user.id);
 
   const [
     { data: openTables },
@@ -193,7 +197,11 @@ export default async function DiscoverPage({
     <AppShell title="Explore">
       <div className="space-y-8">
         <IntentLaunchpad />
-        <ExternalEventList events={(externalEventsResult.data ?? []) as ExternalEventCard[]} />
+        <ExternalEventList
+          events={(externalEventsResult.data ?? []) as ExternalEventCard[]}
+          initialPreferences={Object.fromEntries((externalPreferences ?? []).map((preference) => [preference.event_id, preference.state as 'saved' | 'hidden']))}
+          interests={profile?.interests ?? []}
+        />
         {/* Ideas first: it is what Explore is named for, and the door on
             /create that leads here promises "browse ideas". */}
         <div id="brainstorm" className="scroll-mt-20">

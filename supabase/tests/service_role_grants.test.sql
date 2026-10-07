@@ -28,7 +28,7 @@
 begin;
 
 -- One assertion per function, plus the two catch-alls below.
-select plan(22);
+select plan(26);
 
 select ok(
   has_function_privilege('service_role', 'public.is_event_host(uuid, uuid)', 'EXECUTE'),
@@ -150,6 +150,30 @@ select ok(
   'service_role can execute the PRIVATE body of the nearby-recipient claim'
 );
 
+select ok(
+  has_function_privilege(
+    'service_role', 'public.try_claim_external_event_collection(integer)', 'EXECUTE'),
+  'service_role can claim external event collection leases'
+);
+
+select ok(
+  has_function_privilege(
+    'service_role', 'public.finish_external_event_collection(jsonb)', 'EXECUTE'),
+  'service_role can write external event collection heartbeats'
+);
+
+select ok(
+  has_function_privilege(
+    'service_role', 'public.external_event_collection_status()', 'EXECUTE'),
+  'service_role can read external event collection health'
+);
+
+select ok(
+  has_function_privilege(
+    'service_role', 'public.refresh_external_event_catalog()', 'EXECUTE'),
+  'service_role can refresh the external event catalogue'
+);
+
 -- The rule the hardening migration left behind, stated once: no function
 -- anywhere in `public` may be executable by `anon` while being one of the
 -- service-role entry points above. Guards against a future grant that widens
@@ -164,7 +188,10 @@ select is(
         'respond_to_guest_invite', 'rotate_event_share_token',
         'resolve_poll_children', 'try_claim_operator_sweep',
         'finish_operator_sweep', 'operator_sweep_status', 'sweep_retention',
-        'claim_ritual_reminders', 'claim_signal_nearby_recipients'
+        'claim_ritual_reminders', 'claim_signal_nearby_recipients',
+        'try_claim_external_event_collection',
+        'finish_external_event_collection', 'external_event_collection_status',
+        'refresh_external_event_catalog'
       )
       and has_function_privilege('anon', p.oid, 'EXECUTE')),
   0,

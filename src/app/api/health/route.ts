@@ -14,6 +14,7 @@ import {
 } from '@/lib/health';
 
 const REQUIRED_PRIVATE_BUCKET = 'media-private';
+const EVENT_COLLECTION_MAX_AGE_MS = 7 * 60 * 60 * 1000;
 
 /**
  * The `<ref>` subdomain of a Supabase URL (`https://<ref>.supabase.co`) — the
@@ -81,6 +82,7 @@ export async function GET(request: Request) {
   let missingSchemaObjects: string[] = [];
   let storage = false;
   let cronLastRunAt: string | null = null;
+  let eventCollectionLastRunAt: string | null = null;
   if (checks.supabaseAdmin) {
     const admin = createAdminClient();
     const { error } = await admin
@@ -93,6 +95,7 @@ export async function GET(request: Request) {
       { data: status, error: schemaError },
       { data: buckets, error: storageError },
       cronStatus,
+      eventCollectionStatus,
     ] =
       await Promise.all([
         admin.rpc('app_schema_status'),
@@ -101,6 +104,7 @@ export async function GET(request: Request) {
           console.error('[health:cron-heartbeat]', error);
           return null;
         }),
+        admin.rpc('external_event_collection_status'),
       ]);
     const schemaStatus = evaluateSchemaStatus(status, schemaError);
     schemaVersion = schemaStatus.current;
@@ -110,7 +114,12 @@ export async function GET(request: Request) {
       !storageError &&
       Boolean(buckets?.some((bucket) => bucket.id === REQUIRED_PRIVATE_BUCKET && !bucket.public));
     cronLastRunAt = cronStatus?.lastRunAt ?? null;
+    const eventStatus = Array.isArray(eventCollectionStatus.data) ? eventCollectionStatus.data[0] : null;
+    eventCollectionLastRunAt = eventStatus?.last_run_at ?? null;
     checks.cron = checks.cron && isCronHeartbeatFresh(cronLastRunAt);
+    checks.cron = checks.cron && !eventCollectionStatus.error && Boolean(
+      eventCollectionLastRunAt && Date.now() - Date.parse(eventCollectionLastRunAt) <= EVENT_COLLECTION_MAX_AGE_MS,
+    );
   } else {
     checks.cron = false;
   }
@@ -172,6 +181,10 @@ export async function GET(request: Request) {
       cronHeartbeat: {
         lastRunAt: cronLastRunAt,
         staleAfterSeconds: CRON_HEARTBEAT_MAX_AGE_MS / 1000,
+      },
+      eventCollectionHeartbeat: {
+        lastRunAt: eventCollectionLastRunAt,
+        staleAfterSeconds: EVENT_COLLECTION_MAX_AGE_MS / 1000,
       },
       config,
     },

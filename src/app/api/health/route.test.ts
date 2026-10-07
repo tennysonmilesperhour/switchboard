@@ -43,6 +43,7 @@ const COMPLETE_SCHEMA: SchemaStatus = {
 function heartbeatAt(
   value: string | null,
   schemaStatus: SchemaStatus = COMPLETE_SCHEMA,
+  eventValue: string | null = value,
 ) {
   mocks.rpc.mockImplementation(async (name: string) => {
     if (name === 'app_schema_status') {
@@ -60,6 +61,9 @@ function heartbeatAt(
           : [],
         error: null,
       };
+    }
+    if (name === 'external_event_collection_status') {
+      return { data: [{ last_started_at: eventValue, last_run_at: eventValue, running_until: null, last_counts: { accepted: 1 } }], error: null };
     }
     throw new Error(`Unexpected RPC: ${name}`);
   });
@@ -128,6 +132,17 @@ describe('privileged health cron heartbeat', () => {
     expect(body.ok).toBe(true);
     expect(body.services.cron).toBe(true);
     expect(body.cronHeartbeat.lastRunAt).toBe(lastRunAt);
+  });
+
+  it('goes red when event collection has stopped even if cascade is healthy', async () => {
+    const cascade = new Date(NOW.getTime() - 60 * 1000).toISOString();
+    const events = new Date(NOW.getTime() - 8 * 60 * 60 * 1000).toISOString();
+    heartbeatAt(cascade, COMPLETE_SCHEMA, events);
+    const response = await GET(healthRequest());
+    const body = await response.json();
+    expect(response.status).toBe(503);
+    expect(body.problems).toContain('SB-CONFIG-CRON');
+    expect(body.eventCollectionHeartbeat.lastRunAt).toBe(events);
   });
 });
 

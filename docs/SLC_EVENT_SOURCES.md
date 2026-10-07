@@ -2,7 +2,8 @@
 
 Switchboard's collector is a source registry, not one giant scraper. Each source
 has a health record; the generic adapter understands schema.org `Event`, ICS,
-and Trumba JSON. A source is enabled only after its live output is verified.
+Trumba JSON, and Ticketmaster Discovery responses. A source is enabled only
+after its live output is verified.
 
 ## Live in the first slice
 
@@ -10,6 +11,9 @@ and Trumba JSON. A source is enabled only after its live output is verified.
 | --- | --- | --- |
 | Salt Lake County | Parks, recreation, libraries, civic and community programming | Trumba JSON |
 | Salt Lake Community College | Arts, galleries, music, workshops and public campus events | schema.org JSON-LD |
+
+Ticketmaster support is implemented but remains paused until
+`TICKETMASTER_API_KEY` is configured and the source is enabled.
 
 The Salt Lake City and Visit Salt Lake calendars are recorded but disabled:
 their listing pages did not expose events in the supported public formats when
@@ -49,5 +53,9 @@ Add sources in this order, measuring unique upcoming events after deduplication:
 
 Vercel calls `/api/cron/external-events` every three hours with `CRON_SECRET`.
 The route fetches through the shared SSRF guard, caps response size, records
-source health, and upserts normalized rows. Operators add or pause sources in
-`event_sources`; readers can only select current `external_events` through RLS.
+source health, and maintains canonical events separately from private source
+listings. It uses an atomic lease, bounded concurrency, retries, exponential
+source backoff, stale windows, and explicit cancellation signals. Submitted
+links are parsed automatically when possible and otherwise enter the moderation
+queue. Operators see source health and submissions on `/moderation`; readers can
+only select current normalized fields through RLS and column grants.
