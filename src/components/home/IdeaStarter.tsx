@@ -1,12 +1,32 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect, useState } from 'react';
+import { useState, useSyncExternalStore } from 'react';
 import { PlanCard, planColor } from '@/components/ui/PlanCard';
 
 const STORAGE_KEY = 'sb:home-ideas-view';
 
 type View = 'cards' | 'compact';
+
+const CHANGE_EVENT = 'sb:home-ideas-view';
+
+function subscribe(onChange: () => void) {
+  window.addEventListener(CHANGE_EVENT, onChange);
+  window.addEventListener('storage', onChange);
+  return () => {
+    window.removeEventListener(CHANGE_EVENT, onChange);
+    window.removeEventListener('storage', onChange);
+  };
+}
+
+function readSaved(): View | null {
+  try {
+    const saved = window.localStorage.getItem(STORAGE_KEY);
+    return saved === 'cards' || saved === 'compact' ? saved : null;
+  } catch {
+    return null;
+  }
+}
 
 /**
  * The empty-Home "float an idea" surface. Past `maxChips` ideas it defaults to
@@ -22,22 +42,18 @@ export function IdeaStarter({
   maxChips: number;
 }) {
   const canSwipe = ideas.length > maxChips;
-  const [view, setView] = useState<View>(canSwipe ? 'cards' : 'compact');
-
-  useEffect(() => {
-    if (!canSwipe) return;
-    try {
-      const saved = window.localStorage.getItem(STORAGE_KEY);
-      if (saved === 'cards' || saved === 'compact') setView(saved);
-    } catch {
-      // Private window or blocked storage: keep the default.
-    }
-  }, [canSwipe]);
+  // The server and the first client render use the default; the saved choice
+  // is applied right after hydration without a mismatch.
+  const saved = useSyncExternalStore(subscribe, readSaved, () => null);
+  // Covers storage being blocked, where a click still has to work this visit.
+  const [picked, setPicked] = useState<View | null>(null);
+  const view: View = picked ?? saved ?? (canSwipe ? 'cards' : 'compact');
 
   function choose(next: View) {
-    setView(next);
+    setPicked(next);
     try {
       window.localStorage.setItem(STORAGE_KEY, next);
+      window.dispatchEvent(new Event(CHANGE_EVENT));
     } catch {
       // Not remembering is fine.
     }
