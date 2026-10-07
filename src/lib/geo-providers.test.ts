@@ -1,11 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import {
   DEFAULT_GEOCODER_ENDPOINT,
-  DEFAULT_TILES,
+  DEFAULT_MAP_STYLES,
   geocoderEndpoint,
+  mapConnectSources,
+  mapStyleConfig,
   nominatimSearchUrl,
   nominatimUrl,
-  tileConfig,
 } from './geo';
 
 describe('the geocoder endpoint', () => {
@@ -39,30 +40,43 @@ describe('the geocoder endpoint', () => {
   });
 });
 
-describe('map tiles', () => {
-  it('default to OpenStreetMap', () => {
-    expect(tileConfig(undefined, undefined)).toEqual(DEFAULT_TILES);
+describe('map styles', () => {
+  it('default to OpenFreeMap, light and dark', () => {
+    expect(mapStyleConfig(undefined, undefined)).toEqual(DEFAULT_MAP_STYLES);
+    expect(mapStyleConfig('  ', '')).toEqual(DEFAULT_MAP_STYLES);
   });
 
-  it('use a configured https template, keeping a credit', () => {
-    expect(tileConfig('https://tiles.example.com/{z}/{x}/{y}.png', 'Example Maps')).toEqual({
-      url: 'https://tiles.example.com/{z}/{x}/{y}.png',
-      attribution: 'Example Maps',
+  it('use a configured https style, for both appearances unless a dark one is given', () => {
+    expect(mapStyleConfig('https://maps.example.com/style.json?key=k', undefined)).toEqual({
+      light: 'https://maps.example.com/style.json?key=k',
+      dark: 'https://maps.example.com/style.json?key=k',
     });
-    expect(tileConfig('https://{s}.tiles.example.com/{z}/{x}/{y}.png', '').attribution).toBe(
-      DEFAULT_TILES.attribution,
-    );
-  });
-
-  it('fall back on an insecure or incomplete template', () => {
-    expect(tileConfig('http://tiles.example.com/{z}/{x}/{y}.png', 'x')).toEqual(DEFAULT_TILES);
-    expect(tileConfig('https://tiles.example.com/{z}/{x}.png', 'x')).toEqual(DEFAULT_TILES);
-  });
-
-  it('strip markup from a configured credit, which Leaflet renders as HTML', () => {
     expect(
-      tileConfig('https://tiles.example.com/{z}/{x}/{y}.png', '<img src=x onerror=alert(1)>Maps')
-        .attribution,
-    ).toBe('img src=x onerror=alert(1)Maps');
+      mapStyleConfig('https://maps.example.com/light.json', 'https://maps.example.com/dark.json'),
+    ).toEqual({
+      light: 'https://maps.example.com/light.json',
+      dark: 'https://maps.example.com/dark.json',
+    });
+  });
+
+  it('ignore anything that is not plain https', () => {
+    for (const bad of [
+      'http://maps.example.com/style.json',
+      'https://user:pass@maps.example.com/style.json',
+      'javascript:alert(1)',
+      'not a url',
+    ]) {
+      expect(mapStyleConfig(bad, bad)).toEqual(DEFAULT_MAP_STYLES);
+    }
+  });
+
+  it('let the browser reach exactly the style origins, once each', () => {
+    expect(mapConnectSources(DEFAULT_MAP_STYLES)).toBe('https://tiles.openfreemap.org');
+    expect(
+      mapConnectSources({
+        light: 'https://a.example.com/light.json',
+        dark: 'https://b.example.com/dark.json',
+      }),
+    ).toBe('https://a.example.com https://b.example.com');
   });
 });

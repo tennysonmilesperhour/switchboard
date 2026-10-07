@@ -7,14 +7,14 @@ import { locateMyPlaces } from '@/lib/actions/map';
 import type { MapLayerKey, MapMarker, MapPoint } from '@/lib/geo';
 import { buildDirectory, LAYER_META, MAP_LAYERS, markerKey } from '@/lib/map-directory';
 import type { LiveLocation } from '@/lib/types';
-import type { MapFocus } from './LeafletCanvas';
+import type { MapFocus } from './MapCanvas';
 import { MapDirectory } from './MapDirectory';
 import { LiveShare } from './LiveShare';
 
-// The Leaflet canvas touches `window`, so it must load client-only. `ssr: false`
+// The map canvas touches `window`, so it must load client-only. `ssr: false`
 // is only allowed on `next/dynamic` inside a Client Component (this one).
-const LeafletCanvas = dynamic(
-  () => import('./LeafletCanvas').then((mod) => mod.LeafletCanvas),
+const MapCanvas = dynamic(
+  () => import('./MapCanvas').then((mod) => mod.MapCanvas),
   {
     ssr: false,
     loading: () => (
@@ -208,7 +208,7 @@ export function MapExplorer({
         ))}
       </div>
 
-      <LeafletCanvas markers={visible} focus={focus} fitNonce={fitNonce} />
+      <MapCanvas markers={visible} focus={focus} fitNonce={fitNonce} />
 
       <div className="flex flex-wrap items-center gap-2">
         <button

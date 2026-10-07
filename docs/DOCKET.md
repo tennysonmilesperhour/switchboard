@@ -452,9 +452,9 @@ Code can't close these; they need the owner or a dashboard:
   to `/auth/callback` on the production domain.
 - **Optional production variables** still unset on 2026-10-02:
   `OBSERVABILITY_WEBHOOK_URL` (ops alerts) and `SCOPE_WATCH_EMAIL` (checklist
-  notices). Maps and address search fall back to OpenStreetMap's public tiles
-  and Nominatim (`NEXT_PUBLIC_MAP_TILE_URL`, `GEOCODER_URL` unset), which is
-  fine for a pilot but not for heavy traffic.
+  notices). Address search falls back to the public Nominatim (`GEOCODER_URL`
+  unset), which is fine for a pilot but not for heavy traffic. The map now
+  draws OpenFreeMap vector styles by default, whose policy covers production.
 - **Preview environment isolation** (own Supabase project, complete config) and
   confirming the **authed-E2E GitHub job is a required check**.
 - ~~**CI on `main` is red**~~ — **root cause found and fixed 2026-08-12**

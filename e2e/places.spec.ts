@@ -115,13 +115,13 @@ test.describe('places', () => {
     expect(error, error?.message).toBeNull();
 
     await page.goto('/map');
-    await expect(page.locator('.leaflet-container')).toBeVisible();
+    await expect(page.locator('.maplibregl-map')).toBeVisible();
 
     const layers = page.getByRole('group', { name: 'Map layers' });
     const zonesLayer = layers.getByRole('button', { name: /Zones/ });
     await expect(zonesLayer).toHaveAttribute('aria-pressed', 'true');
 
-    const pin = page.locator(`.leaflet-marker-icon[title="${name}"]`);
+    const pin = page.locator(`.sb-map-pin[title="${name}"]`);
     const listed = page.getByRole('button', { name: `Show ${name} on the map` });
     await expect(pin).toBeVisible();
     await expect(listed).toBeVisible();
