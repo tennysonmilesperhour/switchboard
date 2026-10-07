@@ -77,7 +77,7 @@ export default async function DiscoverPage({
       supabase.rpc('list_nearby_plans', { p_max_km: 100 }),
       // Range is measured from the reader's city, never a device fix.
       supabase.rpc('my_home_point').maybeSingle<{ latitude: number; longitude: number }>(),
-      supabase.rpc('list_people_distance_bands'),
+      supabase.rpc('list_people_distance_bands', { p_self: self }),
       // Verified perks in the viewer's area, newest first. This was the ten
       // newest verified venues anywhere in the world.
       areaTerm

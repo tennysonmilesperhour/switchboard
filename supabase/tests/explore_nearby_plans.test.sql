@@ -1,5 +1,5 @@
 begin;
-select plan(11);
+select plan(12);
 
 -- Four people: a viewer (v), a stranger host near v (h), a far host (f), and a
 -- blocked host (b). Coordinates sit on one 0.25 degree grid cell for v and h,
@@ -8,7 +8,8 @@ insert into auth.users (id, email) values
   ('00000000-0000-0000-0000-0000000000a1', 'v@example.test'),
   ('00000000-0000-0000-0000-0000000000a2', 'h@example.test'),
   ('00000000-0000-0000-0000-0000000000a3', 'f@example.test'),
-  ('00000000-0000-0000-0000-0000000000a4', 'b@example.test');
+  ('00000000-0000-0000-0000-0000000000a4', 'b@example.test'),
+  ('00000000-0000-0000-0000-0000000000a5', 'l@example.test');
 
 insert into public.profiles (
   id, display_name, onboarded, discoverable, discovery_geography,
@@ -17,7 +18,8 @@ insert into public.profiles (
   ('00000000-0000-0000-0000-0000000000a1', 'Viewer', true, true, true, 40.00, -100.00),
   ('00000000-0000-0000-0000-0000000000a2', 'Near host', true, true, true, 40.01, -100.01),
   ('00000000-0000-0000-0000-0000000000a3', 'Far host', true, true, true, 40.50, -100.00),
-  ('00000000-0000-0000-0000-0000000000a4', 'Blocked host', true, false, false, 40.01, -100.01)
+  ('00000000-0000-0000-0000-0000000000a4', 'Blocked host', true, false, false, 40.01, -100.01),
+  ('00000000-0000-0000-0000-0000000000a5', 'Lane off', true, true, true, 40.01, -100.01)
 on conflict (id) do update set
   display_name = excluded.display_name,
   onboarded = excluded.onboarded,
@@ -25,6 +27,10 @@ on conflict (id) do update set
   discovery_geography = excluded.discovery_geography,
   home_latitude = excluded.home_latitude,
   home_longitude = excluded.home_longitude;
+
+-- Someone nearby who turned the friends lane off must not be placed either.
+insert into public.discovery_selves (user_id, self, enabled)
+values ('00000000-0000-0000-0000-0000000000a5', 'friends', false);
 
 insert into public.events (id, host_id, title, status, capacity, open_table, broadcast_nearby, starts_at) values
   ('00000000-0000-0000-0000-0000000000e1', '00000000-0000-0000-0000-0000000000a2', 'Near broadcast', 'inviting', 6, true, true, now() + interval '2 days'),
@@ -79,6 +85,11 @@ select is(
   (select count(*)::int from public.list_people_distance_bands()
    where person_id = '00000000-0000-0000-0000-0000000000a4'),
   0, 'a blocked person is never banded');
+
+select is(
+  (select count(*)::int from public.list_people_distance_bands()
+   where person_id = '00000000-0000-0000-0000-0000000000a5'),
+  0, 'a person with the lane off is never banded');
 
 -- Anonymous callers get nothing.
 reset role;

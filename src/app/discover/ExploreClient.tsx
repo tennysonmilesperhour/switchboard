@@ -327,7 +327,7 @@ function PlansPane({
         </div>
       )}
 
-      {plansError ? (
+      {plansError && (
         <Card>
           <ErrorNotice
             message={errorFor(plansError).message}
@@ -335,33 +335,32 @@ function PlansPane({
             code={plansError}
           />
         </Card>
-      ) : (
-        <SwipeDeck
-          ariaLabel="Plans you can ask to join"
-          items={visible}
-          getKey={(plan) => plan.eventId}
-          onDecide={decide}
-          leftLabel="Pass"
-          rightLabel="Ask to join"
-          renderCard={(plan) => <PlanCard plan={plan} />}
-          empty={
-            <EmptyState
-              emoji="🪑"
-              title="No open plans in range"
-              body={
-                hasHomePoint
-                  ? 'Try a wider range, or start one yourself. Hosts choose whether to show a plan to people nearby.'
-                  : 'Set your city in Edit profile to see plans near you. Plans from your circle still show up here.'
-              }
-              action={
-                <Link href="/events/new">
-                  <Button size="sm">Start a plan</Button>
-                </Link>
-              }
-            />
-          }
-        />
       )}
+      <SwipeDeck
+        ariaLabel="Plans you can ask to join"
+        items={visible}
+        getKey={(plan) => plan.eventId}
+        onDecide={decide}
+        leftLabel="Pass"
+        rightLabel="Ask to join"
+        renderCard={(plan) => <PlanCard plan={plan} />}
+        empty={
+          <EmptyState
+            emoji="🪑"
+            title="No open plans in range"
+            body={
+              hasHomePoint
+                ? 'Try a wider range, or start one yourself. Hosts choose whether to show a plan to people nearby.'
+                : 'Set your city in Edit profile to see plans near you. Plans from your circle still show up here.'
+            }
+            action={
+              <Link href="/events/new">
+                <Button size="sm">Start a plan</Button>
+              </Link>
+            }
+          />
+        }
+      />
       <p className="text-center text-xs text-ink-faint">
         Swipe right asks the host. They approve every request.
       </p>
@@ -462,7 +461,12 @@ function PeoplePane({
     if (direction === 'left') {
       // A pass is private history: it keeps this person out of this lane for a
       // month and feeds suggestions. They are never told.
-      void recordDiscoverySignal(person.id, self, 'passed', sharedKeys(person));
+      const saved = await recordDiscoverySignal(person.id, self, 'passed', sharedKeys(person));
+      if (!saved.ok) {
+        // The card stays: removing it would promise a month of quiet that was never recorded.
+        toast.error(saved.error ?? 'Could not save that pass.', saved.code);
+        return false;
+      }
       return true;
     }
     const context =

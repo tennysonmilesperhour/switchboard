@@ -148,7 +148,7 @@ as $$ select * from private.list_nearby_plans(p_max_km) $$;
 revoke all on function public.list_nearby_plans(integer) from public, anon;
 grant execute on function public.list_nearby_plans(integer) to authenticated;
 
-create or replace function private.list_people_distance_bands()
+create or replace function private.list_people_distance_bands(p_self text default 'friends')
 returns table (person_id uuid, distance_band text)
 language sql
 stable
@@ -159,6 +159,7 @@ as $$
     select id, home_latitude, home_longitude
     from public.profiles
     where id = auth.uid()
+      and p_self in ('friends', 'dating', 'networking')
       and discoverable
       and discovery_geography
       and home_latitude is not null
@@ -182,6 +183,9 @@ as $$
       and not coalesce(p.sabbatical, false)
       and not public.are_blocked(auth.uid(), p.id)
       and not private.is_suspended(p.id)
+      -- The same lane rules as the browse itself: a person who turned this
+      -- lane off, or whose audience excludes the caller, is not placed either.
+      and exists (select 1 from private.discovery_pair(auth.uid(), p.id, p_self))
   )
   select
     b.id,
@@ -195,20 +199,20 @@ as $$
   limit 400;
 $$;
 
-revoke all on function private.list_people_distance_bands() from public, anon;
-grant execute on function private.list_people_distance_bands()
+revoke all on function private.list_people_distance_bands(text) from public, anon;
+grant execute on function private.list_people_distance_bands(text)
   to authenticated, service_role;
 
-create or replace function public.list_people_distance_bands()
+create or replace function public.list_people_distance_bands(p_self text default 'friends')
 returns table (person_id uuid, distance_band text)
 language sql
 stable
 security invoker
 set search_path = ''
-as $$ select * from private.list_people_distance_bands() $$;
+as $$ select * from private.list_people_distance_bands(p_self) $$;
 
-revoke all on function public.list_people_distance_bands() from public, anon;
-grant execute on function public.list_people_distance_bands() to authenticated;
+revoke all on function public.list_people_distance_bands(text) from public, anon;
+grant execute on function public.list_people_distance_bands(text) to authenticated;
 
 -- A request to join a stranger's plan must respect blocks and suspensions the
 -- way every other reach-out does. `request_to_join` checked only that the plan

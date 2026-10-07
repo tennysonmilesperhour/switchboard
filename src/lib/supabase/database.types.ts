@@ -4272,7 +4272,7 @@ export type Database = {
         }[]
       }
       list_people_distance_bands: {
-        Args: never
+        Args: { p_self?: string }
         Returns: {
           distance_band: string
           person_id: string

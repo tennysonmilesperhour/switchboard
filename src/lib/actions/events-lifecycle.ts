@@ -29,6 +29,7 @@ import { capacityProblem } from '@/lib/plan-capacity';
 import { normalizeNewQuestions, planExtrasProblem } from '@/lib/plan-extras';
 import { sameInstant } from '@/lib/plan-time';
 import { BROADCAST_NEEDS_HOME_AREA } from '@/lib/nearby-plans';
+import { callerHasHomeArea, hostHasHomeArea } from '@/lib/server/host-home-area';
 import {
   createEventError,
   deliveryWarning,
@@ -77,7 +78,7 @@ export async function createEvent(
   const capacityError = capacityProblem(input.capacity);
   if (capacityError) return createEventError(capacityError);
   const broadcastNearby = Boolean(input.broadcastNearby && input.openTable && input.capacity);
-  if (broadcastNearby && !(await hostHasHomeArea(supabase, user.id))) {
+  if (broadcastNearby && !(await callerHasHomeArea(supabase))) {
     return createEventError(BROADCAST_NEEDS_HOME_AREA);
   }
   if (input.enablePoll) {
@@ -783,19 +784,3 @@ export async function startInviting(eventId: string): Promise<ActionResult> {
   revalidatePath(`/events/${eventId}`);
   return { ok: true };
 }
-/**
- * Whether the host has a home point to measure range from. A broadcast with
- * none would reach no one and never say why, so it is refused up front.
- */
-async function hostHasHomeArea(
-  client: { from: ReturnType<typeof createAdminClient>['from'] },
-  hostId: string,
-): Promise<boolean> {
-  const { data } = await client
-    .from('profiles')
-    .select('home_latitude, home_longitude')
-    .eq('id', hostId)
-    .maybeSingle();
-  return data?.home_latitude != null && data?.home_longitude != null;
-}
-
