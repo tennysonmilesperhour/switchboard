@@ -58,7 +58,7 @@ select is(
   'area', 'same grid cell reads as area');
 select is(
   (select distance_band from public.list_nearby_plans(100) where title = 'Far broadcast'),
-  'nearby', 'the next cell over reads as nearby');
+  'wider', 'half a degree away (about 55 km) reads as wider');
 select is(
   (select count(*)::int from public.list_nearby_plans(100) where title = 'Near private'),
   0, 'a plan that is not broadcast never appears');
