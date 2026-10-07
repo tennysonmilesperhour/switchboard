@@ -1,4 +1,4 @@
--- pgTAP coverage for 20261007120000_verified_facts_selves_mood.sql.
+-- pgTAP coverage for 20261008130000_verified_facts_selves_mood.sql.
 --
 -- Verified facts: the trust tier is not writable by its owner, and vouching
 -- needs a connection who is email-verified for the same org. Lanes: a pair

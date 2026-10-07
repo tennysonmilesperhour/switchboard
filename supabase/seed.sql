@@ -51,7 +51,7 @@ revoke insert, update, delete on public.moderation_actions from anon, authentica
 
 -- Verified profile facts carry a trust tier (claimed / email / vouched) that is
 -- authority-like state: it is written only by server actions holding the service
--- role and by the vouch definer functions (20261007120000). Vouches and the
+-- role and by the vouch definer functions (20261008130000). Vouches and the
 -- mailed-link requests are written only by those paths too. RLS already denies
 -- the writes, but a denied UPDATE matches zero rows in silence, so keep the
 -- refusal loud here as in production.

@@ -1055,4 +1055,82 @@ test.describe('people and places', () => {
       await yaraSide.context.close();
     }
   });
+  // Find each other: exact location between two people who matched. Two phones
+  // about 80 m apart in their match room. The other person's point appears
+  // only once both share, it is exact (not the map's 110 m cell), a move
+  // reaches the other phone without a reload, and Stop takes it away.
+  test('two people who matched share exact locations and see how far and which way', async ({
+    browser,
+  }) => {
+    test.setTimeout(120_000);
+    const ana = await person('Ana');
+    const bo = await person('Bo');
+    const admin = adminClient();
+    const { data: room, error } = await admin
+      .from('rooms')
+      .insert({ kind: 'match', title: `${firstName(ana)} + ${firstName(bo)}`, created_by: ana.id })
+      .select('id')
+      .single();
+    expect(error, error?.message).toBeNull();
+    const { error: memberError } = await admin.from('room_members').insert([
+      { room_id: room!.id, member_id: ana.id },
+      { room_id: room!.id, member_id: bo.id },
+    ]);
+    expect(memberError, memberError?.message).toBeNull();
+
+    const lat = 39.7392;
+    const lng = -104.9903;
+    const anaSide = await signedIn(browser, ana, {
+      geolocation: { latitude: lat, longitude: lng, accuracy: 5 },
+      permissions: ['geolocation'],
+    });
+    // About 80 m north of Ana.
+    const boSide = await signedIn(browser, bo, {
+      geolocation: { latitude: lat + 0.00072, longitude: lng, accuracy: 5 },
+      permissions: ['geolocation'],
+    });
+    try {
+      const a = anaSide.page;
+      const b = boSide.page;
+      await a.goto(`/rooms/${room!.id}`);
+      await b.goto(`/rooms/${room!.id}`);
+
+      await a.getByRole('button', { name: /Find each other/ }).click();
+      await a.getByRole('button', { name: 'Share my exact location' }).click();
+      await expect(a.getByText(`Waiting for ${firstName(bo)}`, { exact: false })).toBeVisible();
+
+      // Bo is told in the chat, and sees nothing of Ana until he shares.
+      await expect(b.getByText('I’m sharing my exact location for the next hour')).toBeVisible({
+        timeout: 20_000,
+      });
+      await b.getByRole('button', { name: /Find each other/ }).click();
+      await expect(b.getByRole('link', { name: /Walk to/ })).toHaveCount(0);
+      await b.getByRole('button', { name: 'Share my exact location' }).click();
+
+      await expect(b.getByText(`${ana.name} is about 80 m south of you.`)).toBeVisible({
+        timeout: 15_000,
+      });
+      await expect(a.getByText(`${bo.name} is about 80 m north of you.`)).toBeVisible({
+        timeout: 15_000,
+      });
+      const walk = b.getByRole('link', { name: `Walk to ${ana.name}` });
+      await expect(walk).toHaveAttribute('href', /39\.739200,-104\.990300/);
+      await shot(b, 'find-each-other');
+
+      // Ana walks ~40 m toward Bo; his phone follows without a reload.
+      await anaSide.context.setGeolocation({ latitude: lat + 0.00036, longitude: lng, accuracy: 5 });
+      await expect(b.getByText(`${ana.name} is about 40 m south of you.`)).toBeVisible({
+        timeout: 20_000,
+      });
+
+      await a.getByRole('button', { name: 'Stop sharing' }).click();
+      await expectToast(a, 'Stopped sharing your exact location.');
+      await expect(b.getByText(`Waiting for ${firstName(ana)}`, { exact: false })).toBeVisible({
+        timeout: 15_000,
+      });
+    } finally {
+      await anaSide.context.close();
+      await boSide.context.close();
+    }
+  });
 });

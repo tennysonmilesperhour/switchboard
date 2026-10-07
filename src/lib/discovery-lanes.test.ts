@@ -21,7 +21,7 @@ import {
 } from './discovery-lanes';
 
 const MIGRATION = readFileSync(
-  join(process.cwd(), 'supabase/migrations/20261007120000_verified_facts_selves_mood.sql'),
+  join(process.cwd(), 'supabase/migrations/20261008130000_verified_facts_selves_mood.sql'),
   'utf8',
 );
 

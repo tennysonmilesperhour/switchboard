@@ -3071,6 +3071,51 @@ export type Database = {
           },
         ]
       }
+      room_exact_locations: {
+        Row: {
+          accuracy_m: number | null
+          expires_at: string
+          latitude: number
+          longitude: number
+          room_id: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          accuracy_m?: number | null
+          expires_at: string
+          latitude: number
+          longitude: number
+          room_id: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          accuracy_m?: number | null
+          expires_at?: string
+          latitude?: number
+          longitude?: number
+          room_id?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "room_exact_locations_room_id_fkey"
+            columns: ["room_id"]
+            isOneToOne: false
+            referencedRelation: "rooms"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "room_exact_locations_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       room_items: {
         Row: {
           created_at: string
@@ -3965,6 +4010,18 @@ export type Database = {
           status: string
         }[]
       }
+      exact_locations_in_room: {
+        Args: { p_room: string }
+        Returns: {
+          accuracy_m: number
+          expires_at: string
+          is_me: boolean
+          latitude: number
+          longitude: number
+          updated_at: string
+          user_id: string
+        }[]
+      }
       facet_live: { Args: { p_key: string; p_user: string }; Returns: boolean }
       find_nearby_people: {
         Args: { p_radius_m?: number }
@@ -4391,6 +4448,16 @@ export type Database = {
         Returns: undefined
       }
       settle_up: { Args: { p_other: string; p_room: string }; Returns: number }
+      share_exact_location: {
+        Args: {
+          p_accuracy_m?: number
+          p_latitude: number
+          p_longitude: number
+          p_restart?: boolean
+          p_room: string
+        }
+        Returns: string
+      }
       shared_facets_of: {
         Args: { p_target: string }
         Returns: {
@@ -4405,6 +4472,7 @@ export type Database = {
         Args: { p_due_on: string; p_ritual: string }
         Returns: string
       }
+      stop_exact_location: { Args: { p_room: string }; Returns: undefined }
       sweep_retention: {
         Args: { p_now?: string }
         Returns: {

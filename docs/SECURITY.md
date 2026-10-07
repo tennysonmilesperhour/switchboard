@@ -872,6 +872,37 @@ Litmus test: *can a caller who is not sharing — or is blocked, or outside the
 target's visibility scope — learn another user's location, or make the database
 retain a precise coordinate?*
 
+### Exact location between matched people ("Find each other")
+
+`room_exact_locations` (`20261008120000_exact_location_in_match_rooms.sql`) is
+the one place the app keeps an **exact** coordinate, on purpose: two people who
+chose each other need to find each other in person. It is fenced harder than the
+map, not softer:
+
+- **No table access.** RLS is on with no policies; every read and write goes
+  through `share_exact_location`, `stop_exact_location` and
+  `exact_locations_in_room`, definer functions that re-check the whole rule on
+  every call. The write time is stamped by the function, and only `p_restart`
+  (the person tapping Share) sets a new 60-minute expiry, so no client can make
+  a point last longer or look fresher than it is.
+- **Only between two people who matched.** Two-person rooms (`match`,
+  `moment`) only, both still members. A plan's group room never offers it.
+- **See and be seen.** The other member's point is returned only while the
+  caller's own share is live.
+- **Every exit closes it.** A block (`room_closed_by_block`), suspension or
+  sabbatical refuses both sharing and reading; a block also deletes both
+  people's points in every room they share, so an unblock inside the hour
+  cannot bring them back; Stop, leaving the room, a sabbatical starting, and
+  an unmatch (room cascade) delete the caller's point;
+  a point silent for 15 minutes is not returned; expired rows are deleted by the
+  next share and by the retention cron.
+- One refusal sentence for every reason, so a blocked person is never told
+  they were blocked.
+
+Litmus test: *can anyone other than the one person you matched with, while you
+are sharing with them, learn your exact position, or keep learning it after you
+stopped, left, or blocked them?*
+
 ## Home density (a boolean, and only a boolean)
 
 The Around pillar appears only when a viewer's city has an anchored zone they
@@ -966,7 +997,7 @@ browser identify the person behind a candidate moment?*
 
 People discovery is now three lanes (friends, dating, networking), each with a
 bar, audiences and weights, plus a temporary mood that raises or lowers the bar
-(`20261007120000_verified_facts_selves_mood.sql`). Most of what a person sets
+(`20261008130000_verified_facts_selves_mood.sql`). Most of what a person sets
 here is something a stranger would love to read back, so the invariants are
 about what an observer can learn:
 

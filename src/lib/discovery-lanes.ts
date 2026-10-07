@@ -8,7 +8,7 @@
  * suggestions the app offers from a person's own history.
  *
  * Keep the numbers here in step with the migration
- * (`20261007120000_verified_facts_selves_mood.sql`): the tier cut-offs in
+ * (`20261008130000_verified_facts_selves_mood.sql`): the tier cut-offs in
  * `weightTier`, the 72 hour mood cap, and the `(dating)` / `(networking)`
  * activity suffixes. `discovery-lanes.test.ts` reads the migration to prove it.
  */
