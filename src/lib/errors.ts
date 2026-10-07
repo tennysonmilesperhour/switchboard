@@ -914,6 +914,32 @@ const REGISTRY = {
     fix: 'Reload the page. Nothing about your discoverability changed.',
     actor: 'reader',
   },
+  // Verified facts (school, work) and the discovery lanes that use them.
+  'SB-FACT-SAVE': {
+    message: 'That detail didn’t save.',
+    fix: 'Try again.',
+    actor: 'reader',
+  },
+  'SB-FACT-VERIFY': {
+    message: 'Switchboard couldn’t start verifying that detail.',
+    fix: 'Check the address, then try again in a few minutes.',
+    actor: 'reader',
+  },
+  'SB-FACT-CHECK': {
+    message: 'Switchboard couldn’t confirm that verification link.',
+    fix: 'Request a new link from your profile and open it within 30 minutes.',
+    actor: 'reader',
+  },
+  'SB-DISCOVERY-SAVE': {
+    message: 'Your discovery settings didn’t save.',
+    fix: 'Try again. Nothing about who can see you changed.',
+    actor: 'reader',
+  },
+  'SB-DISCOVERY-LOAD': {
+    message: 'Switchboard couldn’t load your discovery settings just now.',
+    fix: 'Reload the page. Nothing about who can see you changed.',
+    actor: 'reader',
+  },
 
   // Nearby plans failing to load must not read as "No open plans in range".
   'SB-PLANS-LOAD': {
@@ -1236,6 +1262,12 @@ const AREA_CODES: Record<string, ErrorCode> = {
   'discover.people': 'SB-PEOPLE-LOAD',
   'discover.people-bands': 'SB-PEOPLE-LOAD',
   'discover.nearby-plans': 'SB-PLANS-LOAD',
+  'fact.save': 'SB-FACT-SAVE',
+  'fact.verify-start': 'SB-FACT-VERIFY',
+  'fact.verify-check': 'SB-FACT-CHECK',
+  'fact.vouch': 'SB-FACT-SAVE',
+  'discovery-prefs.save': 'SB-DISCOVERY-SAVE',
+  'discovery-prefs.load': 'SB-DISCOVERY-LOAD',
   'discover.join-requests': 'SB-INVITE-LOAD',
   'energy.save': 'SB-ENERGY-SAVE',
   'event-thread.send': 'SB-THREAD-SAVE',
@@ -1253,6 +1285,9 @@ const AREA_CODES: Record<string, ErrorCode> = {
   'location.stop': 'SB-LOCATION-SAVE',
   'location.load': 'SB-LOCATION-LOAD',
   'location.refresh': 'SB-LOCATION-SAVE',
+  'exact.share': 'SB-LOCATION-SAVE',
+  'exact.stop': 'SB-LOCATION-SAVE',
+  'exact.load': 'SB-LOCATION-LOAD',
   'map.search': 'SB-MAP-LOOKUP',
   'map.reverse': 'SB-MAP-LOOKUP',
   'map.locate': 'SB-MAP-LOOKUP',

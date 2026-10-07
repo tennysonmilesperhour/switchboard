@@ -5,6 +5,8 @@ import { AppShell } from '@/components/shell/AppShell';
 import { DiscoverClient } from './DiscoverClient';
 import { ExploreClient, type ExplorePlan, type ExploreMode } from './ExploreClient';
 import type { DiscoveryMatch } from './types';
+import { toDiscoveryPerson } from '@/lib/discovery-people';
+import { isSelf, laneOfActivity, moodIsActive, type Self } from '@/lib/discovery-lanes';
 import type { PendingJoinRequest } from '@/components/events/OpenTables';
 import { VenuePerks } from '@/components/venues/VenuePerks';
 import { isDistanceBand, type DistanceBand } from '@/lib/nearby-plans';
@@ -23,12 +25,14 @@ const MAX_FOCUS_LENGTH = 60;
 export default async function DiscoverPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string | string[]; mode?: string | string[] }>;
+  searchParams: Promise<{ q?: string | string[]; mode?: string | string[]; lane?: string | string[] }>;
 }) {
   // `?q=<interest>` is how the You page's "still waiting for a first outing"
   // tags arrive: it seeds the idea generator with that one interest. Untrusted,
   // so it is trimmed, capped, and only ever rendered as text.
-  const { q, mode: modeParam } = await searchParams;
+  const { q, mode: modeParam, lane } = await searchParams;
+  const laneParam = Array.isArray(lane) ? lane[0] : lane;
+  const self: Self = isSelf(laneParam) ? laneParam : 'friends';
   // `?mode=people` opens the People side; anything else is Plans, the side
   // Explore is named for.
   const initialMode: ExploreMode =
@@ -63,6 +67,8 @@ export default async function DiscoverPage({
     { data: discoveryMatches },
     { data: myInterests },
     myRequestsResult,
+    { data: moodRow },
+    { data: laneRow },
   ] =
     await Promise.all([
       supabase.rpc('list_open_tables'),
@@ -88,7 +94,7 @@ export default async function DiscoverPage({
         .select('id, name, area, perk, url, status, review_note, reviewed_at')
         .eq('claimed_by', user.id)
         .order('created_at', { ascending: false }),
-      supabase.rpc('list_discoverable_people', { p_category: 'all' }),
+      supabase.rpc('list_discovery_candidates', { p_self: self }),
       supabase
         .from('matches')
         .select('id, user_a, user_b, activity, room_id, created_at')
@@ -114,6 +120,20 @@ export default async function DiscoverPage({
         .eq('status', 'requested')
         .order('created_at', { ascending: false })
         .limit(10),
+      // Own mood and own lane settings, so the page can say why it looks the
+      // way it does. Both are owner-only under RLS.
+      supabase
+        .from('discovery_mood')
+        .select('preset, bar_shift, only_selves, include_items, expires_at')
+        .eq('user_id', user.id)
+        .gt('expires_at', new Date().toISOString())
+        .maybeSingle(),
+      supabase
+        .from('discovery_selves')
+        .select('enabled')
+        .eq('user_id', user.id)
+        .eq('self', self)
+        .maybeSingle(),
     ]);
 
   // A failed lookup must not read as an empty room ("No one in this lane
@@ -194,7 +214,7 @@ export default async function DiscoverPage({
   const venues = venuesResult.data;
   const interestByTarget = Object.fromEntries(
     (myInterests ?? [])
-      .filter((intent) => intent.target_id)
+      .filter((intent) => intent.target_id && laneOfActivity(intent.activity) === self)
       .map((intent) => [intent.target_id as string, { id: intent.id, activity: intent.activity }]),
   );
 
@@ -228,7 +248,12 @@ export default async function DiscoverPage({
         plansError={plansError}
         requests={myRequests}
         requestsError={requestsError}
-        people={people ?? []}
+        people={(people ?? []).map(toDiscoveryPerson)}
+        self={self}
+        // No row means the friends lane follows the discoverable switch and the
+        // others are off, exactly as the database reads it.
+        laneOn={laneRow ? laneRow.enabled : self === 'friends' && Boolean(profile?.discoverable)}
+        mood={moodRow && moodIsActive(moodRow) ? moodRow : null}
         bands={bands}
         matches={matches}
         discoverable={Boolean(profile?.discoverable)}

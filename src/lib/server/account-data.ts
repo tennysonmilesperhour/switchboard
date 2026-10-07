@@ -231,6 +231,18 @@ export interface MyDataExport {
     plans: unknown[];
   };
   signals: unknown[];
+  /**
+   * Discovery: the places listed on the profile (with how far each was
+   * verified), the three lanes, the ratings, any mood in effect, and the private
+   * tap history. All of it is owner-only data; none of it is anyone else's.
+   */
+  discovery: {
+    facts: unknown[];
+    lanes: unknown[];
+    weights: unknown[];
+    mood: unknown | null;
+    taps: unknown[];
+  };
 }
 
 interface RsvpExportRow extends Record<string, unknown> {
@@ -275,7 +287,19 @@ export async function buildMyDataExport(
   user: User,
   exportedAt = new Date().toISOString(),
 ): Promise<MyDataExport> {
-  const [profileResult, plansResult, rsvpsResult, roomMessagesResult, planMessagesResult, signalsResult] =
+  const [
+    profileResult,
+    plansResult,
+    rsvpsResult,
+    roomMessagesResult,
+    planMessagesResult,
+    signalsResult,
+    factsResult,
+    lanesResult,
+    weightsResult,
+    moodResult,
+    tapsResult,
+  ] =
     await Promise.all([
       admin.from('profiles').select(columns(PROFILE_COLUMNS)).eq('id', user.id).single(),
       admin
@@ -306,6 +330,19 @@ export async function buildMyDataExport(
         .select('id, emoji, label, circle_ids, expires_at, created_at')
         .eq('user_id', user.id)
         .order('created_at', { ascending: true }),
+      admin
+        .from('profile_facts')
+        .select('id, kind, label, tier, verified_at, shown, created_at')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: true }),
+      admin.from('discovery_selves').select('*').eq('user_id', user.id),
+      admin.from('discovery_weights').select('self, item, weight').eq('user_id', user.id),
+      admin.from('discovery_mood').select('*').eq('user_id', user.id).maybeSingle(),
+      admin
+        .from('discovery_signals')
+        .select('target_id, self, kind, items, created_at')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: true }),
     ]);
 
   const firstFailure = [
@@ -315,6 +352,11 @@ export async function buildMyDataExport(
     ['room messages', roomMessagesResult.error],
     ['plan messages', planMessagesResult.error],
     ['signals', signalsResult.error],
+    ['profile places', factsResult.error],
+    ['discovery lanes', lanesResult.error],
+    ['discovery ratings', weightsResult.error],
+    ['discovery mood', moodResult.error],
+    ['discovery taps', tapsResult.error],
   ].find(([, error]) => Boolean(error));
   if (firstFailure) throw queryFailure(String(firstFailure[0]), firstFailure[1]);
 
@@ -385,6 +427,13 @@ export async function buildMyDataExport(
       plans: planMessagesResult.data ?? [],
     },
     signals: signalsResult.data ?? [],
+    discovery: {
+      facts: factsResult.data ?? [],
+      lanes: lanesResult.data ?? [],
+      weights: weightsResult.data ?? [],
+      mood: moodResult.data ?? null,
+      taps: tapsResult.data ?? [],
+    },
   };
 }
 

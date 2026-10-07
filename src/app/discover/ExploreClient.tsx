@@ -12,7 +12,16 @@ import { ErrorNotice } from '@/components/ui/ErrorNotice';
 import { Switch } from '@/components/ui/Switch';
 import { SwipeDeck, type SwipeDirection } from '@/components/ui/SwipeDeck';
 import { useToast } from '@/components/ui/Toast';
-import { BlockReportButtons } from '@/components/profile/BlockReportButtons';
+import { recordDiscoverySignal } from '@/lib/actions/discovery-prefs';
+import {
+  SELVES,
+  SELF_INFO,
+  activityForLane,
+  describeMoodRemaining,
+  moodInfo,
+  stripLane,
+  type Self,
+} from '@/lib/discovery-lanes';
 import { requestToJoin } from '@/lib/actions/open-table';
 import { downToConnect, withdrawIntent } from '@/lib/actions/mutual';
 import { setDiscoverable } from '@/lib/actions/profile';
@@ -35,6 +44,7 @@ import type {
   DiscoveryMatch,
   DiscoveryPerson,
 } from './types';
+import { PersonCard, sharedKeys } from './PersonCard';
 
 export type ExploreMode = 'plans' | 'people';
 
@@ -77,6 +87,9 @@ export function ExploreClient({
   myContexts,
   peopleError,
   plansFooter,
+  self = 'friends',
+  laneOn = true,
+  mood = null,
 }: {
   initialMode: ExploreMode;
   initialRange: ExploreRange;
@@ -96,6 +109,12 @@ export function ExploreClient({
   peopleError: ErrorCode | null;
   /** Shown under the plan deck: the idea generator and partner perks. */
   plansFooter?: ReactNode;
+  /** The lane being browsed on the People side. */
+  self?: Self;
+  /** Whether the reader has that lane on. */
+  laneOn?: boolean;
+  /** The reader's own active mood, if any. */
+  mood?: { preset: string; expires_at: string } | null;
 }) {
   const [mode, setMode] = useState<ExploreMode>(initialMode);
   const [range, setRange] = useState<ExploreRange>(initialRange);
@@ -103,7 +122,7 @@ export function ExploreClient({
   function chooseMode(next: ExploreMode) {
     setMode(next);
     try {
-      window.history.replaceState(null, '', `?mode=${next}`);
+      window.history.replaceState(null, '', `?mode=${next}&lane=${self}`);
     } catch {
       // A URL that cannot be updated is only a missing deep link.
     }
@@ -163,6 +182,9 @@ export function ExploreClient({
           loadError={peopleError}
           range={range}
           hasHomePoint={hasHomePoint}
+          self={self}
+          laneOn={laneOn}
+          mood={mood}
         />
       )}
     </div>
@@ -384,6 +406,9 @@ function PeoplePane({
   loadError,
   range,
   hasHomePoint,
+  self,
+  laneOn,
+  mood,
 }: {
   people: DiscoveryPerson[];
   bands: Record<string, DistanceBand>;
@@ -394,6 +419,9 @@ function PeoplePane({
   loadError: ErrorCode | null;
   range: ExploreRange;
   hasHomePoint: boolean;
+  self: Self;
+  laneOn: boolean;
+  mood: { preset: string; expires_at: string } | null;
 }) {
   const [wanted, setWanted] = useState<string[]>([]);
   const [category, setCategory] = useState<string | null>(null);
@@ -431,14 +459,22 @@ function PeoplePane({
   );
 
   async function decide(person: DiscoveryPerson, direction: SwipeDirection): Promise<boolean> {
-    if (direction === 'left') return true;
+    if (direction === 'left') {
+      // A pass is private history: it keeps this person out of this lane for a
+      // month and feeds suggestions. They are never told.
+      void recordDiscoverySignal(person.id, self, 'passed', sharedKeys(person));
+      return true;
+    }
     const context =
       selectedContext[person.id] || discoveryContextChoice(person, myContexts).defaultContext;
-    const result = await downToConnect(person.id, context, 'discover_connect');
+    // The lane rides in the saved text, so a dating tap and a friends tap on the
+    // same context are different asks and cannot match each other.
+    const result = await downToConnect(person.id, activityForLane(self, context), 'discover_connect');
     if (!result.ok) {
       toast.error(result.error ?? 'Could not save that quietly.', result.code);
       return false;
     }
+    void recordDiscoverySignal(person.id, self, 'accepted', sharedKeys(person));
     if (result.matched) {
       setJustMatched(true);
       toast.success('It is mutual.');
@@ -477,6 +513,56 @@ function PeoplePane({
 
   return (
     <div className="space-y-5">
+      <nav aria-label="Lanes" className="flex gap-2 overflow-x-auto pb-1">
+        {SELVES.map((option) => (
+          <Link
+            key={option}
+            href={`/discover?mode=people&lane=${option}`}
+            aria-current={option === self ? 'page' : undefined}
+            className={`shrink-0 rounded-pill border px-4 py-2 text-sm font-semibold transition-colors ${
+              option === self
+                ? 'border-terracotta bg-terracotta text-white'
+                : 'border-line bg-card text-ink-soft hover:border-terracotta'
+            }`}
+          >
+            {SELF_INFO[option].label}
+          </Link>
+        ))}
+        <Link
+          href={`/discover/preferences?lane=${self}`}
+          className="shrink-0 self-center px-2 text-sm font-bold text-terracotta-deep"
+        >
+          Discovery settings
+        </Link>
+      </nav>
+
+      {mood ? (
+        <Link href={`/discover/preferences?lane=${self}`} className="block">
+          <Card tone="sage">
+            <p className="text-sm text-sage-deep">
+              <strong>{moodInfo(mood.preset)?.label ?? 'Custom mood'}</strong> ·{' '}
+              {describeMoodRemaining(mood.expires_at)}. Only people who clear your current bar
+              are shown. <span className="font-bold underline">Change</span>
+            </p>
+          </Card>
+        </Link>
+      ) : null}
+
+      {discoverable && !laneOn ? (
+        <Card tone="cream">
+          <p className="text-sm font-bold">
+            {SELF_INFO[self].label} is {mood ? 'resting or ' : ''}off.
+          </p>
+          <p className="mt-1 text-sm text-ink-soft">
+            {SELF_INFO[self].blurb} Turn it on in discovery settings to browse here and be found
+            here.
+          </p>
+          <Link href={`/discover/preferences?lane=${self}`} className="mt-3 inline-block">
+            <Button size="sm">Open discovery settings</Button>
+          </Link>
+        </Card>
+      ) : null}
+
       <Link href="/people" className="group block">
         <Card className="transition-colors group-hover:border-terracotta">
           <div className="flex items-center gap-3">
@@ -561,7 +647,7 @@ function PeoplePane({
         </div>
       )}
 
-      {discoverable && (
+      {discoverable && laneOn && (
         <>
           <div className="space-y-2">
             <p className="text-plate text-plate-inset text-xs font-bold uppercase tracking-wide text-ink-soft">
@@ -620,7 +706,7 @@ function PeoplePane({
                   return (
                     <li key={person.id} className="flex items-center gap-3 text-sm">
                       <span className="min-w-0 flex-1 truncate">
-                        <strong>{person.display_name}</strong> · {interest.activity}
+                        <strong>{person.display_name}</strong> · {stripLane(interest.activity)}
                       </span>
                       <Button
                         type="button"
@@ -684,92 +770,5 @@ function PeoplePane({
         </>
       )}
     </div>
-  );
-}
-
-function PersonCard({
-  person,
-  band,
-  myContexts,
-  chosen,
-  onChoose,
-}: {
-  person: DiscoveryPerson;
-  band: DistanceBand | null;
-  myContexts: string[];
-  chosen: string | undefined;
-  onChoose: (context: string) => void;
-}) {
-  const { options, defaultContext } = discoveryContextChoice(person, myContexts);
-  const profileHref = `/u/${encodeURIComponent(person.handle)}?from=/discover`;
-  const shared = [...person.shared_interests, ...person.shared_down_to].slice(0, 4);
-  return (
-    <Card lifted className="space-y-3">
-      <div className="flex items-start gap-3">
-        <Avatar name={person.display_name} seed={person.id} src={person.avatar_url} size="lg" />
-        <div className="min-w-0 flex-1">
-          <Link
-            href={profileHref}
-            className="block truncate font-display text-xl hover:text-terracotta-deep"
-          >
-            {person.display_name}
-          </Link>
-          <p className="truncate text-xs text-ink-faint">
-            @{person.handle}
-            {person.location ? ` · ${person.location}` : ''}
-            {person.pronouns ? ` · ${person.pronouns}` : ''}
-          </p>
-        </div>
-        {person.mutual_friend_count > 0 && (
-          <span className="shrink-0 rounded-pill bg-cream px-2 py-1 text-xs font-bold text-ink-soft">
-            {person.mutual_friend_count} mutual
-          </span>
-        )}
-      </div>
-      {person.tagline && (
-        <p className="text-sm leading-relaxed text-ink-soft">{person.tagline}</p>
-      )}
-      <div className="flex flex-wrap gap-1.5">
-        {band && (
-          <span className="rounded-pill bg-cream px-2 py-1 text-xs text-ink-soft">
-            {BAND_LABEL[band]}
-          </span>
-        )}
-        {person.categories
-          .filter((category) => category !== 'geography')
-          .map((category) => (
-            <span key={category} className="rounded-pill bg-cream px-2 py-1 text-xs text-ink-soft">
-              {category}
-            </span>
-          ))}
-      </div>
-      {shared.length > 0 && (
-        <p className="text-xs text-ink-faint">Shared: {shared.join(', ')}</p>
-      )}
-      <div className="space-y-1">
-        <label className="text-xs font-bold text-ink-soft" htmlFor={`ctx-${person.id}`}>
-          Connect over
-        </label>
-        <select
-          id={`ctx-${person.id}`}
-          value={chosen || defaultContext}
-          onChange={(event) => onChoose(event.target.value)}
-          className="w-full rounded-card border border-line bg-paper px-3 py-2 text-sm outline-none focus:border-terracotta"
-        >
-          {options.length > 0 ? (
-            options.map((context) => (
-              <option key={context} value={context}>
-                {context}
-              </option>
-            ))
-          ) : (
-            <option value="Connect">Connect</option>
-          )}
-        </select>
-      </div>
-      <div className="border-t border-line pt-1.5">
-        <BlockReportButtons targetId={person.id} name={person.display_name} />
-      </div>
-    </Card>
   );
 }

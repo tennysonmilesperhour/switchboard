@@ -273,7 +273,7 @@ test.describe('safety and moderation', () => {
     await expect(r.page.getByRole('heading', { name: roomTitle })).toBeVisible();
     await expect(r.page.getByText(rude)).toHaveCount(0);
     await r.page.goto(boardUrl);
-    await expect(r.page.getByRole('heading', { name: `🏘️ ${boardName}` })).toBeVisible();
+    await expect(r.page.getByRole('heading', { name: boardName, level: 1 })).toBeVisible();
     await expect(r.page.getByText(post)).toHaveCount(0);
 
     // Marking the report actioned takes it out of the queue.
@@ -521,7 +521,7 @@ test.describe('safety and moderation', () => {
     const title = unique('Quiet dinner ');
     await sendPlan(h.page, title, async (page) => {
       const pick = page.getByRole('button', { name: new RegExp(resting.name) });
-      await expect(pick).toContainText('🍃 On sabbatical');
+      await expect(pick).toContainText('On sabbatical');
       await pick.click();
       await expect(page.getByText(`${resting.name} is on sabbatical`)).toBeVisible();
       await expect(page.getByText(`“${note}”`)).toBeVisible();

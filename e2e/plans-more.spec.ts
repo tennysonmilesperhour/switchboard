@@ -177,7 +177,7 @@ test.describe('plans, more', () => {
     // The guest says yes: it is held, and they are asked for a guardian.
     await asPerson(browser, guest.handle, async (page) => {
       await page.goto(eventUrl);
-      await page.getByRole('button', { name: 'I’m in ✓' }).click();
+      await page.getByRole('button', { name: 'I’m in', exact: true }).click();
       await expect(page.getByText('One more step - a guardian needs to approve')).toBeVisible();
       expect((await inviteOf(eventId, guest.id)).status).toBe('pending_approval');
       await page.getByLabel('Guardian’s email').fill(guardianEmail);
@@ -201,7 +201,7 @@ test.describe('plans, more', () => {
     const friendGuardian = `${unique('parent')}@example.com`;
     await asPerson(browser, friend.handle, async (page) => {
       await page.goto(eventUrl);
-      await page.getByRole('button', { name: 'I’m in ✓' }).click();
+      await page.getByRole('button', { name: 'I’m in', exact: true }).click();
       await page.getByLabel('Guardian’s email').fill(friendGuardian);
       await page.getByRole('button', { name: 'Send approval request' }).click();
       await expect(page.getByText(/We emailed/)).toBeVisible();
@@ -272,7 +272,7 @@ test.describe('plans, more', () => {
         await expect(page.getByText('2 people selected')).toBeVisible();
       },
       Invites: async (page) => {
-        await page.getByText('Let the group decide what to do 🗳️').click();
+        await page.getByText('Let the group decide what to do').click();
       },
     });
     const eventId = eventIdOf(eventUrl);
@@ -339,7 +339,7 @@ test.describe('plans, more', () => {
 
     await hostPage.reload();
     await expect(hostPage.getByText('Time TBD')).toHaveCount(0);
-    const send = hostPage.getByRole('button', { name: 'Send the invitations 🪜' });
+    const send = hostPage.getByRole('button', { name: 'Send the invitations', exact: true });
     await expect(send).toBeEnabled();
     await send.click();
     await expect
@@ -363,7 +363,7 @@ test.describe('plans, more', () => {
         await pickFriend(wizard, guest.name);
       },
       Invites: async (wizard) => {
-        await wizard.getByText('Let the group decide what to do 🗳️').click();
+        await wizard.getByText('Let the group decide what to do').click();
         await wizard.locator('#voteDeadline').fill(localDateTime(2));
       },
     });
@@ -380,14 +380,14 @@ test.describe('plans, more', () => {
     // Not a dead end: the host is told the plan needs a date, and sets one.
     await page.goto(eventUrl);
     await expect(page.getByText('The group has decided, but the plan has no date yet.')).toBeVisible();
-    await page.getByRole('link', { name: 'Set the date 📅' }).click();
+    await page.getByRole('link', { name: 'Set the date', exact: true }).click();
     await page.waitForURL(/\/edit(#startsAt)?$/);
     await page.locator('#startsAt').fill(localDateTime(3));
     await page.getByRole('button', { name: 'Save changes' }).click();
     await page.waitForURL(/\/events\/[0-9a-f-]{36}$/);
     await expect.poll(async () => (await eventRow(eventId)).starts_at).toBeTruthy();
 
-    const send = page.getByRole('button', { name: 'Send the invitations 🪜' });
+    const send = page.getByRole('button', { name: 'Send the invitations', exact: true });
     await expect(send).toBeEnabled();
     await send.click();
     await expect.poll(async () => (await eventRow(eventId)).status).toBe('inviting');
@@ -464,7 +464,7 @@ test.describe('plans, more', () => {
 
     await asPerson(browser, guest.handle, async (page) => {
       await page.goto(eventUrl);
-      await page.getByRole('button', { name: 'I’m in ✓' }).click();
+      await page.getByRole('button', { name: 'I’m in', exact: true }).click();
       await expect.poll(async () => (await inviteOf(eventId, guest.id)).status).toBe('accepted');
     });
 
@@ -560,12 +560,12 @@ test.describe('plans, more', () => {
     await asPerson(browser, friend.handle, async (page) => {
       await page.goto(eventUrl);
       await page.getByRole('button', { name: 'Can’t make it' }).click();
-      await page.getByRole('button', { name: 'Can’t this time - keep asking! 💛' }).click();
+      await page.getByRole('button', { name: 'Can’t this time - keep asking!', exact: true }).click();
       await expect(page.getByText('You said you can’t make it')).toBeVisible();
       await expect.poll(async () => (await inviteOf(eventId, friend.id)).status).toBe('declined');
       await page.getByRole('button', { name: 'Actually, I can come' }).click();
-      await page.getByRole('button', { name: 'I’m in ✓' }).click();
-      await expect(page.getByText('You’re in ✓')).toBeVisible();
+      await page.getByRole('button', { name: 'I’m in', exact: true }).click();
+      await expect(page.getByText('You’re in', { exact: true })).toBeVisible();
     });
     expect((await inviteOf(eventId, friend.id)).status).toBe('accepted');
     await hostContext.close();
@@ -646,13 +646,13 @@ test.describe('plans, more', () => {
 
     await asPerson(browser, guest.handle, async (page) => {
       await page.goto(eventUrl);
-      await page.getByRole('button', { name: 'I’m in ✓' }).click();
-      await expect(page.getByText('You’re in ✓')).toBeVisible();
+      await page.getByRole('button', { name: 'I’m in', exact: true }).click();
+      await expect(page.getByText('You’re in', { exact: true })).toBeVisible();
     });
     await asPerson(browser, friend.handle, async (page) => {
       await page.goto(eventUrl);
       await page.getByRole('button', { name: 'Can’t make it' }).click();
-      await page.getByRole('button', { name: 'Can’t this time - keep asking! 💛' }).click();
+      await page.getByRole('button', { name: 'Can’t this time - keep asking!', exact: true }).click();
       await expect(page.getByText('You said you can’t make it')).toBeVisible();
     });
 
@@ -715,10 +715,10 @@ test.describe('plans, more', () => {
 
     // Run it back: a new plan with the same crew, deciding its date.
     await hostPage.goto(eventUrl);
-    await hostPage.getByRole('button', { name: '🔁 Run it back' }).click();
+    await hostPage.getByRole('button', { name: 'Run it back', exact: true }).click();
     await hostPage.waitForURL((url) => /\/events\/[0-9a-f-]{36}$/.test(url.pathname) && !url.pathname.includes(eventId));
     const cloneId = eventIdOf(hostPage.url());
-    await expect(hostPage.getByText('🗳️ Group is deciding')).toBeVisible();
+    await expect(hostPage.getByText('Group is deciding', { exact: true })).toBeVisible();
     const clone = await eventRow(cloneId);
     expect(clone.status).toBe('deciding');
     expect(clone.starts_at).toBeNull();
@@ -756,7 +756,7 @@ test.describe('plans, more', () => {
       }).then(async (url) => {
         await asPerson(browser, guest.handle, async (guestPage) => {
           await guestPage.goto(url);
-          await guestPage.getByRole('button', { name: 'I’m in ✓' }).click();
+          await guestPage.getByRole('button', { name: 'I’m in', exact: true }).click();
           await guestPage.getByLabel('Guardian’s email').fill(guardianEmail);
           await guestPage.getByRole('button', { name: 'Send approval request' }).click();
           await expect(guestPage.getByText(/We emailed/)).toBeVisible();
