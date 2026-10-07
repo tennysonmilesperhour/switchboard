@@ -22,6 +22,7 @@ files are historical evidence, never a source of current product truth.
 | [`DOCKET.md`](DOCKET.md) | The living backlog: strategy, queued builds, design threads, and carried residuals. |
 | [`INNOVATIONS.md`](INNOVATIONS.md) | Unshipped ideas only; shipped features are removed. |
 | [`POSTHOG_SOURCEMAPS.md`](POSTHOG_SOURCEMAPS.md) | How to upload production source maps to PostHog and verify the result. |
+| [`SLC_EVENT_SOURCES.md`](SLC_EVENT_SOURCES.md) | Event ingestion coverage, source acceptance rules, and the expansion path for Salt Lake discovery. |
 | [`scope-of-work-verification.html`](scope-of-work-verification.html) | The client-facing verification checklist, served live at `/scope-verification`. Add a section per delivered round. |
 
 ## Archive

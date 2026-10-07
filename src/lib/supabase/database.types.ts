@@ -1033,6 +1033,134 @@ export type Database = {
           },
         ]
       }
+      event_sources: {
+        Row: {
+          city: string
+          created_at: string
+          enabled: boolean
+          format: string
+          id: string
+          last_error: string | null
+          last_started_at: string | null
+          last_succeeded_at: string | null
+          name: string
+          updated_at: string
+          url: string
+        }
+        Insert: {
+          city?: string
+          created_at?: string
+          enabled?: boolean
+          format?: string
+          id: string
+          last_error?: string | null
+          last_started_at?: string | null
+          last_succeeded_at?: string | null
+          name: string
+          updated_at?: string
+          url: string
+        }
+        Update: {
+          city?: string
+          created_at?: string
+          enabled?: boolean
+          format?: string
+          id?: string
+          last_error?: string | null
+          last_started_at?: string | null
+          last_succeeded_at?: string | null
+          name?: string
+          updated_at?: string
+          url?: string
+        }
+        Relationships: []
+      }
+      external_events: {
+        Row: {
+          address: string | null
+          cancelled_at: string | null
+          canonical_url: string
+          category: string | null
+          city: string
+          content_hash: string
+          dedupe_key: string
+          description: string | null
+          ends_at: string | null
+          first_seen_at: string
+          id: string
+          image_url: string | null
+          last_seen_at: string
+          price_label: string | null
+          raw: Json
+          source_event_id: string
+          source_id: string
+          starts_at: string
+          tags: string[]
+          ticket_url: string | null
+          time_zone: string
+          title: string
+          venue_name: string | null
+        }
+        Insert: {
+          address?: string | null
+          cancelled_at?: string | null
+          canonical_url: string
+          category?: string | null
+          city?: string
+          content_hash: string
+          dedupe_key: string
+          description?: string | null
+          ends_at?: string | null
+          first_seen_at?: string
+          id?: string
+          image_url?: string | null
+          last_seen_at?: string
+          price_label?: string | null
+          raw?: Json
+          source_event_id: string
+          source_id: string
+          starts_at: string
+          tags?: string[]
+          ticket_url?: string | null
+          time_zone?: string
+          title: string
+          venue_name?: string | null
+        }
+        Update: {
+          address?: string | null
+          cancelled_at?: string | null
+          canonical_url?: string
+          category?: string | null
+          city?: string
+          content_hash?: string
+          dedupe_key?: string
+          description?: string | null
+          ends_at?: string | null
+          first_seen_at?: string
+          id?: string
+          image_url?: string | null
+          last_seen_at?: string
+          price_label?: string | null
+          raw?: Json
+          source_event_id?: string
+          source_id?: string
+          starts_at?: string
+          tags?: string[]
+          ticket_url?: string | null
+          time_zone?: string
+          title?: string
+          venue_name?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "external_events_source_id_fkey"
+            columns: ["source_id"]
+            isOneToOne: false
+            referencedRelation: "event_sources"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       events: {
         Row: {
           cancel_reason: string | null
@@ -4673,4 +4801,3 @@ export const Constants = {
     Enums: {},
   },
 } as const
-
