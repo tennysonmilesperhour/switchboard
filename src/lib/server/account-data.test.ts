@@ -106,6 +106,7 @@ describe('data export serialization', () => {
       rsvps: [{ id: 'rsvp-1' }],
       messages: { rooms: [{ id: 'message-1' }], plans: [] },
       signals: [{ id: 'signal-1' }],
+      discovery: { facts: [], lanes: [], weights: [], mood: null, taps: [] },
     };
 
     const json = serializeMyDataExport(data);
