@@ -64,12 +64,12 @@ people 100–300 m apart may or may not match. Under ~80 m always should.
 
 Needs a match room first: either both tap Interested on each other in Discover
 (section 3), or both step through a Moment to "matched" (section 2). Either
-opens a chat for the two of you under Chats.
+opens a room for the two of you under More › Rooms.
 
 | Do | Expect |
 |---|---|
-| A: open the match chat › 📍 Find each other › Share my exact location, allow | "You're sharing. Waiting for B to share theirs." B gets a chat message saying A is sharing |
-| B: open the same chat › 📍 Find each other | No map and no pin for A yet (you only see theirs once you share) |
+| A: open the match room › 📍 Find each other › Share my exact location, allow | "You're sharing. Waiting for B to share theirs." B gets a message in the room saying A is sharing |
+| B: open the same room › 📍 Find each other | No map and no pin for A yet (you only see theirs once you share) |
 | B: Share my exact location | Within ~5 s each sees "A is about N m <direction> of you", a map with both pins, and "Walk to A" |
 | Stand 50 m apart, then walk toward each other | The distance shrinks within ~5–10 s, no reload |
 | Tap "Walk to …" | Apple Maps (iPhone) or Google Maps opens with walking directions to the other person |

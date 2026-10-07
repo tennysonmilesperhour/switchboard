@@ -16,7 +16,7 @@ export const EXACT_NOT_ALLOWED =
 
 /** The note posted in the room when someone turns it on, so the other person knows. */
 export const EXACT_STARTED_MESSAGE =
-  '📍 I’m sharing my exact location for the next hour so we can find each other. Tap “Find each other” at the top of this chat to share yours.';
+  '📍 I’m sharing my exact location for the next hour so we can find each other. Tap “Find each other” at the top of this room to share yours.';
 
 /** How long one share lasts. Mirrors the interval in 20261008120000. */
 export const EXACT_SHARE_MINUTES = 60;
