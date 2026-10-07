@@ -630,6 +630,165 @@ export type Database = {
           },
         ]
       }
+      discovery_mood: {
+        Row: {
+          bar_shift: number
+          expires_at: string
+          include_items: string[]
+          only_selves: string[]
+          preset: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          bar_shift?: number
+          expires_at: string
+          include_items?: string[]
+          only_selves?: string[]
+          preset?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          bar_shift?: number
+          expires_at?: string
+          include_items?: string[]
+          only_selves?: string[]
+          preset?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "discovery_mood_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: true
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      discovery_selves: {
+        Row: {
+          bar: number
+          blurb: string
+          enabled: boolean
+          identifies_as: string | null
+          interested_in: string[]
+          seeking: string
+          self: string
+          updated_at: string
+          user_id: string
+          visible_to: string
+        }
+        Insert: {
+          bar?: number
+          blurb?: string
+          enabled?: boolean
+          identifies_as?: string | null
+          interested_in?: string[]
+          seeking?: string
+          self: string
+          updated_at?: string
+          user_id: string
+          visible_to?: string
+        }
+        Update: {
+          bar?: number
+          blurb?: string
+          enabled?: boolean
+          identifies_as?: string | null
+          interested_in?: string[]
+          seeking?: string
+          self?: string
+          updated_at?: string
+          user_id?: string
+          visible_to?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "discovery_selves_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      discovery_signals: {
+        Row: {
+          created_at: string
+          id: string
+          items: string[]
+          kind: string
+          self: string
+          target_id: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          items?: string[]
+          kind: string
+          self: string
+          target_id: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          items?: string[]
+          kind?: string
+          self?: string
+          target_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "discovery_signals_target_id_fkey"
+            columns: ["target_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "discovery_signals_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      discovery_weights: {
+        Row: {
+          item: string
+          self: string
+          user_id: string
+          weight: number
+        }
+        Insert: {
+          item: string
+          self: string
+          user_id: string
+          weight: number
+        }
+        Update: {
+          item?: string
+          self?: string
+          user_id?: string
+          weight?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "discovery_weights_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       energy_logs: {
         Row: {
           created_at: string
@@ -1140,6 +1299,81 @@ export type Database = {
           {
             foreignKeyName: "facet_prefs_user_id_fkey"
             columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      fact_verification_requests: {
+        Row: {
+          created_at: string
+          domain: string
+          expires_at: string
+          fact_id: string
+          token_hash: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          domain: string
+          expires_at: string
+          fact_id: string
+          token_hash: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          domain?: string
+          expires_at?: string
+          fact_id?: string
+          token_hash?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "fact_verification_requests_fact_id_fkey"
+            columns: ["fact_id"]
+            isOneToOne: false
+            referencedRelation: "profile_facts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "fact_verification_requests_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      fact_vouches: {
+        Row: {
+          created_at: string
+          fact_id: string
+          voucher_id: string
+        }
+        Insert: {
+          created_at?: string
+          fact_id: string
+          voucher_id: string
+        }
+        Update: {
+          created_at?: string
+          fact_id?: string
+          voucher_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "fact_vouches_fact_id_fkey"
+            columns: ["fact_id"]
+            isOneToOne: false
+            referencedRelation: "profile_facts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "fact_vouches_voucher_id_fkey"
+            columns: ["voucher_id"]
             isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
@@ -2492,6 +2726,50 @@ export type Database = {
           },
         ]
       }
+      profile_facts: {
+        Row: {
+          created_at: string
+          id: string
+          kind: string
+          label: string
+          org_key: string
+          shown: boolean
+          tier: string
+          user_id: string
+          verified_at: string | null
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          kind: string
+          label: string
+          org_key: string
+          shown?: boolean
+          tier?: string
+          user_id: string
+          verified_at?: string | null
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          kind?: string
+          label?: string
+          org_key?: string
+          shown?: boolean
+          tier?: string
+          user_id?: string
+          verified_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "profile_facts_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       profiles: {
         Row: {
           appearance_custom: Json
@@ -2787,6 +3065,51 @@ export type Database = {
           {
             foreignKeyName: "rituals_partner_id_fkey"
             columns: ["partner_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      room_exact_locations: {
+        Row: {
+          accuracy_m: number | null
+          expires_at: string
+          latitude: number
+          longitude: number
+          room_id: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          accuracy_m?: number | null
+          expires_at: string
+          latitude: number
+          longitude: number
+          room_id: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          accuracy_m?: number | null
+          expires_at?: string
+          latitude?: number
+          longitude?: number
+          room_id?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "room_exact_locations_room_id_fkey"
+            columns: ["room_id"]
+            isOneToOne: false
+            referencedRelation: "rooms"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "room_exact_locations_user_id_fkey"
+            columns: ["user_id"]
             isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
@@ -3687,6 +4010,18 @@ export type Database = {
           status: string
         }[]
       }
+      exact_locations_in_room: {
+        Args: { p_room: string }
+        Returns: {
+          accuracy_m: number
+          expires_at: string
+          is_me: boolean
+          latitude: number
+          longitude: number
+          updated_at: string
+          user_id: string
+        }[]
+      }
       facet_live: { Args: { p_key: string; p_user: string }; Returns: boolean }
       find_nearby_people: {
         Args: { p_radius_m?: number }
@@ -3805,6 +4140,26 @@ export type Database = {
           mutual_friend_count: number
           pronouns: string
           shared_down_to: string[]
+          shared_interests: string[]
+          tagline: string
+        }[]
+      }
+      list_discovery_candidates: {
+        Args: { p_self?: string }
+        Returns: {
+          avatar_url: string
+          blurb: string
+          categories: string[]
+          contexts: string[]
+          display_name: string
+          fit: string
+          handle: string
+          id: string
+          location: string
+          mutual_friend_count: number
+          pronouns: string
+          shared_down_to: string[]
+          shared_facts: Json
           shared_interests: string[]
           tagline: string
         }[]
@@ -4093,6 +4448,16 @@ export type Database = {
         Returns: undefined
       }
       settle_up: { Args: { p_other: string; p_room: string }; Returns: number }
+      share_exact_location: {
+        Args: {
+          p_accuracy_m?: number
+          p_latitude: number
+          p_longitude: number
+          p_restart?: boolean
+          p_room: string
+        }
+        Returns: string
+      }
       shared_facets_of: {
         Args: { p_target: string }
         Returns: {
@@ -4107,6 +4472,7 @@ export type Database = {
         Args: { p_due_on: string; p_ritual: string }
         Returns: string
       }
+      stop_exact_location: { Args: { p_room: string }; Returns: undefined }
       sweep_retention: {
         Args: { p_now?: string }
         Returns: {
@@ -4125,6 +4491,8 @@ export type Database = {
         Args: { p_circle_ids: string[]; p_owner: string; p_viewer: string }
         Returns: boolean
       }
+      vouch_for_fact: { Args: { p_fact: string }; Returns: string }
+      withdraw_vouch: { Args: { p_fact: string }; Returns: string }
       zone_presence: { Args: { p_zone: string }; Returns: number }
     }
     Enums: {

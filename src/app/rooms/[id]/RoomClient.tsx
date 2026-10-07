@@ -23,6 +23,7 @@ import { UploadError, uploadImage } from '@/lib/client/upload-image';
 import { formatRelative } from '@/lib/format';
 import type { RoomItemKind } from '@/lib/types';
 import { MessageBubble } from './MessageBubble';
+import { FindEachOther } from './FindEachOther';
 import { RoomHeader, type RoomMemberInfo, type RoomReadOnly } from './RoomHeader';
 import { SplitTab, type ExpenseRow, type ExpenseShareRow } from './SplitTab';
 import {
@@ -155,6 +156,11 @@ export function RoomClient({
   // A match room the other person left has nobody to talk to.
   const alone = roomKind === 'match' && members.every((member) => member.id === currentUserId);
   const canWrite = !readOnly && !alone;
+  // Exact location between two people who matched (20261008120000): the
+  // two-person rooms only, while both are still here and nothing has closed it.
+  const otherMember = members.find((member) => member.id !== currentUserId);
+  const findEachOther =
+    (roomKind === 'match' || roomKind === 'moment') && canWrite && Boolean(otherMember);
   const nameOf = (id: string) => memberNames[id] ?? 'Someone who left';
 
   useEffect(() => {
@@ -472,6 +478,10 @@ export function RoomClient({
         canLeave={canLeave}
         readOnly={readOnly}
       />
+
+      {findEachOther && (
+        <FindEachOther roomId={roomId} otherName={otherMember?.name ?? 'them'} />
+      )}
 
       <div
         role="tablist"
