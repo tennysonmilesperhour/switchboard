@@ -28,6 +28,7 @@ const PUBLIC_PREFIXES = [
   '/join', // shareable plan links; auth returns here via a validated next path
   '/approve', // guardian approval links; token-authed, the guardian has no account
   '/verify-contact',
+  '/verify-fact', // emailed fact-verification link; the page sends a signed-out visitor to sign in and back
   '/scope-verification', // client-facing checklist, shared by URL; nothing private on it
   '/api/scope-feedback', // the checklist's feedback box; the client has no account by design
   '/api/scope-progress', // the checklist's shared board, readable by anyone with the link
