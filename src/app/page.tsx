@@ -419,19 +419,23 @@ export default async function HomePage() {
           </section>
         ) : (
           <div className="space-y-3">
-            <Link href="/events/new" className="block">
-              <PlanCard
-                title="Float an idea to your people"
-                color="pink"
-                attendeesLabel="Pick something below, or start from scratch. Switchboard sorts out the details."
-                actions={
-                  // A solid surface with the theme's own ink: white text on a
-                  // quarter-white pill over the pink card fell below 4.5:1.
-                  <span className="rounded-btn bg-card px-5 py-2.5 text-sm font-bold text-ink shadow-lift">
-                    Start something
-                  </span>
-                }
-              />
+            <Link
+              href="/events/new"
+              className="plan-pink flex items-center gap-3 rounded-card p-4 text-white shadow-card active:scale-[0.99] transition-transform"
+            >
+              <div className="min-w-0 flex-1">
+                <h3 className="text-lg font-extrabold leading-tight tracking-tight">
+                  Float an idea to your people
+                </h3>
+                <p className="mt-0.5 text-sm font-semibold text-white/85">
+                  Pick something below, or start from scratch.
+                </p>
+              </div>
+              {/* A solid surface with the theme's own ink: white text on a
+                  quarter-white pill over the pink card fell below 4.5:1. */}
+              <span className="shrink-0 rounded-btn bg-card px-4 py-2 text-sm font-bold text-ink shadow-lift">
+                Start
+              </span>
             </Link>
             <div className="flex flex-wrap gap-2" aria-label="Quick plan ideas">
               {['Coffee', 'Dinner', 'Game night', 'A walk', 'Drinks', 'Movie night'].map(
