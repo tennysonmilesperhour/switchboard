@@ -45,6 +45,7 @@ import type {
   RequestRow,
   SpaceRow,
 } from './sections/types';
+import { rememberContactPhones } from '@/lib/client/saved-contact-phones';
 
 export function PeopleClient({
   friends,
@@ -287,6 +288,8 @@ export function PeopleClient({
     try {
       const { matches, throttled, error, code } = await resolveContactMatches(contacts);
       setContactMatches(matches);
+      // Kept on this device only, so a conversation can offer "Text instead".
+      rememberContactPhones(matches);
       // Rate-limited is not "no matches": the unchecked contacts are unknown,
       // and the reader needs to hear that with its code (G7).
       if (throttled || error) {

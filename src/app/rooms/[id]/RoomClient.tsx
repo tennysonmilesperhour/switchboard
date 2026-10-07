@@ -23,6 +23,7 @@ import { UploadError, uploadImage } from '@/lib/client/upload-image';
 import { formatRelative } from '@/lib/format';
 import type { RoomItemKind } from '@/lib/types';
 import { MessageBubble } from './MessageBubble';
+import { DirectActions } from './DirectActions';
 import { RoomHeader, type RoomMemberInfo, type RoomReadOnly } from './RoomHeader';
 import { SplitTab, type ExpenseRow, type ExpenseShareRow } from './SplitTab';
 import {
@@ -63,6 +64,9 @@ const PHOTO_BODY = '📷 Photo';
 interface RoomClientProps {
   roomId: string;
   roomKind: string;
+  roomTitle: string;
+  /** The one other person in a conversation started from a status. */
+  peer: { id: string; name: string } | null;
   currentUserId: string;
   members: RoomMemberInfo[];
   /** Names for everyone who wrote here, including people who have left. */
@@ -103,6 +107,8 @@ function parseRoomMessage(value: Record<string, unknown>): RoomMessage | null {
 export function RoomClient({
   roomId,
   roomKind,
+  roomTitle,
+  peer,
   currentUserId,
   members,
   memberNames,
@@ -153,7 +159,9 @@ export function RoomClient({
 
   const memberIds = new Set(members.map((member) => member.id));
   // A match room the other person left has nobody to talk to.
-  const alone = roomKind === 'match' && members.every((member) => member.id === currentUserId);
+  const alone =
+    (roomKind === 'match' || roomKind === 'direct') &&
+    members.every((member) => member.id === currentUserId);
   const canWrite = !readOnly && !alone;
   const nameOf = (id: string) => memberNames[id] ?? 'Someone who left';
 
@@ -594,6 +602,7 @@ export function RoomClient({
               </Button>
             </form>
           )}
+          {canWrite && peer && <DirectActions peer={peer} planTitle={roomTitle} />}
         </>
       ) : tab === 'split' ? (
         <SplitTab

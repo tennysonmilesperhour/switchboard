@@ -620,13 +620,12 @@ export default async function HomePage() {
                   ? signal.profile[0]
                   : signal.profile;
                 const name = profileRow?.display_name ?? 'Friend';
-                // A signal is an opening, so the card answers it: a plan with
-                // them already invited and the signal as the working title.
-                // It used to open their profile, which does not show the
-                // signal, and offered nothing to do about it.
-                const href = `/events/new?invite=${signal.user_id}&title=${encodeURIComponent(
-                  signal.label,
-                )}`;
+                // A signal is an opening, so the card answers it with a
+                // conversation: tapping goes straight into messaging them, and
+                // the room carries a Make a plan button at the bottom. It used
+                // to open their profile, then a plan form, which asked for a
+                // commitment before anyone had said hello.
+                const href = `/rooms/with/${signal.user_id}`;
                 return (
                   <Link key={signal.id} href={href} className="block group">
                     <Card tone="sage" className="group-hover:shadow-lift transition-shadow">
@@ -640,7 +639,7 @@ export default async function HomePage() {
                         </span>
                         <span className="flex flex-col items-end gap-0.5">
                           <span className="text-xs font-bold text-terracotta-deep whitespace-nowrap">
-                            Make a plan
+                            Message
                           </span>
                           <span className="text-xs text-ink-faint whitespace-nowrap">
                             {formatRelative(signal.expires_at).replace('in ', '')} left

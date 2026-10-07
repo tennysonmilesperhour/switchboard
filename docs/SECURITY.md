@@ -867,6 +867,36 @@ Litmus test: *can a caller who is not sharing — or is blocked, or outside the
 target's visibility scope — learn another user's location, or make the database
 retain a precise coordinate?*
 
+## Statuses that start a conversation, and the nearby notice
+
+A status (an availability signal) used to be passive. Two things now act on it,
+and both are decided in the database (`20261007120000_signal_chat_and_nearby.sql`).
+
+- **Opening a conversation.** `open_signal_chat(p_other)` creates a `direct`
+  room (two people, closed for both by a block like a match room) only when the
+  caller can *currently* see one of that person's live statuses, or the two
+  already share a direct room, so a link keeps working after the status that
+  started it has ended. It refuses a blocked or suspended person and returns
+  nothing about where anyone is. `/rooms/with/[userId]` only asks and follows
+  the answer; a "no" is shown as "that status has ended", never as a failure.
+- **The nearby notice.** When a status is turned on, `claim_signal_nearby_recipients`
+  (service role only, ids out and nothing else) names the friends to tell. A
+  recipient qualifies only if the status is actually offered to them, they chose
+  to be discoverable, they are not on sabbatical, and *both* people are sharing a
+  live location written in the last 15 minutes within 5 km (points rounded to
+  ~110 m like every other cross-person distance). The claim is atomic and keeps
+  one row per pair, so a status toggled on and off cannot ring anyone more than
+  once per three hours. The notification text names the person and the status;
+  it never carries a distance or a place.
+- **One audience rule, restated once.** `private.visible_signals_of` repeats the
+  `signals_visible` policy for a viewer who is not the session user, and adds
+  the blocked and suspended refusals. `signal_chat_and_nearby.test.sql` proves it
+  agrees with the policy; change one and the other, or that test fails.
+- **"Text instead" is on-device.** The number comes from the reader's own
+  contacts, remembered by `src/lib/client/saved-contact-phones.ts` in that
+  browser and cleared on sign-out and account deletion. The server never stores
+  a contact's number and never sends the text; the button is an `sms:` link.
+
 ## Home density (a boolean, and only a boolean)
 
 The Around pillar appears only when a viewer's city has an anchored zone they

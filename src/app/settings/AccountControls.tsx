@@ -8,6 +8,7 @@ import { deleteAccount, exportMyData } from '@/lib/actions/account';
 import { PASSWORD_MIN_LENGTH } from '@/lib/auth-identity';
 import { failure, type ErrorCode } from '@/lib/errors';
 import { useConfirm } from '@/components/ui/ConfirmDialog';
+import { forgetSavedContactPhones } from '@/lib/client/saved-contact-phones';
 
 /** A server action that threw instead of answering — a dropped connection, or a
  *  page left open across a deploy — still gets its code, not a stuck button. */
@@ -53,6 +54,8 @@ export function AccountControls({ hostedPlanCount = 0 }: { hostedPlanCount?: num
       danger: true,
     })) return;
     setPending('delete');
+    // Numbers from this person's contacts stay on this device only; they go too.
+    forgetSavedContactPhones();
     try {
       const result = await deleteAccount(confirmation);
       setPending(null);
