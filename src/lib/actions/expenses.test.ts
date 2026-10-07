@@ -77,6 +77,29 @@ describe('saveExpense', () => {
     expect(mocks.rpc).not.toHaveBeenCalled();
   });
 
+  it.each(['1e2', '0x10', '1.005', '12,50.5.5', 'abc', '-5'])(
+    'refuses %s rather than saving a different amount than was typed',
+    async (amount) => {
+      const result = await saveExpense(input({ amount }));
+
+      expect(result.ok).toBe(false);
+      expect(mocks.rpc).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([
+    ['42.5', 4250],
+    ['$1,200.00', 120000],
+    ['7', 700],
+  ])('reads %s as %i cents', async (amount, cents) => {
+    await saveExpense(input({ amount }));
+
+    expect(mocks.rpc).toHaveBeenCalledWith(
+      'save_expense',
+      expect.objectContaining({ p_amount_cents: cents }),
+    );
+  });
+
   it('needs at least one person to split with', async () => {
     const result = await saveExpense(input({ participantIds: [] }));
 

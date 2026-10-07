@@ -19,7 +19,9 @@ const mocks = vi.hoisted(() => ({
   notesSelect: vi.fn(),
   countSelect: vi.fn(async () => ({ count: 3 })),
   upsert: vi.fn(async () => ({ error: null as unknown })),
-  createSignedUrl: vi.fn(async () => ({ data: { signedUrl: 'https://signed.example/s.png' } })),
+  createSignedUrls: vi.fn(async (paths: string[]) => ({
+    data: paths.map((path) => ({ path, signedUrl: 'https://signed.example/s.png' })),
+  })),
   reportOperationalError: vi.fn(),
   notifyProgress: vi.fn(async () => 'sent'),
 }));
@@ -39,7 +41,7 @@ vi.mock('@/lib/supabase/admin', () => ({
       },
       upsert: mocks.upsert,
     }),
-    storage: { from: () => ({ createSignedUrl: mocks.createSignedUrl }) },
+    storage: { from: () => ({ createSignedUrls: mocks.createSignedUrls }) },
   }),
 }));
 vi.mock('@/lib/server/rate-limit', () => ({ checkRateLimit: mocks.checkRateLimit }));
@@ -219,8 +221,8 @@ describe('POST /api/scope-progress', () => {
         number,
         { failClosed?: boolean },
       ][];
-      expect(calls[0][0]).toBe('scope-progress:write:all');
-      expect(calls[1][0]).toContain('203.0.113.9');
+      expect(calls[0][0]).toContain('203.0.113.9');
+      expect(calls[1][0]).toBe('scope-progress:write:all');
       for (const call of calls) expect(call[3]).toMatchObject({ failClosed: true });
     });
 

@@ -22,6 +22,8 @@ const state = vi.hoisted(() => ({
   adminUpserts: [] as Array<{ table: string; rows: unknown }>,
   adminDeletes: [] as Array<{ table: string; id: unknown }>,
   sessionCohostInserts: [] as Row[],
+  /** Rows of profile_blocks the clone's block lookup returns. */
+  blocks: [] as Row[],
 }));
 
 const mocks = vi.hoisted(() => ({
@@ -38,6 +40,7 @@ function thenable(result: Result) {
     select: () => builder,
     eq: () => builder,
     order: () => builder,
+    or: () => builder,
     maybeSingle: async () => result,
     single: async () => result,
     then: (resolve: (value: unknown) => unknown) => resolve({ error: null, ...result }),
@@ -65,6 +68,9 @@ const session = {
 const admin = {
   from(table: string) {
     return {
+      select() {
+        return thenable({ data: table === 'profile_blocks' ? state.blocks : [], error: null });
+      },
       insert(rows: unknown) {
         state.adminInserts.push({ table, rows });
         const error = state.adminInsertError[table] ?? null;
@@ -132,6 +138,7 @@ beforeEach(() => {
   state.adminUpserts = [];
   state.adminDeletes = [];
   state.sessionCohostInserts = [];
+  state.blocks = [];
   mocks.checkEventManager.mockResolvedValue({ ok: true, isManager: true });
 });
 
@@ -151,6 +158,15 @@ describe('cloneEventForReuse', () => {
     expect(insertsInto('event_questions')[0]).toEqual([
       expect.objectContaining({ event_id: 'clone-1', prompt: 'Spice level?' }),
     ]);
+  });
+
+  it('leaves out someone blocked since the last plan instead of failing the whole clone', async () => {
+    state.blocks = [{ blocker_id: 'guest-1', blocked_id: 'host' }];
+
+    const result = await cloneEventForReuse('host', 'source-1', null);
+
+    expect(result).toEqual({ ok: true, eventId: 'clone-1' });
+    expect(insertsInto('invites')).toEqual([]);
   });
 
   it('sends a dated next occurrence straight out as invitations', async () => {
