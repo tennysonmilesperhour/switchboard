@@ -10,7 +10,7 @@
 --   * Nobody reads or writes the table directly.
 
 begin;
-select plan(23);
+select plan(25);
 
 insert into auth.users (id, email) values
   ('00000000-0000-0000-0000-00000000ea01', 'ava-exact@example.com'),
@@ -189,6 +189,27 @@ select is(
   'after a block, the blocked person cannot share'
 );
 
+reset role;
+select is(
+  (select count(*)::int from public.room_exact_locations
+    where room_id = '00000000-0000-0000-0000-0000000e0a01'),
+  0,
+  'a block deletes both people''s points in the rooms they share'
+);
+
+delete from public.profile_blocks
+ where blocker_id = '00000000-0000-0000-0000-00000000eb02'
+   and blocked_id = '00000000-0000-0000-0000-00000000ea01';
+set local role authenticated;
+select set_config('request.jwt.claims',
+  '{"sub":"00000000-0000-0000-0000-00000000ea01","role":"authenticated"}', true);
+
+select is(
+  (select count(*)::int from public.exact_locations_in_room('00000000-0000-0000-0000-0000000e0a01')),
+  0,
+  'unblocking does not bring the old points back: sharing needs a new tap'
+);
+
 -- ————————————————————————— a moment room, stop, sabbatical —————————————————————————
 select is(
   public.share_exact_location('00000000-0000-0000-0000-0000000e0a03', 39.7393, -104.9903, 4, true),
@@ -206,6 +227,9 @@ select is(
   'Stop deletes the point'
 );
 
+insert into public.room_exact_locations (room_id, user_id, latitude, longitude, expires_at)
+values ('00000000-0000-0000-0000-0000000e0a01', '00000000-0000-0000-0000-00000000eb02', 39.74, -104.99, now() + interval '30 minutes');
+
 delete from public.room_members
  where room_id = '00000000-0000-0000-0000-0000000e0a01'
    and member_id = '00000000-0000-0000-0000-00000000eb02';
@@ -216,6 +240,9 @@ select is(
   0,
   'leaving the room deletes your point in it'
 );
+
+insert into public.room_exact_locations (room_id, user_id, latitude, longitude, expires_at)
+values ('00000000-0000-0000-0000-0000000e0a03', '00000000-0000-0000-0000-00000000ea01', 39.74, -104.99, now() + interval '30 minutes');
 
 update public.profiles set sabbatical = true
  where id = '00000000-0000-0000-0000-00000000ea01';

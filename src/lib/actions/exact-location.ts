@@ -66,7 +66,7 @@ export async function shareExactLocation(
   if (!auth.ok) return auth;
   const { supabase, user } = auth;
 
-  if (!(await checkRateLimit(`exact-share:${user.id}`, WRITE_LIMIT, WINDOW_SECONDS))) {
+  if (!(await checkRateLimit(`exact-share:${user.id}:${roomId}`, WRITE_LIMIT, WINDOW_SECONDS))) {
     return validation('Too many location updates. Wait a moment and it will pick up again.');
   }
 
@@ -108,7 +108,7 @@ export async function getExactLocations(roomId: string): Promise<ExactLocationsR
   if (!auth.ok) return auth;
   const { supabase, user } = auth;
 
-  if (!(await checkRateLimit(`exact-read:${user.id}`, READ_LIMIT, WINDOW_SECONDS))) {
+  if (!(await checkRateLimit(`exact-read:${user.id}:${roomId}`, READ_LIMIT, WINDOW_SECONDS))) {
     return validation('Too many refreshes. Wait a moment and it will pick up again.');
   }
 

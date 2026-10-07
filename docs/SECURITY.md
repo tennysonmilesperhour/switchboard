@@ -885,8 +885,10 @@ map, not softer:
 - **See and be seen.** The other member's point is returned only while the
   caller's own share is live.
 - **Every exit closes it.** A block (`room_closed_by_block`), suspension or
-  sabbatical refuses both sharing and reading; Stop, leaving the room, a
-  sabbatical starting, and an unmatch (room cascade) delete the caller's point;
+  sabbatical refuses both sharing and reading; a block also deletes both
+  people's points in every room they share, so an unblock inside the hour
+  cannot bring them back; Stop, leaving the room, a sabbatical starting, and
+  an unmatch (room cascade) delete the caller's point;
   a point silent for 15 minutes is not returned; expired rows are deleted by the
   next share and by the retention cron.
 - One refusal sentence for every reason, so a blocked person is never told

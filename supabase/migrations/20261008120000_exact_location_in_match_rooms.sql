@@ -11,7 +11,8 @@
 --   * See and be seen: you read the other person's point only while you are
 --     sharing yours. Nobody can watch without being watched.
 --   * A block closes it both ways (private.room_closed_by_block), as it closes
---     the room's chat. Suspended accounts and sabbaticals are out, as they are
+--     the room's chat, and deletes both people's points, so an unblock never
+--     brings them back. Suspended accounts and sabbaticals are out, as they are
 --     on the map.
 --   * Time-boxed: 60 minutes from the last time you turned it on, and stopped
 --     at once by Stop, by leaving or unmatching (the room cascades), or by
@@ -241,6 +242,36 @@ drop trigger if exists room_members_clear_exact_location on public.room_members;
 create trigger room_members_clear_exact_location
   after delete on public.room_members
   for each row execute function private.clear_exact_location_on_leave();
+
+-- A block ends every exact share between the pair, for both of them. Hiding
+-- the points while the block stands is not enough: an unblock inside the hour
+-- would otherwise bring both points back, and an open room would carry on
+-- sharing without either person tapping Share again.
+create or replace function private.clear_exact_locations_on_block()
+returns trigger
+language plpgsql
+security definer
+set search_path = ''
+as $$
+begin
+  delete from public.room_exact_locations l
+  using public.room_members a, public.room_members b
+  where a.room_id = l.room_id
+    and b.room_id = l.room_id
+    and a.member_id = new.blocker_id
+    and b.member_id = new.blocked_id
+    and l.user_id in (new.blocker_id, new.blocked_id);
+  return new;
+end;
+$$;
+
+revoke all on function private.clear_exact_locations_on_block() from public, anon, authenticated;
+grant execute on function private.clear_exact_locations_on_block() to service_role;
+
+drop trigger if exists profile_blocks_clear_exact_locations on public.profile_blocks;
+create trigger profile_blocks_clear_exact_locations
+  after insert on public.profile_blocks
+  for each row execute function private.clear_exact_locations_on_block();
 
 -- Schema health knows about all of the above, so a half-applied deploy reads as
 -- incomplete. Every existing entry from 20260930092000 is carried unchanged.

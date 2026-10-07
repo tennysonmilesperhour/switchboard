@@ -91,11 +91,11 @@ describe('shareExactLocation', () => {
     expect(mocks.rpc.mock.calls[0][1].p_accuracy_m).toBeUndefined();
   });
 
-  it('is rate limited per person', async () => {
+  it('is rate limited per person and per room, so two shares never starve each other', async () => {
     mocks.checkRateLimit.mockResolvedValue(false);
     const result = await shareExactLocation(ROOM, 40.7, -74, 4, false);
     expect(result.ok).toBe(false);
-    expect(mocks.checkRateLimit).toHaveBeenCalledWith('exact-share:user-1', expect.any(Number), 3600);
+    expect(mocks.checkRateLimit).toHaveBeenCalledWith(`exact-share:user-1:${ROOM}`, expect.any(Number), 3600);
     expect(mocks.rpc).not.toHaveBeenCalled();
   });
 
