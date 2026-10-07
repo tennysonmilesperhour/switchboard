@@ -796,6 +796,14 @@ export const FEATURE_GROUPS: readonly FeatureGroup[] = [
         href: '/features',
       },
       {
+        id: 'walkthroughs',
+        title: 'Walkthroughs',
+        blurb:
+          'Short demos that play themselves while you tap Next: one for the whole idea in a minute, and deeper ones on plans, deciding, people, rooms, places, and settings.',
+        where: 'More → Everything → Walkthroughs, at the top',
+        href: '/tour/welcome',
+      },
+      {
         id: 'tips-reset',
         title: 'Bring the tips back',
         blurb: 'Dismissed the getting-started card too early? Restore it.',

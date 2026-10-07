@@ -38,6 +38,17 @@ async function freshDevice<T>(browser: Browser, fn: (page: Page) => Promise<T>):
 }
 
 /** Where a signed-in person lands: Home, with the app shell around it. */
+/**
+ * A brand-new account is shown the short walkthrough before Home. Skip has to
+ * be on its first frame and has to land on Home — a tour that can't be left is
+ * a dead end the day after sign-up.
+ */
+async function skipFirstRunTour(page: Page) {
+  await expect(page).toHaveURL(/\/tour\/welcome\?first=1/, { timeout: 30_000 });
+  await expect(page.getByRole('heading', { name: 'Start with the + button' })).toBeVisible();
+  await page.getByRole('link', { name: 'Skip tour' }).click();
+}
+
 async function expectHome(page: Page) {
   await expect(page).toHaveURL((url) => url.pathname === '/', { timeout: 30_000 });
   await expect(page.getByRole('navigation', { name: 'Main navigation' })).toBeVisible();
@@ -101,6 +112,7 @@ test.describe('accounts', () => {
       await agreeAndContinue(page);
       await expect(page.getByText('Step 2 of 2')).toBeVisible();
       await page.getByRole('button', { name: 'Start connecting' }).click();
+      await skipFirstRunTour(page);
       await expectHome(page);
 
       // Confirming the address recorded it as proven, which is what later lets
@@ -142,6 +154,7 @@ test.describe('accounts', () => {
       await expect(page.getByText('Step 3 of 3')).toBeVisible();
       await expect(page.getByLabel(/A recovery email/)).toBeVisible();
       await page.getByRole('button', { name: 'Skip for now' }).click();
+      await skipFirstRunTour(page);
       await expectHome(page);
 
       await page.goto('/profile');
