@@ -94,6 +94,19 @@ test('lets an invite action reach its database eligibility check without an HTML
   expect(response.headers.has('location')).toBe(false);
 });
 
+test.each(['/events/new', '/boards', '/settings'])('does not exempt a protected %s action from eligibility', async path => {
+  for (const [profile, destination] of [
+    [{ onboarded: false, legal_terms_version: null }, '/onboarding'],
+    [{ onboarded: true, legal_terms_version: 'old' }, '/legal-update'],
+  ] as const) {
+    signedInAs({ id: 'u1' }, profile);
+    const response = await proxy(new NextRequest(`https://switchboardsocial.me${path}`, {
+      method: 'POST', headers: { 'next-action': 'protected-action' },
+    }));
+    expect(new URL(response.headers.get('location')!).pathname).toBe(destination);
+  }
+});
+
 /** A signed-in session whose account may since have been suspended. */
 function signedInAs(
   user: { id: string; banned_until?: string },

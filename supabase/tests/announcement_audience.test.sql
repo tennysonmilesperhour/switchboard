@@ -1,6 +1,6 @@
 -- A room membership left behind after declining must not reveal door codes.
 begin;
-select plan(10);
+select plan(12);
 insert into auth.users(id, email) values
   ('00000000-0000-0000-0000-000000001801', 'announcement-host@example.com'),
   ('00000000-0000-0000-0000-000000001802', 'announcement-guest@example.com');
@@ -21,6 +21,15 @@ select lives_ok($$insert into public.announcements(id, event_id, author_id, body
    '00000000-0000-0000-0000-000000001801', 'Door code 4412')$$, 'host can post the announcement');
 select is((select count(*)::int from public.messages where room_id = '00000000-0000-0000-0000-000000001810'),
   1, 'the room copy is committed atomically without provider fan-out');
+reset role;
+set local role service_role;
+select lives_ok($$insert into public.messages(room_id, sender_id, body) values
+  ('00000000-0000-0000-0000-000000001810', '00000000-0000-0000-0000-000000001801', 'Door code 4412')$$,
+  'an old app instance can finish its best-effort mirror during rollout');
+select is((select count(*)::int from public.messages where room_id = '00000000-0000-0000-0000-000000001810'),
+  1, 'legacy fan-out creates neither a duplicate nor an unprotected room copy');
+reset role;
+set local role authenticated;
 select set_config('request.jwt.claims', '{"sub":"00000000-0000-0000-0000-000000001802","role":"authenticated"}', true);
 select is((select count(*)::int from public.announcements where id = '00000000-0000-0000-0000-000000001812'),
   1, 'accepted attendee can read the update');

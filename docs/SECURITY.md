@@ -1215,7 +1215,9 @@ the client. Regression coverage lives in `poll_vote_binding`,
 - Announcements and their room copies require accepted attendance or event
   management. A database trigger writes the tagged room copy atomically;
   changing RSVP status cannot expose it through stale room membership.
-  Existing matching copies are backfilled. The audience marker cannot be
+  Existing matching copies are backfilled. Legacy service-role fan-out during
+  rolling deployment is tagged or suppressed if the atomic copy already exists.
+  The audience marker cannot be
   detached, even through privileged updates.
 - Ordinary board members may select public board metadata, not `invite_code`.
   Only the existing moderator RPC returns/rotates the bearer join code.

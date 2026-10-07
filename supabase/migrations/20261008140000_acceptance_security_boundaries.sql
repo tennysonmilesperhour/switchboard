@@ -246,16 +246,30 @@ alter table public.messages add column announcement_id uuid
   references public.announcements(id) on delete cascade;
 create index messages_announcement_idx on public.messages(announcement_id);
 
--- Tag previously mirrored announcements so former guests cannot read them via rooms.
-update public.messages m set announcement_id = (
-  select a.id from public.announcements a join public.events e on e.id = a.event_id
-  where e.room_id = m.room_id and a.author_id = m.sender_id and (m.body = a.body or m.body = '📣 ' || a.body)
-  order by a.created_at desc, a.id limit 1
-) where exists (
-  select 1 from public.announcements a join public.events e on e.id = a.event_id
-  where e.room_id = m.room_id and a.author_id = m.sender_id
-    and (m.body = a.body or m.body = '📣 ' || a.body)
-);
+-- Older copies have no identity marker. Match one subsequent copy per
+-- announcement, before the next identical announcement, never every equal
+-- chat message or the newest announcement regardless of chronology.
+do $$
+declare a record;
+begin
+  for a in select x.*, e.room_id from public.announcements x
+    join public.events e on e.id = x.event_id order by x.created_at, x.id loop
+    update public.messages set announcement_id = a.id where id = (
+      select m.id from public.messages m
+      where m.announcement_id is null and m.room_id = a.room_id
+        and m.sender_id = a.author_id and (m.body = a.body or m.body = '📣 ' || a.body)
+        and m.created_at >= a.created_at
+        and not exists (
+          select 1 from public.announcements later where later.event_id = a.event_id
+            and later.author_id = a.author_id and later.body = a.body
+            and (later.created_at, later.id) > (a.created_at, a.id)
+            and later.created_at <= m.created_at
+        )
+      order by m.created_at, m.id limit 1
+    );
+  end loop;
+end;
+$$;
 
 alter policy messages_select on public.messages using (
   private.is_room_member(room_id, (select auth.uid())) and removed_at is null
@@ -295,6 +309,19 @@ begin
   if tg_op = 'INSERT' and new.announcement_id is not null
      and current_user in ('anon', 'authenticated') then
     raise exception 'announcement copies are server-written';
+  end if;
+  -- An old app instance may still fan out an untagged copy during rollout.
+  -- Attach the same audience, or suppress the redundant copy already committed
+  -- by the announcement trigger. Ordinary member chat is never deduplicated.
+  if tg_op = 'INSERT' and new.announcement_id is null and current_user = 'service_role' then
+    select a.id into new.announcement_id
+    from public.announcements a join public.events e on e.id = a.event_id
+    where e.room_id = new.room_id and a.author_id = new.sender_id
+      and (new.body = a.body or new.body = '📣 ' || a.body)
+    order by a.created_at desc, a.id limit 1;
+    if new.announcement_id is not null and exists (
+      select 1 from public.messages m where m.announcement_id = new.announcement_id
+    ) then return null; end if;
   end if;
   return new;
 end;

@@ -255,7 +255,7 @@ export async function proxy(request: NextRequest) {
     user &&
     (!isPublicPath(pathname) || /^\/(i|join|rsvp)(\/|$)/.test(pathname)) &&
     pathname !== '/onboarding' &&
-    !request.headers.has('next-action') &&
+    !(request.headers.has('next-action') && /^\/(i|join|rsvp)(\/|$)/.test(pathname)) &&
     !pathname.startsWith('/api/')
   ) {
     const { data: profile } = await supabase
