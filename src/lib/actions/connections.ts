@@ -15,6 +15,7 @@ import { notifyUsers } from '@/lib/server/notify';
 import { normalizePhoneNumber } from '@/lib/phone';
 import { checkRateLimit } from '@/lib/server/rate-limit';
 import { reportAndFail } from '@/lib/server/observability';
+import { removeBlockedFromMyGroups } from '@/lib/server/block-cascade';
 import { circleEmoji } from '@/lib/circle-emoji';
 
 /** PostgREST `.or()` filters are built by string interpolation below; only ever
@@ -534,46 +535,8 @@ export async function blockProfile(profileId: string): Promise<ConnectionResult>
     .delete()
     .eq('ignorer_id', user.id)
     .eq('ignored_id', profileId);
-  // A block ends the connection whichever surface it came from. This used to
-  // happen only when the caller passed the connection id, which the People
-  // page does and a room or a profile page does not, so blocking someone from
-  // a room left them connected (and still inside every circle-scoped signal).
-  const { error: unlinkError } = await supabase
-    .from('connections')
-    .delete()
-    .or(pairFilter(user.id, profileId));
-  if (unlinkError) {
-    return reportAndFail('SB-CONNECTION-SAVE', 'connection.block', unlinkError, { profileId });
-  }
-  // They leave your circles too, so a later unblock doesn't silently restore
-  // them to groups you curated. circle_members is owner-only under RLS.
-  const { data: myCircles } = await supabase
-    .from('circles')
-    .select('id')
-    .eq('owner_id', user.id);
-  const circleIds = (myCircles ?? []).map((circle) => circle.id);
-  if (circleIds.length > 0) {
-    await supabase
-      .from('circle_members')
-      .delete()
-      .in('circle_id', circleIds)
-      .eq('member_id', profileId);
-  }
-  // Households are the same kind of curated group and were missed: a blocked
-  // person stayed filed in yours, and was silently back in it (and in every
-  // household invite) if you ever reconnected. household_members is owner-only.
-  const { data: myHouseholds } = await supabase
-    .from('households')
-    .select('id')
-    .eq('owner_id', user.id);
-  const householdIds = (myHouseholds ?? []).map((household) => household.id);
-  if (householdIds.length > 0) {
-    await supabase
-      .from('household_members')
-      .delete()
-      .in('household_id', householdIds)
-      .eq('member_id', profileId);
-  }
+  const unlinked = await removeBlockedFromMyGroups(supabase, user.id, profileId);
+  if (unlinked) return unlinked;
   revalidatePath('/people');
   return { ok: true };
 }

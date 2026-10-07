@@ -18,6 +18,7 @@ const mocks = vi.hoisted(() => {
     blocked: false,
     invited: false,
     insertError: null as { code: string } | null,
+    removed: [{ cohost_id: 'friend-1' }] as Array<{ cohost_id: string }>,
   };
   const inserts: Array<{ table: string; row: unknown }> = [];
 
@@ -36,6 +37,11 @@ const mocks = vi.hoisted(() => {
               ? state.profile
               : null,
         error: null,
+      }),
+      delete: () => ({
+        eq: () => ({
+          eq: () => ({ select: async () => ({ data: state.removed, error: null }) }),
+        }),
       }),
       insert: async (row: unknown) => {
         inserts.push({ table, row });
@@ -67,7 +73,7 @@ vi.mock('@/lib/server/observability', () => ({
   reportAndFail: vi.fn(async () => ({ ok: false, code: 'SB-PLAN-SAVE', error: 'x', fix: null })),
 }));
 
-import { addCoHost } from './event-cohosts';
+import { addCoHost, removeCoHost } from './event-cohosts';
 
 afterEach(() => {
   vi.clearAllMocks();
@@ -150,5 +156,20 @@ describe('addCoHost (decision D1)', () => {
     expect(result.ok).toBe(false);
     expect(result).not.toHaveProperty('code');
     expect(mocks.notifyUsers).not.toHaveBeenCalled();
+  });
+});
+
+describe('removeCoHost', () => {
+  it('removes the co-host when the caller is the host', async () => {
+    mocks.state.removed = [{ cohost_id: 'friend-1' }];
+    expect(await removeCoHost('event-1', 'friend-1')).toEqual({ ok: true });
+  });
+
+  it('does not report success when RLS deleted nothing', async () => {
+    mocks.state.removed = [];
+    const result = await removeCoHost('event-1', 'friend-1');
+
+    expect(result.ok).toBe(false);
+    expect(result).toMatchObject({ code: 'SB-PERM-HOST' });
   });
 });
