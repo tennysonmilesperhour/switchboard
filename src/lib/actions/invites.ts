@@ -188,7 +188,7 @@ export async function respondToInvite(
         }
         await notifyUsers([event.host_id], {
           kind: 'rsvp_accepted',
-          title: 'Someone’s in 🎉',
+          title: 'Someone’s in',
           body: `Your invitation to ${event.title} was accepted.`,
           url: `/events/${event.id}`,
         });
@@ -445,7 +445,7 @@ export async function respondViaShareLink(
       if (event) {
         await notifyUsers([event.host_id], {
           kind: 'rsvp_accepted',
-          title: 'Someone’s in 🎉',
+          title: 'Someone’s in',
           body: `${responderName || 'A guest'} accepted your invitation to ${event.title}.`,
           url: `/events/${event.id}`,
         });
@@ -594,7 +594,7 @@ export async function respondToGuestInvite(
     if (event) {
       await notifyUsers([event.host_id], {
         kind: 'rsvp_accepted',
-        title: 'Someone’s in 🎉',
+        title: 'Someone’s in',
         body: `${invite.guest_name ?? 'A guest'} accepted your invitation to ${event.title}.`,
         url: `/events/${event.id}`,
       });

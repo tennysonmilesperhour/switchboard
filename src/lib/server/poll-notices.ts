@@ -362,7 +362,7 @@ export async function notifyDateSettled(eventId: string): Promise<void> {
 
   await notifyUsers(recipients, {
     kind: 'event_date_set',
-    title: 'The date is set 📅',
+    title: 'The date is set',
     body: `${event.title} is happening ${formatDateTime(event.starts_at, event.time_zone)}.`,
     url: `/events/${event.id}`,
   });

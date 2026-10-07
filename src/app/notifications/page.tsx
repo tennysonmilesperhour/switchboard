@@ -152,7 +152,7 @@ export default async function NotificationsPage() {
         <div className="space-y-8">
           {failures.notifications ? (
             <section>
-              <SectionHeader title="Recent 🔔" />
+              <SectionHeader title="Recent" />
               <SectionError code="SB-NOTIFY-LOAD" />
             </section>
           ) : (
@@ -167,7 +167,7 @@ export default async function NotificationsPage() {
 
           {invitesError && (
             <section>
-              <SectionHeader title="Waiting on you 💌" />
+              <SectionHeader title="Waiting on you" />
               <SectionError code="SB-INVITE-LOAD" />
             </section>
           )}
@@ -175,7 +175,7 @@ export default async function NotificationsPage() {
           {invites.length > 0 && (
             <section>
               <SectionHeader
-                title="Waiting on you 💌"
+                title="Waiting on you"
                 hint="Invitations you haven’t answered yet"
               />
               <div className="space-y-2">
@@ -197,7 +197,7 @@ export default async function NotificationsPage() {
 
           {requestsError && (
             <section>
-              <SectionHeader title="Wants to connect 👋" />
+              <SectionHeader title="Wants to connect" />
               <SectionError code="SB-CONNECTION-LOAD" />
             </section>
           )}
@@ -205,7 +205,7 @@ export default async function NotificationsPage() {
           {requestList.length > 0 && (
             <section>
               <SectionHeader
-                title="Wants to connect 👋"
+                title="Wants to connect"
                 hint="Accept or ignore in People"
               />
               <div className="space-y-2">
@@ -237,14 +237,14 @@ export default async function NotificationsPage() {
 
           {matchesError && (
             <section>
-              <SectionHeader title="Matches ✨" />
+              <SectionHeader title="Matches" />
               <SectionError code="SB-MATCH-LOAD" />
             </section>
           )}
 
           {matchList.length > 0 && (
             <section>
-              <SectionHeader title="Matches ✨" hint="You both chose each other" />
+              <SectionHeader title="Matches" hint="You both chose each other" />
               <div className="space-y-2">
                 {matchList.map((match) => (
                   <Link
@@ -268,14 +268,14 @@ export default async function NotificationsPage() {
 
           {announcementsError && (
             <section>
-              <SectionHeader title="From your hosts 📣" />
+              <SectionHeader title="From your hosts" />
               <SectionError code="SB-ANNOUNCEMENT-LOAD" />
             </section>
           )}
 
           {announcementList.length > 0 && (
             <section>
-              <SectionHeader title="From your hosts 📣" />
+              <SectionHeader title="From your hosts" />
               <div className="space-y-2">
                 {announcementList.map((announcement) => {
                   const event = Array.isArray(announcement.event)

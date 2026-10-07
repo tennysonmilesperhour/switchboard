@@ -1,5 +1,6 @@
 'use client';
 
+import { Glyph } from '@/components/ui/Glyph';
 import type { Dispatch, SetStateAction } from 'react';
 import { Avatar } from '@/components/ui/Avatar';
 import { Button } from '@/components/ui/Button';
@@ -165,7 +166,7 @@ export function PeopleStep({
                               phone, one line cut "Jordan Reyes" to "Jordan Re…". */}
                           <span className="font-bold text-sm block line-clamp-2 break-words">{friend.name}</span>
                           <span className="text-[11px] text-ink-faint block truncate">
-                            {friend.sabbatical ? '🍃 On sabbatical' : `@${friend.handle}`}
+                            {friend.sabbatical ? 'On sabbatical' : `@${friend.handle}`}
                           </span>
                         </span>
                         <span
@@ -204,7 +205,7 @@ export function PeopleStep({
               and now looks like it. */}
           <Card tone="terracotta">
             <p className="text-sm font-bold text-ink">
-              📇 Bring in your contacts
+              <Glyph emoji="📇" size={14} />Bring in your contacts
             </p>
             <p className="mt-0.5 mb-2.5 text-xs leading-relaxed text-ink-soft">
               The quickest way to fill this list. We’ll show who is already on

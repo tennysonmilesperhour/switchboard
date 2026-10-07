@@ -205,7 +205,7 @@ export function GuestRsvpClient({
   if (status === 'declined') {
     return (
       <div className="mt-8 rounded-card bg-cream p-5 animate-rise">
-        <p className="font-bold">No worries 💛</p>
+        <p className="font-bold">No worries</p>
         <p className="text-sm text-ink-soft mt-1">
           The invitation will quietly move along. Nobody’s feelings were harmed
           in the making of this RSVP.
@@ -316,7 +316,7 @@ export function GuestRsvpClient({
             disabled={pending}
             onClick={() => respond(false, 'keep_asking')}
           >
-            Can’t this time — keep asking! 💛
+            Can’t this time — keep asking!
           </Button>
           <Button
             variant="ghost"

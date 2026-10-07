@@ -29,7 +29,7 @@ export function ProfileStrength({ input }: { input: ProfileStrengthInput }) {
             <Icon name="check" size={20} />
           </span>
           <div className="min-w-0">
-            <p className="text-sm font-bold text-sage-deep">Your profile is all set ✨</p>
+            <p className="text-sm font-bold text-sage-deep">Your profile is all set</p>
             <p className="text-xs text-sage-deep/80">
               Friends can find and invite you by handle, email, or phone.
             </p>

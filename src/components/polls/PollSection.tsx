@@ -1,5 +1,6 @@
 'use client';
 
+import { Glyph } from '@/components/ui/Glyph';
 import { useEffect, useOptimistic, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
@@ -147,7 +148,7 @@ function IdeaMedia({ option }: { option: PollOption }) {
           rel="noopener noreferrer nofollow"
           className="mt-1.5 inline-flex max-w-full items-center gap-1 text-xs font-bold text-terracotta-deep underline decoration-terracotta/40 underline-offset-2"
         >
-          <span aria-hidden>🔗</span>
+          <Glyph emoji="🔗" size={12} />
           <span className="truncate">{linkHostname(option.link_url)}</span>
           <span className="sr-only">(opens in a new tab)</span>
         </a>
@@ -608,7 +609,7 @@ export function PollSection({
                     )}
                     {option.source === 'ai' && (
                       <span className="text-[10px] uppercase tracking-wide text-terracotta-deep">
-                        ✨ suggested by Switchboard
+                        <Glyph emoji="✨" size={12} className="inline -mt-0.5 mr-1" />suggested by Switchboard
                       </span>
                     )}
                     <IdeaMedia option={option} />
@@ -619,7 +620,7 @@ export function PollSection({
                       title={`${result?.voters} voted`}
                     >
                       {consensus}% · {result?.voters}
-                      <span aria-hidden> 🗳</span>
+                      <Glyph emoji="🗳" size={12} className="ml-1 inline -mt-0.5" />
                     </span>
                   )}
                 </div>
@@ -655,7 +656,7 @@ export function PollSection({
                             : 'bg-paper border-line hover:border-ink-faint opacity-70'
                         }`}
                       >
-                        {button.emoji}
+                        <Glyph emoji={button.emoji} size={20} className="mx-auto block" />
                       </button>
                     ))}
                   </div>

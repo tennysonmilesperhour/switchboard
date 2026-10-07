@@ -92,7 +92,7 @@ async function remindOneEvent(
   if (attendeeUsers.length > 0) {
     await notifyUsers(attendeeUsers, {
       kind: 'reminder',
-      title: kind === 'soon' ? 'Starting soon ⏰' : 'Coming up tomorrow 📅',
+      title: kind === 'soon' ? 'Starting soon' : 'Coming up tomorrow',
       body: `${event.title} - ${when}.`,
       url,
     });
@@ -127,7 +127,7 @@ async function remindOneEvent(
     if (pendingUsers.length > 0) {
       await notifyUsers(pendingUsers, {
         kind: 'reminder',
-        title: 'Still hoping you can make it 💛',
+        title: 'Still hoping you can make it',
         body: `${event.title} - ${when}. Your invitation is still open.`,
         url,
       });

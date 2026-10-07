@@ -1,5 +1,6 @@
 'use client';
 
+import { Glyph } from '@/components/ui/Glyph';
 import { useEffect } from 'react';
 
 /**
@@ -38,7 +39,7 @@ export default function GlobalError({
         }}
       >
         <span aria-hidden style={{ fontSize: '2.25rem' }}>
-          🌫️
+          <Glyph emoji="🌫️" size={36} />
         </span>
         <h1 style={{ fontSize: '1.5rem', fontWeight: 800, margin: 0 }}>
           Something slipped

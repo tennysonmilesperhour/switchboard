@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { Glyph } from '@/components/ui/Glyph';
 
 export interface HomePillar {
   href: string;
@@ -110,9 +111,7 @@ export function PillarRow({
               href={pillar.href}
               className="flex h-full min-h-11 flex-col rounded-card border border-line bg-card p-3 shadow-lift transition-all hover:border-terracotta hover:shadow-float focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-terracotta active:scale-[0.98]"
             >
-              <span className="text-2xl" aria-hidden>
-                {pillar.emoji}
-              </span>
+              <Glyph emoji={pillar.emoji} size={24} />
               <span className="mt-1.5 font-bold text-ink">{pillar.title}</span>
               <span className="mt-0.5 text-xs leading-snug text-ink-faint">
                 {pillar.body}

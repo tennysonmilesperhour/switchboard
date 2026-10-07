@@ -41,7 +41,7 @@ export function EnergyPrompt({
   if (done) {
     return (
       <Card tone="cream" className="animate-rise">
-        <p className="text-sm text-ink-soft">Noted, just for you. 🤍</p>
+        <p className="text-sm text-ink-soft">Noted, just for you.</p>
       </Card>
     );
   }
@@ -55,9 +55,9 @@ export function EnergyPrompt({
       <div className="flex gap-2 mt-3">
         {(
           [
-            ['filled', '🔋 Filled up'],
-            ['neutral', '😌 Fine'],
-            ['drained', '🪫 Drained'],
+            ['filled', 'Filled up'],
+            ['neutral', 'Fine'],
+            ['drained', 'Drained'],
           ] as Array<[Feeling, string]>
         ).map(([feeling, label]) => (
           <button
@@ -102,7 +102,7 @@ export function MatchmakerCard({ proposal }: { proposal: ProposalCardData }) {
         </p>
         {proposal.roomId && (
           <Link href={`/rooms/${proposal.roomId}`} className="inline-block mt-2">
-            <Button size="sm">Say hi 💬</Button>
+            <Button size="sm">Say hi</Button>
           </Link>
         )}
       </Card>
@@ -225,7 +225,7 @@ export function RitualCard({ ritual }: { ritual: RitualCardData }) {
               })
             }
           >
-            Love it 🔁
+            Love it
           </Button>
           <Button
             variant="ghost"

@@ -1,5 +1,6 @@
 'use client';
 
+import { Glyph } from '@/components/ui/Glyph';
 import { Avatar } from '@/components/ui/Avatar';
 import { Card } from '@/components/ui/Card';
 import { ReorderableList } from '@/components/ui/ReorderableList';
@@ -180,7 +181,7 @@ export function OrderStep({
             )}
           </ReorderableList>
           <p className="text-plate text-plate-inset inline-block text-xs text-ink-faint">
-            💡 Suggested window for this plan: <strong>{suggested.label}</strong> -
+            <Glyph emoji="💡" size={14} className="inline -mt-0.5 mr-1" />Suggested window for this plan: <strong>{suggested.label}</strong> -
             based on how soon it starts.
           </p>
         </div>

@@ -1,5 +1,6 @@
 'use client';
 
+import { Glyph } from '@/components/ui/Glyph';
 import { useRef, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
@@ -154,7 +155,7 @@ export function EventThread({
                       ? replyTo.body.length > 90
                         ? `${replyTo.body.slice(0, 89)}…`
                         : replyTo.body
-                      : '🎤 Voice note'}
+                      : 'Voice note'}
                   </span>
                 ) : null}
               </p>
@@ -164,7 +165,7 @@ export function EventThread({
                 aria-label="Cancel reply"
                 className="shrink-0 text-xs text-ink-faint hover:text-ink"
               >
-                ✕
+                <Glyph emoji="✕" size={14} />
               </button>
             </div>
           )}
@@ -234,7 +235,7 @@ export function EventThread({
                     </div>
                     {comment.reply_to && (
                       <p className="mt-1 rounded-card border-l-2 border-line bg-paper/70 px-2.5 py-1.5 text-xs text-ink-soft">
-                        <span className="font-bold">↩ {comment.reply_to.author_name}</span>
+                        <span className="font-bold">{comment.reply_to.author_name}</span>
                         {comment.reply_to.excerpt && (
                           <span className="block truncate">{comment.reply_to.excerpt}</span>
                         )}
@@ -311,7 +312,7 @@ export function EventThread({
           <div className="absolute inset-x-0 bottom-0 flex justify-center pb-1">
             <Card tone="gold" lifted className="text-center max-w-sm">
               <p className="font-extrabold text-ink">
-                🔒 {hiddenCount} more{' '}
+                <Glyph emoji="🔒" size={14} className="inline -mt-0.5 mr-1" />{hiddenCount} more{' '}
                 {hiddenCount === 1 ? 'comment' : 'comments'} in the thread
               </p>
               {rsvpAnchorId ? (

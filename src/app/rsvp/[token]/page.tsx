@@ -1,3 +1,4 @@
+import { Glyph } from '@/components/ui/Glyph';
 import { canSubscribeGuestSms } from '@/lib/sms-commands';
 import { normalizePhoneNumber } from '@/lib/phone';
 import type { Metadata } from 'next';
@@ -225,7 +226,7 @@ export default async function GuestRsvpPage({
       <main className="flex-1 flex flex-col justify-center pb-24">
         {!invite || !event ? (
           <div className="text-center">
-            <p className="text-4xl mb-3" aria-hidden>🍂</p>
+            <p className="mb-3" aria-hidden><Glyph emoji="🍂" size={40} /></p>
             <h1 className="font-extrabold tracking-tight text-2xl">{gone.message}</h1>
             <p className="text-ink-soft text-sm mt-2">{gone.fix}</p>
             {/* Which of "expired", "withdrawn", or "this deployment can't see

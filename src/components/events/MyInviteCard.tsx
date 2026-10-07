@@ -64,7 +64,7 @@ export function MyInviteCard({
   if (invite.status === 'accepted') {
     return (
       <Card tone="sage" lifted>
-        <p className="font-extrabold text-lg text-sage-deep">You’re in ✓</p>
+        <p className="font-extrabold text-lg text-sage-deep">You’re in</p>
         <p className="text-sm text-ink-soft mt-0.5">See you there. The room has the details.</p>
       </Card>
     );

@@ -29,7 +29,7 @@ export function ScheduleNextButton({
         })
       }
     >
-      {pending ? 'Setting it up…' : `🔁 ${label}`}
+      {pending ? 'Setting it up…' : label}
     </Button>
   );
 }

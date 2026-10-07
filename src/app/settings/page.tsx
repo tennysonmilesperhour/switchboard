@@ -561,7 +561,7 @@ export default async function SettingsPage({
                   name="sabbatical_message"
                   defaultValue={sabbaticalMessage}
                   maxLength={140}
-                  placeholder="Taking a quiet season 🍃"
+                  placeholder="Taking a quiet season"
                   aria-label="Sabbatical note"
                   aria-describedby="sabbatical-note-hint"
                   className="w-full rounded-card border border-line bg-paper px-3.5 py-2.5 text-sm outline-none focus:border-terracotta"

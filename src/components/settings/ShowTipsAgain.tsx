@@ -35,7 +35,7 @@ export function ShowTipsAgain() {
         className="rounded-pill border border-line px-3.5 py-2 text-sm font-bold text-ink-soft hover:border-terracotta hover:text-terracotta-deep transition-colors disabled:opacity-70"
       >
         {state === 'restored'
-          ? '✓ It’ll be on Home next visit'
+          ? 'It’ll be on Home next visit'
           : 'Show the getting-started checklist again'}
       </button>
       {state === 'unavailable' && (

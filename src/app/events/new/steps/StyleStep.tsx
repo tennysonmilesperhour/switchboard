@@ -1,5 +1,6 @@
 'use client';
 
+import { Glyph } from '@/components/ui/Glyph';
 import type { Dispatch, SetStateAction } from 'react';
 import { Card } from '@/components/ui/Card';
 import { Chip } from '@/components/ui/Chip';
@@ -92,7 +93,7 @@ export function StyleStep({
                     }`}
                     aria-hidden
                   >
-                    {option.emoji}
+                    <Glyph emoji={option.emoji} size={24} />
                   </span>
                   <div className="flex-1">
                     <p className={`font-extrabold ${active ? 'text-terracotta-deep' : 'text-ink'}`}>
@@ -138,7 +139,7 @@ export function StyleStep({
                 className="mt-1 size-4 accent-terracotta"
               />
               <span>
-                <span className="font-bold">Let the group decide what to do 🗳️</span>
+                <span className="font-bold">Let the group decide what to do</span>
                 <span className="block text-sm text-ink-soft mt-0.5 leading-relaxed">
                   Attendees suggest ideas and rank them privately. The best fit
                   wins - no debates, no loudest-voice problem.
@@ -213,7 +214,7 @@ export function StyleStep({
                 className="mt-1 size-4 accent-terracotta"
               />
               <span>
-                <span className="font-bold">Send a reminder before it starts ⏰</span>
+                <span className="font-bold">Send a reminder before it starts</span>
                 <span className="block text-sm text-ink-soft mt-0.5 leading-relaxed">
                   {REMINDER_SCHEDULE_COPY} Turn this off for a low-key plan that
                   doesn’t need one. You can change it later from Edit plan.

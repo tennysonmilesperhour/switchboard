@@ -17,6 +17,7 @@ import { setDiscoverable } from '@/lib/actions/profile';
 import { formatRelative } from '@/lib/format';
 import { errorFor, type ErrorCode } from '@/lib/errors';
 import { discoveryContextChoice } from '@/lib/discovery-context';
+import { Glyph } from '@/components/ui/Glyph';
 
 export interface DiscoveryPerson {
   id: string;
@@ -153,7 +154,7 @@ export function PeopleDiscoveryClient({
       <Link href="/people" className="block group">
         <Card className="group-hover:border-terracotta transition-colors">
           <div className="flex items-center gap-3">
-            <span className="text-xl" aria-hidden>👋</span>
+            <Glyph emoji="👋" size={20} />
             <span className="min-w-0 flex-1 text-sm">
               <span className="block font-bold">Already know someone?</span>
               <span className="block text-xs text-ink-faint">

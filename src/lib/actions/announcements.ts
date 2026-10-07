@@ -132,7 +132,7 @@ async function fanOutAnnouncement(
     await admin.from('messages').insert({
       room_id: event.room_id,
       sender_id: authorId,
-      body: `📣 ${body}`,
+      body: body,
     });
   }
 }

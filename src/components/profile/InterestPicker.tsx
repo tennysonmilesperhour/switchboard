@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Chip } from '@/components/ui/Chip';
 import type { InterestGroup } from '@/lib/interests';
+import { Glyph } from '@/components/ui/Glyph';
 
 interface InterestPickerProps {
   /** Form field name — one hidden input is emitted per selected value. */
@@ -174,9 +175,7 @@ export function InterestPicker({
 
           const header = (
             <p className="text-xs font-medium uppercase tracking-wide text-ink-faint">
-              <span aria-hidden className="mr-1">
-                {group.emoji}
-              </span>
+              <Glyph emoji={group.emoji} size={14} className="mr-1 inline align-text-bottom" />
               {group.label}
             </p>
           );
@@ -220,9 +219,7 @@ export function InterestPicker({
                 aria-expanded={open}
                 className="flex w-full items-center gap-3 px-3.5 py-3 text-left outline-none focus-visible:ring-2 focus-visible:ring-terracotta"
               >
-                <span aria-hidden className="text-base">
-                  {group.emoji}
-                </span>
+                <Glyph emoji={group.emoji} size={18} />
                 <span className="flex-1 text-sm font-medium text-ink">
                   {group.label}
                 </span>
@@ -254,7 +251,6 @@ export function InterestPicker({
         {customSelected.length > 0 && (
           <div className="space-y-2">
             <p className="text-xs font-medium uppercase tracking-wide text-ink-faint">
-              <span aria-hidden className="mr-1">✨</span>
               Your own
             </p>
             <div className="flex flex-wrap gap-2">

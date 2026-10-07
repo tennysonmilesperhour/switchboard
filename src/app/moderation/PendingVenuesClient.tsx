@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/Button';
 import { useToast } from '@/components/ui/Toast';
 import { formatRelative } from '@/lib/format';
 import { reviewVenue } from '@/lib/actions/venues';
+import { Glyph } from '@/components/ui/Glyph';
 
 export interface PendingVenue {
   id: string;
@@ -70,7 +71,7 @@ function VenueClaimCard({ venue }: { venue: PendingVenue }) {
         {venue.area && <span className="text-ink-soft"> · {venue.area}</span>}
       </p>
       <p className="mt-1.5 rounded-card bg-cream p-3 text-sm text-ink-soft break-words">
-        🎁 {venue.perk}
+        <Glyph emoji="🎁" size={14} className="mr-1 inline align-text-bottom" />{venue.perk}
       </p>
       <p className="mt-1.5 text-xs text-ink-soft">
         Claimed by {venue.claimant_name ?? 'a member'} · {formatRelative(venue.created_at)}

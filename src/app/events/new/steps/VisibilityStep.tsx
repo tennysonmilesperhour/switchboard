@@ -94,7 +94,7 @@ export function VisibilityStep({
                   className="mt-1 size-4 accent-terracotta"
                 />
                 <span>
-                  <span className="font-bold">Open Table 🍽️</span>
+                  <span className="font-bold">Open Table</span>
                   <span className="block text-sm text-ink-soft mt-0.5">
                     If seats stay empty, friends of your attendees can ask to
                     join. You approve every request.

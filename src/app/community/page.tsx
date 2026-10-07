@@ -5,6 +5,7 @@ import { AppShell } from '@/components/shell/AppShell';
 import { Card, SectionHeader } from '@/components/ui/Card';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { COMMUNITY_COVENANT_SUMMARY } from '@/lib/legal';
+import { Glyph } from '@/components/ui/Glyph';
 
 export const metadata: Metadata = { title: 'Community' };
 
@@ -48,7 +49,10 @@ export default async function CommunityPage() {
               {boards?.map((board) => (
                 <Link key={board.id} href={`/boards/${board.slug}`} className="block group">
                   <Card className="group-hover:border-terracotta transition-colors">
-                    <p className="font-medium">🏘️ {board.name}</p>
+                    <p className="flex items-center gap-1.5 font-medium">
+                      <Glyph emoji="🏘️" size={16} />
+                      {board.name}
+                    </p>
                     {board.description && (
                       <p className="text-sm text-ink-soft mt-0.5">{board.description}</p>
                     )}

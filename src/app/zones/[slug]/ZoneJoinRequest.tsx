@@ -9,6 +9,7 @@ import { useToast } from '@/components/ui/Toast';
 import { requestToJoinZone, withdrawZoneRequest } from '@/lib/actions/zones';
 import { formatDate } from '@/lib/format';
 import { ZONE_REASK_DAYS, type ZoneRequestState } from '@/lib/zone-rules';
+import { Glyph } from '@/components/ui/Glyph';
 
 interface ZoneJoinRequestProps {
   zoneId: string;
@@ -107,9 +108,7 @@ export function ZoneJoinRequest({ zoneId, zoneName, initialState }: ZoneJoinRequ
 
   return (
     <Card className="text-center" aria-busy={pending}>
-      <p className="text-4xl" aria-hidden>
-        🔒
-      </p>
+      <Glyph emoji="🔒" size={40} className="mx-auto text-ink-soft" />
       <h2 className="mt-3 font-display text-xl text-ink">{zoneName} is private</h2>
 
       {state.kind === 'none' && (

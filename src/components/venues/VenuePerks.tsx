@@ -1,5 +1,6 @@
 'use client';
 
+import { Glyph } from '@/components/ui/Glyph';
 import { useState, useTransition } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -43,8 +44,8 @@ function externalHref(raw: string | null): string | null {
 }
 
 const STATUS_CHIP: Record<VenueStatus, { label: string; className: string }> = {
-  pending: { label: '⏳ Pending review', className: 'bg-gold-soft text-ink-soft' },
-  verified: { label: '✓ Verified partner', className: 'bg-sage-soft text-ink-soft' },
+  pending: { label: 'Pending review', className: 'bg-gold-soft text-ink-soft' },
+  verified: { label: 'Verified partner', className: 'bg-sage-soft text-ink-soft' },
   rejected: { label: 'Not approved', className: 'bg-rose-soft text-rose-deep' },
 };
 
@@ -63,10 +64,10 @@ function VenueCard({ venue }: { venue: VenueRow }) {
           )}
         </p>
         <span className="shrink-0 rounded-full bg-sage-soft px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-ink-soft">
-          ✓ Verified
+          Verified
         </span>
       </div>
-      <p className="text-sm text-ink-soft mt-0.5">🎁 {venue.perk}</p>
+      <p className="text-sm text-ink-soft mt-0.5"><Glyph emoji="🎁" size={14} className="mr-1 inline -mt-0.5" />{venue.perk}</p>
       {href && (
         <a
           href={href}
@@ -151,7 +152,7 @@ function ClaimCard({ claim, supportEmail }: { claim: VenueClaim; supportEmail: s
           {chip.label}
         </span>
       </div>
-      <p className="text-sm text-ink-soft mt-0.5">🎁 {claim.perk}</p>
+      <p className="text-sm text-ink-soft mt-0.5"><Glyph emoji="🎁" size={14} className="mr-1 inline -mt-0.5" />{claim.perk}</p>
       {claim.status === 'pending' && (
         <p className="mt-1 text-xs text-ink-faint">
           A moderator is reviewing this. You’ll get a notification and an email with
@@ -248,7 +249,7 @@ export function VenuePerks({
   return (
     <section id="perks" className="scroll-mt-20">
       <SectionHeader
-        title="Partner perks 🏪"
+        title="Partner perks"
         hint={area ? `Verified spots near ${area} with a perk for Switchboard groups` : 'Verified local spots that offer Switchboard groups a perk'}
         action={
           <button
@@ -313,7 +314,7 @@ export function VenuePerks({
         <Card className="mt-3 animate-rise">
           {submitted ? (
             <div className="space-y-1.5 text-center py-2">
-              <p className="text-2xl" aria-hidden>📨</p>
+              <p className="flex justify-center text-terracotta-deep" aria-hidden><Glyph emoji="📨" size={28} /></p>
               <p className="text-sm font-bold text-ink">Submitted for review</p>
               <p className="text-xs text-ink-soft leading-relaxed">
                 We&apos;ll verify it&apos;s really the business and publish the perk

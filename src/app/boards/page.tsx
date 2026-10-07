@@ -7,6 +7,7 @@ import { Card, SectionHeader } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { createBoard } from '@/lib/actions/boards';
+import { Glyph } from '@/components/ui/Glyph';
 
 export const metadata: Metadata = { title: 'Neighborhood Boards' };
 
@@ -49,7 +50,10 @@ export default async function BoardsPage({
               {boards?.map((board) => (
                 <Link key={board.id} href={`/boards/${board.slug}`} className="block group">
                   <Card className="group-hover:border-terracotta transition-colors">
-                    <p className="font-medium">🏘️ {board.name}</p>
+                    <p className="flex items-center gap-1.5 font-medium">
+                      <Glyph emoji="🏘️" size={16} />
+                      {board.name}
+                    </p>
                     {board.description && (
                       <p className="text-sm text-ink-soft mt-0.5">{board.description}</p>
                     )}

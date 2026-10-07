@@ -477,7 +477,7 @@ describe('respondToIntroduction', () => {
     expect(mocks.notifyUsers).toHaveBeenCalledTimes(1);
     expect(mocks.notifyUsers).toHaveBeenCalledWith(['friend-a', 'friend-b'], {
       kind: 'match',
-      title: '✨ It’s a match',
+      title: 'It’s a match',
       body: 'You both said yes to climbing. Say hi!',
       url: '/rooms/room-9',
     });
@@ -526,7 +526,7 @@ describe('respondToIntroduction', () => {
     expect(result).toEqual({ ok: true, matched: true, url: '/mutual' });
     expect(mocks.notifyUsers).toHaveBeenCalledWith(['friend-a', 'friend-b'], {
       kind: 'match',
-      title: '✨ It’s a match',
+      title: 'It’s a match',
       body: 'You both said yes. Say hi!',
       url: '/mutual',
     });

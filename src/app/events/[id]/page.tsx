@@ -1,3 +1,4 @@
+import { Glyph } from '@/components/ui/Glyph';
 import type { Metadata } from 'next';
 import { after } from 'next/server';
 import { redirect } from 'next/navigation';
@@ -217,9 +218,9 @@ export default async function EventPage({
 
   const statusLabel: Record<SwitchboardEvent['status'], string> = {
     draft: 'Draft',
-    deciding: '🗳️ Group is deciding',
-    inviting: '🪜 Invitations in motion',
-    confirmed: '✓ Confirmed',
+    deciding: 'Group is deciding',
+    inviting: 'Invitations in motion',
+    confirmed: 'Confirmed',
     cancelled: 'Cancelled',
     past: 'Past',
   };
@@ -290,7 +291,7 @@ export default async function EventPage({
         {giveSpaceNotice && (
           <div className="rounded-card bg-gold-soft px-4 py-3">
             <p className="text-sm text-ink">
-              <span aria-hidden className="mr-1">👀</span>
+              <Glyph emoji="👀" size={14} className="mr-1 inline -mt-0.5" />
               <span className="font-bold">Heads up:</span> someone you’ve chosen to
               give space may also be there.
             </p>
@@ -349,7 +350,7 @@ export default async function EventPage({
           )}
           {event.status === 'past' && event.happened_at && (
             <Card tone="sage" lifted>
-              <p className="font-extrabold text-lg text-sage-deep">It happened 🎉</p>
+              <p className="font-extrabold text-lg text-sage-deep">It happened</p>
               <p className="text-sm text-ink-soft mt-0.5">
                 {attendees.length > 0
                   ? `You got ${attendees.length} ${attendees.length === 1 ? 'person' : 'people'} together. That’s the whole point.`
@@ -363,7 +364,7 @@ export default async function EventPage({
                   href={`/events/${event.id}/capsule`}
                   className="inline-flex items-center gap-1.5 rounded-pill border border-line bg-card px-3.5 py-2 text-xs font-bold text-ink-soft shadow-lift hover:border-terracotta hover:text-terracotta-deep active:scale-[0.98] transition-all"
                 >
-                  📦 Add to the Memory Capsule
+                  <Glyph emoji="📦" size={14} />Add to the Memory Capsule
                 </Link>
               </div>
             </Card>
@@ -371,7 +372,7 @@ export default async function EventPage({
           <div className="flex gap-2 flex-wrap">
             {event.recurrence && event.recurrence !== 'none' && (
               <span className="inline-flex items-center gap-1.5 rounded-pill bg-terracotta-soft px-3.5 py-2 text-xs font-bold text-terracotta-deep">
-                🔁 {recurrenceLabel(event.recurrence, event.recurrence_interval_days)}
+                <Glyph emoji="🔁" size={14} />{recurrenceLabel(event.recurrence, event.recurrence_interval_days)}
               </span>
             )}
             {/* Same gate as the Google link beside it: the .ics route answers
@@ -381,7 +382,7 @@ export default async function EventPage({
                 href={`/api/events/${event.id}/ics`}
                 className="inline-flex items-center gap-1.5 rounded-pill border border-line bg-card px-3.5 py-2 text-xs font-bold text-ink-soft shadow-lift hover:border-terracotta hover:text-terracotta-deep active:scale-[0.98] transition-all"
               >
-                📅 Apple / Outlook
+                <Glyph emoji="📅" size={14} />Apple / Outlook
               </a>
             )}
             {calendarEvent && (
@@ -391,7 +392,7 @@ export default async function EventPage({
                 rel="noopener noreferrer"
                 className="inline-flex items-center gap-1.5 rounded-pill border border-line bg-card px-3.5 py-2 text-xs font-bold text-ink-soft shadow-lift hover:border-terracotta hover:text-terracotta-deep active:scale-[0.98] transition-all"
               >
-                📅 Google Calendar
+                <Glyph emoji="📅" size={14} />Google Calendar
               </a>
             )}
             {wishlistUrl && (
@@ -401,7 +402,7 @@ export default async function EventPage({
                 rel="noopener noreferrer"
                 className="inline-flex items-center gap-1.5 rounded-pill border border-line bg-card px-3.5 py-2 text-xs font-bold text-ink-soft shadow-lift hover:border-terracotta hover:text-terracotta-deep active:scale-[0.98] transition-all"
               >
-                🎁 Wishlist
+                <Glyph emoji="🎁" size={14} />Wishlist
               </a>
             )}
             {event.room_id && inRoom && (
@@ -409,7 +410,7 @@ export default async function EventPage({
                 href={`/rooms/${event.room_id}`}
                 className="inline-flex items-center gap-1.5 rounded-pill border border-line bg-card px-3.5 py-2 text-xs font-bold text-ink-soft shadow-lift hover:border-terracotta hover:text-terracotta-deep active:scale-[0.98] transition-all"
               >
-                ❋ Room
+                <Glyph emoji="❋" size={14} />Room
               </Link>
             )}
             {!happenedCard && event.starts_at && new Date(event.starts_at) < new Date() && (
@@ -417,7 +418,7 @@ export default async function EventPage({
                 href={`/events/${event.id}/capsule`}
                 className="inline-flex items-center gap-1.5 rounded-pill border border-line bg-card px-3.5 py-2 text-xs font-bold text-ink-soft shadow-lift hover:border-terracotta hover:text-terracotta-deep active:scale-[0.98] transition-all"
               >
-                📦 Memory Capsule
+                <Glyph emoji="📦" size={14} />Memory Capsule
               </Link>
             )}
             {isHost && (
@@ -425,7 +426,7 @@ export default async function EventPage({
                 href={`/api/events/${event.id}/guests.csv`}
                 className="inline-flex items-center gap-1.5 rounded-pill border border-line bg-card px-3.5 py-2 text-xs font-bold text-ink-soft shadow-lift hover:border-terracotta hover:text-terracotta-deep active:scale-[0.98] transition-all"
               >
-                ⬇ Guest list (CSV)
+                <Glyph emoji="⬇" size={14} />Guest list (CSV)
               </a>
             )}
             {canManage &&
@@ -435,7 +436,7 @@ export default async function EventPage({
                   href={`/events/${event.id}/edit`}
                   className="inline-flex items-center gap-1.5 rounded-pill border border-line bg-card px-3.5 py-2 text-xs font-bold text-ink-soft shadow-lift hover:border-terracotta hover:text-terracotta-deep active:scale-[0.98] transition-all"
                 >
-                  ✏️ Edit plan
+                  <Glyph emoji="✏" size={14} />Edit plan
                 </Link>
               )}
             {/* Share the plan's PUBLIC link, never /events/<id>: the event URL
@@ -462,7 +463,7 @@ export default async function EventPage({
           </div>
           {venuePerk && (
             <p className="rounded-card bg-gold-soft px-3.5 py-3 text-sm">
-              🏪 <strong className="font-bold">{venuePerk.name}</strong> perk for Switchboard groups:{' '}
+              <Glyph emoji="🏪" size={14} className="mr-1 inline -mt-0.5" /><strong className="font-bold">{venuePerk.name}</strong> perk for Switchboard groups:{' '}
               {venuePerk.perk}
             </p>
           )}

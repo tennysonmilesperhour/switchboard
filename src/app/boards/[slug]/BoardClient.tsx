@@ -22,6 +22,7 @@ import {
 } from '@/lib/actions/boards';
 import { BoardSettings } from './BoardSettings';
 import { BoardMembers } from './BoardMembers';
+import { Glyph } from '@/components/ui/Glyph';
 
 export interface BoardPostRow {
   id: string;
@@ -263,10 +264,10 @@ export function BoardClient({
             <div className="flex gap-2 mb-3">
               {(
                 [
-                  ['notice', '📌 Notice'],
-                  ['event', '🔁 Recurring announcement'],
-                  ['offer', '🤲 Offer'],
-                  ['request', '🙋 Request'],
+                  ['notice', 'Notice'],
+                  ['event', 'Recurring announcement'],
+                  ['offer', 'Offer'],
+                  ['request', 'Request'],
                 ] as const
               ).map(([value, label]) => (
                 <button
@@ -426,9 +427,11 @@ export function BoardClient({
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">
                         <p className="font-medium">
-                          <span aria-hidden className="mr-1">
-                            {post.kind === 'event' ? '🔁' : post.kind === 'offer' ? '🤲' : post.kind === 'request' ? '🙋' : '📌'}
-                          </span>
+                          <Glyph
+                            emoji={post.kind === 'event' ? '🔁' : post.kind === 'offer' ? '🤲' : post.kind === 'request' ? '🙋' : '📌'}
+                            size={16}
+                            className="mr-1.5 inline align-text-bottom"
+                          />
                           {post.title}
                         </p>
                         {post.body && (
@@ -443,7 +446,7 @@ export function BoardClient({
                         )}
                         {post.starts_at && (
                           <p className="text-xs font-bold text-ink mt-1.5">
-                            📅 First date: {formatDate(post.starts_at)}
+                            First date: {formatDate(post.starts_at)}
                           </p>
                         )}
                         <p className="text-[11px] text-ink-faint mt-1.5">
@@ -470,7 +473,7 @@ export function BoardClient({
                               )}
                               {isAuthor && helpers.length > 0 && (
                                 <p className="text-xs font-bold text-sage-deep">
-                                  🙋 Can help:{' '}
+                                  Can help:{' '}
                                   {helpers.map((helper, index) => (
                                     <span key={helper.id}>
                                       {index > 0 && ', '}
@@ -493,7 +496,7 @@ export function BoardClient({
                               <div className="flex items-center gap-2">
                                 {post.fulfilled_at ? (
                                   <span className="rounded-pill bg-sage-soft px-2.5 py-1 text-xs font-bold text-sage-deep">
-                                    ✓ Complete
+                                    Complete
                                   </span>
                                 ) : isAuthor ? (
                                   <button
@@ -512,7 +515,7 @@ export function BoardClient({
                                 ) : iResponded ? (
                                   <>
                                     <span className="rounded-pill bg-cream px-2.5 py-1 text-xs font-bold text-ink-soft">
-                                      ✓ You offered to help
+                                      You offered to help
                                     </span>
                                     <button
                                       type="button"

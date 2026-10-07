@@ -91,7 +91,7 @@ export async function respondToRitual(
       .maybeSingle();
     await notifyUsers([ritual.creator_id], {
       kind: 'ritual',
-      title: 'It’s a ritual 🔁',
+      title: 'It’s a ritual',
       body: `${me?.display_name ?? 'Your friend'} is in for "${ritual.activity}" as a regular thing.`,
       url: '/mutual',
     });

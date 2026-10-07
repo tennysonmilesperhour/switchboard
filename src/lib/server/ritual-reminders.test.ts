@@ -49,7 +49,7 @@ describe('sweepRitualReminders (D8)', () => {
     expect(mocks.notifyUsers).toHaveBeenCalledTimes(2);
     expect(mocks.notifyUsers).toHaveBeenCalledWith(['rita'], {
       kind: 'ritual',
-      title: 'A ritual is due 🔁',
+      title: 'A ritual is due',
       body: 'Time for coffee with Pat. Plan it, or skip this one.',
       url: '/mutual',
     });

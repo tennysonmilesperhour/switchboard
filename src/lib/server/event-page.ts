@@ -791,5 +791,5 @@ export async function loadEventPage(
 export function threadExcerpt(body: string | null, hasVoice: boolean): string | null {
   const text = body?.replace(/\s+/g, ' ').trim() ?? '';
   if (text) return text.length > 90 ? `${text.slice(0, 89)}…` : text;
-  return hasVoice ? '🎤 Voice note' : null;
+  return hasVoice ? 'Voice note' : null;
 }

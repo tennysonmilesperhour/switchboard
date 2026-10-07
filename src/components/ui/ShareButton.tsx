@@ -1,6 +1,7 @@
 'use client';
 
 import { useToast } from '@/components/ui/Toast';
+import { Glyph } from '@/components/ui/Glyph';
 
 interface ShareButtonProps {
   /**
@@ -61,7 +62,8 @@ export function ShareButton({
       onClick={share}
       className={`inline-flex items-center gap-1.5 rounded-pill border border-line bg-card px-3.5 py-2 text-xs font-bold text-ink-soft shadow-lift hover:border-terracotta hover:text-terracotta-deep active:scale-[0.98] transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-terracotta ${className}`}
     >
-      🔗 {label}
+      <Glyph emoji="🔗" size={14} className="mr-1.5 inline align-text-bottom" />
+      {label}
     </button>
   );
 }

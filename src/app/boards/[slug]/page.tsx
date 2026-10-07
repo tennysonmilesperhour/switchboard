@@ -92,7 +92,7 @@ export default async function BoardPage({
           <p className="text-xs uppercase tracking-widest text-gold-deep">
             Neighborhood Board
           </p>
-          <h2 className="font-display text-3xl mt-1.5">🏘️ {board.name}</h2>
+          <h2 className="font-display text-3xl mt-1.5">{board.name}</h2>
           {board.description && (
             <p className="text-sm opacity-70 mt-2 leading-relaxed">{board.description}</p>
           )}

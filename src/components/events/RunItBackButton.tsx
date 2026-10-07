@@ -28,7 +28,7 @@ export function RunItBackButton({ eventId }: { eventId: string }) {
         })
       }
     >
-      {pending ? 'Setting it up…' : '🔁 Run it back'}
+      {pending ? 'Setting it up…' : 'Run it back'}
     </Button>
   );
 }

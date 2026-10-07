@@ -17,6 +17,7 @@ import {
   wallpaperShare,
   type CustomAppearance,
 } from '@/lib/theme-custom';
+import { Glyph } from '@/components/ui/Glyph';
 
 interface AppearancePickerProps {
   current: AppThemeId;
@@ -177,9 +178,9 @@ export function AppearancePicker({
                   {theme.name}
                 </span>
                 {selected && (
-                  <span className="shrink-0 whitespace-nowrap text-xs font-bold text-terracotta-deep">✓ on</span>
+                  <span className="shrink-0 whitespace-nowrap text-xs font-bold text-terracotta-deep">On</span>
                 )}
-                {locked && <span aria-hidden>🔒</span>}
+                {locked && <Glyph emoji="🔒" size={14} />}
               </span>
               <span className="mt-0.5 block text-xs leading-snug text-ink-faint">
                 {locked
@@ -571,7 +572,7 @@ function PlateOption({
     >
       <span className="flex items-center gap-1.5 text-xs font-bold text-ink">
         {title}
-        {selected && <span className="text-terracotta-deep">✓</span>}
+        {selected && <Glyph emoji="✓" size={14} className="text-terracotta-deep" />}
       </span>
       <span className="mt-0.5 block text-[11px] leading-snug text-ink-faint">
         {blurb}

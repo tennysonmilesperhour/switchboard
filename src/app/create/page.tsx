@@ -4,6 +4,7 @@ import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
 import { AppShell } from '@/components/shell/AppShell';
 import { Icon } from '@/components/ui/Icon';
+import { Glyph } from '@/components/ui/Glyph';
 
 export const metadata: Metadata = { title: 'Start something' };
 
@@ -61,10 +62,10 @@ export default async function CreatePage() {
             >
               <div className="flex items-center gap-4 rounded-card border-2 border-line bg-card p-4 hover:border-terracotta/50">
                 <span
-                  className="grid size-12 shrink-0 place-items-center rounded-2xl bg-cream text-2xl"
+                  className="grid size-12 shrink-0 place-items-center rounded-2xl bg-cream"
                   aria-hidden
                 >
-                  {door.emoji}
+                  <Glyph emoji={door.emoji} size={24} />
                 </span>
                 <span className="min-w-0 flex-1">
                   <span className="block font-extrabold text-ink">{door.title}</span>

@@ -8,6 +8,7 @@ import { checkIn } from '@/lib/actions/moments';
 import { EXPERIENCE_PRESETS } from '@/lib/types';
 import { useCurrentLocation } from '@/lib/client/use-current-location';
 import { errorRef, type ErrorCode } from '@/lib/errors';
+import { Glyph } from '@/components/ui/Glyph';
 
 export function ZoneCheckIn({
   zoneId,
@@ -89,7 +90,8 @@ export function ZoneCheckIn({
               : 'border-line bg-card text-ink-soft hover:border-terracotta hover:text-terracotta-deep'
           }`}
         >
-          📍 {location.status === 'locating'
+          <Glyph emoji="📍" size={14} />
+          {location.status === 'locating'
             ? 'Locating…'
             : location.status === 'ready'
               ? 'Pinned to the map'
@@ -137,7 +139,7 @@ export function ZoneCheckIn({
           })
         }
       >
-        {pending ? 'Checking in…' : 'Check in to the zone ✨'}
+        {pending ? 'Checking in…' : 'Check in to the zone'}
       </Button>
     </div>
   );
