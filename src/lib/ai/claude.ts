@@ -24,7 +24,7 @@ export function getClaude(): Anthropic {
 
 export const MODELS = {
   /** Fast classification/extraction - Living Rooms, serendipity scoring. */
-  fast: 'claude-haiku-4-5-20251001',
+  fast: 'claude-haiku-5-5',
   /** Curation and reasoning - Smart Activity Discovery. */
-  smart: 'claude-sonnet-4-6',
+  smart: 'claude-sonnet-5-5',
 } as const;

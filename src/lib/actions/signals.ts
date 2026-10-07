@@ -3,8 +3,10 @@
 import { failure, validation, type ActionResult } from '@/lib/errors';
 
 import { revalidatePath } from 'next/cache';
+import { after } from 'next/server';
 import { reportAndFail } from '@/lib/server/observability';
 import { requireUser } from '@/lib/server/require-user';
+import { notifyNearbyFriends } from '@/lib/server/signal-nearby';
 import type { createClient } from '@/lib/supabase/server';
 import { AUDIENCE_LIMITS, type SignalAudience } from '@/lib/signal-audience';
 
@@ -197,7 +199,7 @@ export async function activateSignals(
         expires_at: expiresAt,
       })),
     )
-    .select('id');
+    .select('id, label');
   if (error) return reportAndFail('SB-SIGNAL-SAVE', 'signal.activate', error);
 
   // Ids come from the insert above, so interpolating them is safe. Without
@@ -214,6 +216,11 @@ export async function activateSignals(
     if (clearError) return reportAndFail('SB-SIGNAL-SAVE', 'signal.activate', clearError);
   }
   revalidatePath('/');
+
+  // A discoverable friend who is close by hears about it. After the response,
+  // so turning a status on never waits on (or fails because of) the notices.
+  const turnedOn = (inserted ?? []).map((row) => ({ id: row.id, label: row.label }));
+  after(() => notifyNearbyFriends(user.id, turnedOn));
   return { ok: true };
 }
 

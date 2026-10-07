@@ -339,8 +339,9 @@ export function SignalBar({ active, circles, people, groups, defaultCircleId }: 
             })}
           </ul>
           <p className="mt-2 text-xs text-ink-faint">
-            No broadcast, no notification - friends simply notice when they open
-            Switchboard.{nextExpiry ? ` The first turns off ${formatRelative(nextExpiry)}.` : ''}
+            Friends see this when they open Switchboard. A friend who is
+            discoverable, sharing their location and nearby also gets one
+            notification.{nextExpiry ? ` The first turns off ${formatRelative(nextExpiry)}.` : ''}
           </p>
         </Card>
       )}
@@ -549,8 +550,9 @@ export function SignalBar({ active, circles, people, groups, defaultCircleId }: 
         </Card>
       ) : (
         <p className="text-xs text-ink-faint">
-          Tap any that fit, choose who sees them, then turn them on. Friends quietly notice
-          when they open Switchboard. Each turns off by itself in 3 hours.
+          Tap any that fit, choose who sees them, then turn them on. Friends see them when they
+          open Switchboard, and discoverable friends nearby are notified once. Each turns off by
+          itself in 3 hours.
         </p>
       )}
     </div>

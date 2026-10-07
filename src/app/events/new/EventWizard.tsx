@@ -421,7 +421,10 @@ export function EventWizard({
           profileId: invitee.profileId,
           guestName: invitee.profileId ? undefined : invitee.name,
           guestContact: invitee.guestContact,
-          groupStage: invitee.groupStage,
+          // A stage chosen for waves must not survive a switch to "everyone at
+          // once": the database would queue that person behind a wave that never
+          // runs.
+          groupStage: inviteMode === 'all_at_once' ? 0 : invitee.groupStage,
           windowMinutes: invitee.windowMinutes,
         })),
       });

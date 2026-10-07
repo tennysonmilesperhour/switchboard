@@ -153,7 +153,25 @@ export async function cloneEventForReuse(
     if (error) return fail('poll', error);
   }
 
-  const carryOver = runItBackCrew(priorResult.data ?? [], userId);
+  const crew = runItBackCrew(priorResult.data ?? [], userId);
+  // A block made after the last plan stops the invite insert (42501), which
+  // used to fail the whole clone and leave the host unable to run it back at
+  // all. Leave the blocked pair out and carry the rest.
+  const crewIds = crew.map((i) => i.invitee_id).filter((id): id is string => Boolean(id));
+  const blockedIds = new Set<string>();
+  if (crewIds.length > 0) {
+    const { data: blocks } = await admin
+      .from('profile_blocks')
+      .select('blocker_id, blocked_id')
+      .or(
+        `and(blocker_id.eq.${userId},blocked_id.in.(${crewIds.join(',')})),` +
+          `and(blocked_id.eq.${userId},blocker_id.in.(${crewIds.join(',')}))`,
+      );
+    for (const block of blocks ?? []) {
+      blockedIds.add(block.blocker_id === userId ? block.blocked_id : block.blocker_id);
+    }
+  }
+  const carryOver = crew.filter((i) => !i.invitee_id || !blockedIds.has(i.invitee_id));
   if (carryOver.length > 0) {
     const { error } = await admin.from('invites').insert(
       carryOver.map((i, index) => ({

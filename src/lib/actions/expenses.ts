@@ -47,11 +47,13 @@ export async function saveExpense(
   const trimmed = input.description.trim().slice(0, 120);
   if (!trimmed) return validation('What was it for?');
 
-  const dollars = Number(input.amount);
-  if (!Number.isFinite(dollars) || dollars <= 0) {
-    return validation('Enter an amount greater than zero.');
+  // Dollars and at most two decimals. `Number()` alone accepts "1e2" and
+  // "0x10", and rounding turned "1.005" into a different amount than typed.
+  const typed = String(input.amount).trim().replace(/^\$/, '').replace(/,/g, '');
+  if (!/^\d+(\.\d{0,2})?$/.test(typed)) {
+    return validation('Enter an amount in dollars and cents, like 12.50.');
   }
-  const amountCents = Math.round(dollars * 100);
+  const amountCents = Math.round(Number(typed) * 100);
   if (amountCents < 1) return validation('Enter an amount greater than zero.');
   // amount_cents is a Postgres int; anything larger failed as "didn't save".
   if (amountCents > 100_000_000) {

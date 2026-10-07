@@ -135,5 +135,8 @@ revoke all on public.notification_email_jobs,public.guest_sms_consents,public.sm
 -- The ritual reminder ledger is written and read only by definer code
 -- (20260930081000_ritual_reminders.sql).
 revoke all on public.ritual_reminders from anon, authenticated;
+-- The nearby-friend notice ledger is written and read only by definer code
+-- (20261008140000_signal_chat_and_nearby.sql).
+revoke all on public.signal_nearby_notices from anon, authenticated;
 revoke all on public.notification_routes from anon,authenticated;
 grant select on public.notification_routes to authenticated;

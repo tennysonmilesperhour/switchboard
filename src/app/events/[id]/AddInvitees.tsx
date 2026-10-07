@@ -17,6 +17,7 @@ import {
   type ContactCandidate,
   type ContactMatch,
 } from '@/lib/actions/connections';
+import { rememberContactPhones } from '@/lib/client/saved-contact-phones';
 
 export interface ConnectionOption {
   id: string;
@@ -154,6 +155,7 @@ export function AddInvitees({
     setContactsNote(null);
     try {
       const { matches, error: lookupError, code } = await resolveContactMatches(contacts);
+      rememberContactPhones(matches);
       const invitable = matches
         .filter((match) => match.connectionStatus !== 'self')
         .filter((match) => Boolean(inviteTargetFor(match)))

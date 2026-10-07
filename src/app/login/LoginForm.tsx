@@ -135,7 +135,7 @@ export function LoginForm({ next = '/', initialMode = 'signin' }: LoginFormProps
     if (!unconfirmedEmail) return;
     setResending(true);
     try {
-      const result = await resendEmailConfirmation(unconfirmedEmail);
+      const result = await resendEmailConfirmation(unconfirmedEmail, next);
       if (result.ok) {
         setUnconfirmedEmail(null);
         setFix(null);

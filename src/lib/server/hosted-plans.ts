@@ -1,8 +1,8 @@
 import 'server-only';
 
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { notifyUsers } from '@/lib/server/notify';
-import { guestEmailHeaders, looksLikeEmail, sendEmails } from '@/lib/server/email';
+import { notifyUsers, type NotificationPayload } from '@/lib/server/notify';
+import { guestEmailHeaders, looksLikeEmail, sendEmails, type EmailMessage } from '@/lib/server/email';
 
 /** Statuses of a plan someone could still be expecting to go to. */
 export const LIVE_PLAN_STATUSES = ['draft', 'deciding', 'inviting', 'confirmed'] as const;
@@ -27,8 +27,8 @@ export async function upcomingHostedPlans(
 }
 
 /**
- * Tell everyone who said yes to a departing host's upcoming plans that the plan
- * is off, before the account deletion cascades the plans away.
+ * Snapshot recipients before deletion cascades the source rows away. This must
+ * not send anything: storage cleanup or auth deletion can still fail.
  *
  * Deleting a single plan already refuses to erase one with accepted guests
  * until it is cancelled, "so nobody loses a commitment without receiving the
@@ -36,16 +36,22 @@ export async function upcomingHostedPlans(
  * with no notice at all. Links point at /plans because the plan page will not
  * exist by the time anyone taps them.
  */
-export async function noticeHostedPlansEnding(
+export interface HostedPlanCancellations {
+  planCount: number;
+  members: { userIds: string[]; payload: NotificationPayload }[];
+  emails: EmailMessage[];
+}
+
+export async function prepareHostedPlanCancellations(
   admin: SupabaseClient,
   hostId: string,
-): Promise<number> {
+): Promise<HostedPlanCancellations> {
   const plans = await upcomingHostedPlans(admin, hostId);
-  if (plans.length === 0) return 0;
+  if (plans.length === 0) return { planCount: 0, members: [], emails: [] };
   const titles = new Map(plans.map((plan) => [plan.id, plan.title]));
   const planIds = [...titles.keys()];
 
-  const [{ data: invites }, { data: cohosts }] = await Promise.all([
+  const [{ data: invites, error: inviteError }, { data: cohosts, error: cohostError }] = await Promise.all([
     admin
       .from('invites')
       .select('event_id, invitee_id, guest_contact')
@@ -53,6 +59,9 @@ export async function noticeHostedPlansEnding(
       .eq('status', 'accepted'),
     admin.from('event_cohosts').select('event_id, cohost_id').in('event_id', planIds),
   ]);
+  if (inviteError || cohostError) {
+    throw new Error('Could not read hosted-plan recipients', { cause: inviteError ?? cohostError });
+  }
 
   const members = new Map<string, Set<string>>();
   const add = (eventId: string, userId: string | null) => {
@@ -63,14 +72,15 @@ export async function noticeHostedPlansEnding(
   for (const invite of invites ?? []) add(invite.event_id, invite.invitee_id);
   for (const cohost of cohosts ?? []) add(cohost.event_id, cohost.cohost_id);
 
-  for (const [eventId, ids] of members) {
-    await notifyUsers([...ids], {
+  const notices = [...members].map(([eventId, ids]) => ({
+    userIds: [...ids],
+    payload: {
       kind: 'event_cancelled',
       title: 'Plan cancelled',
       body: `${titles.get(eventId) ?? 'A plan'} is off. The host closed their Switchboard account.`,
       url: '/plans',
-    });
-  }
+    },
+  }));
 
   const emails = (invites ?? [])
     .filter((invite) => !invite.invitee_id && looksLikeEmail(invite.guest_contact))
@@ -83,7 +93,13 @@ export async function noticeHostedPlansEnding(
         headers: guestEmailHeaders(),
       };
     });
-  if (emails.length > 0) await sendEmails(emails);
+  return { planCount: plans.length, members: notices, emails };
+}
 
-  return plans.length;
+/** Call only after successful deletion. No reads of the now-deleted rows. */
+export async function sendHostedPlanCancellations(snapshot: HostedPlanCancellations): Promise<void> {
+  for (const notice of snapshot.members) {
+    await notifyUsers(notice.userIds, notice.payload);
+  }
+  if (snapshot.emails.length > 0) await sendEmails(snapshot.emails);
 }

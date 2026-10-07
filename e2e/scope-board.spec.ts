@@ -132,3 +132,37 @@ test('feedback appears on the board immediately after sending', async ({ page })
   await expect(page.locator('#notesCount')).toHaveText('1');
   await expect(page.locator('#notesList')).toContainText('The control is hard to find.');
 });
+
+test('refreshing the board keeps collapsed sections collapsed', async ({ page }) => {
+  await page.route(boardPath, (route) =>
+    route.request().method() === 'POST'
+      ? route.fulfill({ json: { ok: true } })
+      : route.fulfill({ json: { ok: true, checked: {}, notes: [] } }),
+  );
+  await page.goto('/scope-verification');
+  await page.getByRole('button', { name: 'Collapse all' }).click();
+  await expect(page.locator('.group.collapsed').first()).toBeAttached();
+  await page.getByRole('button', { name: 'Refresh shared board' }).click();
+  await expect(page.locator('#boardNote')).toBeHidden();
+  const total = await page.locator('.group').count();
+  await expect(page.locator('.group.collapsed')).toHaveCount(total);
+});
+
+test('a tick the server refuses outright does not block the ones behind it', async ({ page }) => {
+  await page.route(boardPath, (route) => {
+    if (route.request().method() !== 'POST') {
+      return route.fulfill({ json: { ok: true, checked: {}, notes: [] } });
+    }
+    const sent = route.request().postDataJSON() as { itemId: string };
+    return sent.itemId === 'A1'
+      ? route.fulfill({ status: 400, json: { error: 'no' } })
+      : route.fulfill({ json: { ok: true } });
+  });
+  await page.addInitScript(() => {
+    localStorage.setItem('swb-scope-pending-v1', JSON.stringify({ A1: true, A2: true }));
+  });
+  await page.goto('/scope-verification');
+  await expect
+    .poll(() => page.evaluate(() => localStorage.getItem('swb-scope-pending-v1')))
+    .toBe('{}');
+});

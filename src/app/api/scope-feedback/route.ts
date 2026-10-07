@@ -78,7 +78,14 @@ function fail(message: string, status: number, code?: string) {
 /** Trim, collapse the newlines a paste brings in, and bound it. */
 function text(value: FormDataEntryValue | null, max: number): string {
   if (typeof value !== 'string') return '';
-  return value.replace(/\r\n/g, '\n').trim().slice(0, max);
+  // Control characters other than newline and tab never belong in a note or a
+  // name, and a name ends up in the owner's email subject.
+  const cleaned = value
+    .replace(/\r\n?/g, '\n')
+    .replace(/[\u0000-\u0008\u000B-\u001F\u007F]/g, '')
+    .trim();
+  // By code point, so a surrogate pair is never cut in half.
+  return Array.from(cleaned).slice(0, max).join('');
 }
 
 export async function POST(request: Request) {
@@ -95,15 +102,8 @@ export async function POST(request: Request) {
   const ip = clientIpFromHeaders(request.headers) || 'unknown';
   // Fail closed on both: an unavailable limiter must not turn an anonymous
   // upload endpoint into an unlimited one.
-  const withinGlobal = await checkRateLimit(
-    'scope-feedback:all',
-    GLOBAL_LIMIT,
-    GLOBAL_WINDOW_SECONDS,
-    { failClosed: true },
-  );
-  if (!withinGlobal) {
-    return fail('Too much feedback at once. Try again later.', 429);
-  }
+  // Per-address first: a refused address must stop here, not keep spending the
+  // global budget and lock everyone else out for a day.
   const withinIp = await checkRateLimit(
     `scope-feedback:ip:${ip}`,
     PER_IP_LIMIT,
@@ -112,6 +112,15 @@ export async function POST(request: Request) {
   );
   if (!withinIp) {
     return fail('You’ve sent a few already. Try again in an hour.', 429);
+  }
+  const withinGlobal = await checkRateLimit(
+    'scope-feedback:all',
+    GLOBAL_LIMIT,
+    GLOBAL_WINDOW_SECONDS,
+    { failClosed: true },
+  );
+  if (!withinGlobal) {
+    return fail('Too much feedback at once. Try again later.', 429);
   }
 
   let formData: FormData;
@@ -185,6 +194,9 @@ export async function POST(request: Request) {
   });
 
   if (insertError) {
+    if (stored.length > 0) {
+      await admin.storage.from('client-feedback').remove(stored);
+    }
     await reportOperationalError('client-feedback', insertError, {
       submissionId,
       screenshots: stored.length,

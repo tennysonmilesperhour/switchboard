@@ -146,6 +146,11 @@ const KIND_TO_CATEGORY: Record<string, NotificationCategory> = {
   interest_received: 'social',
   moment: 'social',
   ritual: 'social',
+  // A discoverable friend close by turned on a status. Opt-in on both sides
+  // (they chose to be discoverable and to share a live location), and busy
+  // neighbourhoods can send several, so it must be mutable with the rest of
+  // the social kinds rather than only by turning every push off.
+  signal_nearby: 'social',
   // Left unmapped on purpose, so no toggle can hide an answer someone is
   // waiting on: parental_approval, parental_approval_denied (a guardian's
   // decision), venue_review (the outcome of a partner claim) and join_declined

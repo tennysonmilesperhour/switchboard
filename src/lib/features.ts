@@ -635,7 +635,7 @@ export const FEATURE_GROUPS: readonly FeatureGroup[] = [
         id: 'availability-signals',
         title: 'Availability signals',
         blurb:
-          'Say “coffee?” to exactly who you mean: circles, specific people, or a whole group you belong to. Each signal picks its own audience, nothing goes live until you tap Turn on, and it expires on its own.',
+          'Say “coffee?” to exactly who you mean: circles, specific people, or a whole group you belong to. Each signal picks its own audience, nothing goes live until you tap Turn on, and it expires on its own. A friend who is discoverable, sharing their location and nearby gets one notification, and tapping a friend’s status opens a conversation with them, with Make a plan (and Text instead, for people from your shared contacts) at the bottom.',
         // No condition any more: the composer is always on Home, and says so
         // itself when there is nobody to tell yet. The qualifier that was here
         // existed only because Home hid it outright.
