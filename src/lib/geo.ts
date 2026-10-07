@@ -140,6 +140,21 @@ export function isApproximateFix(accuracyM: number | null | undefined): boolean 
  */
 export const LOCATION_PROMPT_WAIT_MS = 20_000;
 
+// How long a live share may last. Always bounded: a share can never linger, and
+// the server clamps whatever a client asks for to this range.
+export const MIN_SHARE_MINUTES = 15;
+export const MAX_SHARE_MINUTES = 8 * 60;
+export const DEFAULT_SHARE_MINUTES = 120;
+
+/** The durations offered when turning sharing on, shortest first. */
+export const SHARE_DURATIONS: readonly { label: string; minutes: number }[] = [
+  { label: '30 min', minutes: 30 },
+  { label: '1 hour', minutes: 60 },
+  { label: '2 hours', minutes: 120 },
+  { label: '4 hours', minutes: 240 },
+  { label: '8 hours', minutes: 480 },
+];
+
 export const LOCATION_PROMPT_WAITING =
   'Still waiting for location permission. Answer the prompt, or allow location for this site in your browser settings.';
 

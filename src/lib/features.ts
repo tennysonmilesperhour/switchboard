@@ -525,7 +525,7 @@ export const FEATURE_GROUPS: readonly FeatureGroup[] = [
         id: 'live-location',
         title: 'Live on the map',
         blurb:
-          'Opt in to appear to other people who are also sharing — mutual, block-aware, blurred to about 110 meters, and it switches itself off after a couple of hours.',
+          'Opt in to appear to other people who are also sharing — mutual, block-aware, blurred to about 110 meters, and it switches itself off after the time you pick, from 30 minutes to 8 hours.',
         where: 'More → Around → Map → the live sharing toggle',
         href: '/map',
       },
