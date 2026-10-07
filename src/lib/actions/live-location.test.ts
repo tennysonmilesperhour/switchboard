@@ -438,7 +438,7 @@ describe('getNearbyPeople', () => {
     const result = await getNearbyPeople();
 
     expectFailure(result, 'SB-RATE-LIMIT', 'Too many refreshes. Try again in a moment.');
-    expect(mocks.checkRateLimit).toHaveBeenCalledWith('live-nearby:user-1', 300, 3600);
+    expect(mocks.checkRateLimit).toHaveBeenCalledWith('live-nearby:user-1', 600, 3600);
     expect(mocks.rpc).not.toHaveBeenCalled();
   });
 

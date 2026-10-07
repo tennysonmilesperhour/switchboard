@@ -195,7 +195,7 @@ export async function getNearbyPeople(radiusM = DEFAULT_RADIUS_M): Promise<Nearb
   if (!auth.ok) return auth;
   const { supabase, user } = auth;
 
-  if (!(await checkRateLimit(`live-nearby:${user.id}`, 300, 60 * 60))) {
+  if (!(await checkRateLimit(`live-nearby:${user.id}`, 600, 60 * 60))) {
     return failure('SB-RATE-LIMIT', 'Too many refreshes. Try again in a moment.');
   }
 
