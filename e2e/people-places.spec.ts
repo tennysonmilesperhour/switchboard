@@ -226,15 +226,15 @@ test.describe('people and places', () => {
 
       // D8: both people hear about it, each naming the other.
       await expectNotification(page, 'A ritual is due');
-      await expect(page.getByText(`with ${ben.name}. Plan it, or skip this one.`, { exact: false })).toBeVisible();
+      await expect(page.getByRole('main').getByText(`with ${ben.name}. Plan it, or skip this one.`, { exact: false })).toBeVisible();
       await expectNotification(benPage, 'A ritual is due');
-      await expect(benPage.getByText(`with ${ana.name}. Plan it, or skip this one.`, { exact: false })).toBeVisible();
+      await expect(benPage.getByRole('main').getByText(`with ${ana.name}. Plan it, or skip this one.`, { exact: false })).toBeVisible();
       await shot(benPage, 'ritual-reminder-inbox');
 
       // A second sweep does not remind them again.
       await runCascadeSweep(request);
       await benPage.reload();
-      await expect(benPage.getByText('A ritual is due')).toHaveCount(1);
+      await expect(benPage.getByRole('main').getByText('A ritual is due')).toHaveCount(1);
 
       // Ben skips this one from Mutual; it moves a week on for both of them.
       await benPage.goto('/mutual');
