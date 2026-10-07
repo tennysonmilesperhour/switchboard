@@ -25,9 +25,12 @@ import {
 } from '@/lib/actions/live-location';
 import type { LiveLocation, LocationVisibility, NearbyPerson } from '@/lib/types';
 
-// How often we re-ask "who's near me" while sharing. Live enough to feel present
-// without hammering the rate-limited RPC.
-const POLL_MS = 20_000;
+// How often we re-ask "who's near me" while sharing and the page is in view.
+// Other people's rows are owner-only under RLS, so realtime can't deliver them;
+// a short poll is how someone switching their sharing on or off shows up here.
+// Hidden tabs skip it (see below), which keeps this inside the server's budget
+// (`live-nearby` in live-location.ts).
+const POLL_MS = 8_000;
 
 const RADIUS_CHOICES: { label: string; meters: number }[] = [
   { label: 'This spot', meters: 1_000 },
@@ -247,7 +250,9 @@ export function LiveShare({
   const startPoll = useCallback(() => {
     if (pollTimer.current !== null) return;
     void pollNearby();
-    pollTimer.current = setInterval(() => void pollNearby(), POLL_MS);
+    pollTimer.current = setInterval(() => {
+      if (document.visibilityState === 'visible') void pollNearby();
+    }, POLL_MS);
   }, [pollNearby]);
 
   // Resume an already-active share (e.g. the user shared, then navigated back).
