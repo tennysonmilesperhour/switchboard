@@ -10,6 +10,7 @@ import { SignalBar } from '@/components/signals/SignalBar';
 import { Glyph } from '@/components/ui/Glyph';
 import { GettingStarted } from '@/components/home/GettingStarted';
 import { Greeting } from '@/components/home/Greeting';
+import { IdeaStarter } from '@/components/home/IdeaStarter';
 import { PillarRow } from '@/components/home/PillarRow';
 import { PassportCard } from '@/components/home/PassportCard';
 import { RecentMatches } from '@/components/home/RecentMatches';
@@ -59,8 +60,8 @@ type HomeSection = keyof typeof HOME_SECTIONS;
 const PLAN_IDEAS = ['Coffee', 'Dinner', 'Game night', 'A walk', 'Drinks', 'Movie night'];
 
 /** Up to this many ideas fit as chips under a compact banner. Past it, Home
- *  switches to large idea cards you swipe through, so a long list never turns
- *  into a wall of chips. */
+ *  defaults to large idea cards you swipe through (the reader can toggle back),
+ *  so a long list never turns into a wall of chips. */
 const MAX_CHIP_IDEAS = 2;
 
 /** A section whose read failed, in the place it would have rendered. */
@@ -426,69 +427,7 @@ export default async function HomePage() {
           </section>
         ) : (
           <div className="space-y-3">
-            {PLAN_IDEAS.length > MAX_CHIP_IDEAS ? (
-              <div
-                className="-mx-4 flex snap-x snap-mandatory gap-3 overflow-x-auto px-4 pb-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
-                aria-label="Plan ideas, swipe to browse"
-              >
-                <div className="w-[85%] shrink-0 snap-center">
-                  <Link href="/events/new" className="block">
-                    <PlanCard
-                      title="Float an idea to your people"
-                      color="pink"
-                      attendeesLabel="Swipe for ideas, or start from scratch."
-                      actions={
-                        <span className="rounded-btn bg-card px-5 py-2.5 text-sm font-bold text-ink shadow-lift">
-                          Start something
-                        </span>
-                      }
-                    />
-                  </Link>
-                </div>
-                {PLAN_IDEAS.map((idea, i) => (
-                  <div key={idea} className="w-[85%] shrink-0 snap-center">
-                    <PlanCard
-                      href={`/events/new?title=${encodeURIComponent(idea)}`}
-                      title={idea}
-                      color={planColor(i + 1)}
-                      attendeesLabel="Tap to start this plan"
-                    />
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <>
-                <Link
-                  href="/events/new"
-                  className="plan-pink flex items-center gap-3 rounded-card p-4 text-white shadow-card active:scale-[0.99] transition-transform"
-                >
-                  <div className="min-w-0 flex-1">
-                    <h3 className="text-lg font-extrabold leading-tight tracking-tight">
-                      Float an idea to your people
-                    </h3>
-                    <p className="mt-0.5 text-sm font-semibold text-white/85">
-                      Pick something below, or start from scratch.
-                    </p>
-                  </div>
-                  {/* A solid surface with the theme's own ink: white text on a
-                      quarter-white pill over the pink card fell below 4.5:1. */}
-                  <span className="shrink-0 rounded-btn bg-card px-4 py-2 text-sm font-bold text-ink shadow-lift">
-                    Start
-                  </span>
-                </Link>
-                <div className="flex flex-wrap gap-2" aria-label="Quick plan ideas">
-                  {PLAN_IDEAS.map((idea) => (
-                    <Link
-                      key={idea}
-                      href={`/events/new?title=${encodeURIComponent(idea)}`}
-                      className="inline-flex items-center gap-1.5 rounded-pill border border-line bg-card px-3.5 py-2 text-sm font-bold text-ink-soft shadow-lift hover:border-terracotta hover:text-terracotta-deep active:scale-[0.98] transition-all"
-                    >
-                      {idea}
-                    </Link>
-                  ))}
-                </div>
-              </>
-            )}
+            <IdeaStarter ideas={PLAN_IDEAS} maxChips={MAX_CHIP_IDEAS} />
             <p className="text-xs text-ink-faint leading-relaxed">
               Nothing is revealed unless both sides choose it, and nothing nags.
               Invite everyone at once, or one person at a time.
