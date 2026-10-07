@@ -78,7 +78,7 @@ async function createZone(
   }
   await form.getByRole('button', { name: 'Create zone' }).click();
   await page.waitForURL(/\/zones\/[^/?]+$/, { timeout: 15_000 });
-  await expect(page.getByRole('heading', { name: `✨ ${name}` })).toBeVisible();
+  await expect(page.getByRole('heading', { name: name })).toBeVisible();
   return new URL(page.url()).pathname.split('/').pop()!;
 }
 
@@ -274,7 +274,7 @@ test.describe('people and places', () => {
     const { context, page: deePage } = await signedIn(browser, dee);
     try {
       await pick(deePage, cy);
-      await expect(deePage.getByText('✨ It’s mutual!')).toBeVisible();
+      await expect(deePage.getByText('It’s mutual!', { exact: true })).toBeVisible();
       const deeMatch = deePage.locator('div', { hasText: cy.name }).filter({
         has: deePage.getByRole('button', { name: 'Unmatch' }),
       }).last();
@@ -346,7 +346,7 @@ test.describe('people and places', () => {
       await expect(page.getByText(fox.name)).toHaveCount(0);
       await page.goto('/notifications');
       await expect(heard).toHaveCount(1);
-      await expect(page.getByText('Wants to connect 👋')).toHaveCount(0);
+      await expect(page.getByText('Wants to connect', { exact: true })).toHaveCount(0);
       await shot(page, 'ignore-inbox');
 
       // Eve changing her mind is still one step: asking Fox herself connects them.
@@ -425,7 +425,7 @@ test.describe('people and places', () => {
 
       // Hal is removed, and sees that rather than a fresh "Ask to join".
       await h.goto(`/zones/${slug}`);
-      await expect(h.getByRole('heading', { name: `✨ ${name}` })).toBeVisible();
+      await expect(h.getByRole('heading', { name: name })).toBeVisible();
       await page.goto(`/zones/${slug}`);
       await page.locator('li', { hasText: hal.name }).getByRole('button', { name: 'Remove' }).click();
       await confirmDialog(page, `Remove ${hal.name}?`, 'Remove');
@@ -496,7 +496,7 @@ test.describe('people and places', () => {
       await page.getByLabel('Ends on').fill(end);
       await page.getByRole('button', { name: 'Save changes' }).click();
       await expectToast(page, 'Zone updated.');
-      await expect(page.getByRole('heading', { name: `✨ ${renamed}` })).toBeVisible();
+      await expect(page.getByRole('heading', { name: renamed })).toBeVisible();
       const shown = new Date(`${end}T12:00:00Z`).toLocaleDateString('en-US', { month: 'long', day: 'numeric', timeZone: 'UTC' });
       await expect(page.getByText(new RegExp(`Open until .*${shown}`))).toBeVisible();
 
@@ -505,7 +505,7 @@ test.describe('people and places', () => {
       await expectToast(page, `${jo.name} can now manage this zone with you.`);
       await expect(page.locator('li', { hasText: jo.name })).toContainText('moderator');
       await j.reload();
-      await expect(j.getByRole('heading', { name: `✨ ${renamed}` })).toBeVisible();
+      await expect(j.getByRole('heading', { name: renamed })).toBeVisible();
       await expect(j.getByText('Who can be here')).toBeVisible();
       await j.getByRole('button', { name: 'Edit', exact: true }).click();
       await expect(j.getByRole('button', { name: 'Delete this zone' })).toHaveCount(0);
@@ -518,7 +518,7 @@ test.describe('people and places', () => {
       await expectToast(page, 'Zone deleted.');
       await page.waitForURL(/\/zones$/);
       await j.goto(`/zones/${slug}`);
-      await expect(j.getByRole('heading', { name: `✨ ${renamed}` })).toHaveCount(0);
+      await expect(j.getByRole('heading', { name: renamed })).toHaveCount(0);
       await expect(j.getByRole('heading', { name: `${renamed} is private` })).toHaveCount(0);
     } finally {
       await joSide.context.close();
@@ -542,7 +542,7 @@ test.describe('people and places', () => {
     try {
       await luSide.page.goto(href);
       await luSide.page.waitForURL(new RegExp(`/zones/${slug}$`));
-      await expect(luSide.page.getByRole('heading', { name: `✨ ${name}` })).toBeVisible();
+      await expect(luSide.page.getByRole('heading', { name: name })).toBeVisible();
     } finally {
       await luSide.context.close();
     }
@@ -566,7 +566,7 @@ test.describe('people and places', () => {
     await page.waitForURL(/\/boards\/[^/?]+$/, { timeout: 15_000 });
     const boardUrl = page.url();
 
-    await page.getByRole('button', { name: '🙋 Request' }).click();
+    await page.getByRole('button', { name: 'Request', exact: true }).click();
     await page.getByLabel('Title').fill(ask);
     await page.getByRole('button', { name: 'Post to the board' }).click();
     await expectToast(page, 'Posted to the board.');
@@ -611,7 +611,7 @@ test.describe('people and places', () => {
         .fill(renamed);
       await page.getByRole('button', { name: 'Save', exact: true }).click();
       await expectToast(page, 'Board updated.');
-      await expect(page.getByRole('heading', { name: `🏘️ ${renamed}` })).toBeVisible();
+      await expect(page.getByRole('heading', { name: renamed })).toBeVisible();
 
       await page.getByRole('button', { name: 'Leave this board' }).click();
       await confirmDialog(page, `Leave ${renamed}?`, 'Leave board');
@@ -620,7 +620,7 @@ test.describe('people and places', () => {
 
       // Nia runs it now, and can delete it.
       await n.reload();
-      await expect(n.getByRole('heading', { name: `🏘️ ${renamed}` })).toBeVisible();
+      await expect(n.getByRole('heading', { name: renamed })).toBeVisible();
       await expect(n.getByText('Invite-only - you moderate this board')).toBeVisible();
       await shot(n, 'board-new-moderator');
       await n.getByRole('button', { name: 'Delete this board' }).click();
@@ -653,7 +653,7 @@ test.describe('people and places', () => {
     try {
       await patSide.page.goto(href);
       await patSide.page.waitForURL(boardUrl);
-      await expect(patSide.page.getByRole('heading', { name: `🏘️ ${name}` })).toBeVisible();
+      await expect(patSide.page.getByRole('heading', { name: name })).toBeVisible();
     } finally {
       await patSide.context.close();
     }
@@ -685,9 +685,9 @@ test.describe('people and places', () => {
       await p.goto('/moments');
       await p.getByLabel('Where are you?').fill(place);
       await p.getByRole('button', { name: /Use my current location/ }).click();
-      await expect(p.getByRole('button', { name: /📍/ }).first()).toHaveAttribute('aria-pressed', 'true');
+      await expect(p.getByRole('button', { name: /Use my current location|Pinned to the map/ }).first()).toHaveAttribute('aria-pressed', 'true');
       await p.getByRole('button', { name: experience }).click();
-      await p.getByRole('button', { name: 'Check in ✨' }).click();
+      await p.getByRole('button', { name: 'Check in', exact: true }).click();
       await expect(p.getByText('Checked in', { exact: true })).toBeVisible();
     }
 
@@ -723,9 +723,9 @@ test.describe('people and places', () => {
       await expect(q.getByText('You’re curious - they haven’t decided yet.', { exact: false })).toBeVisible();
       await r.reload();
       await r.getByRole('button', { name: 'I’d like to learn more' }).click();
-      await expect(r.getByText('✨ Mutual curiosity')).toBeVisible();
+      await expect(r.getByText('Mutual curiosity', { exact: true })).toBeVisible();
       await q.reload();
-      await expect(q.getByText('✨ Mutual curiosity')).toBeVisible();
+      await expect(q.getByText('Mutual curiosity', { exact: true })).toBeVisible();
       await expect(q.getByText(rae.name)).toBeVisible();
       await shot(q, 'moments-mutual');
     } finally {
@@ -868,9 +868,9 @@ test.describe('people and places', () => {
       await page.getByLabel('Where are you?').fill(unique('Café '));
       await page.getByRole('button', { name: /Use my current location/ }).click();
       await expect(page.getByText(/only gave an approximate location \(within 3\.0 km\)/)).toBeVisible();
-      await expect(page.getByRole('button', { name: /📍/ }).first()).toHaveAttribute('aria-pressed', 'false');
+      await expect(page.getByRole('button', { name: /Use my current location|Pinned to the map/ }).first()).toHaveAttribute('aria-pressed', 'false');
       await page.getByRole('button', { name: /Coffee Conversation/ }).click();
-      await page.getByRole('button', { name: 'Check in ✨' }).click();
+      await page.getByRole('button', { name: 'Check in', exact: true }).click();
       await expect(page.getByText('Checked in', { exact: true })).toBeVisible();
 
       const { data } = await adminClient()
@@ -906,7 +906,7 @@ test.describe('people and places', () => {
     try {
       await page.goto('/moments');
       await page.getByRole('button', { name: /Use my current location/ }).click();
-      await expect(page.getByRole('button', { name: /📍/ }).first()).toHaveAttribute('aria-pressed', 'true');
+      await expect(page.getByRole('button', { name: /Use my current location|Pinned to the map/ }).first()).toHaveAttribute('aria-pressed', 'true');
       await expect(page.getByText(/location fix/)).toHaveCount(0);
     } finally {
       await context.close();
@@ -970,7 +970,7 @@ test.describe('people and places', () => {
         await p.getByLabel('Where are you?').fill(place);
         await p.getByRole('button', { name: /Use my current location/ }).click();
         await p.getByRole('button', { name: /Coffee Conversation/ }).click();
-        await p.getByRole('button', { name: 'Check in ✨' }).click();
+        await p.getByRole('button', { name: 'Check in', exact: true }).click();
         await expect(p.getByText('Checked in', { exact: true })).toBeVisible();
       }
       const t = tiaSide.page;
@@ -981,10 +981,10 @@ test.describe('people and places', () => {
       const u = umaSide.page;
       await u.reload();
       await u.getByRole('button', { name: 'I’d like to learn more' }).click();
-      await expect(u.getByText('✨ Mutual curiosity')).toBeVisible();
+      await expect(u.getByText('Mutual curiosity', { exact: true })).toBeVisible();
       // Well inside the page's own 30-second look-again: only the
       // notification can have refreshed it this fast.
-      await expect(t.getByText('✨ Mutual curiosity')).toBeVisible({ timeout: 10_000 });
+      await expect(t.getByText('Mutual curiosity', { exact: true })).toBeVisible({ timeout: 10_000 });
     } finally {
       for (const side of [tiaSide, umaSide]) {
         await side.page.goto('/moments', { timeout: 10_000 }).catch(() => {});
