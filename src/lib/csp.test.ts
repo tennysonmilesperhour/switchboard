@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { buildCsp, supabaseConnectSources } from '@/lib/csp';
+import { buildCsp, mapSources, supabaseConnectSources } from '@/lib/csp';
 
 /**
  * A CSP that is wrong fails silently. Nothing throws, no request 500s, nothing
@@ -60,8 +60,18 @@ describe('buildCsp', () => {
 
   it('reaches Supabase over the origin the app was actually built against', () => {
     expect(csp({ supabaseUrl: 'http://127.0.0.1:54321' })).toContain(
-      "connect-src 'self' http://127.0.0.1:54321 ws://127.0.0.1:54321",
+      "connect-src 'self' http://127.0.0.1:54321 ws://127.0.0.1:54321 ",
     );
+  });
+
+  it('lets the map fetch its basemap and run its tile worker', () => {
+    // Both failures are silent: the map frame renders and stays blank.
+    const policy = csp({ isDev: false, mapSources: mapSources(undefined, undefined) });
+    expect(policy).toMatch(/connect-src [^;]*https:\/\/tiles\.openfreemap\.org/);
+    expect(policy).toContain("worker-src 'self' blob:");
+    const custom = csp({ mapSources: mapSources('https://maps.example.com/s.json', undefined) });
+    expect(custom).toMatch(/connect-src [^;]*https:\/\/maps\.example\.com/);
+    expect(custom).not.toContain('openfreemap');
   });
 
   it('lets signed voice notes and photos load from the Supabase origin', () => {

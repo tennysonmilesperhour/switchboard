@@ -9,6 +9,7 @@ import { requireUser } from '@/lib/server/require-user';
 import { isValidCoordinate } from '@/lib/geo';
 import { checkRateLimit } from '@/lib/server/rate-limit';
 import { reportAndFail } from '@/lib/server/observability';
+import { removeBlockedFromMyGroups } from '@/lib/server/block-cascade';
 
 export interface MomentActionResult {
   ok: boolean;
@@ -410,10 +411,23 @@ export async function acceptMoment(
     );
   }
 
-  await admin.from('room_members').insert([
+  const { error: membersError } = await admin.from('room_members').insert([
     { room_id: room.id, member_id: mine.user_id },
     { room_id: room.id, member_id: other.user_id },
   ]);
+  if (membersError) {
+    // A match whose room nobody is in is worse than no match: take the room
+    // back and give the claim back so either person can try again.
+    await admin.from('rooms').delete().eq('id', room.id);
+    await admin
+      .from('moments')
+      .update({ status: 'open' })
+      .in('id', [myMomentId, otherMomentId]);
+    return reportAndFail('SB-MOMENT-CHAT', 'moment.chat', membersError, {
+      myMomentId,
+      otherMomentId,
+    });
+  }
 
   // Durable notification (in-app row + push), so a match is discoverable later
   // in /notifications even if the recipient never enabled push or is offline.
@@ -451,6 +465,14 @@ export async function blockMomentCandidate(
       'Could not block this person. Try again.',
     );
   }
+  // The same block as everywhere else: a candidate who is already a connection
+  // leaves the connection and the circles too.
+  const unlinked = await removeBlockedFromMyGroups(
+    mine.supabase,
+    mine.user.id,
+    authorization.other.user_id,
+  );
+  if (unlinked) return unlinked;
   revalidatePath('/moments');
   return { ok: true };
 }

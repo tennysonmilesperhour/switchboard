@@ -9,7 +9,7 @@ import { errorFor, type ErrorCode } from '@/lib/errors';
  *
  *   - an impossible coordinate never reaches the database;
  *   - a stored coordinate is already rounded to ~110 m, whatever the device sent;
- *   - every share expires within 1–8 hours, and moving never extends it;
+ *   - every share expires within 15 minutes–8 hours, and moving never extends it;
  *   - every read and write is keyed to the session's own id;
  *   - the discovery radius is clamped before it reaches `find_nearby_people`,
  *     which is the only way to see anyone else.
@@ -212,23 +212,42 @@ describe('shareLocation', () => {
   });
 
   it.each([
-    ['nothing chosen', undefined, 2],
-    ['NaN', Number.NaN, 2],
-    ['infinity', Number.POSITIVE_INFINITY, 2],
-    ['zero', 0, 1],
-    ['a negative window', -5, 1],
-    ['a fraction that rounds to zero', 0.4, 1],
-    ['a fraction that rounds up', 2.6, 3],
-    ['the maximum', 8, 8],
-    ['a whole day', 24, 8],
-    ['a numeric string', '8', 2],
-  ])('clamps the window for %s to %i h', async (_label, hours, expected) => {
-    const result = await share({ hours: hours as number });
+    ['nothing chosen', undefined, 120],
+    ['NaN', Number.NaN, 120],
+    ['infinity', Number.POSITIVE_INFINITY, 120],
+    ['thirty minutes', 30, 30],
+    ['an hour', 60, 60],
+    ['zero', 0, 15],
+    ['a negative window', -5, 15],
+    ['a minute', 1, 15],
+    ['the maximum', 480, 480],
+    ['a whole day', 1440, 480],
+    ['a numeric string', '480', 120],
+  ])('clamps the window for %s to %i min', async (_label, minutes, expected) => {
+    const result = await share({ minutes: minutes as number });
 
-    const expiresAt = new Date(NOW.getTime() + expected * HOUR_MS).toISOString();
+    const expiresAt = new Date(NOW.getTime() + expected * 60_000).toISOString();
     expect(result).toEqual({ ok: true, expiresAt });
     const [row] = argsOf('live_locations', 'upsert') as [Record<string, unknown>];
     expect(row.expires_at).toBe(expiresAt);
+  });
+
+  it('keeps the running window when only the details change', async () => {
+    const running = new Date(NOW.getTime() + 25 * 60_000).toISOString();
+    answers.live_locations = { data: { expires_at: running }, error: null };
+
+    const result = await share({ keepWindow: true, minutes: 480, visibility: 'connections' });
+
+    expect(result).toEqual({ ok: true, expiresAt: running });
+    const [row] = argsOf('live_locations', 'upsert') as [Record<string, unknown>];
+    expect(row.expires_at).toBe(running);
+  });
+
+  it('starts a fresh window when keepWindow finds no live share', async () => {
+    const result = await share({ keepWindow: true, minutes: 60 });
+
+    const expiresAt = new Date(NOW.getTime() + HOUR_MS).toISOString();
+    expect(result).toEqual({ ok: true, expiresAt });
   });
 
   it('keeps only a real accuracy reading', async () => {
@@ -438,7 +457,7 @@ describe('getNearbyPeople', () => {
     const result = await getNearbyPeople();
 
     expectFailure(result, 'SB-RATE-LIMIT', 'Too many refreshes. Try again in a moment.');
-    expect(mocks.checkRateLimit).toHaveBeenCalledWith('live-nearby:user-1', 300, 3600);
+    expect(mocks.checkRateLimit).toHaveBeenCalledWith('live-nearby:user-1', 600, 3600);
     expect(mocks.rpc).not.toHaveBeenCalled();
   });
 

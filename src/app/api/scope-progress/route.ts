@@ -50,7 +50,8 @@ function fail(message: string, status: number, code?: string) {
 
 function text(value: FormDataEntryValue | string | null, max: number): string {
   if (typeof value !== 'string') return '';
-  return value.trim().slice(0, max);
+  // By code point, so a surrogate pair is never cut in half.
+  return Array.from(value.trim()).slice(0, max).join('');
 }
 
 export async function GET(request: Request) {
@@ -109,30 +110,32 @@ export async function GET(request: Request) {
   }
 
   // Signed per request rather than made public, so the objects are viewable
-  // without the bucket being listable.
-  const notes = await Promise.all(
-    (notesResult.data ?? []).map(async (row) => {
-      const screenshots = await Promise.all(
-        (row.screenshots ?? []).map(async (path: string) => {
-          const { data } = await admin.storage
-            .from('client-feedback')
-            .createSignedUrl(path, SIGNED_URL_SECONDS);
-          return data?.signedUrl ?? null;
-        }),
-      );
-      return {
-        id: row.id,
-        at: row.created_at,
-        itemId: row.item_id,
-        itemLabel: row.item_label,
-        body: row.body,
-        reporter: row.reporter,
-        status: row.status,
-        resolution: row.resolution,
-        screenshots: screenshots.filter((url): url is string => Boolean(url)),
-      };
-    }),
+  // without the bucket being listable. One batched call, not one per image.
+  const paths = (notesResult.data ?? []).flatMap(
+    (row) => (row.screenshots ?? []) as string[],
   );
+  const signed = new Map<string, string>();
+  if (paths.length > 0) {
+    const { data } = await admin.storage
+      .from('client-feedback')
+      .createSignedUrls(paths, SIGNED_URL_SECONDS);
+    for (const entry of data ?? []) {
+      if (entry.path && entry.signedUrl) signed.set(entry.path, entry.signedUrl);
+    }
+  }
+  const notes = (notesResult.data ?? []).map((row) => ({
+    id: row.id,
+    at: row.created_at,
+    itemId: row.item_id,
+    itemLabel: row.item_label,
+    body: row.body,
+    reporter: row.reporter,
+    status: row.status,
+    resolution: row.resolution,
+    screenshots: ((row.screenshots ?? []) as string[])
+      .map((path) => signed.get(path))
+      .filter((url): url is string => Boolean(url)),
+  }));
 
   return NextResponse.json(
     { ok: true, checked, notes },
@@ -158,17 +161,8 @@ export async function POST(request: Request) {
 
   const ip = clientIpFromHeaders(request.headers) || 'unknown';
   // Fail closed on both: an unavailable limiter must not turn an open write
-  // endpoint into an unlimited one.
-  if (
-    !(await checkRateLimit(
-      'scope-progress:write:all',
-      WRITE_GLOBAL_LIMIT,
-      WRITE_GLOBAL_WINDOW_SECONDS,
-      { failClosed: true },
-    ))
-  ) {
-    return fail('Too many changes at once. Try again later.', 429);
-  }
+  // endpoint into an unlimited one. Per-address first, so a refused address
+  // stops here instead of spending the global budget.
   if (
     !(await checkRateLimit(
       `scope-progress:write:${ip}`,
@@ -178,6 +172,16 @@ export async function POST(request: Request) {
     ))
   ) {
     return fail('That’s a lot of changes. Try again in a bit.', 429);
+  }
+  if (
+    !(await checkRateLimit(
+      'scope-progress:write:all',
+      WRITE_GLOBAL_LIMIT,
+      WRITE_GLOBAL_WINDOW_SECONDS,
+      { failClosed: true },
+    ))
+  ) {
+    return fail('Too many changes at once. Try again later.', 429);
   }
 
   let payload: {

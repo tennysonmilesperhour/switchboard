@@ -5,7 +5,13 @@ import { failure, validation, type ActionResult, type ErrorCode } from '@/lib/er
 import { revalidatePath } from 'next/cache';
 import { requireUser } from '@/lib/server/require-user';
 import { checkRateLimit } from '@/lib/server/rate-limit';
-import { coarsenCoordinate, isValidCoordinate } from '@/lib/geo';
+import {
+  coarsenCoordinate,
+  DEFAULT_SHARE_MINUTES,
+  isValidCoordinate,
+  MAX_SHARE_MINUTES,
+  MIN_SHARE_MINUTES,
+} from '@/lib/geo';
 import type { LiveLocation, LocationVisibility, NearbyPerson } from '@/lib/types';
 import { reportAndFail } from '@/lib/server/observability';
 
@@ -30,10 +36,7 @@ export interface NearbyResult {
 }
 
 // Sharing is always time-boxed. The window is the user's choice, clamped so a
-// live location can never linger indefinitely.
-const MIN_HOURS = 1;
-const MAX_HOURS = 8;
-const DEFAULT_HOURS = 2;
+// live location can never linger indefinitely (bounds live in `@/lib/geo`).
 
 // Discovery radius bounds (metres): a live map is for "around here", not a
 // nation-wide people search. Clamped before it reaches the RPC.
@@ -45,9 +48,9 @@ function sanitizeVisibility(value: unknown): LocationVisibility {
   return value === 'connections' ? 'connections' : 'sharers';
 }
 
-function clampHours(hours: number | undefined): number {
-  if (!Number.isFinite(hours as number)) return DEFAULT_HOURS;
-  return Math.min(MAX_HOURS, Math.max(MIN_HOURS, Math.round(hours as number)));
+function clampMinutes(minutes: number | undefined): number {
+  if (typeof minutes !== 'number' || !Number.isFinite(minutes)) return DEFAULT_SHARE_MINUTES;
+  return Math.min(MAX_SHARE_MINUTES, Math.max(MIN_SHARE_MINUTES, Math.round(minutes)));
 }
 
 export interface ShareLocationInput {
@@ -57,7 +60,13 @@ export interface ShareLocationInput {
   headline?: string | null;
   emoji?: string | null;
   visibility?: LocationVisibility;
-  hours?: number;
+  /** How long to share, in minutes; clamped to 15 minutes–8 hours. */
+  minutes?: number;
+  /**
+   * Change the details of a share that is already live without touching when
+   * it ends. Falls back to `minutes` when no live share exists.
+   */
+  keepWindow?: boolean;
 }
 
 /**
@@ -89,7 +98,16 @@ export async function shareLocation(input: ShareLocationInput): Promise<ShareRes
     return failure('SB-LOCATION-PAUSED');
   }
 
-  const expiresAt = new Date(Date.now() + clampHours(input.hours) * 3_600_000).toISOString();
+  let expiresAt = new Date(Date.now() + clampMinutes(input.minutes) * 60_000).toISOString();
+  if (input.keepWindow === true) {
+    const { data: live } = await supabase
+      .from('live_locations')
+      .select('expires_at')
+      .eq('user_id', user.id)
+      .gt('expires_at', new Date().toISOString())
+      .maybeSingle();
+    if (live?.expires_at) expiresAt = live.expires_at;
+  }
   const headline = input.headline?.trim().slice(0, 90) || null;
   const emoji = input.emoji?.trim().slice(0, 8) || null;
   const accuracy =
@@ -195,7 +213,7 @@ export async function getNearbyPeople(radiusM = DEFAULT_RADIUS_M): Promise<Nearb
   if (!auth.ok) return auth;
   const { supabase, user } = auth;
 
-  if (!(await checkRateLimit(`live-nearby:${user.id}`, 300, 60 * 60))) {
+  if (!(await checkRateLimit(`live-nearby:${user.id}`, 600, 60 * 60))) {
     return failure('SB-RATE-LIMIT', 'Too many refreshes. Try again in a moment.');
   }
 

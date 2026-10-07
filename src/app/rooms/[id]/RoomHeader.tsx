@@ -91,7 +91,7 @@ export function RoomHeader({
     const ok = await confirm({
       title: 'Leave this room?',
       body:
-        roomKind === 'match'
+        roomKind === 'match' || roomKind === 'direct'
           ? 'It leaves your Rooms, and you won’t see anything new said here. The other person keeps what was already said.'
           : 'It leaves your Rooms, and you won’t see anything new said here. The plan itself isn’t affected.',
       confirmLabel: 'Leave',
@@ -233,7 +233,7 @@ export function RoomHeader({
           )}
         </div>
       )}
-      {!readOnly && roomKind === 'match' && others.length === 0 && (
+      {!readOnly && (roomKind === 'match' || roomKind === 'direct') && others.length === 0 && (
         <div role="status" className="rounded-card bg-cream px-3.5 py-2.5 text-sm text-ink-soft">
           The other person has left this room. What was said stays here for you.
         </div>

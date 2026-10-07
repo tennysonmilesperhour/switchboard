@@ -54,7 +54,7 @@ beforeEach(() => {
       error: null,
     });
     const query: Record<string, unknown> = {};
-    for (const name of ['select', 'eq']) query[name] = () => query;
+    for (const name of ['select', 'eq', 'neq', 'is']) query[name] = () => query;
     query.update = (data: unknown) => { writing = true; updates.push(data); return query; };
     query.insert = (data: unknown) => { writing = true; inserts.push(data); return query; };
     query.maybeSingle = async () => result();

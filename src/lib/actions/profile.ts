@@ -582,10 +582,19 @@ export async function updateSabbatical(formData: FormData): Promise<ActionResult
   // Entering a quiet season pulls down any live availability signal and any
   // live location share, so you stop appearing on radars and the map right away.
   if (on) {
-    await Promise.all([
+    const [signals, location] = await Promise.all([
       supabase.from('availability_signals').delete().eq('user_id', user.id),
       supabase.from('live_locations').delete().eq('user_id', user.id),
     ]);
+    // A failed delete would leave a signal or a pin showing while the switch
+    // reads "on", so say so rather than reporting a quiet season that is not.
+    const pullDownError = signals?.error ?? location?.error;
+    if (pullDownError) {
+      return reportAndFail('SB-SETTINGS-SAVE', 'settings.sabbatical', pullDownError, {
+        userId: user.id,
+        step: 'pull-down',
+      });
+    }
   }
 
   revalidatePath('/settings');

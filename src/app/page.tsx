@@ -10,6 +10,7 @@ import { SignalBar } from '@/components/signals/SignalBar';
 import { Glyph } from '@/components/ui/Glyph';
 import { GettingStarted } from '@/components/home/GettingStarted';
 import { Greeting } from '@/components/home/Greeting';
+import { IdeaStarter } from '@/components/home/IdeaStarter';
 import { PillarRow } from '@/components/home/PillarRow';
 import { PassportCard } from '@/components/home/PassportCard';
 import { RecentMatches } from '@/components/home/RecentMatches';
@@ -55,6 +56,13 @@ const HOME_SECTIONS = {
 } as const satisfies Record<string, { area: string; code: ErrorCode }>;
 
 type HomeSection = keyof typeof HOME_SECTIONS;
+
+const PLAN_IDEAS = ['Coffee', 'Dinner', 'Game night', 'A walk', 'Drinks', 'Movie night'];
+
+/** Up to this many ideas fit as chips under a compact banner. Past it, Home
+ *  defaults to large idea cards you swipe through (the reader can toggle back),
+ *  so a long list never turns into a wall of chips. */
+const MAX_CHIP_IDEAS = 2;
 
 /** A section whose read failed, in the place it would have rendered. */
 function SectionError({ section }: { section: HomeSection }) {
@@ -419,33 +427,7 @@ export default async function HomePage() {
           </section>
         ) : (
           <div className="space-y-3">
-            <Link href="/events/new" className="block">
-              <PlanCard
-                title="Float an idea to your people"
-                color="pink"
-                attendeesLabel="Pick something below, or start from scratch. Switchboard sorts out the details."
-                actions={
-                  // A solid surface with the theme's own ink: white text on a
-                  // quarter-white pill over the pink card fell below 4.5:1.
-                  <span className="rounded-btn bg-card px-5 py-2.5 text-sm font-bold text-ink shadow-lift">
-                    Start something
-                  </span>
-                }
-              />
-            </Link>
-            <div className="flex flex-wrap gap-2" aria-label="Quick plan ideas">
-              {['Coffee', 'Dinner', 'Game night', 'A walk', 'Drinks', 'Movie night'].map(
-                (idea) => (
-                  <Link
-                    key={idea}
-                    href={`/events/new?title=${encodeURIComponent(idea)}`}
-                    className="inline-flex items-center gap-1.5 rounded-pill border border-line bg-card px-3.5 py-2 text-sm font-bold text-ink-soft shadow-lift hover:border-terracotta hover:text-terracotta-deep active:scale-[0.98] transition-all"
-                  >
-                    {idea}
-                  </Link>
-                ),
-              )}
-            </div>
+            <IdeaStarter ideas={PLAN_IDEAS} maxChips={MAX_CHIP_IDEAS} />
             <p className="text-xs text-ink-faint leading-relaxed">
               Nothing is revealed unless both sides choose it, and nothing nags.
               Invite everyone at once, or one person at a time.
@@ -620,13 +602,12 @@ export default async function HomePage() {
                   ? signal.profile[0]
                   : signal.profile;
                 const name = profileRow?.display_name ?? 'Friend';
-                // A signal is an opening, so the card answers it: a plan with
-                // them already invited and the signal as the working title.
-                // It used to open their profile, which does not show the
-                // signal, and offered nothing to do about it.
-                const href = `/events/new?invite=${signal.user_id}&title=${encodeURIComponent(
-                  signal.label,
-                )}`;
+                // A signal is an opening, so the card answers it with a
+                // conversation: tapping goes straight into messaging them, and
+                // the room carries a Make a plan button at the bottom. It used
+                // to open their profile, then a plan form, which asked for a
+                // commitment before anyone had said hello.
+                const href = `/rooms/with/${signal.user_id}`;
                 return (
                   <Link key={signal.id} href={href} className="block group">
                     <Card tone="sage" className="group-hover:shadow-lift transition-shadow">
@@ -640,7 +621,7 @@ export default async function HomePage() {
                         </span>
                         <span className="flex flex-col items-end gap-0.5">
                           <span className="text-xs font-bold text-terracotta-deep whitespace-nowrap">
-                            Make a plan
+                            Message
                           </span>
                           <span className="text-xs text-ink-faint whitespace-nowrap">
                             {formatRelative(signal.expires_at).replace('in ', '')} left

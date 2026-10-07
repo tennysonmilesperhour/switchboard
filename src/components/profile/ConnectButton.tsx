@@ -106,6 +106,12 @@ export function ConnectButton({
             toast.error(result.error ?? 'Could not send that request.', result.code);
             return;
           }
+          if (result.connected) {
+            setLocalStatus('accepted');
+            toast.success(`You’re connected with ${name}. They had already asked you.`);
+            router.refresh();
+            return;
+          }
           setLocalStatus('outgoing');
           toast.success(`Request sent to ${name}.`);
           router.refresh();

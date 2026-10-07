@@ -74,6 +74,7 @@ function builder(result: { data?: unknown; error?: DbError | null }) {
     select: () => chain,
     eq: () => chain,
     order: () => chain,
+    or: () => chain,
     maybeSingle: async () => settled,
     single: async () => settled,
     then: (resolve: (value: unknown) => unknown, reject?: (reason: unknown) => unknown) =>
@@ -107,6 +108,9 @@ function defaultSessionFrom(table: string) {
 
 function defaultAdminFrom(table: string) {
   return {
+    select() {
+      return builder({ data: [] });
+    },
     insert(rows: unknown) {
       state.adminInserts.push({ table, rows });
       const data = table === 'rooms' ? { id: 'room-new' } : table === 'events' ? { id: 'clone-1' } : null;

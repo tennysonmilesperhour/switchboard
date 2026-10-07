@@ -10,6 +10,8 @@
  * message in a CI browser nobody was reading.
  */
 
+import { mapConnectSources, mapStyleConfig } from '@/lib/geo';
+
 /**
  * Where the browser may reach Supabase — the REST origin and its websocket.
  *
@@ -64,6 +66,17 @@ export function supabaseMediaSource(
 }
 
 /**
+ * Where the browser fetches the basemap: the style JSON, vector tiles, glyphs
+ * and sprites all come over `fetch`, so the map is blank without these origins.
+ */
+export function mapSources(
+  light = process.env.NEXT_PUBLIC_MAP_STYLE_URL,
+  dark = process.env.NEXT_PUBLIC_MAP_STYLE_URL_DARK,
+): string {
+  return mapConnectSources(mapStyleConfig(light, dark));
+}
+
+/**
  * `script-src` uses a fresh nonce for inline framework scripts and same-origin
  * bundles, with NO `'unsafe-inline'` in production. We intentionally avoid
  * `strict-dynamic`: Next/Turbopack can request follow-up chunks without a
@@ -76,10 +89,14 @@ export function supabaseMediaSource(
  * attributes are pervasive in the UI and a CSP nonce does not cover inline
  * style *attributes* (only `<style>` elements). Style injection is far lower
  * risk than script injection, so this is an accepted allowance.
+ *
+ * `worker-src blob:` is for the map: MapLibre parses vector tiles in a Web
+ * Worker it builds from a blob of its own bundled code. Without it the worker
+ * falls back to `script-src`, is refused, and the map never draws a tile.
  */
 export function buildCsp(
   nonce: string,
-  options: { isDev?: boolean; supabaseUrl?: string } = {},
+  options: { isDev?: boolean; supabaseUrl?: string; mapSources?: string } = {},
 ): string {
   const isDev = options.isDev ?? process.env.NODE_ENV === 'development';
   return [
@@ -89,7 +106,8 @@ export function buildCsp(
     `img-src 'self' data: blob: https: ${supabaseMediaSource(options.supabaseUrl)}`,
     `media-src 'self' blob: ${supabaseMediaSource(options.supabaseUrl)}`,
     "font-src 'self' data:",
-    `connect-src 'self' ${supabaseConnectSources(options.supabaseUrl)}`,
+    `connect-src 'self' ${supabaseConnectSources(options.supabaseUrl)} ${options.mapSources ?? mapSources()}`,
+    "worker-src 'self' blob:",
     "frame-src 'none'",
     "object-src 'none'",
     "base-uri 'self'",

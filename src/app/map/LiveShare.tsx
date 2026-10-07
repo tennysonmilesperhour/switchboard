@@ -8,10 +8,12 @@ import { formatRelative } from '@/lib/format';
 import { errorRef, type ErrorCode } from '@/lib/errors';
 import {
   coarsenCoordinate,
+  DEFAULT_SHARE_MINUTES,
   formatDistance,
   isApproximateFix,
   LOCATION_PROMPT_WAIT_MS,
   LOCATION_PROMPT_WAITING,
+  SHARE_DURATIONS,
   type MapMarker,
   type MapPoint,
 } from '@/lib/geo';
@@ -25,9 +27,12 @@ import {
 } from '@/lib/actions/live-location';
 import type { LiveLocation, LocationVisibility, NearbyPerson } from '@/lib/types';
 
-// How often we re-ask "who's near me" while sharing. Live enough to feel present
-// without hammering the rate-limited RPC.
-const POLL_MS = 20_000;
+// How often we re-ask "who's near me" while sharing and the page is in view.
+// Other people's rows are owner-only under RLS, so realtime can't deliver them;
+// a short poll is how someone switching their sharing on or off shows up here.
+// Hidden tabs skip it (see below), which keeps this inside the server's budget
+// (`live-nearby` in live-location.ts).
+const POLL_MS = 8_000;
 
 const RADIUS_CHOICES: { label: string; meters: number }[] = [
   { label: 'This spot', meters: 1_000 },
@@ -129,6 +134,7 @@ export function LiveShare({
     mySharing?.visibility === 'connections' ? 'connections' : 'sharers',
   );
   const [radius, setRadius] = useState(RADIUS_CHOICES[1].meters);
+  const [minutes, setMinutes] = useState(DEFAULT_SHARE_MINUTES);
   const [note, setNote] = useState(mySharing?.headline ?? '');
   const [expiresAt, setExpiresAt] = useState<string | null>(mySharing?.expires_at ?? null);
   const [nearbyCount, setNearbyCount] = useState<number | null>(null);
@@ -247,7 +253,9 @@ export function LiveShare({
   const startPoll = useCallback(() => {
     if (pollTimer.current !== null) return;
     void pollNearby();
-    pollTimer.current = setInterval(() => void pollNearby(), POLL_MS);
+    pollTimer.current = setInterval(() => {
+      if (document.visibilityState === 'visible') void pollNearby();
+    }, POLL_MS);
   }, [pollNearby]);
 
   // Resume an already-active share (e.g. the user shared, then navigated back).
@@ -331,7 +339,7 @@ export function LiveShare({
               accuracyM: pos.coords.accuracy ?? null,
               headline: note,
               visibility: nextVisibility,
-              hours: 2,
+              minutes,
             });
             if (!result.ok) {
               toast.error(result.error ?? 'Could not start sharing.', result.code);
@@ -414,7 +422,7 @@ export function LiveShare({
         lng: point.lng,
         headline: note,
         visibility: next,
-        hours: 2,
+        keepWindow: true,
       });
       if (!result.ok) {
         setVisibility(previous);
@@ -426,6 +434,34 @@ export function LiveShare({
     } catch {
       setVisibility(previous);
       toast.error('Could not change who can see you. Try again.', 'SB-LOCATION-SAVE');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  // Restart the window from now, so "turn off in 30 min" means 30 minutes from
+  // this tap. The server clamps it; only the accepted expiry is shown.
+  async function changeDuration(next: number) {
+    setMinutes(next);
+    if (!sharing) return;
+    const point = lastPoint.current;
+    if (!point) return;
+    setBusy(true);
+    try {
+      const result = await shareLocation({
+        lat: point.lat,
+        lng: point.lng,
+        headline: note,
+        visibility,
+        minutes: next,
+      });
+      if (!result.ok) {
+        toast.error(result.error ?? 'Could not change when sharing turns off.', result.code);
+        return;
+      }
+      setExpiresAt(result.expiresAt ?? expiresAt);
+    } catch {
+      toast.error('Could not change when sharing turns off. Try again.', 'SB-LOCATION-SAVE');
     } finally {
       setBusy(false);
     }
@@ -455,6 +491,28 @@ export function LiveShare({
         ))}
       </select>
     </label>
+  );
+
+  const durationPicker = (label: string, selected: number | null) => (
+    <div className="flex flex-wrap items-center gap-2" role="group" aria-label={label}>
+      <span className="text-xs font-bold text-ink-soft">{label}</span>
+      {SHARE_DURATIONS.map((choice) => (
+        <button
+          key={choice.minutes}
+          type="button"
+          onClick={() => changeDuration(choice.minutes)}
+          disabled={busy}
+          aria-pressed={selected === choice.minutes}
+          className={`rounded-pill border px-3 py-1.5 text-xs font-bold transition-colors disabled:opacity-60 ${
+            selected === choice.minutes
+              ? 'border-terracotta bg-terracotta-soft text-terracotta-deep'
+              : 'border-line bg-card text-ink-faint hover:text-ink-soft'
+          }`}
+        >
+          {choice.label}
+        </button>
+      ))}
+    </div>
   );
 
   if (!supported) {
@@ -546,6 +604,7 @@ export function LiveShare({
           ))}
           {radiusSelect}
         </div>
+        <div className="mt-2">{durationPicker('Turn off in', null)}</div>
       </Card>
     );
   }
@@ -556,8 +615,8 @@ export function LiveShare({
       <p className="mt-1 text-sm text-ink-soft leading-relaxed">
         Turn location on to appear on the map and see other people who are also
         sharing right now. It’s off by default, only ever an{' '}
-        <strong>approximate</strong> spot, and switches itself off after a couple
-        of hours.
+        <strong>approximate</strong> spot, and switches itself off when the time
+        you pick runs out.
       </p>
 
       <div className="mt-3 space-y-2.5">
@@ -583,6 +642,7 @@ export function LiveShare({
           </label>
           {radiusSelect}
         </div>
+        {durationPicker('Turn off after', minutes)}
       </div>
 
       <Button size="lg" className="mt-3 w-full" disabled={busy} onClick={() => start()}>

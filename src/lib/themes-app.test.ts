@@ -239,6 +239,8 @@ describe('resolveTheme', () => {
     expect(resolveTheme('')).toBe('default');
     expect(resolveTheme('neon')).toBe('default');
     expect(resolveTheme('DUSK')).toBe('default');
+    // Retired preset: rows saved before it was removed render the default.
+    expect(resolveTheme('dusk')).toBe('default');
   });
 });
 
@@ -283,7 +285,7 @@ describe('the appearance_theme CHECK constraint', () => {
 
 describe('themeById', () => {
   it('falls back to the default rather than returning undefined', () => {
-    expect(themeById('dusk').id).toBe('dusk');
+    expect(themeById('almanac').id).toBe('almanac');
     // @ts-expect-error — deliberately passing a value the type forbids, because
     // a stale stored value can reach this at runtime.
     expect(themeById('gone').id).toBe('default');

@@ -9,6 +9,8 @@
  * the same words, from one rule.
  */
 
+export const MAX_CAPACITY = 100_000;
+
 export const CAPACITY_MESSAGE = 'Spots must be a whole number of at least 1.';
 
 /** Why this value cannot be a plan's capacity, or null when it can (or is blank). */
@@ -18,5 +20,8 @@ export function capacityProblem(raw: string | number | null | undefined): string
   if (text === '') return null;
   const value = Number(text);
   if (!Number.isInteger(value) || value < 1) return CAPACITY_MESSAGE;
+  // `events.capacity` is a Postgres int; anything near its limit failed the
+  // insert as an operator fault instead of naming the number.
+  if (value > MAX_CAPACITY) return `Spots can’t be more than ${MAX_CAPACITY.toLocaleString('en-US')}.`;
   return null;
 }

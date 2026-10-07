@@ -907,6 +907,17 @@ const REGISTRY = {
     fix: 'End your sabbatical in Settings before turning a signal on.',
     actor: 'reader',
   },
+  'SB-SIGNAL-CHAT': {
+    message: 'That conversation didn’t open.',
+    fix: 'Go back and tap their status again.',
+    actor: 'reader',
+  },
+  // Never shown: the nearby-friend notice runs after the status has saved.
+  'SB-SIGNAL-NOTIFY': {
+    message: 'Nearby friends couldn’t be told about a status.',
+    fix: null,
+    actor: 'operator',
+  },
   'SB-VENUE-SAVE': {
     message: 'That venue change didn’t save.',
     fix: 'Try again.',
@@ -1328,6 +1339,8 @@ const AREA_CODES: Record<string, ErrorCode> = {
   'signal.activate': 'SB-SIGNAL-SAVE',
   'signal.remove': 'SB-SIGNAL-SAVE',
   'signal.clear': 'SB-SIGNAL-SAVE',
+  'signal.open-chat': 'SB-SIGNAL-CHAT',
+  'signal.notify-nearby': 'SB-SIGNAL-NOTIFY',
   'venue.claim': 'SB-VENUE-SAVE',
   'venue.review': 'SB-VENUE-SAVE',
   'venue.update': 'SB-VENUE-SAVE',

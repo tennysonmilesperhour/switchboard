@@ -345,6 +345,14 @@ export const FEATURE_GROUPS: readonly FeatureGroup[] = [
         href: '/people',
       },
       {
+        id: 'people-near-you',
+        title: 'People near you',
+        blurb:
+          'On People, a Near you section lists others in your area who have also opted into discovery and shared their city. It needs discovery and Geography switched on for you, and you only see each other when both sides opt in. Add anyone with one tap.',
+        where: 'More → People → Near you',
+        href: '/people',
+      },
+      {
         id: 'add-someone',
         title: 'Add someone',
         blurb:
@@ -525,7 +533,7 @@ export const FEATURE_GROUPS: readonly FeatureGroup[] = [
         id: 'live-location',
         title: 'Live on the map',
         blurb:
-          'Opt in to appear to other people who are also sharing — mutual, block-aware, blurred to about 110 meters, and it switches itself off after a couple of hours.',
+          'Opt in to appear to other people who are also sharing — mutual, block-aware, blurred to about 110 meters, and it switches itself off after the time you pick, from 30 minutes to 8 hours.',
         where: 'More → Around → Map → the live sharing toggle',
         href: '/map',
       },
@@ -635,7 +643,7 @@ export const FEATURE_GROUPS: readonly FeatureGroup[] = [
         id: 'availability-signals',
         title: 'Availability signals',
         blurb:
-          'Say “coffee?” to exactly who you mean: circles, specific people, or a whole group you belong to. Each signal picks its own audience, nothing goes live until you tap Turn on, and it expires on its own.',
+          'Say “coffee?” to exactly who you mean: circles, specific people, or a whole group you belong to. Each signal picks its own audience, nothing goes live until you tap Turn on, and it expires on its own. A friend who is discoverable, sharing their location and nearby gets one notification, and tapping a friend’s status opens a conversation with them, with Make a plan (and Text instead, for people from your shared contacts) at the bottom.',
         // No condition any more: the composer is always on Home, and says so
         // itself when there is nobody to tell yet. The qualifier that was here
         // existed only because Home hid it outright.

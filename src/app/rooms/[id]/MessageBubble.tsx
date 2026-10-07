@@ -1,6 +1,7 @@
 'use client';
 
 import { Avatar } from '@/components/ui/Avatar';
+import { linkify } from '@/lib/linkify';
 import type { RoomMessage } from './room-messages';
 
 interface MessageBubbleProps {
@@ -18,6 +19,33 @@ interface MessageBubbleProps {
 }
 
 const PHOTO_BODY = '📷 Photo';
+
+/** Message text with http(s) links made tappable. Built as elements, never HTML. */
+function LinkedText({ text, mine }: { text: string; mine: boolean }) {
+  return (
+    <>
+      {linkify(text).map((segment, index) =>
+        segment.type === 'link' ? (
+          <a
+            key={index}
+            href={segment.href}
+            target="_blank"
+            rel="noopener noreferrer"
+            // Your own bubble toggles its Delete menu; a tap on a link opens it instead.
+            onClick={(event) => event.stopPropagation()}
+            className={`underline underline-offset-2 break-all ${
+              mine ? 'text-white font-semibold' : 'text-terracotta-deep'
+            }`}
+          >
+            {segment.text}
+          </a>
+        ) : (
+          <span key={index}>{segment.text}</span>
+        ),
+      )}
+    </>
+  );
+}
 
 function PhotoContent({ message, mine }: { message: RoomMessage; mine: boolean }) {
   const caption = message.body !== PHOTO_BODY ? message.body : null;
@@ -44,7 +72,7 @@ function PhotoContent({ message, mine }: { message: RoomMessage; mine: boolean }
             mine ? 'bg-terracotta text-white' : 'bg-cream text-ink'
           }`}
         >
-          {caption}
+          <LinkedText text={caption} mine={mine} />
         </p>
       )}
     </div>
@@ -76,7 +104,7 @@ export function MessageBubble({
         mine ? 'bg-terracotta text-white rounded-br-md' : 'bg-cream text-ink rounded-bl-md'
       }`}
     >
-      {message.body}
+      <LinkedText text={message.body} mine={mine} />
     </div>
   );
 
@@ -85,15 +113,24 @@ export function MessageBubble({
       <div className="flex flex-row-reverse gap-2.5">
         <div className="max-w-[75%] flex flex-col items-end">
           {onDelete ? (
-            <button
-              type="button"
+            // A div, not a button: the bubble can hold links, and a link inside
+            // a button is invalid and unreliable to tap.
+            <div
+              role="button"
+              tabIndex={0}
               onClick={onToggleMenu}
+              onKeyDown={(event) => {
+                if (event.target === event.currentTarget && (event.key === 'Enter' || event.key === ' ')) {
+                  event.preventDefault();
+                  onToggleMenu();
+                }
+              }}
               aria-expanded={menuOpen}
               aria-label="Options for your message"
-              className="block text-left rounded-card focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-terracotta"
+              className="block cursor-pointer text-left rounded-card focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-terracotta"
             >
               {content}
-            </button>
+            </div>
           ) : (
             content
           )}
