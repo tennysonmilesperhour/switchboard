@@ -61,7 +61,7 @@ const PLAN_IDEAS = ['Coffee', 'Dinner', 'Game night', 'A walk', 'Drinks', 'Movie
 /** Up to this many ideas fit as chips under a compact banner. Past it, Home
  *  switches to large idea cards you swipe through, so a long list never turns
  *  into a wall of chips. */
-const MAX_CHIP_IDEAS = 8;
+const MAX_CHIP_IDEAS = 2;
 
 /** A section whose read failed, in the place it would have rendered. */
 function SectionError({ section }: { section: HomeSection }) {
