@@ -67,6 +67,7 @@ const NOT_INDEXED: Record<string, string> = {
   'reset-password': 'auth',
   onboarding: 'auth — reached automatically on first run',
   'verify-contact': 'reached from a verification link, not browsed to',
+  'verify-fact': 'reached from a verification link, not browsed to',
   'legal-update': 'interstitial shown when the terms change',
   i: 'per-plan share link; you arrive with a token, you don’t browse here',
   join: 'shareable plan link; token-addressed',

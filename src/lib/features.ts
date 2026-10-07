@@ -457,6 +457,30 @@ export const FEATURE_GROUPS: readonly FeatureGroup[] = [
         href: '/discover',
       },
       {
+        id: 'discovery-lanes',
+        title: 'Friends, dating, and networking lanes',
+        blurb:
+          'Three separate sides of you, each with its own on switch, its own card line, and its own rules for who can see you and who you want to see. Dating and networking stay off until you turn them on, and a pair only appears when both people’s settings let it through.',
+        where: 'Explore → People discovery → Discovery settings',
+        href: '/discover/preferences',
+      },
+      {
+        id: 'discovery-mood',
+        title: 'Mood and how picky you are',
+        blurb:
+          'Rate what matters to you, then set a baseline bar. A mood like jet-lagged or out for fun raises or lowers it for a while and ends by itself. Nobody sees your mood, and a quiet person looks the same as someone who just doesn’t match.',
+        where: 'Explore → People discovery → Discovery settings → How are you feeling?',
+        href: '/discover/preferences',
+      },
+      {
+        id: 'verified-places',
+        title: 'School and work, checked',
+        blurb:
+          'List where you studied or work. A claim you typed is labelled as one; confirm it with a school or work email, or have two connections who are confirmed there vouch for it, and it shows as checked. Shared places count for more in discovery.',
+        where: 'Edit profile → School and work',
+        href: '/profile/edit',
+      },
+      {
         id: 'venue-perks',
         title: 'Partner perks',
         blurb:

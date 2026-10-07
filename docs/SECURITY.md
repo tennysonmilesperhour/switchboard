@@ -404,6 +404,11 @@ integrations a deployment has wired up is reconnaissance, not public data.
   leaving or removal ends their check-in in the zone.
 - `supabase/tests/shared_moments_distance.test.sql` — located check-ins match
   within about 200 m and not at 1 km; zones, blocks and anonymity still hold.
+- `supabase/tests/discovery_lanes.test.sql` — the tier on a profile fact is not
+  writable by its owner, vouching needs two email-verified connections, lanes
+  surface only mutual pairs that clear both bars, a mood raises the bar and ends
+  by itself, dating preferences hold both ways, a blind tap reads nothing back,
+  lanes never cross-match, and browsing is rate limited.
 - `supabase/tests/discovery_requires_discoverable.test.sql` — browsing and
   marking interest require being discoverable; Nearby compares locations.
 - `supabase/tests/zone_end_dates.test.sql` — every zone ends, nobody checks
@@ -956,6 +961,55 @@ profile:
 
 Litmus test: *does any field or action available before mutual reveal let the
 browser identify the person behind a candidate moment?*
+
+## Discovery lanes, mood, and verified facts (a refusal must not be a probe)
+
+People discovery is now three lanes (friends, dating, networking), each with a
+bar, audiences and weights, plus a temporary mood that raises or lowers the bar
+(`20261007120000_verified_facts_selves_mood.sql`). Most of what a person sets
+here is something a stranger would love to read back, so the invariants are
+about what an observer can learn:
+
+- **One decision, in one place.** `private.discovery_pair(viewer, candidate,
+  lane)` is the only rule. Both people must have the lane on and be
+  discoverable and off sabbatical; each must satisfy the other's `seeking` and
+  `visible_to`; dating preferences must hold both ways; and the strongest
+  shared item must clear **both** effective bars. The browse
+  (`list_discovery_candidates`), the original `list_discoverable_people`, and
+  match formation all ask it. It refuses to answer for anyone but
+  `auth.uid()`, so it cannot be pointed at a third pair.
+- **Weights never leave the database.** Browse returns the shared items that
+  cleared the bar and a three-word `fit`, never a number. Matching compares four
+  coarse tiers, not 0 to 100, and browsing is rate limited inside the function
+  (`consume_rate_limit`, 90 an hour) because it is the surface a prober with
+  chosen weights would use.
+- **A refusal is never an oracle.** The `mutual_intents` write policy checks
+  only the author's own lanes. It does not look at the target, so tapping
+  someone who would not surface succeeds exactly like any other tap. The match
+  is gated afterwards, silently, in `check_mutual_match`: the interest waits and
+  forms a match on a later tap once the other person's mood or settings let the
+  pair through. Never add a target-dependent error to that write.
+- **Lanes do not cross-match.** The lane rides in the activity text
+  (`Coffee (dating)`), so a dating tap and a friends tap on "Coffee" are
+  different asks and cannot produce a match neither person meant.
+- **Mood ends.** `discovery_mood.expires_at` is clamped to 72 hours by a trigger
+  and ignored once past, so nobody stays hidden by forgetting it. A refused or
+  quiet person looks identical to one who simply does not match; nothing records
+  or reveals a decline.
+- **A verified tier is authority state.** `profile_facts.tier` and
+  `verified_at` are written only by server actions on the service role
+  (`email`, after a mailed link is opened) and by the vouch definer functions
+  (`vouched`). The table has no client write grants and `seed.sql` re-revokes
+  them. Vouching needs an accepted connection who is themselves
+  **email-verified** for the same org, and two of them; vouches never chain, so
+  one real alumnus cannot mint a ring of vouched sockpuppets. The mailed address
+  is never stored, only its domain; the token is stored hashed.
+- **Signals are private and finite.** `discovery_signals` is owner-only, cannot
+  be updated, and prunes itself at 90 days. The person passed on can never read
+  that they were.
+
+Litmus test: *can any response, error, or timing difference available to a
+stranger tell them how another person's lanes, mood, or weights are set?*
 
 ## Zone presence (a count, and only a count)
 
