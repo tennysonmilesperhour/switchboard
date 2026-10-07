@@ -13,6 +13,7 @@ import { parseProfileLinks, parseProfileSocials } from '@/lib/supabase/json';
 import { ProfileTabs, type ProfileEvent } from './ProfileTabs';
 import { ProfileShare } from './ProfileShare';
 import { ProfileStrength } from '@/components/profile/ProfileStrength';
+import { FactList, type ProfileFact } from '@/components/profile/FactList';
 import { absoluteUrl } from '@/lib/links';
 
 export const metadata: Metadata = { title: 'Profile' };
@@ -78,6 +79,19 @@ export default async function ProfilePage() {
       .eq('invitee_id', user.id)
       .eq('status', 'accepted'),
   ]);
+
+  const { data: factRows } = await supabase
+    .from('profile_facts')
+    .select('id, kind, label, tier')
+    .eq('user_id', user.id)
+    .eq('shown', true)
+    .order('created_at', { ascending: true });
+  const facts: ProfileFact[] = (factRows ?? []).map((row) => ({
+    id: row.id,
+    kind: row.kind === 'employer' ? 'employer' : 'school',
+    label: row.label,
+    tier: row.tier === 'email' || row.tier === 'vouched' ? row.tier : 'claimed',
+  }));
 
   const attended = (attendedRows ?? [])
     .map((row) => row.event)
@@ -253,6 +267,12 @@ export default async function ProfilePage() {
                     {tag}
                   </span>
                 ))}
+              </div>
+            ) : null}
+
+            {facts.length > 0 ? (
+              <div className="mt-4 text-left">
+                <FactList facts={facts} />
               </div>
             ) : null}
           </div>
