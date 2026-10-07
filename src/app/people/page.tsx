@@ -8,6 +8,9 @@ import { loadFindability } from '@/lib/server/findability';
 import { PeopleClient } from './PeopleClient';
 import type { CircleRow, FriendRow, RequestRow, SpaceRow } from './sections/types';
 import { loadVisibleSignals } from '@/lib/server/signals';
+import { reportOperationalError } from '@/lib/server/observability';
+import type { ErrorCode } from '@/lib/errors';
+import { NearbyPeopleSection, type NearbyPerson } from './sections/NearbyPeopleSection';
 
 export const metadata: Metadata = { title: 'People' };
 
@@ -24,6 +27,8 @@ export default async function PeoplePage() {
     { data: circleMembers },
     { data: householdRows },
     { data: avoidRows },
+    { data: myProfile },
+    nearbyResult,
   ] = await Promise.all([
     supabase
       .from('connections')
@@ -40,7 +45,32 @@ export default async function PeoplePage() {
       .select('id, name, emoji, household_members(member_id)')
       .eq('owner_id', user.id),
     supabase.from('profile_avoids').select('avoided_id').eq('avoider_id', user.id),
+    supabase
+      .from('profiles')
+      .select('discoverable, discovery_geography, home_latitude, home_longitude')
+      .eq('id', user.id)
+      .single(),
+    // Mutual discoverability is enforced in the database: the function returns
+    // nothing unless the caller is discoverable, and 'geography' only matches
+    // people who also share their area, within range of the caller's own.
+    supabase.rpc('list_discoverable_people', { p_category: 'geography' }),
   ]);
+
+  let nearbyError: ErrorCode | null = null;
+  if (nearbyResult.error) {
+    await reportOperationalError('discover.people', nearbyResult.error, {}, 'SB-PEOPLE-LOAD');
+    nearbyError = 'SB-PEOPLE-LOAD';
+  }
+  const nearby: NearbyPerson[] = (nearbyResult.data ?? []).slice(0, 6).map((person) => ({
+    id: person.id,
+    display_name: person.display_name,
+    handle: person.handle,
+    avatar_url: person.avatar_url,
+    tagline: person.tagline,
+    location: person.location,
+    shared_interests: person.shared_interests,
+    mutual_friend_count: person.mutual_friend_count,
+  }));
 
   const avoidedIds = new Set(
     (avoidRows ?? []).map((row) => row.avoided_id),
@@ -146,6 +176,19 @@ export default async function PeoplePage() {
           households={households}
           givingSpace={givingSpace}
           inviteUrl={inviteUrl}
+          nearby={
+            <NearbyPeopleSection
+              people={nearby}
+              discoverable={Boolean(myProfile?.discoverable)}
+              geographyReady={Boolean(
+                myProfile?.discovery_geography &&
+                  myProfile.home_latitude != null &&
+                  myProfile.home_longitude != null,
+              )}
+              requestedIds={outgoing.map((request) => request.id)}
+              loadError={nearbyError}
+            />
+          }
         />
       </div>
     </AppShell>

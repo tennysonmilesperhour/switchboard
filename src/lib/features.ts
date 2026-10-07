@@ -345,6 +345,14 @@ export const FEATURE_GROUPS: readonly FeatureGroup[] = [
         href: '/people',
       },
       {
+        id: 'people-near-you',
+        title: 'People near you',
+        blurb:
+          'On People, a Near you section lists others in your area who have also opted into discovery and shared their city. It needs discovery and Geography switched on for you, and you only see each other when both sides opt in. Add anyone with one tap.',
+        where: 'More → People → Near you',
+        href: '/people',
+      },
+      {
         id: 'add-someone',
         title: 'Add someone',
         blurb:
