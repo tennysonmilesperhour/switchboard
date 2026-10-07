@@ -109,6 +109,7 @@ export async function cloneEventForReuse(
       capacity: source.capacity,
       invite_mode: source.invite_mode,
       open_table: source.open_table,
+      broadcast_nearby: source.broadcast_nearby,
       status: asPoll ? 'deciding' : 'inviting',
       show_invite_list: source.show_invite_list,
       show_accepted: source.show_accepted,

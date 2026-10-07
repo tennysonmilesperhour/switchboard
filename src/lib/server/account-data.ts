@@ -172,6 +172,7 @@ const PLAN_COLUMNS = [
   'show_expired',
   'room_id',
   'open_table',
+  'broadcast_nearby',
   'cover_url',
   'theme',
   'wishlist_url',

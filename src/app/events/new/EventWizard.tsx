@@ -124,6 +124,7 @@ export function EventWizard({
   const [showAccepted, setShowAccepted] = useState(true);
   const [showExpired, setShowExpired] = useState(false);
   const [openTable, setOpenTable] = useState(true);
+  const [broadcastNearby, setBroadcastNearby] = useState(false);
   const [remindersEnabled, setRemindersEnabled] = useState(true);
   const [parentalApproval, setParentalApproval] = useState(false);
 
@@ -397,6 +398,7 @@ export function EventWizard({
         capacity: capacity ? Number(capacity) : null,
         inviteMode,
         openTable,
+        broadcastNearby: openTable && broadcastNearby,
         showInviteList,
         showAccepted,
         showExpired,
@@ -560,6 +562,7 @@ export function EventWizard({
           parentalApproval={parentalApproval} setParentalApproval={setParentalApproval}
           capacity={capacity}
           openTable={openTable} setOpenTable={setOpenTable}
+          broadcastNearby={broadcastNearby} setBroadcastNearby={setBroadcastNearby}
         />
       )}
 

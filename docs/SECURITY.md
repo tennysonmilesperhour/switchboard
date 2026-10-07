@@ -1114,6 +1114,28 @@ somebody else's screenshot, get a file served back executable, or talk the
 triage job into shipping a change that is not words?*
 
 
+## Nearby plans (a host's opt-in, a band and nothing finer)
+
+Explore can show a host's Open Table to strangers in range
+(`20261007120000_explore_nearby_plans.sql`). The rules that keep that from
+becoming a location leak:
+
+- **Per-plan opt-in.** `events.broadcast_nearby` is host-set and a check
+  constraint ties it to `open_table`. Nothing is broadcast by default, and the
+  host still approves every request.
+- **A band, never a distance.** `list_nearby_plans` and
+  `list_people_distance_bands` return `area | nearby | wider`, computed from
+  `private.coarse_distance_m` (a ~28 km grid on both home points). No plan
+  coordinates, venue name or address leaves the function.
+- **Same exclusions as people discovery.** Blocked, suspended and sabbatical
+  hosts are never listed, and `request_to_join` refuses a blocked or suspended
+  host too, so the door matches the list.
+- **No GPS.** Range comes from the home point on the profile, read through
+  `my_home_point`; the device location is never involved.
+
+Litmus test: *could a stranger who calls these functions learn where a host
+lives or where a plan is?*
+
 ## Known residual risks / follow-ups
 
 ## Give Space safety invariant

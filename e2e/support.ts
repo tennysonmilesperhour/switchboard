@@ -1,4 +1,4 @@
-import { expect, test, type APIRequestContext, type BrowserContext, type Page } from '@playwright/test';
+import { expect, test, type APIRequestContext, type BrowserContext, type Locator, type Page } from '@playwright/test';
 import { createServerClient } from '@supabase/ssr';
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
@@ -374,4 +374,19 @@ export async function runCascadeSweep(request: APIRequestContext): Promise<Recor
     await new Promise((resolve) => setTimeout(resolve, 3_000));
   }
   throw new Error(`The cascade sweep never completed a run: ${last}`);
+}
+
+/**
+ * Explore shows one card at a time. Pass cards until the one matching `target`
+ * is on top (passing is local to the page, so nothing is sent), so a spec can
+ * act on a specific plan or person without depending on the deck's order.
+ */
+export async function bringCardToTop(page: Page, target: Locator, pass = 'Pass'): Promise<void> {
+  for (let i = 0; i < 40; i += 1) {
+    if (await target.isVisible()) return;
+    const next = page.getByRole('button', { name: pass, exact: true });
+    if (!(await next.isEnabled().catch(() => false))) break;
+    await next.click();
+  }
+  await expect(target).toBeVisible();
 }

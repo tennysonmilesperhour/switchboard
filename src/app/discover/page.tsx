@@ -3,13 +3,11 @@ import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
 import { AppShell } from '@/components/shell/AppShell';
 import { DiscoverClient } from './DiscoverClient';
-import {
-  PeopleDiscoveryClient,
-  type DiscoveryMatch,
-} from './PeopleDiscoveryClient';
-import { OpenTables, type PendingJoinRequest } from '@/components/events/OpenTables';
+import { ExploreClient, type ExplorePlan, type ExploreMode } from './ExploreClient';
+import type { DiscoveryMatch } from './types';
+import type { PendingJoinRequest } from '@/components/events/OpenTables';
 import { VenuePerks } from '@/components/venues/VenuePerks';
-import { IntentLaunchpad } from './IntentLaunchpad';
+import { isDistanceBand, type DistanceBand } from '@/lib/nearby-plans';
 import { supportEmail } from '@/lib/contact';
 import { venueAreaKey } from '@/lib/venue-area';
 import { ownContexts } from '@/lib/discovery-context';
@@ -25,12 +23,16 @@ const MAX_FOCUS_LENGTH = 60;
 export default async function DiscoverPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string | string[] }>;
+  searchParams: Promise<{ q?: string | string[]; mode?: string | string[] }>;
 }) {
   // `?q=<interest>` is how the You page's "still waiting for a first outing"
   // tags arrive: it seeds the idea generator with that one interest. Untrusted,
   // so it is trimmed, capped, and only ever rendered as text.
-  const { q } = await searchParams;
+  const { q, mode: modeParam } = await searchParams;
+  // `?mode=people` opens the People side; anything else is Plans, the side
+  // Explore is named for.
+  const initialMode: ExploreMode =
+    (Array.isArray(modeParam) ? modeParam[0] : modeParam) === 'people' ? 'people' : 'plans';
   const focusInterest =
     (Array.isArray(q) ? q[0] : q)?.trim().slice(0, MAX_FOCUS_LENGTH) || null;
   const supabase = await createClient();
@@ -52,6 +54,9 @@ export default async function DiscoverPage({
 
   const [
     { data: openTables },
+    nearbyPlansResult,
+    { data: homePoint },
+    bandsResult,
     venuesResult,
     { data: myVenues },
     peopleResult,
@@ -61,6 +66,12 @@ export default async function DiscoverPage({
   ] =
     await Promise.all([
       supabase.rpc('list_open_tables'),
+      // Plans hosts chose to show to people in range, strangers included.
+      // Fetched out to the widest band; the client narrows by the range picked.
+      supabase.rpc('list_nearby_plans', { p_max_km: 100 }),
+      // Range is measured from the reader's city, never a device fix.
+      supabase.rpc('my_home_point').maybeSingle<{ latitude: number; longitude: number }>(),
+      supabase.rpc('list_people_distance_bands'),
       // Verified perks in the viewer's area, newest first. This was the ten
       // newest verified venues anywhere in the world.
       areaTerm
@@ -112,6 +123,17 @@ export default async function DiscoverPage({
     await reportOperationalError('discover.people', peopleResult.error, {}, 'SB-PEOPLE-LOAD');
     peopleError = 'SB-PEOPLE-LOAD';
   }
+  let plansError: ErrorCode | null = null;
+  if (nearbyPlansResult.error) {
+    await reportOperationalError('discover.nearby-plans', nearbyPlansResult.error, {}, 'SB-PLANS-LOAD');
+    plansError = 'SB-PLANS-LOAD';
+  }
+  // A failed band lookup must not read as "nobody is near you": without bands
+  // every person lacks a placeable city, so say so rather than empty the deck.
+  if (bandsResult.error) {
+    await reportOperationalError('discover.people-bands', bandsResult.error, {}, 'SB-PEOPLE-LOAD');
+    peopleError = 'SB-PEOPLE-LOAD';
+  }
   let venuesError: ErrorCode | null = null;
   if (venuesResult.error) {
     await reportOperationalError('venue.load', venuesResult.error, {}, 'SB-VENUE-LOAD');
@@ -134,6 +156,40 @@ export default async function DiscoverPage({
         }]
       : [];
   });
+  const hasHomePoint = Boolean(homePoint);
+  const plans: ExplorePlan[] = [];
+  const seenPlans = new Set<string>();
+  for (const row of nearbyPlansResult.data ?? []) {
+    seenPlans.add(row.event_id);
+    plans.push({
+      eventId: row.event_id,
+      title: row.title,
+      startsAt: row.starts_at,
+      timeZone: row.time_zone,
+      hostName: row.host_name,
+      spotsLeft: row.spots_left,
+      knownVia: row.known_via,
+      band: isDistanceBand(row.distance_band) ? row.distance_band : 'wider',
+    });
+  }
+  // Friends-of-friends tables the host did not broadcast: no place to measure.
+  for (const row of openTables ?? []) {
+    if (seenPlans.has(row.event_id)) continue;
+    plans.push({
+      eventId: row.event_id,
+      title: row.title,
+      startsAt: row.starts_at,
+      timeZone: row.time_zone,
+      hostName: row.host_name,
+      spotsLeft: row.spots_left,
+      knownVia: row.known_via,
+      band: null,
+    });
+  }
+  const bands: Record<string, DistanceBand> = {};
+  for (const row of bandsResult.data ?? []) {
+    if (isDistanceBand(row.distance_band)) bands[row.person_id] = row.distance_band;
+  }
   const people = peopleResult.data;
   const venues = venuesResult.data;
   const interestByTarget = Object.fromEntries(
@@ -164,46 +220,46 @@ export default async function DiscoverPage({
 
   return (
     <AppShell title="Explore">
-      <div className="space-y-8">
-        <IntentLaunchpad />
-        {/* Ideas first: it is what Explore is named for, and the door on
-            /create that leads here promises "browse ideas". */}
-        <div id="brainstorm" className="scroll-mt-20">
-          <DiscoverClient
-            key={focusInterest ?? ''}
-            defaultInterests={profile?.interests ?? []}
-            focusInterest={focusInterest}
-          />
-        </div>
-        <div id="browse" className="scroll-mt-20 space-y-8">
-          <PeopleDiscoveryClient
-            people={people ?? []}
-            matches={matches}
-            discoverable={Boolean(profile?.discoverable)}
-            interests={interestByTarget}
-            myContexts={ownContexts(profile?.discovery_contexts, profile?.down_to)}
-            loadError={peopleError}
-          />
-          <OpenTables
-            tables={openTables ?? []}
-            requests={myRequests}
-            requestsError={requestsError}
-          />
-        </div>
-        <VenuePerks
-          venues={venues ?? []}
-          area={area}
-          loadError={venuesError}
-          supportEmail={supportEmail()}
-          myClaims={(myVenues ?? []).map((venue) => ({
-            ...venue,
-            status:
-              venue.status === 'verified' || venue.status === 'rejected'
-                ? venue.status
-                : 'pending',
-          }))}
-        />
-      </div>
+      <ExploreClient
+        initialMode={initialMode}
+        initialRange={hasHomePoint ? 'nearby' : 'any'}
+        hasHomePoint={hasHomePoint}
+        plans={plans}
+        plansError={plansError}
+        requests={myRequests}
+        requestsError={requestsError}
+        people={people ?? []}
+        bands={bands}
+        matches={matches}
+        discoverable={Boolean(profile?.discoverable)}
+        interests={interestByTarget}
+        myContexts={ownContexts(profile?.discovery_contexts, profile?.down_to)}
+        peopleError={peopleError}
+        plansFooter={
+          <div className="space-y-8">
+            <div id="brainstorm" className="scroll-mt-20">
+              <DiscoverClient
+                key={focusInterest ?? ''}
+                defaultInterests={profile?.interests ?? []}
+                focusInterest={focusInterest}
+              />
+            </div>
+            <VenuePerks
+              venues={venues ?? []}
+              area={area}
+              loadError={venuesError}
+              supportEmail={supportEmail()}
+              myClaims={(myVenues ?? []).map((venue) => ({
+                ...venue,
+                status:
+                  venue.status === 'verified' || venue.status === 'rejected'
+                    ? venue.status
+                    : 'pending',
+              }))}
+            />
+          </div>
+        }
+      />
     </AppShell>
   );
 }
