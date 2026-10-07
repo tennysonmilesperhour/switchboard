@@ -52,6 +52,7 @@
     }
   }
   :root[data-theme="dark"] {
+    color-scheme: dark;
     --bg: #0f1117;
     --surface: #171b24;
     --surface-2: #1e2230;
@@ -73,7 +74,7 @@
   }
 
   * { box-sizing: border-box; }
-  html { background: var(--bg); }
+  html { background: var(--bg); color-scheme: light dark; }
   body {
     margin: 0; background: var(--bg); color: var(--ink);
     font-family: var(--sans); line-height: 1.55; font-size: 15px;
@@ -319,7 +320,7 @@
 
   .fb-panel {
     background: var(--surface); width: 100%; max-width: 520px;
-    max-height: 92vh; overflow-y: auto;
+    max-height: 92vh; max-height: 92dvh; overflow-y: auto;
     border: 1px solid var(--line); border-radius: var(--radius) var(--radius) 0 0;
     box-shadow: 0 -6px 40px rgba(0,0,0,0.3); padding: 18px 18px 20px;
   }
@@ -659,8 +660,26 @@
   // write is in flight cannot lose it. Only these edits are replayed; the
   // cached board must never re-tick something somebody else unchecked.
   var PENDING_KEY = "swb-scope-pending-v1";
+  // False once this device has refused to keep the outbox, so the page can say
+  // that unsent changes live only in this tab.
+  var outboxKept = true;
   function savePending(pending) {
-    try { localStorage.setItem(PENDING_KEY, JSON.stringify(pending)); } catch {}
+    try { localStorage.setItem(PENDING_KEY, JSON.stringify(pending)); outboxKept = true; }
+    catch { outboxKept = false; }
+  }
+
+  // A request that never settles (captive portal, stalled mobile link) must not
+  // leave the outbox or the Send button wedged for good.
+  function fetchWithTimeout(url, options, ms) {
+    options = options || {};
+    if (typeof AbortController === "undefined") return fetch(url, options);
+    var controller = new AbortController();
+    var timer = setTimeout(function () { controller.abort(); }, ms || 20000);
+    options.signal = controller.signal;
+    return fetch(url, options).then(
+      function (res) { clearTimeout(timer); return res; },
+      function (err) { clearTimeout(timer); throw err; }
+    );
   }
 
   function read(key) {
@@ -700,7 +719,7 @@
   var boardLoaded = false;
 
   function postTick(id, checked) {
-    return fetch("/api/scope-progress", {
+    return fetchWithTimeout("/api/scope-progress", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -716,7 +735,10 @@
     var count = Object.keys(pending).length;
     setBoardNote(count
       ? count + (count === 1 ? " change is" : " changes are") +
-        " saved on this device but have not reached the shared board. Use Refresh shared board to try again. (SB-SCOPE-BOARD)"
+        (outboxKept
+          ? " saved on this device but have not reached the shared board. Use Refresh shared board to try again."
+          : " held in this tab only, because this browser will not store them. Keep the page open and use Refresh shared board to try again.") +
+        " (SB-SCOPE-BOARD)"
       : "");
   }
 
@@ -730,7 +752,16 @@
       if (!id) return Promise.resolve();
       var checked = pending[id];
       return postTick(id, checked).then(function(res) {
-        if (!res.ok) throw new Error(String(res.status));
+        // A refusal this edit can never get past (anything 4xx except a timeout
+        // or a rate limit) is dropped, so it cannot hold up every tick behind
+        // it. The next board load shows the server's truth for that box.
+        var permanent = res.status >= 400 && res.status < 500 && res.status !== 408 && res.status !== 429;
+        if (!res.ok && !permanent) throw new Error(String(res.status));
+        if (!res.ok) {
+          if (pending[id] === checked) delete pending[id];
+          savePending(pending);
+          return next();
+        }
         if (pending[id] === checked) {
           delete pending[id];
           if (checked) marks[id] = { by: myName(), at: new Date().toISOString() };
@@ -752,7 +783,7 @@
   function loadBoard() {
     var requestedAtRevision = revision;
     var pendingAtRequest = Object.keys(pending);
-    return fetch("/api/scope-progress", { headers: { Accept: "application/json" } })
+    return fetchWithTimeout("/api/scope-progress", { headers: { Accept: "application/json" } })
       .then(function(res) {
         if (!res.ok) throw new Error(String(res.status));
         return res.json();
@@ -810,6 +841,14 @@
   document.getElementById("grpCnt").textContent = GROUPS.length;
 
   function renderGroups() {
+    // Re-rendering must not re-open what the reader folded away.
+    var collapsedIds = {};
+    var heads = root.querySelectorAll(".group");
+    for (var h = 0; h < heads.length; h++) {
+      if (heads[h].classList.contains("collapsed")) collapsedIds[heads[h].getAttribute("data-group")] = true;
+    }
+    var focusedId = document.activeElement && document.activeElement.getAttribute
+      ? document.activeElement.getAttribute("data-id") : null;
     root.innerHTML = "";
     GROUPS.forEach(function(g) {
       var groupDone = g.items.filter(function(it) { return state[it.id]; }).length;
@@ -818,10 +857,11 @@
       var isFull = groupDone === groupTotal;
 
       var card = document.createElement("div");
-      card.className = "group";
+      card.className = "group" + (collapsedIds[g.id] ? " collapsed" : "");
+      card.setAttribute("data-group", g.id);
 
       card.innerHTML =
-        '<button class="group-head" aria-expanded="true">' +
+        '<button class="group-head" aria-expanded="' + (collapsedIds[g.id] ? 'false' : 'true') + '">' +
           '<div class="gh-icon">' + g.id + '</div>' +
           '<div class="gh-text"><h3>' + esc(g.title) + '</h3><div class="gh-blurb">' + esc(g.blurb) + '</div></div>' +
           '<span class="gh-count' + (isFull ? ' full' : '') + '">' + groupDone + ' / ' + groupTotal + '</span>' +
@@ -859,6 +899,10 @@
       root.appendChild(card);
     });
 
+    if (focusedId) {
+      var again = root.querySelector('.chk[data-id="' + focusedId + '"]');
+      if (again) again.focus();
+    }
   }
 
   /*
@@ -1216,7 +1260,7 @@
 
         fbSetNote("Sending…");
 
-        return fetch("/api/scope-feedback", { method: "POST", body: form })
+        return fetchWithTimeout("/api/scope-feedback", { method: "POST", body: form }, 60000)
           .then(function (res) {
             // Something in front of the route (the host's body-size 413, a
             // gateway error page) answers with HTML, not JSON. Keep track of

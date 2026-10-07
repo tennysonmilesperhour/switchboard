@@ -19,6 +19,7 @@ const mocks = vi.hoisted(() => ({
   hasAdminCredentials: vi.fn(() => true),
   checkRateLimit: vi.fn(async () => true),
   upload: vi.fn(async () => ({ error: null as unknown })),
+  remove: vi.fn(async () => ({ error: null as unknown })),
   insert: vi.fn(async () => ({ error: null as unknown })),
   reportOperationalError: vi.fn(),
 }));
@@ -26,7 +27,7 @@ const mocks = vi.hoisted(() => ({
 vi.mock('@/lib/supabase/admin', () => ({
   hasAdminCredentials: mocks.hasAdminCredentials,
   createAdminClient: () => ({
-    storage: { from: () => ({ upload: mocks.upload }) },
+    storage: { from: () => ({ upload: mocks.upload, remove: mocks.remove }) },
     from: () => ({ insert: mocks.insert }),
   }),
 }));
@@ -96,6 +97,29 @@ describe('POST /api/scope-feedback', () => {
     expect(mocks.insert).not.toHaveBeenCalled();
   });
 
+  it('strips control characters from the name and never splits a surrogate pair', async () => {
+    const form = withBody('a'.repeat(3999) + '😀😀');
+    form.set('reporter', 'Gina\r\nSubject: forged\u0007');
+    await post(form);
+
+    const [row] = mocks.insert.mock.calls[0] as unknown as [
+      { body: string; reporter: string },
+    ];
+    expect(row.reporter).not.toMatch(/[\r\u0007]/);
+    expect(Array.from(row.body)).toHaveLength(4000);
+    expect(row.body.endsWith('😀')).toBe(true);
+  });
+
+  it('removes uploaded screenshots when the note itself fails to save', async () => {
+    mocks.insert.mockResolvedValueOnce({ error: { message: 'nope' } });
+    const form = withBody();
+    form.append('screenshots', png());
+    const response = await post(form);
+
+    expect(response.status).toBe(500);
+    expect(mocks.remove).toHaveBeenCalledTimes(1);
+  });
+
   describe('rate limiting', () => {
     it('consults a global bucket and a per-address bucket, both fail-closed', async () => {
       await post(withBody(), { 'x-vercel-forwarded-for': '203.0.113.7' });
@@ -107,15 +131,17 @@ describe('POST /api/scope-feedback', () => {
         { failClosed?: boolean },
       ][];
       expect(calls).toHaveLength(2);
-      expect(calls[0][0]).toBe('scope-feedback:all');
-      expect(calls[1][0]).toContain('203.0.113.7');
+      expect(calls[0][0]).toContain('203.0.113.7');
+      expect(calls[1][0]).toBe('scope-feedback:all');
       for (const call of calls) {
         expect(call[3]).toMatchObject({ failClosed: true });
       }
     });
 
     it('writes nothing when the global bucket is spent', async () => {
-      mocks.checkRateLimit.mockResolvedValueOnce(false);
+      mocks.checkRateLimit
+        .mockResolvedValueOnce(true)
+        .mockResolvedValueOnce(false);
       const response = await post(withBody());
 
       expect(response.status).toBe(429);
@@ -124,13 +150,18 @@ describe('POST /api/scope-feedback', () => {
     });
 
     it('writes nothing when one address has sent too many', async () => {
-      mocks.checkRateLimit
-        .mockResolvedValueOnce(true)
-        .mockResolvedValueOnce(false);
+      mocks.checkRateLimit.mockResolvedValueOnce(false);
       const response = await post(withBody());
 
       expect(response.status).toBe(429);
       expect(mocks.insert).not.toHaveBeenCalled();
+    });
+
+    it('does not spend the global bucket on a refused address', async () => {
+      mocks.checkRateLimit.mockResolvedValueOnce(false);
+      await post(withBody());
+
+      expect(mocks.checkRateLimit).toHaveBeenCalledTimes(1);
     });
 
     it('is refused, not opened, when the limiter itself is unavailable', async () => {
