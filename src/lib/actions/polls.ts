@@ -368,6 +368,10 @@ export async function pickWinner(
     .update({ phase: 'decided', winning_option_id: optionId })
     .eq('id', pollId)
     .eq('event_id', eventId)
+    // Not a queued follow-up, and not a poll that already has a winner: a
+    // second pick would overwrite the result and tell the group again.
+    .neq('phase', 'pending')
+    .is('winning_option_id', null)
     .select('id');
   if (error) return reportAndFail('SB-POLL-DECIDE', 'poll.pick', error, { pollId, eventId });
   if (!data || data.length === 0) return failure('SB-POLL-DECIDE');

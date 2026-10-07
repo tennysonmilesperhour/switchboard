@@ -15,16 +15,26 @@ const mocks = vi.hoisted(() => {
   update.mockImplementation(() => ({ eq }));
   /** Tables a row was deleted from, with the column and value it was scoped to. */
   const deleted: Array<[string, string, unknown]> = [];
+  /** Table whose delete should fail, for the pull-down failure path. */
+  let failDeleteOn: string | null = null;
   const from = (table: string) => ({
     update,
     delete: () => ({
       eq: async (column: string, value: unknown) => {
         deleted.push([table, column, value]);
-        return { error: null };
+        return { error: failDeleteOn === table ? { message: 'boom' } : null };
       },
     }),
   });
-  return { update, eq, deleted, from };
+  return {
+    update,
+    eq,
+    deleted,
+    from,
+    failDeleteOn: (table: string | null) => {
+      failDeleteOn = table;
+    },
+  };
 });
 
 vi.mock('@/lib/server/require-user', () => ({
@@ -61,6 +71,7 @@ beforeEach(() => {
   mocks.update.mockClear();
   mocks.eq.mockClear();
   mocks.deleted.length = 0;
+  mocks.failDeleteOn(null);
 });
 
 describe('updateSabbatical', () => {
@@ -78,6 +89,13 @@ describe('updateSabbatical', () => {
         ['live_locations', 'user_id', 'user-1'],
       ]),
     );
+  });
+
+  it('does not report a quiet season when the live signal could not be taken down', async () => {
+    mocks.failDeleteOn('availability_signals');
+    const result = await updateSabbatical(sabbatical(true));
+
+    expect(result).not.toEqual({ ok: true });
   });
 
   it('deletes nothing when it ends', async () => {

@@ -28,7 +28,7 @@
 begin;
 
 -- One assertion per function, plus the two catch-alls below.
-select plan(20);
+select plan(22);
 
 select ok(
   has_function_privilege('service_role', 'public.is_event_host(uuid, uuid)', 'EXECUTE'),
@@ -134,6 +134,22 @@ select ok(
   'service_role can claim due ritual reminders (the cascade cron)'
 );
 
+select ok(
+  has_function_privilege(
+    'service_role',
+    'public.claim_signal_nearby_recipients(uuid, uuid[], double precision, interval, integer)',
+    'EXECUTE'),
+  'service_role can claim who to tell that a nearby friend is down for something'
+);
+
+select ok(
+  has_function_privilege(
+    'service_role',
+    'private.claim_signal_nearby_recipients(uuid, uuid[], double precision, interval, integer)',
+    'EXECUTE'),
+  'service_role can execute the PRIVATE body of the nearby-recipient claim'
+);
+
 -- The rule the hardening migration left behind, stated once: no function
 -- anywhere in `public` may be executable by `anon` while being one of the
 -- service-role entry points above. Guards against a future grant that widens
@@ -148,7 +164,7 @@ select is(
         'respond_to_guest_invite', 'rotate_event_share_token',
         'resolve_poll_children', 'try_claim_operator_sweep',
         'finish_operator_sweep', 'operator_sweep_status', 'sweep_retention',
-        'claim_ritual_reminders'
+        'claim_ritual_reminders', 'claim_signal_nearby_recipients'
       )
       and has_function_privilege('anon', p.oid, 'EXECUTE')),
   0,

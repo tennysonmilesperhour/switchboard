@@ -3,6 +3,7 @@
 import type { ReactNode } from 'react';
 import { signOut } from '@/lib/actions/profile';
 import { releasePushOnSignOut } from '@/lib/client/push';
+import { forgetSavedContactPhones } from '@/lib/client/saved-contact-phones';
 
 /**
  * Sign out, after detaching this browser's push subscription from the account.
@@ -13,6 +14,8 @@ import { releasePushOnSignOut } from '@/lib/client/push';
 export function SignOutForm({ children }: { children: ReactNode }) {
   async function handleSignOut() {
     await releasePushOnSignOut();
+    // Numbers from this person's contacts must not outlive them on a shared device.
+    forgetSavedContactPhones();
     await signOut();
   }
 

@@ -208,7 +208,7 @@ export async function updateEventDetails(
   const [{ data: before }, { data: asked, error: askedError }] = await Promise.all([
     admin
       .from('events')
-      .select('starts_at, location_name, location_address, title')
+      .select('starts_at, ends_at, location_name, location_address, title')
       .eq('id', eventId)
       .maybeSingle(),
     admin.from('event_questions').select('position').eq('event_id', eventId),
@@ -259,7 +259,11 @@ export async function updateEventDetails(
       // re-anchor `time_zone` to that same zone to keep the pair consistent.
       // Only when the client actually resolved a zone — never overwrite a good
       // stored zone with null just because this browser couldn't report one.
-      ...(input.timeZone ? { time_zone: input.timeZone.slice(0, 64) } : {}),
+      // Only when the time itself is being rewritten: a details-only edit from
+      // a browser in another zone must not re-label an unchanged instant.
+      ...(input.timeZone && (whenChanged || !sameInstant(before.ends_at, input.endsAt))
+        ? { time_zone: input.timeZone.slice(0, 64) }
+        : {}),
       capacity: input.capacity,
       wishlist_url: wishlistUrl,
       ...(extras

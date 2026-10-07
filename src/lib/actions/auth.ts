@@ -286,7 +286,7 @@ export async function createPasswordAccount(
         if (existing.user?.email_confirmed_at) {
           return validation('That email or username is already taken.');
         }
-        const resent = await resendEmailConfirmation(email);
+        const resent = await resendEmailConfirmation(email, nextPath);
         if (!resent.ok) return resent;
         return validation(
           'This email already has an account that was never confirmed, so we sent a fresh sign-in link to it. ' +
@@ -533,7 +533,13 @@ async function resolveResetUserId(
  */
 export async function resendEmailConfirmation(
   identifier: string,
+  next?: string,
 ): Promise<AuthActionResult> {
+  // Where the person was headed when they signed up (a plan they were invited
+  // to), so a re-sent link lands them there like the first one did.
+  const nextPath = safeNextPath(next ?? '', '/');
+  const afterOnboarding =
+    nextPath === '/' ? '/onboarding' : `/onboarding?next=${encodeURIComponent(nextPath)}`;
   const normalized = normalizeIdentifier(identifier);
   const generic: AuthActionResult = { ok: true, identifier: normalized };
   if (!isEmailIdentifier(normalized)) {
@@ -579,7 +585,7 @@ export async function resendEmailConfirmation(
     const { data: link, error: linkError } = await admin.auth.admin.generateLink({
       type: 'magiclink',
       email: user.email,
-      options: { redirectTo: appUrl('/auth/confirm?next=/onboarding') },
+      options: { redirectTo: appUrl(`/auth/confirm?next=${encodeURIComponent(afterOnboarding)}`) },
     });
     if (linkError) {
       return reportAndFail('SB-AUTH-RESEND', 'auth.resend-confirmation', linkError);
@@ -588,7 +594,7 @@ export async function resendEmailConfirmation(
     const hashed = link.properties?.hashed_token;
     const confirmUrl = hashed
       ? appUrl(
-          `/auth/confirm?token_hash=${encodeURIComponent(hashed)}&type=magiclink&next=${encodeURIComponent('/onboarding')}`,
+          `/auth/confirm?token_hash=${encodeURIComponent(hashed)}&type=magiclink&next=${encodeURIComponent(afterOnboarding)}`,
         )
       : link.properties?.action_link;
     if (!confirmUrl) {

@@ -3286,6 +3286,39 @@ export type Database = {
         }
         Relationships: []
       }
+      signal_nearby_notices: {
+        Row: {
+          notified_at: string
+          owner_id: string
+          recipient_id: string
+        }
+        Insert: {
+          notified_at?: string
+          owner_id: string
+          recipient_id: string
+        }
+        Update: {
+          notified_at?: string
+          owner_id?: string
+          recipient_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "signal_nearby_notices_owner_id_fkey"
+            columns: ["owner_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "signal_nearby_notices_recipient_id_fkey"
+            columns: ["recipient_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       sms_consent_events: {
         Row: {
           enabled: boolean
@@ -3941,6 +3974,16 @@ export type Database = {
           user_id: string
         }[]
       }
+      claim_signal_nearby_recipients: {
+        Args: {
+          p_cooldown?: string
+          p_limit?: number
+          p_owner: string
+          p_radius_m?: number
+          p_signal_ids: string[]
+        }
+        Returns: string[]
+      }
       claim_sms_jobs: {
         Args: never
         Returns: {
@@ -4328,6 +4371,7 @@ export type Database = {
         Args: { p_event: string; p_ritual: string }
         Returns: string
       }
+      open_signal_chat: { Args: { p_other: string }; Returns: string }
       operator_sweep_status: {
         Args: { p_sweep: string }
         Returns: {

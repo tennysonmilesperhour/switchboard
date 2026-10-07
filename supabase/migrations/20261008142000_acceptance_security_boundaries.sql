@@ -1,4 +1,4 @@
--- Acceptance audit W16–W21. Sequenced after main's existing October 8 migrations.
+-- Acceptance audit W16–W21. Sequenced after main's signal-chat migration.
 begin;
 
 -- Preserve existing mismatched legacy ballots for an operator to inspect.

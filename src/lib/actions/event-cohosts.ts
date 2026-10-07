@@ -155,16 +155,22 @@ export async function removeCoHost(
   const auth = await requireUser();
   if (!auth.ok) return auth;
   const { supabase } = auth;
-  const { error } = await supabase
+  const { data: removed, error } = await supabase
     .from('event_cohosts')
     .delete()
     .eq('event_id', eventId)
-    .eq('cohost_id', cohostId);
+    .eq('cohost_id', cohostId)
+    .select('cohost_id');
   if (error) {
     return reportAndFail('SB-PLAN-SAVE', 'event-update', error, {
       eventId,
       step: 'cohost-remove',
     });
+  }
+  // RLS filters a non-host's delete down to nothing without an error, which
+  // used to read as success while the co-host stayed.
+  if (!removed || removed.length === 0) {
+    return failure('SB-PERM-HOST', 'Only the host can remove co-hosts.');
   }
   revalidatePath(`/events/${eventId}`);
   revalidatePath('/plans');
