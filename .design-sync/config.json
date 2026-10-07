@@ -1,0 +1,43 @@
+{
+  "pkg": "switchboard-ui",
+  "globalName": "Switchboard",
+  "shape": "package",
+  "projectId": "d8575ca9-0de1-4494-8506-045b76c62019",
+  "entry": ".design-sync/pkg/src/index.ts",
+  "buildCmd": "node .design-sync/pkg/build.mjs",
+  "srcDir": "../../src/components",
+  "tsconfig": "tsconfig.paths.json",
+  "cssEntry": "dist/switchboard.css",
+  "extraFonts": [
+    "dist/fonts/fonts.css"
+  ],
+  "docsDir": "docs",
+  "componentSrcMap": {
+    "Button": "../../src/components/ui/Button.tsx",
+    "Card": "../../src/components/ui/Card.tsx",
+    "Chip": "../../src/components/ui/Chip.tsx",
+    "Avatar": "../../src/components/ui/Avatar.tsx",
+    "PlanCard": "../../src/components/ui/PlanCard.tsx",
+    "EmptyState": "../../src/components/ui/EmptyState.tsx",
+    "BottomNav": "../../src/components/shell/BottomNav.tsx",
+    "SectionHeader": null,
+    "AvatarCluster": null,
+    "PathnameProvider": null
+  },
+  "storyImports": {
+    "shim": [
+      "pkg/shims/next-navigation"
+    ]
+  },
+  "guidelinesGlob": [
+    "../../docs/DESIGN-SYSTEM.md",
+    "../../PRODUCT.md"
+  ],
+  "readmeHeader": ".design-sync/conventions.md",
+  "dtsPropsFor": {
+    "Button": "/** primary (default) | secondary | ghost | accept (sage, saying yes) | danger (rose, decline or remove) */\n  variant?: \"primary\" | \"secondary\" | \"ghost\" | \"accept\" | \"danger\";\n  size?: \"sm\" | \"md\" | \"lg\";\n  disabled?: boolean;\n  /** Defaults to \"button\". Pass \"submit\" for a real form submit. */\n  type?: \"button\" | \"submit\" | \"reset\";\n  onClick?: React.MouseEventHandler<HTMLButtonElement>;\n  \"aria-label\"?: string;\n  className?: string;\n  id?: string;\n  style?: React.CSSProperties;\n  children?: React.ReactNode;",
+    "Chip": "/** Filled with the accent when true; rendered as aria-pressed. */\n  selected?: boolean;\n  /** Optional leading emoji, hidden from assistive tech. */\n  emoji?: string;\n  disabled?: boolean;\n  onClick?: React.MouseEventHandler<HTMLButtonElement>;\n  \"aria-label\"?: string;\n  className?: string;\n  id?: string;\n  style?: React.CSSProperties;\n  children?: React.ReactNode;",
+    "Avatar": "/** Drives the initials and the fallback hue. */\n  name: string;\n  /** Pins the hue to something other than the name, such as an id. */\n  seed?: string;\n  /** Photo URL. Omit for deterministic initials. */\n  src?: string | null;\n  size?: \"xs\" | \"sm\" | \"md\" | \"lg\" | \"xl\";\n  /** White ring, for avatars on colored surfaces. */\n  ring?: boolean;\n  /** Live-signal ring (sage) and emoji badge. Omit or pass null for no signal. */\n  signal?: { emoji: string; label: string } | null;\n  className?: string;",
+    "PlanCard": "  title: string;\n  /** One of the six plan tokens; use planColor(i) to rotate by position. */\n  color?: \"pink\" | \"purple\" | \"blue\" | \"jade\" | \"orange\" | \"magenta\";\n  imageUrl?: string | null;\n  attendees?: { name: string; src?: string | null }[];\n  /** The sentence under the cluster, such as \"You and 3 others\". */\n  attendeesLabel?: string;\n  when?: string;\n  dateLabel?: string;\n  where?: string;\n  distance?: string;\n  /** Small uppercase pill, such as \"Deciding\" or \"Confirmed\". */\n  status?: string;\n  /** Wraps the card in a link when set. */\n  href?: string;\n  /** Usually two Buttons: accept plus secondary. Full variant only. */\n  actions?: React.ReactNode;\n  variant?: \"full\" | \"compact\" | \"tile\";\n  className?: string;"
+  }
+}
