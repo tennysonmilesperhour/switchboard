@@ -1950,6 +1950,7 @@ export type Database = {
       }
       messages: {
         Row: {
+          announcement_id: string | null
           body: string
           created_at: string
           id: string
@@ -1959,6 +1960,7 @@ export type Database = {
           sender_id: string
         }
         Insert: {
+          announcement_id?: string | null
           body: string
           created_at?: string
           id?: string
@@ -1968,6 +1970,7 @@ export type Database = {
           sender_id: string
         }
         Update: {
+          announcement_id?: string | null
           body?: string
           created_at?: string
           id?: string
@@ -1977,6 +1980,13 @@ export type Database = {
           sender_id?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "messages_announcement_id_fkey"
+            columns: ["announcement_id"]
+            isOneToOne: false
+            referencedRelation: "announcements"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "messages_room_id_fkey"
             columns: ["room_id"]
@@ -2535,6 +2545,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "poll_options"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "poll_votes_option_poll_fk"
+            columns: ["option_id", "poll_id"]
+            isOneToOne: false
+            referencedRelation: "poll_options"
+            referencedColumns: ["id", "poll_id"]
           },
           {
             foreignKeyName: "poll_votes_poll_id_fkey"
@@ -4375,14 +4392,31 @@ export type Database = {
         Args: { p_approve: boolean; p_request: string }
         Returns: boolean
       }
-      respond_to_guest_invite: {
-        Args: { p_accept: boolean; p_token: string }
-        Returns: string
-      }
-      respond_to_invite: {
-        Args: { p_accept: boolean; p_invite: string; p_note?: string }
-        Returns: string
-      }
+      respond_to_guest_invite:
+        | { Args: { p_accept: boolean; p_token: string }; Returns: string }
+        | {
+            Args: {
+              p_accept: boolean
+              p_answers: Json
+              p_token: string
+              p_user: string
+            }
+            Returns: string
+          }
+      respond_to_invite:
+        | {
+            Args: { p_accept: boolean; p_invite: string; p_note?: string }
+            Returns: string
+          }
+        | {
+            Args: {
+              p_accept: boolean
+              p_answers: Json
+              p_invite: string
+              p_note: string
+            }
+            Returns: string
+          }
       respond_to_matchmaker: {
         Args: { p_accept: boolean; p_proposal: string }
         Returns: string
@@ -4398,19 +4432,34 @@ export type Database = {
         Returns: string
       }
       rotate_zone_invite_code: { Args: { p_zone: string }; Returns: string }
-      rsvp_via_share_token: {
-        Args: {
-          p_accept: boolean
-          p_contact: string
-          p_name: string
-          p_token: string
-          p_user: string
-        }
-        Returns: {
-          outcome: string
-          token: string
-        }[]
-      }
+      rsvp_via_share_token:
+        | {
+            Args: {
+              p_accept: boolean
+              p_contact: string
+              p_name: string
+              p_token: string
+              p_user: string
+            }
+            Returns: {
+              outcome: string
+              token: string
+            }[]
+          }
+        | {
+            Args: {
+              p_accept: boolean
+              p_answers: Json
+              p_contact: string
+              p_name: string
+              p_token: string
+              p_user: string
+            }
+            Returns: {
+              outcome: string
+              token: string
+            }[]
+          }
       save_expense: {
         Args: {
           p_amount_cents: number

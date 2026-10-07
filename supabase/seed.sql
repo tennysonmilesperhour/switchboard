@@ -109,6 +109,7 @@ begin
        and c.relkind in ('r', 'p', 'v', 'm', 'f')
        and c.relname not in (
          'profiles',
+         'boards', -- invite_code is a moderator-only bearer capability (W19).
          'calendar_subscriptions',
          'parental_approvals',
          'sms_opt_outs',

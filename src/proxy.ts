@@ -248,13 +248,14 @@ export async function proxy(request: NextRequest) {
   // Funnel authenticated-but-not-onboarded users into onboarding from ANY
   // protected route, not just the home page — otherwise an invite deep link
   // (?next=/join/…) or any bookmarked path lets a user in without a profile,
-  // interests, or starter circles. Public routes and API routes are exempt (a
-  // signed-out guest can still view a share/RSVP link, and API calls must not
-  // be redirected to an HTML page).
+  // interests, or starter circles. Invite pages remain public to signed-out
+  // visitors, but signed-in visitors must finish setup before answering.
+  // Actions enforce eligibility in their database transaction, not a redirect.
   if (
     user &&
-    !isPublicPath(pathname) &&
+    (!isPublicPath(pathname) || /^\/(i|join|rsvp)(\/|$)/.test(pathname)) &&
     pathname !== '/onboarding' &&
+    !request.headers.has('next-action') &&
     !pathname.startsWith('/api/')
   ) {
     const { data: profile } = await supabase
@@ -262,11 +263,11 @@ export async function proxy(request: NextRequest) {
       .select('onboarded, legal_terms_version')
       .eq('id', user.id)
       .maybeSingle();
-    if (profile && profile.onboarded === false) {
+    if (!profile || profile.onboarded !== true) {
       const url = request.nextUrl.clone();
       url.pathname = '/onboarding';
       url.search = '';
-      if (pathname !== '/') url.searchParams.set('next', pathname);
+      if (pathname !== '/') url.searchParams.set('next', pathname + request.nextUrl.search);
       const res = NextResponse.redirect(url);
       res.headers.set('content-security-policy', csp);
       return res;
@@ -279,7 +280,7 @@ export async function proxy(request: NextRequest) {
       const url = request.nextUrl.clone();
       url.pathname = '/legal-update';
       url.search = '';
-      if (pathname !== '/') url.searchParams.set('next', pathname);
+      if (pathname !== '/') url.searchParams.set('next', pathname + request.nextUrl.search);
       const res = NextResponse.redirect(url);
       res.headers.set('content-security-policy', csp);
       return res;

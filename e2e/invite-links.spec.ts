@@ -5,6 +5,7 @@ import {
   type BrowserContext,
   type Page,
 } from '@playwright/test';
+import { adminClient, createAccount, sessionCookiesFor, unique } from './support';
 
 /**
  * The invite-link contract.
@@ -160,6 +161,58 @@ async function asStranger<T>(
 test.describe('invite link contract', () => {
   test.skip(!DB, 'requires a seeded database (set E2E_DB=1 — see e2e/README.md)');
   test.skip(({ isMobile }) => isMobile, 'host journeys run against the desktop app shell');
+
+  test('signed-in invite links require onboarding and current terms, then return to the invitation', async ({ page }) => {
+    const account = await createAccount({ handle: unique('e2egate'), name: 'Intake Guest', legalVersion: 'old' });
+    const admin = adminClient();
+    await page.context().addCookies(await sessionCookiesFor(account.handle));
+    const { error: setupError } = await admin.from('profiles').update({ onboarded: false }).eq('id', account.id);
+    expect(setupError).toBeNull();
+    for (const path of ['/i/', '/rsvp/', '/join/']) {
+      const destination = `${path}00000000-0000-0000-0000-000000000000?from=acceptance`;
+      await page.goto(destination);
+      await expect(page).toHaveURL(url => url.pathname === '/onboarding' && url.searchParams.get('next') === destination);
+    }
+    const { error } = await admin.from('profiles').update({ onboarded: true }).eq('id', account.id);
+    expect(error).toBeNull();
+    const destination = '/i/00000000-0000-0000-0000-000000000000?from=acceptance';
+    await page.goto(destination);
+    await expect(page).toHaveURL(url => url.pathname === '/legal-update' && url.searchParams.get('next') === destination);
+    await page.getByLabel('I confirm I am at least 18 years old and accept the updated terms.').check();
+    await page.getByRole('button', { name: 'Continue', exact: true }).click();
+    await expect(page).toHaveURL(url => `${url.pathname}${url.search}` === destination);
+  });
+
+  test('a guest invitation saves required answers and attaches the account in the same RSVP', async ({ page }) => {
+    const host = await createAccount({ handle: unique('e2eintakeh'), name: 'Intake Host' });
+    const guest = await createAccount({ handle: unique('e2eintakeg'), name: 'Intake Guest' });
+    const admin = adminClient();
+    const { data: event, error: eventError } = await admin.from('events').insert({
+      host_id: host.id, title: 'Required intake invitation', status: 'inviting', invite_mode: 'group',
+    }).select('id').single();
+    expect(eventError).toBeNull();
+    const { data: question, error: questionError } = await admin.from('event_questions').insert({
+      event_id: event!.id, prompt: 'Which meal?', kind: 'choice', options: ['Veg', 'Other'], required: true, position: 0,
+    }).select('id').single();
+    expect(questionError).toBeNull();
+    const { data: invitation, error: inviteError } = await admin.from('invites').insert({
+      event_id: event!.id, guest_name: guest.name, status: 'sent', position: 0,
+    }).select('id, guest_token').single();
+    expect(inviteError).toBeNull();
+    await page.context().addCookies(await sessionCookiesFor(guest.handle));
+    await page.goto(`/rsvp/${invitation!.guest_token}`);
+    await page.getByRole('button', { name: 'I’m in', exact: true }).click();
+    await expect(page.getByRole('main').getByRole('alert')).toContainText('Please answer the required questions');
+    expect((await admin.from('invites').select('status').eq('id', invitation!.id).single()).data?.status).toBe('sent');
+    await page.getByLabel('Veg', { exact: true }).check();
+    await page.getByRole('button', { name: 'I’m in', exact: true }).click();
+    await expect.poll(async () => (await admin.from('invites').select('status, invitee_id').eq('id', invitation!.id).single()).data)
+      .toEqual({ status: 'accepted', invitee_id: guest.id });
+    const { data: answer } = await admin.from('invite_answers').select('answer').eq('invite_id', invitation!.id).eq('question_id', question!.id).single();
+    expect(answer?.answer).toBe('Veg');
+    await page.goto(`/events/${event!.id}`);
+    await expect(page.getByRole('heading', { name: 'Required intake invitation', exact: true, level: 1 })).toBeVisible();
+  });
 
   test('the host share link is absolute and points at the canonical origin', async ({
     page,

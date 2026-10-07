@@ -1201,6 +1201,43 @@ triage job into shipping a change that is not words?*
 
 ## Known residual risks / follow-ups
 
+## Acceptance boundary regressions (October 2026)
+
+The acceptance-security migrations enforce these rules in PostgreSQL, not just
+the client. Regression coverage lives in `poll_vote_binding`,
+`announcement_audience`, `rsvp_requirements`, `proximity_matrix`,
+`board_moderators`, `private_zone_requests`, and `give_space_notices` pgTAP files.
+
+- A poll vote's option must belong to its poll, on INSERT and UPDATE. The
+  composite foreign key is initially NOT VALID to preserve existing anomalous
+  ballots for operator inspection; all new writes are checked immediately.
+- Coarse live-location discovery must satisfy both people's audience choices.
+- Announcements and their room copies require accepted attendance or event
+  management. A database trigger writes the tagged room copy atomically;
+  changing RSVP status cannot expose it through stale room membership.
+  Existing matching copies are backfilled. The audience marker cannot be
+  detached, even through privileged updates.
+- Ordinary board members may select public board metadata, not `invite_code`.
+  Only the existing moderator RPC returns/rotates the bearer join code.
+- A removed or denied zone member cannot redeem the old bearer link. Their
+  second request still needs a moderator decision. Voluntary leavers can rejoin.
+- Invite-link navigation funnels signed-in accounts through onboarding and
+  current terms while anonymous readers can still view the plan. RSVP RPCs
+  enforce the same eligibility even when navigation is bypassed. SMS sends an
+  ineligible responder back to their invitation.
+- Required RSVP answers are validated and stored in the acceptance transaction:
+  no blank/oversized answer, invalid choice, or foreign question. Old RPC
+  signatures cannot bypass intake. Declines and waitlists do not save answers.
+  Guest identity attachment is part of the same transaction. Service-only token
+  RPCs take identity from a verified app session, never client input.
+- Open Table approval with incomplete intake/eligibility sends a live invitation
+  to finish those steps; it does not claim a confirmed seat. Guardian/host
+  transitions have a required-answer trigger backstop.
+
+Deploy the migrations before the app that calls the new answer-bearing RPCs.
+`src/lib/legal.test.ts` keeps all database eligibility checks aligned with
+`LEGAL_VERSION`; update the database policy whenever terms change.
+
 ## Give Space safety invariant
 
 Give Space is a shield, never a tracking surface. It exists to change what its
@@ -1237,6 +1274,9 @@ where the requester's commitment completes inside the host's approval request.
 It is service-role only, takes the subject explicitly, and applies the identical
 commitment gate — a host cannot use it to learn or plant anything, and gets
 nothing back.
+
+The overlap includes the primary host even when the host has no self-invite.
+The same accepted-only, anonymous, monotonic one-bit notice applies.
 
 Litmus test: *could someone learn one thing about another person's plans that
 they did not already know, without RSVPing yes to something themselves?*

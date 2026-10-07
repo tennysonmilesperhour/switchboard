@@ -300,9 +300,8 @@ describe('postAnnouncement: fan-out', () => {
       ['eq', 'id', 'host-1'],
     ]);
 
-    expect(stepsOf('admin', 'messages')).toEqual([
-      ['insert', { room_id: 'room-1', sender_id: 'host-1', body: 'Door code is 4412' }],
-    ]);
+    // pgTAP proves the atomic database mirror; the action must not duplicate it.
+    expect(stepsOf('admin', 'messages')).toEqual([]);
   });
 
   it('tells the host when a co-host posts, and not the co-host who wrote it', async () => {
@@ -315,9 +314,7 @@ describe('postAnnouncement: fan-out', () => {
       ['member-1', 'member-2', 'host-1'],
       expect.objectContaining({ kind: 'announcement' }),
     );
-    expect(stepsOf('admin', 'messages')).toEqual([
-      ['insert', { room_id: 'room-1', sender_id: 'cohost-1', body: 'Moved inside — it’s raining' }],
-    ]);
+    expect(stepsOf('admin', 'messages')).toEqual([]);
     // A guest's email names who actually wrote it, never "your host".
     expect(stepsOf('admin', 'profiles')).toContainEqual(['eq', 'id', 'cohost-1']);
     const [[[email]]] = mocks.sendEmails.mock.calls as [[[{ text: string }]]];
@@ -382,8 +379,8 @@ describe('postAnnouncement: fan-out', () => {
     expect(result).toEqual({ ok: true });
     expect(mocks.notifyUsers).not.toHaveBeenCalled();
     expect(mocks.sendEmails).not.toHaveBeenCalled();
-    // The note still gets its permanent home in the room.
-    expect(stepsOf('admin', 'messages')).toHaveLength(1);
+    // The note already got its permanent home in the insert transaction.
+    expect(stepsOf('admin', 'messages')).toEqual([]);
   });
 
   it('posts nowhere else when the plan has no Living Room', async () => {

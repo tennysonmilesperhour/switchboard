@@ -21,6 +21,10 @@ insert into auth.users (id, email) values
   ('30000000-0000-0000-0000-000000000008', 'share-second-seat@example.com'),
   ('30000000-0000-0000-0000-000000000009', 'share-nameless@example.com');
 
+-- These are fully registered RSVP participants; eligibility refusals have separate tests.
+update public.profiles set onboarded = true, legal_terms_version = '2026-08-31'
+where id in ('30000000-0000-0000-0000-000000000001', '30000000-0000-0000-0000-000000000002', '30000000-0000-0000-0000-000000000003', '30000000-0000-0000-0000-000000000004', '30000000-0000-0000-0000-000000000005', '30000000-0000-0000-0000-000000000006', '30000000-0000-0000-0000-000000000007', '30000000-0000-0000-0000-000000000008', '30000000-0000-0000-0000-000000000009');
+
 insert into public.profiles (id, display_name, onboarded) values
   ('30000000-0000-0000-0000-000000000001', 'Share Host', true),
   ('30000000-0000-0000-0000-000000000002', 'Existing Member', true),
