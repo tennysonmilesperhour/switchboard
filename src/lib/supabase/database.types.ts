@@ -3636,7 +3636,7 @@ export type Database = {
       }
       claim_signal_nearby_recipients: {
         Args: {
-          p_cooldown?: unknown
+          p_cooldown?: string
           p_limit?: number
           p_owner: string
           p_radius_m?: number
