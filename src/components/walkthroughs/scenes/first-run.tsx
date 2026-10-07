@@ -3,17 +3,13 @@
 import { Icon } from '@/components/ui/Icon';
 import { Glyph } from '@/components/ui/Glyph';
 import { At, Panel, Phone, Pill, Tap, Typed, useAt, useElapsed } from '../scene-kit';
+import { CREATE_DOORS } from '@/lib/create-doors';
 import { PEOPLE, Person, Field, GradientButton, Bubble, TabBar, type PersonKey } from './shared';
 
 /* The first-run walkthrough: one plan, start to finish. */
 
 export function StartDoors() {
   const open = useAt(1200);
-  const doors = [
-    { emoji: '📅', title: 'I’ve got a plan', body: 'Send invites in your order' },
-    { emoji: '🗳', title: 'Help me figure it out', body: 'Let the group decide' },
-    { emoji: '💡', title: 'Show me ideas', body: 'Things to do near you' },
-  ];
   return (
     <Phone title="Home">
       <div className="space-y-2">
@@ -34,7 +30,7 @@ export function StartDoors() {
           <div className="animate-rise space-y-1.5 rounded-t-3xl bg-paper px-3 pb-3 pt-2 shadow-float">
             <span className="mx-auto block h-1 w-8 rounded-full bg-line" />
             <p className="px-1 text-[13px] font-extrabold text-ink">Start something</p>
-            {doors.map((door, index) => (
+            {CREATE_DOORS.map((door, index) => (
               <At key={door.title} ms={1400 + index * 220}>
                 <Tap at={index === 0 ? 2800 : 99999}>
                   <Panel className="flex items-center gap-2">

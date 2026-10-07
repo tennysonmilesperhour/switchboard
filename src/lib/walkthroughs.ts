@@ -92,7 +92,7 @@ export const WALKTHROUGHS: readonly Walkthrough[] = [
         id: 'start',
         title: 'Start with the + button',
         caption:
-          'Everything begins in the middle of the bottom bar. Got a plan, need the group to decide, or just want ideas — pick a door.',
+          'Everything begins in the middle of the bottom bar. Got a plan, need the group to decide, or want something to do? Pick a door.',
         scene: 'start-doors',
         features: ['start-something'],
       },
@@ -375,9 +375,9 @@ export const WALKTHROUGHS: readonly Walkthrough[] = [
       },
       {
         id: 'sabbatical',
-        title: 'Take a sabbatical',
+        title: 'Take a quiet season',
         caption:
-          'One switch steps you out of discovery, the map, and Mutual, and holds everything but the plans you’re already in.',
+          'Sabbatical is one switch that steps you out of discovery, the map, and Mutual, and holds everything but the plans you’re already in.',
         scene: 'sabbatical',
         features: ['sabbatical'],
       },

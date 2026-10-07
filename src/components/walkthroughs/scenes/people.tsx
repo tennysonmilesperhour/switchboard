@@ -147,34 +147,29 @@ export function Radar() {
       <div className="space-y-2">
         <Panel className="h-14 opacity-50" />
         <At ms={600}>
-          <Panel className="space-y-2 border-gold">
-            <p className="flex items-center gap-1 text-[10px] font-bold text-gold-deep">
-              <Glyph emoji="📡" size={12} /> Been a while
-            </p>
-            <div className="flex items-center gap-2">
-              <Person who="sam" />
-              <span className="text-[11px] text-ink">
-                You and <b>Sam</b> haven’t made a plan in 7 weeks.
-              </span>
-            </div>
-            <At ms={1500}>
-              <div className="grid grid-cols-2 gap-1.5">
-                <Tap at={2400}>
-                  <div className="rounded-lg bg-brand-gradient py-1 text-center text-[10px] font-bold text-white">
-                    Plan something
-                  </div>
-                </Tap>
-                <div className="rounded-lg border border-line py-1 text-center text-[10px] font-bold text-ink-soft">
-                  Not now
-                </div>
-              </div>
-            </At>
-          </Panel>
+          <p className="px-1 text-[13px] font-extrabold text-ink">It’s been a while</p>
+          <p className="px-1 text-[10px] text-ink-faint">Only you can see this</p>
         </At>
-        <At ms={2900}>
+        <At ms={1100}>
+          <Tap at={2400}>
+            <Panel className="flex items-center gap-2">
+              <Person who="sam" />
+              <span className="min-w-0 flex-1 text-[11px] text-ink">
+                <b>Sam Okafor</b>{' '}
+                <span className="text-ink-soft">· 49 days since you got together</span>
+              </span>
+              <span className="whitespace-nowrap text-[10px] font-bold text-terracotta-deep">
+                Make a plan
+              </span>
+            </Panel>
+          </Tap>
+        </At>
+        <At ms={3000}>
           <Panel className="space-y-1">
             <p className="text-[10px] font-bold text-ink-faint">NEW PLAN</p>
-            <p className="text-[12px] font-semibold text-ink">Coffee with Sam</p>
+            <p className="flex items-center gap-1.5 text-[11px] text-ink">
+              <Person who="sam" size="sm" /> Sam is already on the list
+            </p>
           </Panel>
         </At>
       </div>

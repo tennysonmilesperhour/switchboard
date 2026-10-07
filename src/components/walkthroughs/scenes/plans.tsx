@@ -127,8 +127,9 @@ export function ResponseWindow() {
             </div>
             <At ms={2400}>
               <Tap at={2800}>
-                <div className="rounded-lg border border-line py-1 text-center text-[10px] font-bold text-ink-soft">
-                  Give more time
+                <div className="flex items-center justify-between rounded-lg border border-line px-2 py-1 text-[10px] font-bold text-ink-soft">
+                  More time
+                  <Icon name="back" size={10} className="-rotate-90" />
                 </div>
               </Tap>
             </At>

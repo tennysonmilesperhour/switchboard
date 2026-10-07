@@ -101,4 +101,21 @@ describe('walkthroughs', () => {
     const entry = FEATURES.find((feature) => feature.id === 'walkthroughs');
     expect(entry?.href).toBe(`/tour/${primaryWalkthrough().id}`);
   });
+
+  /**
+   * Scenes that stage a real picker read the real list, so a renamed door or
+   * theme changes the demo with it instead of leaving it teaching a label that
+   * isn't on screen.
+   */
+  it('stages the real Start something doors and theme names', () => {
+    const scene = (name: string) =>
+      readFileSync(
+        join(process.cwd(), 'src', 'components', 'walkthroughs', 'scenes', `${name}.tsx`),
+        'utf8',
+      );
+    expect(scene('first-run')).toContain('CREATE_DOORS.map(');
+    expect(scene('you')).toContain('APP_THEMES');
+    const createPage = readFileSync(join(process.cwd(), 'src', 'app', 'create', 'page.tsx'), 'utf8');
+    expect(createPage).toContain('CREATE_DOORS.map(');
+  });
 });

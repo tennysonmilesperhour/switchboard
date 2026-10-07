@@ -2,6 +2,7 @@
 
 import { Icon } from '@/components/ui/Icon';
 import { Glyph } from '@/components/ui/Glyph';
+import { APP_THEMES } from '@/lib/themes-app';
 import { At, Panel, Phone, Tap, useAt, useElapsed } from '../scene-kit';
 import { Toggle } from './shared';
 
@@ -112,7 +113,7 @@ export function Sabbatical() {
     <Phone title="Sabbatical">
       <div className="space-y-2">
         <Panel className="flex items-center justify-between">
-          <span className="text-[11px] font-bold text-ink">Take a sabbatical</span>
+          <span className="text-[11px] font-bold text-ink">Take a quiet season</span>
           <Tap at={800}>
             <Toggle on={on} />
           </Tap>
@@ -151,14 +152,14 @@ function SurfaceRow({ label, at }: { label: string; at: number }) {
 
 export function Appearance() {
   const elapsed = useElapsed();
-  // Inline palettes for the preview only; the real themes live in
-  // src/lib/themes-app.ts and apply to the whole app.
-  const looks = [
-    { name: 'Bright', paper: '#f9fbfd', card: '#ffffff', ink: '#191d22', accent: '#dc2558' },
-    { name: 'Warm dark', paper: '#1d1a17', card: '#2a2622', ink: '#f3ebe1', accent: '#f08a5d' },
-    { name: 'Cream & ink', paper: '#f4efe6', card: '#fbf8f2', ink: '#1f1b16', accent: '#1f1b16' },
-    { name: 'Plum serif', paper: '#faf7fb', card: '#ffffff', ink: '#2a1f2d', accent: '#7b2f7f' },
-  ];
+  // The real presets, by the names Settings shows. The preview paints with
+  // each one's own swatches: [background, surface, accent].
+  const looks = APP_THEMES.filter((theme) => !theme.earned && !theme.custom)
+    .slice(0, 4)
+    .map((theme) => {
+      const [paper, card, accent] = theme.swatches;
+      return { name: theme.name, paper, card, accent, ink: isDark(paper) ? '#f3ebe1' : '#191d22' };
+    });
   const index = elapsed >= 3000 ? 3 : elapsed >= 2000 ? 2 : elapsed >= 1000 ? 1 : 0;
   const look = looks[index];
   return (
@@ -209,4 +210,13 @@ export function Appearance() {
       </div>
     </Phone>
   );
+}
+
+/** Whether a #rrggbb background needs light text. */
+function isDark(hex: string): boolean {
+  const value = parseInt(hex.slice(1), 16);
+  const r = (value >> 16) & 255;
+  const g = (value >> 8) & 255;
+  const b = value & 255;
+  return 0.299 * r + 0.587 * g + 0.114 * b < 128;
 }
