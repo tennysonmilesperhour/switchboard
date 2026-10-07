@@ -13,7 +13,7 @@ import {
   deleteAccountAndData,
   serializeMyDataExport,
 } from '@/lib/server/account-data';
-import { noticeHostedPlansEnding } from '@/lib/server/hosted-plans';
+import { prepareHostedPlanCancellations, sendHostedPlanCancellations } from '@/lib/server/hosted-plans';
 
 export type ExportMyDataResult =
   | { ok: true; filename: string; json: string }
@@ -86,13 +86,13 @@ export async function deleteAccount(
   }
 
   const admin = createAdminClient();
-  // Before the cascade removes them: the people counting on this person's
-  // upcoming plans hear that they're off. Best-effort, so a notification
-  // outage cannot trap someone in an account they asked to delete.
+  // Capture recipients before the cascade, but never announce a deletion that
+  // might still fail. A snapshot failure must not trap someone in their account.
+  let cancellations: Awaited<ReturnType<typeof prepareHostedPlanCancellations>> | null = null;
   try {
-    await noticeHostedPlansEnding(admin, auth.user.id);
+    cancellations = await prepareHostedPlanCancellations(admin, auth.user.id);
   } catch (noticeError) {
-    console.error('Hosted-plan notice before account deletion failed', noticeError);
+    console.error('Hosted-plan cancellation snapshot failed', noticeError);
   }
 
   try {
@@ -104,6 +104,16 @@ export async function deleteAccount(
       error,
       { userId: auth.user.id },
     );
+  }
+
+  // Once deletion has committed, these messages are true. Delivery remains
+  // best-effort; a provider failure cannot undo deletion or prevent sign-out.
+  if (cancellations) {
+    try {
+      await sendHostedPlanCancellations(cancellations);
+    } catch (noticeError) {
+      console.error('Hosted-plan notice after account deletion failed', noticeError);
+    }
   }
 
   await auth.supabase.auth.signOut();
