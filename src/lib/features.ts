@@ -661,7 +661,7 @@ export const FEATURE_GROUPS: readonly FeatureGroup[] = [
         id: 'sabbatical',
         title: 'Sabbatical mode',
         blurb:
-          'One switch takes you out of radar, discovery, Mutual, matchmaking and ritual reminders, and holds every notification except those from plans you’re already in. Your note shows on your profile and to friends picking you for a plan.',
+          'One switch takes you out of radar, the map, discovery, Mutual, matchmaking and ritual reminders, and holds every notification except those from plans you’re already in. Your note shows on your profile and to friends picking you for a plan.',
         where: 'Settings → Sabbatical',
         href: '/settings',
       },

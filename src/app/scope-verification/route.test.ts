@@ -85,7 +85,7 @@ describe('the checklist itself', () => {
     const ids = groups().map((group) => group.id);
     // Nesting a section inside the previous one's `items` is the shape the
     // bracket bug produced, so assert the sections are siblings by name.
-    expect(ids).toEqual(['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J']);
+    expect(ids).toEqual(['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K']);
     expect(new Set(ids).size).toBe(ids.length);
   });
 

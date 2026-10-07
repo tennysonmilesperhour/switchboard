@@ -10,6 +10,7 @@ export const SCOPE_ITEM_IDS = [
   'H1', 'H2', 'H3', 'H4',
   'I1', 'I2', 'I3', 'I4',
   'J1', 'J2', 'J3', 'J4', 'J5', 'J6',
+  'K1', 'K2', 'K3', 'K4', 'K5', 'K6',
 ] as const;
 
 export function isScopeItemId(value: string): boolean {

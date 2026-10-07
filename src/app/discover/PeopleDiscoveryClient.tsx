@@ -265,7 +265,7 @@ export function PeopleDiscoveryClient({
           <EmptyState
             emoji="📍"
             title="No one nearby yet"
-            body="Nearby compares your home area with people who share theirs. Turn on Location under Discoverability in Settings and add your home area to your profile to be counted — and to see who else is close."
+            body="Nearby compares your home area with people who share theirs. Turn on Geography under Discoverability in Settings, then in Edit profile pick your city from the suggestions under City or area so it shows as pinned. That counts you, and shows you who else is close."
           />
         ) : (
           <EmptyState

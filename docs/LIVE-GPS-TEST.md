@@ -16,9 +16,14 @@ Everything here is also covered by simulated tests (`e2e/people-places.spec.ts`,
   Location Services › Safari Websites › While Using + Precise). With it off,
   the phone reports a point kilometres away and the app will say "approximate".
   Worth testing once on purpose.
-- **For Discover "Nearby"**: both accounts discoverable, "Geography" on, and a
-  home area set in Edit profile. Without a home point there is nothing to
-  compare, so the Nearby lane stays empty by design.
+- **For Discover "Nearby"**: both accounts discoverable and "Geography" on
+  (Settings › Discoverability), and a home area set in Edit profile › City or
+  area. Pick the city from the suggestions so the field says "Pinned"; typed
+  text alone saves no point. Without a home point there is nothing to compare,
+  so the Nearby lane stays empty by design.
+- **Keep the Map page open** on both phones during section 1. A share stays
+  visible only while the map is open somewhere: leave it (or lock the screen)
+  for 15+ minutes and you drop off until you come back.
 - Close extra Switchboard tabs. Two tabs on one phone both send updates.
 
 ## 1. The map (live location)
