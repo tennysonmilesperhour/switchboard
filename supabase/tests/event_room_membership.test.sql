@@ -6,6 +6,10 @@ insert into auth.users (id, email) values
   ('20000000-0000-0000-0000-000000000002', 'room-direct@example.com'),
   ('20000000-0000-0000-0000-000000000003', 'room-guest@example.com');
 
+-- These are fully registered RSVP participants; eligibility refusals have separate tests.
+update public.profiles set onboarded = true, legal_terms_version = '2026-08-31'
+where id in ('20000000-0000-0000-0000-000000000001', '20000000-0000-0000-0000-000000000002', '20000000-0000-0000-0000-000000000003');
+
 insert into public.profiles (id, display_name, onboarded) values
   ('20000000-0000-0000-0000-000000000001', 'Room Host', true),
   ('20000000-0000-0000-0000-000000000002', 'Direct Invitee', true),

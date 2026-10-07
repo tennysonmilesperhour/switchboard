@@ -11,6 +11,10 @@
 begin;
 select plan(53);
 
+-- This transaction owns its candidate population, even after browser seeding.
+-- Rollback restores every pre-existing profile; no discovery assertion changes.
+update public.profiles set discoverable = false where discoverable;
+
 -- ————————————————————————— fixtures —————————————————————————
 insert into auth.users (id, email) values
   ('00000000-0000-0000-0000-0000000d0001', 'dl-a@example.com'),

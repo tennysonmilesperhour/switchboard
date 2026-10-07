@@ -66,8 +66,53 @@ test('still sends a signed-out browser navigation to /welcome with its deep link
 
 const WEEK_AHEAD = () => new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
 
+test.each(['/i/token?source=text', '/join/event', '/rsvp/token'])('keeps %s public when signed out', async path => {
+  signedOut();
+  const response = await proxy(new NextRequest(`https://switchboardsocial.me${path}`));
+  expect(response.headers.has('location')).toBe(false);
+});
+
+test.each(['/i/token?source=text', '/join/event', '/rsvp/token'])('preserves %s through onboarding and terms', async path => {
+  for (const [profile, destination] of [
+    [null, '/onboarding'],
+    [{ onboarded: false, legal_terms_version: null }, '/onboarding'],
+    [{ onboarded: true, legal_terms_version: null }, '/legal-update'],
+  ] as const) {
+    signedInAs({ id: 'u1' }, profile);
+    const response = await proxy(new NextRequest(`https://switchboardsocial.me${path}`));
+    const location = new URL(response.headers.get('location')!);
+    expect(location.pathname).toBe(destination);
+    expect(location.searchParams.get('next')).toBe(path);
+  }
+});
+
+test('lets an invite action reach its database eligibility check without an HTML redirect', async () => {
+  signedInAs({ id: 'u1' }, { onboarded: false, legal_terms_version: null });
+  const response = await proxy(new NextRequest('https://switchboardsocial.me/i/token', {
+    method: 'POST', headers: { 'next-action': 'answer' },
+  }));
+  expect(response.headers.has('location')).toBe(false);
+});
+
+test.each(['/events/new', '/boards', '/settings'])('does not exempt a protected %s action from eligibility', async path => {
+  for (const [profile, destination] of [
+    [{ onboarded: false, legal_terms_version: null }, '/onboarding'],
+    [{ onboarded: true, legal_terms_version: 'old' }, '/legal-update'],
+  ] as const) {
+    signedInAs({ id: 'u1' }, profile);
+    const response = await proxy(new NextRequest(`https://switchboardsocial.me${path}`, {
+      method: 'POST', headers: { 'next-action': 'protected-action' },
+    }));
+    expect(new URL(response.headers.get('location')!).pathname).toBe(destination);
+  }
+});
+
 /** A signed-in session whose account may since have been suspended. */
-function signedInAs(user: { id: string; banned_until?: string }) {
+function signedInAs(
+  user: { id: string; banned_until?: string },
+  profile: { onboarded: boolean; legal_terms_version: string | null } | null =
+    { onboarded: true, legal_terms_version: LEGAL_VERSION },
+) {
   const signOut = vi.fn();
   createServerClient.mockImplementation(
     (_url: string, _key: string, options: { cookies: { setAll: (c: unknown[]) => void } }) => ({
@@ -85,7 +130,7 @@ function signedInAs(user: { id: string; banned_until?: string }) {
         select: () => ({
           eq: () => ({
             maybeSingle: async () => ({
-              data: { onboarded: true, legal_terms_version: LEGAL_VERSION },
+              data: profile,
             }),
           }),
         }),

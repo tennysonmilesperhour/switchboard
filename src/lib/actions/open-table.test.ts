@@ -28,7 +28,7 @@ vi.mock('@/lib/server/observability', () => ({
   reportAndFail: vi.fn(async (code: string) => ({ ok: false, code, error: 'failed' })),
 }));
 
-import { declineJoinRequest, requestToJoin } from './open-table';
+import { approveJoinRequest, declineJoinRequest, requestToJoin } from './open-table';
 
 /** A chainable read that resolves to `result` however it is filtered. */
 function read(result: { data: unknown; error: unknown }) {
@@ -37,6 +37,7 @@ function read(result: { data: unknown; error: unknown }) {
     select: () => builder,
     eq: () => builder,
     maybeSingle: async () => result,
+    single: async () => result,
     then: (resolve: (value: unknown) => unknown) => resolve(result),
   };
   return builder;
@@ -53,6 +54,11 @@ beforeEach(() => {
 });
 
 describe('requestToJoin', () => {
+  it('gives an incomplete account a route out instead of a save outage', async () => {
+    mocks.rpc.mockResolvedValue({ data: null, error: { hint: 'SB-RSVP-TERMS' } });
+    expect(await requestToJoin('event-1')).toMatchObject({ ok: false, error: expect.stringContaining('Reload') });
+    expect(mocks.notifyUsers).not.toHaveBeenCalled();
+  });
   it('tells the host and every co-host, never the asker', async () => {
     mocks.rpc.mockResolvedValue({ data: 'invite-1', error: null });
     mocks.adminFrom.mockImplementation((table: string) =>
@@ -80,6 +86,15 @@ describe('requestToJoin', () => {
     expect(mocks.notifyUsers).not.toHaveBeenCalled();
     expect(mocks.checkRateLimit).toHaveBeenCalledWith('join-request:asker:event-1', 3, 86_400);
   });
+});
+
+it('welcoming a requester with unanswered questions sends intake, not a confirmed-seat notice', async () => {
+  mocks.rpc.mockResolvedValue({ data: 'sent', error: null });
+  mocks.sessionFrom.mockReturnValue(read({ data: { invitee_id: 'asker', guest_token: 'token' }, error: null }));
+  expect(await approveJoinRequest('invite-1', 'event-1')).toMatchObject({ ok: true, outcome: 'sent' });
+  expect(mocks.notifyUsers).toHaveBeenCalledWith(['asker'], expect.objectContaining({
+    kind: 'event_invite', url: '/rsvp/token', body: expect.stringContaining('finish the required details'),
+  }));
 });
 
 describe('declineJoinRequest', () => {
