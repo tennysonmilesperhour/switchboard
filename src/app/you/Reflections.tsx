@@ -6,6 +6,8 @@ import { Icon } from '@/components/ui/Icon';
 import { useToast } from '@/components/ui/Toast';
 import { requestReflection } from '@/lib/actions/identity';
 import type { Reflection } from '@/lib/server/identity';
+import type { DeckCard } from '@/lib/server/reflection-deck';
+import { ReflectionDeck } from './ReflectionDeck';
 
 const KINDS: { key: string; label: string; blurb: string }[] = [
   { key: 'general', label: 'Who I seem to be', blurb: 'An overall read' },
@@ -20,9 +22,13 @@ const KIND_LABEL: Record<string, string> = Object.fromEntries(
 export function Reflections({
   reflections,
   ready,
+  deck,
+  deckFailed,
 }: {
   reflections: Reflection[];
   ready: boolean;
+  deck: DeckCard[];
+  deckFailed: boolean;
 }) {
   const [pending, startTransition] = useTransition();
   const [busyKind, setBusyKind] = useState<string | null>(null);
@@ -50,6 +56,10 @@ export function Reflections({
       <h3 className="mb-1 text-xs font-bold uppercase tracking-wide text-ink-faint">
         Reflections
       </h3>
+      <div className="mb-5">
+        <h4 className="mb-1 text-sm font-bold text-ink">Look back</h4>
+        <ReflectionDeck cards={deck} failed={deckFailed} />
+      </div>
       <p className="mb-3 text-xs leading-relaxed text-ink-faint">
         {ready
           ? 'Ask for a deeper, written reflection over your reads - how you relate to people, and how to move toward what you say you want.'

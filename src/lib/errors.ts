@@ -612,6 +612,11 @@ const REGISTRY = {
     fix: 'Reload the page.',
     actor: 'reader',
   },
+  'SB-REFLECT-LOAD': {
+    message: 'Your look-back deck didn’t load.',
+    fix: 'Reload the page. Nothing you already swiped was lost.',
+    actor: 'reader',
+  },
   'SB-ANNOUNCEMENT-LOAD': {
     message: 'Announcements from your hosts didn’t load.',
     fix: 'Reload the page, or open the plan to read them there.',
@@ -762,6 +767,11 @@ const REGISTRY = {
   'SB-ENERGY-SAVE': {
     message: 'That reflection didn’t save.',
     fix: 'Try again.',
+    actor: 'reader',
+  },
+  'SB-REFLECT-SAVE': {
+    message: 'That didn’t save.',
+    fix: 'Try again. The card is back in your deck.',
     actor: 'reader',
   },
   'SB-THREAD-SAVE': {
@@ -1228,6 +1238,8 @@ const AREA_CODES: Record<string, ErrorCode> = {
   'discover.people': 'SB-PEOPLE-LOAD',
   'discover.join-requests': 'SB-INVITE-LOAD',
   'energy.save': 'SB-ENERGY-SAVE',
+  'reflection.save': 'SB-REFLECT-SAVE',
+  'you.deck': 'SB-REFLECT-LOAD',
   'event-thread.send': 'SB-THREAD-SAVE',
   'event-thread.delete': 'SB-THREAD-SAVE',
   'expense.save': 'SB-EXPENSE-SAVE',
