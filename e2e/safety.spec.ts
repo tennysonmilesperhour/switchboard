@@ -272,7 +272,7 @@ test.describe('safety and moderation', () => {
     await expect(r.page.getByRole('heading', { name: roomTitle })).toBeVisible();
     await expect(r.page.getByText(rude)).toHaveCount(0);
     await r.page.goto(boardUrl);
-    await expect(r.page.getByRole('heading', { name: boardName })).toBeVisible();
+    await expect(r.page.getByRole('heading', { name: boardName, level: 1 })).toBeVisible();
     await expect(r.page.getByText(post)).toHaveCount(0);
 
     // Marking the report actioned takes it out of the queue.

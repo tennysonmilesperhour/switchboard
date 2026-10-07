@@ -49,7 +49,7 @@ async function createZone(
   }
   await form.getByRole('button', { name: 'Create zone' }).click();
   await page.waitForURL(/\/zones\/[^/?]+$/, { timeout: 15_000 });
-  await expect(page.getByRole('heading', { name: name })).toBeVisible();
+  await expect(page.getByRole('heading', { name: name, level: 1 })).toBeVisible();
   return new URL(page.url()).pathname.split('/').pop()!;
 }
 
@@ -142,7 +142,7 @@ test.describe('places', () => {
       .getByRole('link', { name: 'Open' })
       .click();
     await page.waitForURL(new RegExp(`/zones/${slug}$`));
-    await expect(page.getByRole('heading', { name: name })).toBeVisible();
+    await expect(page.getByRole('heading', { name: name, level: 1 })).toBeVisible();
   });
 
   test('an organizer opens a public zone, and a neighbour finds it and checks in', async ({
@@ -221,7 +221,7 @@ test.describe('places', () => {
 
       // The guest is in: the zone itself, and a way back out.
       await guest.reload();
-      await expect(guest.getByRole('heading', { name: name })).toBeVisible();
+      await expect(guest.getByRole('heading', { name: name, level: 1 })).toBeVisible();
       await expect(guest.getByText('Private zone', { exact: true })).toBeVisible();
       await guest.getByRole('button', { name: 'Leave zone' }).click();
       await confirmDialog(guest, `Leave ${name}?`, 'Leave zone');
@@ -285,7 +285,7 @@ test.describe('places', () => {
     await page.getByRole('button', { name: 'Create board' }).click();
     await page.waitForURL(/\/boards\/[^/?]+$/, { timeout: 15_000 });
     const boardUrl = page.url();
-    await expect(page.getByRole('heading', { name: name })).toBeVisible();
+    await expect(page.getByRole('heading', { name: name, level: 1 })).toBeVisible();
 
     await page.getByLabel('Title').fill(notice);
     await page.getByLabel('Details').fill('Six foot, by the garage.');

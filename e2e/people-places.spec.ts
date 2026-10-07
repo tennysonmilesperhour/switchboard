@@ -78,7 +78,7 @@ async function createZone(
   }
   await form.getByRole('button', { name: 'Create zone' }).click();
   await page.waitForURL(/\/zones\/[^/?]+$/, { timeout: 15_000 });
-  await expect(page.getByRole('heading', { name: name })).toBeVisible();
+  await expect(page.getByRole('heading', { name: name, level: 1 })).toBeVisible();
   return new URL(page.url()).pathname.split('/').pop()!;
 }
 
@@ -425,7 +425,7 @@ test.describe('people and places', () => {
 
       // Hal is removed, and sees that rather than a fresh "Ask to join".
       await h.goto(`/zones/${slug}`);
-      await expect(h.getByRole('heading', { name: name })).toBeVisible();
+      await expect(h.getByRole('heading', { name: name, level: 1 })).toBeVisible();
       await page.goto(`/zones/${slug}`);
       await page.locator('li', { hasText: hal.name }).getByRole('button', { name: 'Remove' }).click();
       await confirmDialog(page, `Remove ${hal.name}?`, 'Remove');
@@ -496,7 +496,7 @@ test.describe('people and places', () => {
       await page.getByLabel('Ends on').fill(end);
       await page.getByRole('button', { name: 'Save changes' }).click();
       await expectToast(page, 'Zone updated.');
-      await expect(page.getByRole('heading', { name: renamed })).toBeVisible();
+      await expect(page.getByRole('heading', { name: renamed, level: 1 })).toBeVisible();
       const shown = new Date(`${end}T12:00:00Z`).toLocaleDateString('en-US', { month: 'long', day: 'numeric', timeZone: 'UTC' });
       await expect(page.getByText(new RegExp(`Open until .*${shown}`))).toBeVisible();
 
@@ -505,7 +505,7 @@ test.describe('people and places', () => {
       await expectToast(page, `${jo.name} can now manage this zone with you.`);
       await expect(page.locator('li', { hasText: jo.name })).toContainText('moderator');
       await j.reload();
-      await expect(j.getByRole('heading', { name: renamed })).toBeVisible();
+      await expect(j.getByRole('heading', { name: renamed, level: 1 })).toBeVisible();
       await expect(j.getByText('Who can be here')).toBeVisible();
       await j.getByRole('button', { name: 'Edit', exact: true }).click();
       await expect(j.getByRole('button', { name: 'Delete this zone' })).toHaveCount(0);
@@ -518,7 +518,7 @@ test.describe('people and places', () => {
       await expectToast(page, 'Zone deleted.');
       await page.waitForURL(/\/zones$/);
       await j.goto(`/zones/${slug}`);
-      await expect(j.getByRole('heading', { name: renamed })).toHaveCount(0);
+      await expect(j.getByRole('heading', { name: renamed, level: 1 })).toHaveCount(0);
       await expect(j.getByRole('heading', { name: `${renamed} is private` })).toHaveCount(0);
     } finally {
       await joSide.context.close();
@@ -542,7 +542,7 @@ test.describe('people and places', () => {
     try {
       await luSide.page.goto(href);
       await luSide.page.waitForURL(new RegExp(`/zones/${slug}$`));
-      await expect(luSide.page.getByRole('heading', { name: name })).toBeVisible();
+      await expect(luSide.page.getByRole('heading', { name: name, level: 1 })).toBeVisible();
     } finally {
       await luSide.context.close();
     }
@@ -611,7 +611,7 @@ test.describe('people and places', () => {
         .fill(renamed);
       await page.getByRole('button', { name: 'Save', exact: true }).click();
       await expectToast(page, 'Board updated.');
-      await expect(page.getByRole('heading', { name: renamed })).toBeVisible();
+      await expect(page.getByRole('heading', { name: renamed, level: 1 })).toBeVisible();
 
       await page.getByRole('button', { name: 'Leave this board' }).click();
       await confirmDialog(page, `Leave ${renamed}?`, 'Leave board');
@@ -620,7 +620,7 @@ test.describe('people and places', () => {
 
       // Nia runs it now, and can delete it.
       await n.reload();
-      await expect(n.getByRole('heading', { name: renamed })).toBeVisible();
+      await expect(n.getByRole('heading', { name: renamed, level: 1 })).toBeVisible();
       await expect(n.getByText('Invite-only - you moderate this board')).toBeVisible();
       await shot(n, 'board-new-moderator');
       await n.getByRole('button', { name: 'Delete this board' }).click();
@@ -653,7 +653,7 @@ test.describe('people and places', () => {
     try {
       await patSide.page.goto(href);
       await patSide.page.waitForURL(boardUrl);
-      await expect(patSide.page.getByRole('heading', { name: name })).toBeVisible();
+      await expect(patSide.page.getByRole('heading', { name: name, level: 1 })).toBeVisible();
     } finally {
       await patSide.context.close();
     }
