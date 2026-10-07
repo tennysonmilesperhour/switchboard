@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import dynamic from 'next/dynamic';
 import { Button } from '@/components/ui/Button';
+import { Glyph } from '@/components/ui/Glyph';
 import { useToast } from '@/components/ui/Toast';
 import {
   isApproximateFix,
@@ -308,7 +309,8 @@ export function FindEachOther({
         className="flex w-full items-center justify-between gap-2 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-terracotta rounded"
       >
         <span className="text-sm font-semibold text-ink">
-          📍 Find each other
+          <Glyph emoji="📍" size={14} className="mr-1 inline align-text-bottom" />
+          Find each other
           {sharing && <span className="ml-2 text-xs font-medium text-sage-deep">Sharing</span>}
         </span>
         <span className="text-xs text-ink-soft">{open ? 'Hide' : 'Open'}</span>
