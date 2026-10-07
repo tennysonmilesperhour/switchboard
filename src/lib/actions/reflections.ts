@@ -2,7 +2,7 @@
 
 import { revalidatePath } from 'next/cache';
 import { validation, type ActionResult } from '@/lib/errors';
-import { reportAndFail } from '@/lib/server/observability';
+import { reportAndFail, reportOperationalError } from '@/lib/server/observability';
 import { requireUser } from '@/lib/server/require-user';
 import {
   DECK_VERDICTS,
@@ -48,12 +48,18 @@ export async function saveEventReflection(
   // themselves from Home.
   const feeling = impliedFeeling(input.verdict);
   if (feeling) {
-    await supabase
+    const { error: energyError } = await supabase
       .from('energy_logs')
       .upsert(
         { user_id: user.id, event_id: eventId, feeling },
         { onConflict: 'user_id,event_id', ignoreDuplicates: true },
       );
+    // The reflection itself is saved, so the card is rightly gone; the energy
+    // map is derived from it. Log the miss under the same code instead of
+    // telling the reader their swipe failed.
+    if (energyError) {
+      await reportOperationalError('reflection.energy', energyError, { eventId }, 'SB-REFLECT-SAVE');
+    }
   }
 
   revalidatePath('/');

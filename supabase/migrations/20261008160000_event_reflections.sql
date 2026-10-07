@@ -26,13 +26,39 @@ create policy event_reflections_select on public.event_reflections
   for select to authenticated
   using (user_id = (select auth.uid()));
 
--- Insert is limited to plans the caller can already see, so a row cannot probe
--- for plans that are hidden from them.
+-- Insert is limited to plans the caller took part in and that are over: the
+-- same boundary the deck loader uses (host, co-host or accepted guest; a day
+-- past the end, or marked happened/past; never cancelled or draft). Seeing a
+-- plan is not enough: events_select also shows plans to people who declined
+-- and plans that have not happened.
 create policy event_reflections_insert on public.event_reflections
   for insert to authenticated
   with check (
     user_id = (select auth.uid())
-    and exists (select 1 from public.events e where e.id = event_id)
+    and exists (
+      select 1
+      from public.events e
+      where e.id = event_id
+        and e.status not in ('cancelled', 'draft')
+        and (
+          e.happened_at is not null
+          or e.status = 'past'
+          or coalesce(e.ends_at, e.starts_at) <= now() - interval '1 day'
+        )
+        and (
+          e.host_id = (select auth.uid())
+          or exists (
+            select 1 from public.event_cohosts c
+            where c.event_id = e.id and c.cohost_id = (select auth.uid())
+          )
+          or exists (
+            select 1 from public.invites i
+            where i.event_id = e.id
+              and i.invitee_id = (select auth.uid())
+              and i.status = 'accepted'
+          )
+        )
+    )
   );
 
 create policy event_reflections_update on public.event_reflections

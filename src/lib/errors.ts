@@ -1271,6 +1271,7 @@ const AREA_CODES: Record<string, ErrorCode> = {
   'discover.join-requests': 'SB-INVITE-LOAD',
   'energy.save': 'SB-ENERGY-SAVE',
   'reflection.save': 'SB-REFLECT-SAVE',
+  'reflection.energy': 'SB-REFLECT-SAVE',
   'you.deck': 'SB-REFLECT-LOAD',
   'event-thread.send': 'SB-THREAD-SAVE',
   'event-thread.delete': 'SB-THREAD-SAVE',

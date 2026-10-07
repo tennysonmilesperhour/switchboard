@@ -86,8 +86,10 @@ export function ReflectionDeck({ cards, failed }: { cards: DeckCard[]; failed: b
       window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     setDrag(null);
     setLeaving(dir);
-    window.setTimeout(
+    let removed = false;
+    const timer = window.setTimeout(
       () => {
+        removed = true;
         setQueue((q) => q.filter((c) => c.id !== card.id));
         setSwiped((n) => n + 1);
         setLeaving(null);
@@ -112,6 +114,13 @@ export function ReflectionDeck({ cards, failed }: { cards: DeckCard[]; failed: b
         code = 'code' in res ? res.code : null;
       } catch {
         message = undefined;
+      }
+      // A save that fails inside the animation window: the card never left.
+      if (!removed) {
+        window.clearTimeout(timer);
+        setLeaving(null);
+        toast.error(message ?? 'Could not save that. Try again.', code);
+        return;
       }
       // Put the card back on top with what was typed, so nothing is lost.
       setQueue((q) => [card, ...q.filter((c) => c.id !== card.id)]);
