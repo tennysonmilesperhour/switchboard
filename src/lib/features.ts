@@ -457,6 +457,14 @@ export const FEATURE_GROUPS: readonly FeatureGroup[] = [
         href: '/discover',
       },
       {
+        id: 'local-event-discovery',
+        title: 'What’s happening nearby',
+        blurb:
+          'Browse fresh local listings for tonight, this weekend, or the next seven days; search by interest, filter for free events, save or hide one, and jump to the organizer to sign up.',
+        where: 'Explore → Around Salt Lake',
+        href: '/discover',
+      },
+      {
         id: 'people-discovery',
         title: 'People discovery',
         blurb:
