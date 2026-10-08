@@ -170,9 +170,9 @@ export function AppearancePicker({
                   />
                 ))}
               </span>
-              <span className="mt-2 flex items-center gap-1.5">
+              <span className="mt-2 flex flex-wrap items-center gap-x-1.5">
                 <span
-                  className="font-bold text-ink"
+                  className="min-w-0 break-words font-bold text-ink"
                   style={theme.font ? { fontFamily: theme.font } : undefined}
                 >
                   {theme.name}

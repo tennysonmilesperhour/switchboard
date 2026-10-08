@@ -454,12 +454,32 @@ html {
   background: var(--color-paper);
 }
 
+/* Form controls default to their intrinsic width as a flex item's minimum
+ * (an input is ~20 characters, a select is its longest option), so a
+ * `flex-1` field beside a button pushed the button off the screen at phone
+ * widths. Letting them shrink keeps every field inside its row. In a layer,
+ * so a utility like `min-w-40` still wins. */
+@layer base {
+  input,
+  select,
+  textarea {
+    min-width: 0;
+  }
+
+  select {
+    max-width: 100%;
+  }
+}
+
 body {
   background: var(--color-paper);
   color: var(--color-ink);
   font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
   overscroll-behavior-y: none;
+  /* A URL, email, or handle is one unbreakable word. Without this it ran
+   * straight through the side of whatever card held it. */
+  overflow-wrap: break-word;
 }
 
 /* Native modal backdrop. The dialog itself is a full-viewport flex container;
