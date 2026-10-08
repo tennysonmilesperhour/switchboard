@@ -55,6 +55,7 @@ export function PeopleClient({
   households = [],
   givingSpace = [],
   inviteUrl,
+  nearby = null,
 }: {
   friends: FriendRow[];
   incoming: RequestRow[];
@@ -65,6 +66,8 @@ export function PeopleClient({
   givingSpace?: SpaceRow[];
   /** Absolute link to Switchboard itself, from `appInviteUrl()` on the server. */
   inviteUrl: string;
+  /** Server-rendered "Near you" discovery section, shown under the add form. */
+  nearby?: React.ReactNode;
 }) {
   const [identifier, setIdentifier] = useState('');
   const [message, setMessage] = useState<PeopleMessage | null>(null);
@@ -488,6 +491,7 @@ export function PeopleClient({
         message={message} inviteUrl={inviteUrl}
         contactMatches={contactMatches} quickConnect={quickConnect}
       />
+      {nearby}
       <IncomingRequestsSection
         incoming={incoming} pending={pending}
         acceptRequest={acceptRequest} ignoreRequest={ignoreRequest}

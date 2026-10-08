@@ -70,12 +70,13 @@ grant all on mismatches to authenticated;
 -- the radius. Distances are chosen well clear of the ~110 m rounding.
 do $$
 declare
-  ana_share text; bo_share text; bo_scope text; rel text; dist text;
+  ana_share text; bo_share text; ana_scope text; bo_scope text; rel text; dist text;
   bo_lat double precision;
   seen boolean; expected boolean;
 begin
   foreach ana_share in array array['none', 'live', 'expired'] loop
   foreach bo_share in array array['none', 'live', 'expired'] loop
+  foreach ana_scope in array array['sharers', 'connections'] loop
   foreach bo_scope in array array['sharers', 'connections'] loop
   foreach rel in array array['none', 'ana_blocks', 'bo_blocks', 'connected'] loop
   foreach dist in array array['300m', '4.5km', '6km', '2500km'] loop
@@ -84,7 +85,7 @@ begin
 
     if ana_share <> 'none' then
       insert into public.live_locations (user_id, latitude, longitude, visibility, expires_at)
-      values (pg_temp.ana(), 39.7392, -104.9903, 'sharers',
+      values (pg_temp.ana(), 39.7392, -104.9903, ana_scope,
               case ana_share when 'live' then now() + interval '1 hour'
                              else now() - interval '1 minute' end);
     end if;
@@ -106,21 +107,22 @@ begin
       and bo_share = 'live'
       and rel not in ('ana_blocks', 'bo_blocks')
       and (bo_scope = 'sharers' or rel = 'connected')
+      and (ana_scope = 'sharers' or rel = 'connected')
       and dist in ('300m', '4.5km');
 
     if seen is distinct from expected then
       insert into mismatches values ('live',
-        format('ana=%s bo=%s scope=%s rel=%s dist=%s: saw=%s expected=%s',
-               ana_share, bo_share, bo_scope, rel, dist, seen, expected));
+        format('ana=%s bo=%s ana_scope=%s bo_scope=%s rel=%s dist=%s: saw=%s expected=%s',
+               ana_share, bo_share, ana_scope, bo_scope, rel, dist, seen, expected));
     end if;
-  end loop; end loop; end loop; end loop; end loop;
+  end loop; end loop; end loop; end loop; end loop; end loop;
   delete from public.live_locations where user_id in (pg_temp.ana(), pg_temp.bo());
 end $$;
 
 select is(
   (select count(*)::int from mismatches where section = 'live'),
   0,
-  'find_nearby_people: Bo is on Ana''s map exactly when both share, nobody blocks, Bo''s scope admits Ana, and Bo is within the radius (288 combinations)'
+  'find_nearby_people: both scopes must admit the other person (576 combinations)'
 );
 select diag(cell) from mismatches where section = 'live';
 

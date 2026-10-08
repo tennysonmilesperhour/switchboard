@@ -345,6 +345,14 @@ export const FEATURE_GROUPS: readonly FeatureGroup[] = [
         href: '/people',
       },
       {
+        id: 'people-near-you',
+        title: 'People near you',
+        blurb:
+          'On People, a Near you section lists others in your area who have also opted into discovery and shared their city. It needs discovery and Geography switched on for you, and you only see each other when both sides opt in. Add anyone with one tap.',
+        where: 'More → People → Near you',
+        href: '/people',
+      },
+      {
         id: 'add-someone',
         title: 'Add someone',
         blurb:
@@ -449,6 +457,14 @@ export const FEATURE_GROUPS: readonly FeatureGroup[] = [
         href: '/discover',
       },
       {
+        id: 'local-event-discovery',
+        title: 'What’s happening nearby',
+        blurb:
+          'Browse fresh local listings for tonight, this weekend, or the next seven days; search by interest, filter for free events, save or hide one, and jump to the organizer to sign up.',
+        where: 'Explore → Around Salt Lake',
+        href: '/discover',
+      },
+      {
         id: 'people-discovery',
         title: 'People discovery',
         blurb:
@@ -525,7 +541,7 @@ export const FEATURE_GROUPS: readonly FeatureGroup[] = [
         id: 'live-location',
         title: 'Live on the map',
         blurb:
-          'Opt in to appear to other people who are also sharing — mutual, block-aware, blurred to about 110 meters, and it switches itself off after a couple of hours.',
+          'Opt in to appear to other people who are also sharing — mutual, block-aware, blurred to about 110 meters, and it switches itself off after the time you pick, from 30 minutes to 8 hours.',
         where: 'More → Around → Map → the live sharing toggle',
         href: '/map',
       },
@@ -786,6 +802,14 @@ export const FEATURE_GROUPS: readonly FeatureGroup[] = [
           'A private record of which parts of Switchboard you’ve actually used, and a nudge toward one you haven’t. Yours only, and it never pings you.',
         where: 'More → Everything, at the top',
         href: '/features',
+      },
+      {
+        id: 'walkthroughs',
+        title: 'Walkthroughs',
+        blurb:
+          'Short demos that play themselves while you tap Next: one for the whole idea in a minute, and deeper ones on plans, deciding, people, rooms, places, and settings.',
+        where: 'More → Everything → Walkthroughs, at the top',
+        href: '/tour/welcome',
       },
       {
         id: 'tips-reset',

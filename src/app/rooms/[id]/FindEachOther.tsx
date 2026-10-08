@@ -30,8 +30,8 @@ import {
   walkingDirectionsUrl,
 } from '@/lib/exact-location';
 
-const LeafletCanvas = dynamic(
-  () => import('@/app/map/LeafletCanvas').then((mod) => mod.LeafletCanvas),
+const MapCanvas = dynamic(
+  () => import('@/app/map/MapCanvas').then((mod) => mod.MapCanvas),
   {
     ssr: false,
     loading: () => (
@@ -350,11 +350,11 @@ export function FindEachOther({
               )}
               {loadError && <p className="text-xs text-ink-soft">{loadError}</p>}
               {markers.length > 0 && (
-                <LeafletCanvas
+                <MapCanvas
                   markers={markers}
                   fitNonce={fitNonce}
                   heightClass="h-56"
-                  maxFitZoom={18}
+                  maxFitZoom={17}
                 />
               )}
               <div className="flex flex-wrap items-center gap-2">

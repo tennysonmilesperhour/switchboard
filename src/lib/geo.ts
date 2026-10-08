@@ -140,6 +140,21 @@ export function isApproximateFix(accuracyM: number | null | undefined): boolean 
  */
 export const LOCATION_PROMPT_WAIT_MS = 20_000;
 
+// How long a live share may last. Always bounded: a share can never linger, and
+// the server clamps whatever a client asks for to this range.
+export const MIN_SHARE_MINUTES = 15;
+export const MAX_SHARE_MINUTES = 8 * 60;
+export const DEFAULT_SHARE_MINUTES = 120;
+
+/** The durations offered when turning sharing on, shortest first. */
+export const SHARE_DURATIONS: readonly { label: string; minutes: number }[] = [
+  { label: '30 min', minutes: 30 },
+  { label: '1 hour', minutes: 60 },
+  { label: '2 hours', minutes: 120 },
+  { label: '4 hours', minutes: 240 },
+  { label: '8 hours', minutes: 480 },
+];
+
 export const LOCATION_PROMPT_WAITING =
   'Still waiting for location permission. Answer the prompt, or allow location for this site in your browser settings.';
 
@@ -169,41 +184,58 @@ export function geocoderEndpoint(raw: string | null | undefined): string {
   }
 }
 
-/** Raster tiles the map draws, and who must be credited for them. */
-export interface TileConfig {
-  url: string;
-  attribution: string;
+/**
+ * The vector basemap styles the map draws, one per appearance. A style is a
+ * MapLibre style JSON URL; its tiles, glyphs and sprites are fetched from the
+ * same origin, which `connect-src` must allow (see `mapConnectSources`).
+ */
+export interface MapStyleConfig {
+  light: string;
+  dark: string;
 }
 
-export const DEFAULT_TILES: TileConfig = {
-  url: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
-  attribution: '&copy; OpenStreetMap contributors',
+/**
+ * OpenFreeMap: OpenStreetMap vector tiles with no key, no request cap and a
+ * usage policy that covers production apps. Credit for OpenFreeMap,
+ * OpenMapTiles and OpenStreetMap ships inside the tiles themselves.
+ */
+export const DEFAULT_MAP_STYLES: MapStyleConfig = {
+  light: 'https://tiles.openfreemap.org/styles/positron',
+  dark: 'https://tiles.openfreemap.org/styles/dark',
 };
 
-/**
- * The tile source from configuration (`NEXT_PUBLIC_MAP_TILE_URL` and
- * `NEXT_PUBLIC_MAP_TILE_ATTRIBUTION`), falling back to OpenStreetMap's public
- * tiles. A template must be https and carry `{z}`, `{x}` and `{y}`; a provider
- * without its own attribution keeps the OpenStreetMap credit, which is what
- * nearly every tile provider is built on. The attribution is rendered by
- * Leaflet as HTML, so only plain text and `&copy;`-style entities survive.
- */
-export function tileConfig(
-  rawUrl: string | null | undefined,
-  rawAttribution: string | null | undefined,
-): TileConfig {
-  const url = rawUrl?.trim();
-  if (!url) return DEFAULT_TILES;
-  const templated = ['{z}', '{x}', '{y}'].every((part) => url.includes(part));
-  let secure = false;
+/** An https URL without credentials, or null. */
+function httpsStyleUrl(raw: string | null | undefined): string | null {
+  const value = raw?.trim();
+  if (!value) return null;
   try {
-    secure = new URL(url.replace(/\{[a-z]\}/g, 'a')).protocol === 'https:';
+    const url = new URL(value);
+    if (url.protocol !== 'https:' || url.username || url.password) return null;
+    return url.toString();
   } catch {
-    secure = false;
+    return null;
   }
-  if (!templated || !secure) return DEFAULT_TILES;
-  const attribution = (rawAttribution ?? '').replace(/[<>"']/g, '').trim().slice(0, 200);
-  return { url, attribution: attribution || DEFAULT_TILES.attribution };
+}
+
+/**
+ * The basemap styles from configuration (`NEXT_PUBLIC_MAP_STYLE_URL` and
+ * `NEXT_PUBLIC_MAP_STYLE_URL_DARK`), falling back to OpenFreeMap. A configured
+ * light style with no dark one is used for both, so a deployment that picks its
+ * own provider never mixes it with ours. Anything not https is ignored.
+ */
+export function mapStyleConfig(
+  rawLight: string | null | undefined,
+  rawDark: string | null | undefined,
+): MapStyleConfig {
+  const light = httpsStyleUrl(rawLight);
+  const dark = httpsStyleUrl(rawDark);
+  if (!light) return { light: DEFAULT_MAP_STYLES.light, dark: dark ?? DEFAULT_MAP_STYLES.dark };
+  return { light, dark: dark ?? light };
+}
+
+/** The origins the browser fetches basemap styles, tiles and glyphs from. */
+export function mapConnectSources(styles: MapStyleConfig): string {
+  return [...new Set([styles.light, styles.dark].map((url) => new URL(url).origin))].join(' ');
 }
 
 /** Build a Nominatim forward-geocode URL for a free-text address or place. */

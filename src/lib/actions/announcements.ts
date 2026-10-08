@@ -127,14 +127,8 @@ async function fanOutAnnouncement(
     );
   }
 
-  // Also drop it into the Living Room so the note has a permanent home.
-  if (event.room_id) {
-    await admin.from('messages').insert({
-      room_id: event.room_id,
-      sender_id: authorId,
-      body: body,
-    });
-  }
+  // The database mirrors the note into its room in the original insert's
+  // transaction, retaining the announcement's attendance-only audience.
 }
 
 /**

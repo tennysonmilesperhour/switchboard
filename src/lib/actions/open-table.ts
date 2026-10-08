@@ -5,7 +5,7 @@ import { requireUser } from '@/lib/server/require-user';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { notifyUsers } from '@/lib/server/notify';
 import { reportAndFail, reportOperationalError } from '@/lib/server/observability';
-import { failure } from '@/lib/errors';
+import { failure, validation } from '@/lib/errors';
 import { checkRateLimit } from '@/lib/server/rate-limit';
 import type { RespondResult } from '@/lib/actions/invites';
 
@@ -59,6 +59,9 @@ export async function requestToJoin(eventId: string): Promise<RespondResult> {
   // session check just fails fast (and keeps the admin notify below from firing
   // for an unauthenticated caller) rather than relying on the RPC alone.
   const { error } = await supabase.rpc('request_to_join', { p_event: eventId });
+  if (error && ['SB-RSVP-ONBOARDING', 'SB-RSVP-TERMS'].includes(error.hint)) {
+    return validation('Reload this page to finish your profile and review the current terms before asking to join.');
+  }
   if (error) return reportAndFail('SB-RSVP-SAVE', 'join.request', error, { eventId });
 
   // Let everyone who can answer know a request is waiting: the host and every
@@ -117,6 +120,17 @@ export async function approveJoinRequest(
         title: 'You are in',
         body: `The host welcomed you to ${event?.title ?? 'the event'}.`,
         url: `/events/${eventId}`,
+      });
+    }
+  } else if (data === 'sent') {
+    const { data: invite } = await supabase.from('invites')
+      .select('invitee_id, guest_token').eq('id', inviteId).single();
+    if (invite?.invitee_id) {
+      await notifyUsers([invite.invitee_id], {
+        kind: 'event_invite',
+        title: 'The host welcomed your request',
+        body: 'Open your invitation to finish the required details and confirm your place.',
+        url: `/rsvp/${invite.guest_token}`,
       });
     }
   } else if (data === 'pending_approval') {
