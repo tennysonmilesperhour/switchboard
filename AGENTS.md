@@ -23,8 +23,10 @@ small edit or use repeated hosted runs as the edit/test loop.
   or migration errors locally; retry only failed jobs after a transient outage
   clears. Do not rerun successful jobs to obtain the same evidence again.
 - Keep hosted PR and main checks enabled, including pgTAP, generated database
-  types, account export/deletion and authenticated browser tests. Budget savings
-  must not use skip markers, draft-state bypasses or weakened security tests.
+  types, account export/deletion and authenticated browser tests. Authenticated
+  E2E already skips its suite for draft pull requests, Dependabot, and
+  docs-only diffs, and the job still reports success. Do not add further skip
+  markers or weaken what those tests check.
 
 See [`docs/CI.md`](docs/CI.md) for the shared database setup and startup limits.
 
