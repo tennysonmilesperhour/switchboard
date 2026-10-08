@@ -30,6 +30,14 @@ const SECTIONS = [
     ],
   },
   {
+    title: 'Optional Public Website Analytics',
+    body: [
+      'If you allow analytics, Google Analytics uses cookies to measure visits to public introduction and policy pages, scrolling, and outbound link destinations, along with basic device and usage information.',
+      'We do not send private plans, invitations, contacts, messages, account activity, form contents, or URL query strings to Google Analytics. Advertising personalization is disabled.',
+      'Use Analytics choices on a public page to change your preference at any time. Browser privacy signals keep this optional tracking off. Google processes this information under its privacy policy at https://policies.google.com/privacy.',
+    ],
+  },
+  {
     title: 'SMS Notifications',
     body: [
       'If you add and verify a mobile phone number and opt in to SMS notifications, Switchboard may send text messages about your account, phone verification, invitations, RSVPs, reminders, schedule changes, cancellations, and other plan-related updates.',
@@ -51,7 +59,7 @@ const SECTIONS = [
 export default function PrivacyPage() {
   return (
     <main className="mx-auto max-w-2xl px-6 py-16 text-ink">
-      <p className="text-sm font-bold text-terracotta-deep">Effective August 31, 2026</p>
+      <p className="text-sm font-bold text-terracotta-deep">Updated October 7, 2026</p>
       <h1 className="mt-2 text-4xl font-black">Privacy Notice</h1>
       <p className="mt-4 text-sm leading-relaxed text-ink-soft">
         This notice explains how Switchboard handles information for an early-access
