@@ -54,6 +54,16 @@ describe('buildCsp', () => {
     );
   });
 
+  it('allows analytics collection without widening script permissions', () => {
+    const policy = csp({ isDev: false });
+    const connections = policy.split('; ').find(part => part.startsWith('connect-src '));
+    expect(connections).toContain('https://www.google-analytics.com');
+    expect(connections).toContain('https://region1.google-analytics.com');
+    expect(connections).toContain('https://www.googletagmanager.com');
+    const scripts = policy.split('; ').find(part => part.startsWith('script-src '));
+    expect(scripts).toBe("script-src 'self' 'nonce-n0nce'");
+  });
+
   it('allows eval only in development', () => {
     expect(csp({ isDev: true })).toContain("'unsafe-eval'");
   });
