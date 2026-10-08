@@ -86,3 +86,15 @@ supabase test db # pgTAP security tests against the local database
 npm run e2e      # public browser tests; Playwright starts the dev server
 E2E_DB=1 npm run e2e  # signed-in journeys too: seed first, see e2e/README.md
 ```
+
+## Baseline checklist
+
+- [ ] private repo + main protected + CI
+- [x] dependabot + lockfile
+- [ ] advisors clean (or exceptions noted)
+- [ ] backups/PITR confirmed
+- [x] PostHog + exceptions on
+- [ ] uptime incl. checkout URL
+- [x] privacy / terms / contact
+- [ ] support email works
+- [ ] domain auto-renew on
