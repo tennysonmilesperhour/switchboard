@@ -106,7 +106,7 @@ export function buildCsp(
     `img-src 'self' data: blob: https: ${supabaseMediaSource(options.supabaseUrl)}`,
     `media-src 'self' blob: ${supabaseMediaSource(options.supabaseUrl)}`,
     "font-src 'self' data:",
-    `connect-src 'self' ${supabaseConnectSources(options.supabaseUrl)} ${options.mapSources ?? mapSources()}`,
+    `connect-src 'self' ${supabaseConnectSources(options.supabaseUrl)} ${options.mapSources ?? mapSources()} https://www.google-analytics.com https://region1.google-analytics.com https://www.googletagmanager.com`,
     "worker-src 'self' blob:",
     "frame-src 'none'",
     "object-src 'none'",

@@ -1,3 +1,5 @@
+import Script from 'next/script';
+import { headers } from 'next/headers';
 import type { Metadata, Viewport } from 'next';
 import { cache } from 'react';
 import {
@@ -212,6 +214,7 @@ export default async function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
   const { theme, themeVars, wallpaper, userId } = await resolveShell();
+  const nonce = (await headers()).get('x-nonce') ?? undefined;
   return (
     <html
       lang="en"
@@ -237,6 +240,7 @@ export default async function RootLayout({
           </ToastProvider>
         </PostHogProvider>
         <div id="dialog-root" />
+        <Script src="/site-analytics.js" strategy="afterInteractive" nonce={nonce} />
       </body>
     </html>
   );

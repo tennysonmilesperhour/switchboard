@@ -304,6 +304,7 @@ export const config = {
     // `ingest` is the same-origin PostHog reverse proxy (see next.config.ts).
     // Excluding it here keeps analytics/error beacons off the auth path — no
     // Supabase round-trip, no redirect for signed-out users hitting /ingest.
-    '/((?!ingest|_next/static|_next/image|favicon.ico|icons|manifest.webmanifest|offline.html|sw.js|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
+    // The consent controller is a public static asset, not an account route.
+    '/((?!site-analytics\\.js$|ingest|_next/static|_next/image|favicon.ico|icons|manifest.webmanifest|offline.html|sw.js|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
   ],
 };
