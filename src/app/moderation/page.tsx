@@ -7,6 +7,7 @@ import { signRoomPhotos } from '@/lib/server/room-media';
 import { ModerationClient, type OpenReport } from './ModerationClient';
 import { PendingVenuesClient, type PendingVenue } from './PendingVenuesClient';
 import { SuspendedAccountsClient, type SuspendedAccount } from './SuspendedAccountsClient';
+import { Card } from '@/components/ui/Card';
 
 export const metadata: Metadata = { title: 'Moderation', robots: { index: false } };
 
@@ -28,15 +29,19 @@ export default async function ModerationPage() {
     { data: reports, error: reportsError },
     { data: venues, error: venuesError },
     { data: suspended, error: suspendedError },
+    { data: eventSources, error: eventSourcesError },
+    { data: eventSubmissions, error: eventSubmissionsError },
   ] = await Promise.all([
     supabase.rpc('list_open_reports'),
     supabase.rpc('list_pending_venues'),
     supabase.rpc('list_suspended_accounts'),
+    supabase.rpc('list_event_source_health'),
+    supabase.rpc('list_external_event_submissions'),
   ]);
   // A queue that failed to load must not read as an empty one: "Nothing to
   // review" over a broken RPC tells a moderator everything is handled. Throw
   // to the error boundary, which shows the digest and logs the cause.
-  const loadError = reportsError ?? venuesError ?? suspendedError;
+  const loadError = reportsError ?? venuesError ?? suspendedError ?? eventSourcesError ?? eventSubmissionsError;
   if (loadError) {
     throw new Error(`Could not load the moderation queue: ${loadError.message ?? 'unknown error'}`);
   }
@@ -60,7 +65,8 @@ export default async function ModerationPage() {
   const suspendedAccounts: SuspendedAccount[] = suspended ?? [];
 
   const nothingToReview =
-    openReports.length === 0 && pendingVenues.length === 0 && suspendedAccounts.length === 0;
+    openReports.length === 0 && pendingVenues.length === 0 && suspendedAccounts.length === 0 &&
+    (eventSubmissions ?? []).length === 0 && (eventSources ?? []).length === 0;
 
   return (
     <AppShell title="Moderation" back="/settings">
@@ -73,6 +79,13 @@ export default async function ModerationPage() {
           />
         ) : (
           <>
+            <section className="space-y-4">
+              <div><h2 className="font-display text-xl text-ink">Local event sources</h2><p className="text-sm text-ink-faint mt-0.5">Collector health and submitted links that need a human look.</p></div>
+              <div className="grid gap-3 sm:grid-cols-2">
+                {(eventSources ?? []).map((source) => <Card key={source.id} tone={source.last_error ? 'terracotta' : source.enabled ? 'sage' : 'cream'}><div className="flex justify-between gap-3"><strong>{source.name}</strong><span className="text-xs">{source.enabled ? 'On' : 'Paused'}</span></div><p className="mt-1 text-xs text-ink-muted">{source.last_event_count ?? 0} events · {source.consecutive_failures} consecutive failures</p>{source.last_error && <p className="mt-2 text-xs text-ink-muted">{source.last_error}</p>}</Card>)}
+              </div>
+              {(eventSubmissions ?? []).length > 0 && <div className="space-y-2"><h3 className="font-bold">Submitted links</h3>{(eventSubmissions ?? []).map((submission) => <Card key={submission.id}><a href={submission.url} target="_blank" rel="noreferrer" className="break-all text-sm font-bold text-terracotta-deep underline">{submission.url}</a><p className="mt-1 text-xs text-ink-muted">{submission.status}{submission.note ? ` · ${submission.note}` : ''}</p>{submission.review_note && <p className="mt-1 text-xs text-ink-faint">Parser: {submission.review_note}</p>}</Card>)}</div>}
+            </section>
             <section className="space-y-4">
               <div>
                 <h2 className="font-display text-xl text-ink">Venue claims</h2>

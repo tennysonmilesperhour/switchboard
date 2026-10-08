@@ -1078,8 +1078,66 @@ export type Database = {
           },
         ]
       }
+      event_sources: {
+        Row: {
+          city: string
+          consecutive_failures: number
+          created_at: string
+          enabled: boolean
+          format: string
+          id: string
+          last_error: string | null
+          last_event_count: number | null
+          last_started_at: string | null
+          last_succeeded_at: string | null
+          name: string
+          stale_after_hours: number
+          time_zone: string
+          trust_score: number
+          updated_at: string
+          url: string
+        }
+        Insert: {
+          city?: string
+          consecutive_failures?: number
+          created_at?: string
+          enabled?: boolean
+          format?: string
+          id: string
+          last_error?: string | null
+          last_event_count?: number | null
+          last_started_at?: string | null
+          last_succeeded_at?: string | null
+          name: string
+          stale_after_hours?: number
+          time_zone?: string
+          trust_score?: number
+          updated_at?: string
+          url: string
+        }
+        Update: {
+          city?: string
+          consecutive_failures?: number
+          created_at?: string
+          enabled?: boolean
+          format?: string
+          id?: string
+          last_error?: string | null
+          last_event_count?: number | null
+          last_started_at?: string | null
+          last_succeeded_at?: string | null
+          name?: string
+          stale_after_hours?: number
+          time_zone?: string
+          trust_score?: number
+          updated_at?: string
+          url?: string
+        }
+        Relationships: []
+      }
       events: {
         Row: {
+          broadcast_nearby: boolean
           cancel_reason: string | null
           cancel_voice_url: string | null
           capacity: number | null
@@ -1116,6 +1174,7 @@ export type Database = {
           wishlist_url: string | null
         }
         Insert: {
+          broadcast_nearby?: boolean
           cancel_reason?: string | null
           cancel_voice_url?: string | null
           capacity?: number | null
@@ -1152,6 +1211,7 @@ export type Database = {
           wishlist_url?: string | null
         }
         Update: {
+          broadcast_nearby?: boolean
           cancel_reason?: string | null
           cancel_voice_url?: string | null
           capacity?: number | null
@@ -1314,6 +1374,233 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      external_event_listings: {
+        Row: {
+          canonical_url: string
+          content_hash: string
+          event_id: string
+          first_seen_at: string
+          id: string
+          last_seen_at: string
+          last_seen_run: string
+          payload: Json
+          source_event_id: string
+          source_id: string
+          source_status: string
+          ticket_url: string | null
+        }
+        Insert: {
+          canonical_url: string
+          content_hash: string
+          event_id: string
+          first_seen_at?: string
+          id?: string
+          last_seen_at?: string
+          last_seen_run: string
+          payload?: Json
+          source_event_id: string
+          source_id: string
+          source_status?: string
+          ticket_url?: string | null
+        }
+        Update: {
+          canonical_url?: string
+          content_hash?: string
+          event_id?: string
+          first_seen_at?: string
+          id?: string
+          last_seen_at?: string
+          last_seen_run?: string
+          payload?: Json
+          source_event_id?: string
+          source_id?: string
+          source_status?: string
+          ticket_url?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "external_event_listings_event_id_fkey"
+            columns: ["event_id"]
+            isOneToOne: false
+            referencedRelation: "external_events"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "external_event_listings_source_id_fkey"
+            columns: ["source_id"]
+            isOneToOne: false
+            referencedRelation: "event_sources"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      external_event_preferences: {
+        Row: {
+          created_at: string
+          event_id: string
+          state: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          event_id: string
+          state: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          event_id?: string
+          state?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "external_event_preferences_event_id_fkey"
+            columns: ["event_id"]
+            isOneToOne: false
+            referencedRelation: "external_events"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "external_event_preferences_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      external_event_submissions: {
+        Row: {
+          created_at: string
+          id: string
+          note: string | null
+          review_note: string | null
+          reviewed_at: string | null
+          status: string
+          submitted_by: string
+          url: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          note?: string | null
+          review_note?: string | null
+          reviewed_at?: string | null
+          status?: string
+          submitted_by: string
+          url: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          note?: string | null
+          review_note?: string | null
+          reviewed_at?: string | null
+          status?: string
+          submitted_by?: string
+          url?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "external_event_submissions_submitted_by_fkey"
+            columns: ["submitted_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      external_events: {
+        Row: {
+          accessibility: string[]
+          active_listing_count: number
+          address: string | null
+          age_label: string | null
+          cancelled_at: string | null
+          canonical_url: string
+          category: string | null
+          city: string
+          confidence: number
+          created_at: string
+          dedupe_key: string
+          description: string | null
+          ends_at: string
+          first_seen_at: string
+          id: string
+          image_url: string | null
+          is_free: boolean | null
+          last_seen_at: string
+          price_label: string | null
+          starts_at: string
+          tags: string[]
+          ticket_url: string | null
+          time_zone: string
+          title: string
+          updated_at: string
+          venue_name: string | null
+        }
+        Insert: {
+          accessibility?: string[]
+          active_listing_count?: number
+          address?: string | null
+          age_label?: string | null
+          cancelled_at?: string | null
+          canonical_url: string
+          category?: string | null
+          city?: string
+          confidence?: number
+          created_at?: string
+          dedupe_key: string
+          description?: string | null
+          ends_at: string
+          first_seen_at?: string
+          id?: string
+          image_url?: string | null
+          is_free?: boolean | null
+          last_seen_at?: string
+          price_label?: string | null
+          starts_at: string
+          tags?: string[]
+          ticket_url?: string | null
+          time_zone?: string
+          title: string
+          updated_at?: string
+          venue_name?: string | null
+        }
+        Update: {
+          accessibility?: string[]
+          active_listing_count?: number
+          address?: string | null
+          age_label?: string | null
+          cancelled_at?: string | null
+          canonical_url?: string
+          category?: string | null
+          city?: string
+          confidence?: number
+          created_at?: string
+          dedupe_key?: string
+          description?: string | null
+          ends_at?: string
+          first_seen_at?: string
+          id?: string
+          image_url?: string | null
+          is_free?: boolean | null
+          last_seen_at?: string
+          price_label?: string | null
+          starts_at?: string
+          tags?: string[]
+          ticket_url?: string | null
+          time_zone?: string
+          title?: string
+          updated_at?: string
+          venue_name?: string | null
+        }
+        Relationships: []
       }
       facet_prefs: {
         Row: {
@@ -1995,6 +2282,7 @@ export type Database = {
       }
       messages: {
         Row: {
+          announcement_id: string | null
           body: string
           created_at: string
           id: string
@@ -2004,6 +2292,7 @@ export type Database = {
           sender_id: string
         }
         Insert: {
+          announcement_id?: string | null
           body: string
           created_at?: string
           id?: string
@@ -2013,6 +2302,7 @@ export type Database = {
           sender_id: string
         }
         Update: {
+          announcement_id?: string | null
           body?: string
           created_at?: string
           id?: string
@@ -2022,6 +2312,13 @@ export type Database = {
           sender_id?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "messages_announcement_id_fkey"
+            columns: ["announcement_id"]
+            isOneToOne: false
+            referencedRelation: "announcements"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "messages_room_id_fkey"
             columns: ["room_id"]
@@ -2580,6 +2877,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "poll_options"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "poll_votes_option_poll_fk"
+            columns: ["option_id", "poll_id"]
+            isOneToOne: false
+            referencedRelation: "poll_options"
+            referencedColumns: ["id", "poll_id"]
           },
           {
             foreignKeyName: "poll_votes_poll_id_fkey"
@@ -4110,6 +4414,15 @@ export type Database = {
           user_id: string
         }[]
       }
+      external_event_collection_status: {
+        Args: never
+        Returns: {
+          last_counts: Json
+          last_run_at: string
+          last_started_at: string
+          running_until: string
+        }[]
+      }
       facet_live: { Args: { p_key: string; p_user: string }; Returns: boolean }
       find_nearby_people: {
         Args: { p_radius_m?: number }
@@ -4141,6 +4454,10 @@ export type Database = {
           headline: string
           id: string
         }[]
+      }
+      finish_external_event_collection: {
+        Args: { p_counts: Json }
+        Returns: undefined
       }
       finish_operator_sweep: {
         Args: { p_counts: Json; p_sweep: string }
@@ -4252,6 +4569,42 @@ export type Database = {
           tagline: string
         }[]
       }
+      list_event_source_health: {
+        Args: never
+        Returns: {
+          consecutive_failures: number
+          enabled: boolean
+          id: string
+          last_error: string
+          last_event_count: number
+          last_succeeded_at: string
+          name: string
+        }[]
+      }
+      list_external_event_submissions: {
+        Args: never
+        Returns: {
+          created_at: string
+          id: string
+          note: string
+          review_note: string
+          status: string
+          url: string
+        }[]
+      }
+      list_nearby_plans: {
+        Args: { p_max_km?: number }
+        Returns: {
+          distance_band: string
+          event_id: string
+          host_name: string
+          known_via: string
+          spots_left: number
+          starts_at: string
+          time_zone: string
+          title: string
+        }[]
+      }
       list_open_reports: {
         Args: never
         Returns: {
@@ -4298,6 +4651,13 @@ export type Database = {
           name: string
           perk: string
           url: string
+        }[]
+      }
+      list_people_distance_bands: {
+        Args: { p_self?: string }
+        Returns: {
+          distance_band: string
+          person_id: string
         }[]
       }
       list_suspended_accounts: {
@@ -4429,6 +4789,7 @@ export type Database = {
         }
         Returns: boolean
       }
+      refresh_external_event_catalog: { Args: never; Returns: number }
       replace_event_availability: {
         Args: { p_event: string; p_slots: string[] }
         Returns: undefined
@@ -4464,14 +4825,31 @@ export type Database = {
         Args: { p_approve: boolean; p_request: string }
         Returns: boolean
       }
-      respond_to_guest_invite: {
-        Args: { p_accept: boolean; p_token: string }
-        Returns: string
-      }
-      respond_to_invite: {
-        Args: { p_accept: boolean; p_invite: string; p_note?: string }
-        Returns: string
-      }
+      respond_to_guest_invite:
+        | { Args: { p_accept: boolean; p_token: string }; Returns: string }
+        | {
+            Args: {
+              p_accept: boolean
+              p_answers: Json
+              p_token: string
+              p_user: string
+            }
+            Returns: string
+          }
+      respond_to_invite:
+        | {
+            Args: { p_accept: boolean; p_invite: string; p_note?: string }
+            Returns: string
+          }
+        | {
+            Args: {
+              p_accept: boolean
+              p_answers: Json
+              p_invite: string
+              p_note: string
+            }
+            Returns: string
+          }
       respond_to_matchmaker: {
         Args: { p_accept: boolean; p_proposal: string }
         Returns: string
@@ -4487,19 +4865,34 @@ export type Database = {
         Returns: string
       }
       rotate_zone_invite_code: { Args: { p_zone: string }; Returns: string }
-      rsvp_via_share_token: {
-        Args: {
-          p_accept: boolean
-          p_contact: string
-          p_name: string
-          p_token: string
-          p_user: string
-        }
-        Returns: {
-          outcome: string
-          token: string
-        }[]
-      }
+      rsvp_via_share_token:
+        | {
+            Args: {
+              p_accept: boolean
+              p_contact: string
+              p_name: string
+              p_token: string
+              p_user: string
+            }
+            Returns: {
+              outcome: string
+              token: string
+            }[]
+          }
+        | {
+            Args: {
+              p_accept: boolean
+              p_answers: Json
+              p_contact: string
+              p_name: string
+              p_token: string
+              p_user: string
+            }
+            Returns: {
+              outcome: string
+              token: string
+            }[]
+          }
       save_expense: {
         Args: {
           p_amount_cents: number
@@ -4570,6 +4963,10 @@ export type Database = {
           notifications_deleted: number
           rate_limits_deleted: number
         }[]
+      }
+      try_claim_external_event_collection: {
+        Args: { p_lease_seconds?: number }
+        Returns: boolean
       }
       try_claim_operator_sweep: {
         Args: { p_lease_seconds?: number; p_sweep: string }

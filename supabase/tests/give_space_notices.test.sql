@@ -14,7 +14,7 @@
 --   supabase test db
 
 begin;
-select plan(12);
+select plan(13);
 
 -- ————————————————————————— fixtures —————————————————————————
 -- gina gives space to alex. hal hosts two plans. casey is nobody in particular.
@@ -160,6 +160,13 @@ select throws_ok(
 );
 
 -- ————————————————————————— as Hal, the host —————————————————————————
+reset role;
+insert into public.profile_avoids(avoider_id, avoided_id) values
+  ('00000000-0000-0000-0000-00000000c17a', '00000000-0000-0000-0000-00000000ba12');
+set local role authenticated;
+select is(public.note_give_space_overlap('00000000-0000-0000-0000-0000000eb002'),
+  true, 'an avoided host without a self-invite still produces the boolean heads-up');
+
 -- The host approves join requests, which is the one path that runs the
 -- decision for somebody else. He must never be able to read the result.
 set local role authenticated;

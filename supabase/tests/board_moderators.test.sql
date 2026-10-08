@@ -5,7 +5,7 @@
 -- a co-moderator; and a board whose founder has gone can still be deleted.
 
 begin;
-select plan(13);
+select plan(17);
 
 -- ————————————————————————— fixtures —————————————————————————
 insert into auth.users (id, email) values
@@ -36,6 +36,13 @@ set local role authenticated;
 select set_config('request.jwt.claims',
   '{"sub":"00000000-0000-0000-0000-0000000a102b","role":"authenticated"}', true);
 
+select is((select name from public.boards where slug = 'bm-maple-street'),
+  'Maple Street', 'members can still read safe board columns');
+select throws_ok($$select invite_code from public.boards$$,
+  '42501', null, 'members cannot read the join capability directly');
+select throws_ok($$select public.ensure_board_invite_code('00000000-0000-0000-0000-0000000b1001')$$,
+  'not a moderator of this board', 'members cannot obtain it through the RPC either');
+
 select throws_ok(
   $$ select public.set_board_member_role('00000000-0000-0000-0000-0000000b1001'::uuid,
        '00000000-0000-0000-0000-0000000a102b', 'moderator') $$,
@@ -45,6 +52,9 @@ select throws_ok(
 
 select set_config('request.jwt.claims',
   '{"sub":"00000000-0000-0000-0000-0000000a101a","role":"authenticated"}', true);
+
+select ok(public.ensure_board_invite_code('00000000-0000-0000-0000-0000000b1001') is not null,
+  'moderators can still obtain the code through the authorized RPC');
 
 select is(
   public.set_board_member_role('00000000-0000-0000-0000-0000000b1001'::uuid,

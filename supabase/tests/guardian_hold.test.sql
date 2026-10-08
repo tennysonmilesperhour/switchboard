@@ -18,6 +18,10 @@ insert into auth.users (id, email) values
   ('00000000-0000-0000-0000-00000000d105', 'hold-kid-four@example.com'),
   ('00000000-0000-0000-0000-00000000d106', 'hold-requester@example.com'),
   ('00000000-0000-0000-0000-00000000d107', 'hold-adult@example.com');
+
+-- These are fully registered RSVP participants; eligibility refusals have separate tests.
+update public.profiles set onboarded = true, legal_terms_version = '2026-08-31'
+where id in ('00000000-0000-0000-0000-00000000d101', '00000000-0000-0000-0000-00000000d102', '00000000-0000-0000-0000-00000000d103', '00000000-0000-0000-0000-00000000d104', '00000000-0000-0000-0000-00000000d105', '00000000-0000-0000-0000-00000000d106', '00000000-0000-0000-0000-00000000d107');
 insert into public.profiles (id, display_name, onboarded) values
   ('00000000-0000-0000-0000-00000000d101', 'Hold Host', true),
   ('00000000-0000-0000-0000-00000000d102', 'Kid One', true),
@@ -114,7 +118,8 @@ select is(
 );
 
 select is(
-  public.respond_to_guest_invite('00000000-0000-0000-0000-00000000d1c5', true),
+  public.respond_to_guest_invite('00000000-0000-0000-0000-00000000d1c5', true,
+    '00000000-0000-0000-0000-00000000d107', '{}'::jsonb),
   'pending_approval',
   'a yes through a guest token is held'
 );

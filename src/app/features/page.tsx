@@ -5,6 +5,7 @@ import { Passport } from '@/components/features/Passport';
 import { loadPassport } from '@/lib/server/passport';
 import { passportByGroup } from '@/lib/passport';
 import { FeatureIndexClient } from './FeatureIndexClient';
+import { WalkthroughList } from '@/components/walkthroughs/WalkthroughList';
 
 export const metadata: Metadata = {
   title: 'Everything Switchboard does',
@@ -38,6 +39,7 @@ export default async function FeaturesPage() {
           Switchboard shows you one thing at a time on purpose. Here’s the whole
           of it — what each part does, and where to find it.
         </p>
+        <WalkthroughList />
         {passport && <Passport state={passport} />}
         <FeatureIndexClient
           groupProgress={passport ? passportByGroup(passport) : null}

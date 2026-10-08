@@ -962,6 +962,13 @@ const REGISTRY = {
     actor: 'reader',
   },
 
+  // Nearby plans failing to load must not read as "No open plans in range".
+  'SB-PLANS-LOAD': {
+    message: 'Switchboard couldn’t load plans near you just now.',
+    fix: 'Reload the page. Plans from your circle and your own requests are unchanged.',
+    actor: 'reader',
+  },
+
   // ————————————————————————— last resort —————————————————————————
   // The route-level error boundary and anything genuinely unclassified. Always
   // rendered with the Next.js digest beside it, which is what makes even an
@@ -1111,6 +1118,7 @@ const AREA_CODES: Record<string, ErrorCode> = {
   'plans.invited-events': 'SB-PLAN-LOAD',
   'event-create': 'SB-PLAN-CREATE',
   'event-update': 'SB-PLAN-SAVE',
+  'event.broadcast': 'SB-PLAN-SAVE',
   'event-visibility': 'SB-PLAN-SAVE',
   'authz.event-manager': 'SB-PLAN-AUTHZ',
   'board.report-post': 'SB-POST-REPORT',
@@ -1273,6 +1281,8 @@ const AREA_CODES: Record<string, ErrorCode> = {
   'contact.verify-check': 'SB-VERIFY-CHECK',
   'discovery.run': 'SB-DISCOVERY-RUN',
   'discover.people': 'SB-PEOPLE-LOAD',
+  'discover.people-bands': 'SB-PEOPLE-LOAD',
+  'discover.nearby-plans': 'SB-PLANS-LOAD',
   'fact.save': 'SB-FACT-SAVE',
   'fact.verify-start': 'SB-FACT-VERIFY',
   'fact.verify-check': 'SB-FACT-CHECK',

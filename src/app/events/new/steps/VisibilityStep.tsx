@@ -24,6 +24,8 @@ interface VisibilityStepProps {
   capacity: string;
   openTable: boolean;
   setOpenTable: Dispatch<SetStateAction<boolean>>;
+  broadcastNearby: boolean;
+  setBroadcastNearby: Dispatch<SetStateAction<boolean>>;
 }
 
 export function VisibilityStep({
@@ -38,6 +40,8 @@ export function VisibilityStep({
   capacity,
   openTable,
   setOpenTable,
+  broadcastNearby,
+  setBroadcastNearby,
 }: VisibilityStepProps) {
   return (
         <div className="space-y-3 animate-rise">
@@ -101,6 +105,24 @@ export function VisibilityStep({
                   </span>
                 </span>
               </label>
+              {openTable && (
+                <label className="mt-3 flex cursor-pointer items-start gap-3 border-t border-line pt-3">
+                  <input
+                    type="checkbox"
+                    checked={broadcastNearby}
+                    onChange={(e) => setBroadcastNearby(e.target.checked)}
+                    className="mt-1 size-4 accent-terracotta"
+                  />
+                  <span>
+                    <span className="font-bold">Show it to people nearby</span>
+                    <span className="block text-sm text-ink-soft mt-0.5">
+                      People in your range, strangers included, see the title,
+                      day and open seats in Explore. They never see the place.
+                      Needs your city set in Edit profile.
+                    </span>
+                  </span>
+                </label>
+              )}
             </Card>
           )}
           <p className="text-plate text-plate-inset text-xs text-ink-faint leading-relaxed px-1">

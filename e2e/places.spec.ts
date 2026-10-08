@@ -68,7 +68,7 @@ test.describe('places', () => {
   test('Explore suggests things to do, and one becomes a plan', async ({ page }) => {
     await login(page, 'e2ehost');
     await page.goto('/discover');
-    await expect(page.getByRole('heading', { name: "What's the move?" })).toBeVisible();
+    await expect(page.getByRole('tab', { name: /Plans/ })).toHaveAttribute('aria-selected', 'true');
 
     await page.getByLabel('Where?').fill('Denver');
     await page.getByLabel('When?').fill('Saturday afternoon');

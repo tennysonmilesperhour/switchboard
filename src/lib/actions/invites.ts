@@ -53,43 +53,15 @@ function cleanDeclineMessage(value: string): string | null {
 
 type AnswerClient = ReturnType<typeof createAdminClient>;
 
-/**
- * Persist RSVP answers for a yes, keeping only answers whose question actually
- * belongs to this event (M1: don't trust client-supplied question_ids). Called
- * only for an invite that is accepted, or accepted pending a guardian's
- * approval — the questions were answered with that yes and are not asked
- * again when the guardian approves (M2: never store answers for a declined or
- * waitlisted RSVP).
- */
-async function saveInviteAnswers(
-  client: AnswerClient,
-  inviteId: string,
-  eventId: string,
-  answers: Record<string, string>,
-): Promise<void> {
-  const trimmed = Object.entries(answers)
-    .map(([question_id, answer]) => ({ question_id, answer: answer.trim() }))
-    .filter((row) => row.answer.length > 0);
-  if (trimmed.length === 0) return;
-
-  const { data: questions } = await client
-    .from('event_questions')
-    .select('id')
-    .eq('event_id', eventId);
-  const valid = new Set((questions ?? []).map((q) => q.id));
-
-  const rows = trimmed
-    .filter((row) => valid.has(row.question_id))
-    .map((row) => ({
-      invite_id: inviteId,
-      question_id: row.question_id,
-      answer: row.answer,
-    }));
-  if (rows.length === 0) return;
-
-  await client
-    .from('invite_answers')
-    .upsert(rows, { onConflict: 'invite_id,question_id' });
+/** Database validation is a reader correction, not a save outage. */
+function rsvpValidation(error: { hint?: string; message: string }) {
+  const messages: Record<string, string> = {
+    'SB-RSVP-ONBOARDING': 'Reload this invitation to finish setting up your profile before answering.',
+    'SB-RSVP-TERMS': 'Reload this invitation to review the current terms before answering.',
+    'SB-RSVP-AUTH': 'Sign in before answering this invitation.',
+    RSVP_VALIDATION: 'Complete the required RSVP questions and choose valid answers, then try again.',
+  };
+  return error.hint && messages[error.hint] ? validation(messages[error.hint]) : null;
 }
 
 /**
@@ -134,9 +106,10 @@ export async function respondToInvite(
   const { data, error } = await supabase.rpc('respond_to_invite', {
     p_invite: inviteId,
     p_accept: accept,
-    p_note: note ?? undefined,
+    p_note: note ?? '',
+    p_answers: answers,
   });
-  if (error) return reportAndFail('SB-RSVP-SAVE', 'invite.respond', error, { inviteId });
+  if (error) return rsvpValidation(error) ?? reportAndFail('SB-RSVP-SAVE', 'invite.respond', error, { inviteId });
 
   const { data: invite } = await supabase
     .from('invites')
@@ -162,10 +135,6 @@ export async function respondToInvite(
           eventId: invite.event_id,
         });
       }
-    }
-    if (data === 'accepted' || data === 'pending_approval') {
-      // Only persist answers for a yes, and only for this event's questions.
-      await saveInviteAnswers(supabase, inviteId, invite.event_id, answers);
     }
     // A held yes is not yet a commitment; the Give Space check runs when the
     // guardian's approval makes it one (see parental-approval.ts).
@@ -354,8 +323,11 @@ export async function respondViaShareLink(
     p_name: responderName,
     p_contact: contact ?? '',
     p_accept: accept,
+    p_answers: answers,
   });
   if (error) {
+    const invalid = rsvpValidation(error);
+    if (invalid) return invalid;
     return {
       ...(await reportAndFail('SB-RSVP-SAVE', 'share-rsvp.respond', error)),
     };
@@ -426,9 +398,6 @@ export async function respondViaShareLink(
       .limit(1)
       .maybeSingle();
     acceptedInviteId = acceptedInvite?.id ?? null;
-    if (acceptedInviteId) {
-      await saveInviteAnswers(admin, acceptedInviteId, eventId, answers);
-    }
   }
 
   if (eventId) {
@@ -513,8 +482,6 @@ export async function respondToGuestInvite(
       outcome: 'auth_required',
     };
   }
-  const { supabase } = auth;
-
   if (!(await checkRateLimit(`guest-rsvp:${token}`, 10, 60 * 60))) {
     return failure('SB-RATE-LIMIT', 'Too many attempts. Try again later.');
   }
@@ -540,13 +507,10 @@ export async function respondToGuestInvite(
   const { data: outcome, error } = await admin.rpc('respond_to_guest_invite', {
     p_token: token,
     p_accept: accept,
+    p_user: auth.user.id,
+    p_answers: answers,
   });
-  if (error) return reportAndFail('SB-RSVP-SAVE', 'guest-rsvp.respond', error);
-
-  if (outcome === 'accepted' || outcome === 'pending_approval') {
-    // Only persist answers for a yes, and only for this event's questions.
-    await saveInviteAnswers(admin, invite.id, invite.event_id, answers);
-  }
+  if (error) return rsvpValidation(error) ?? reportAndFail('SB-RSVP-SAVE', 'guest-rsvp.respond', error);
 
   const message = outcome === 'declined' ? cleanDeclineMessage(declineMessage) : null;
   if (outcome === 'declined') {
@@ -561,27 +525,8 @@ export async function respondToGuestInvite(
     }
   }
 
-  // Bind the invite to the account that answered, mirroring what
-  // `rsvp_via_share_token` does inline for the share link. Without this an
-  // accepted guest is a row with `invitee_id = null`: invisible on /plans, in
-  // notifications, and — because the event page resolves the viewer's invite by
-  // `invitee_id` — unable to open the plan, its thread, or its updates at all.
-  // Idempotent and keyed by the same token that authorized the answer; a null
-  // return just means there was nothing left to claim.
-  const { data: claimedEventId, error: claimError } = await supabase.rpc(
-    'claim_guest_invite',
-    {
-      p_token: token,
-    },
-  );
-  // Never fail the answer over this — the RSVP itself is already recorded. But
-  // do surface it, because a silent failure here is exactly what makes an
-  // invitation vanish from the app after someone accepts it.
-  if (claimError) {
-    await reportOperationalError('guest-rsvp.claim', claimError, {
-      eventId: invite.event_id,
-    });
-  }
+  // Identity attachment, required answers, and acceptance committed together.
+  const claimedEventId = invite.event_id;
 
   await advanceEventCascade(invite.event_id);
 
@@ -632,21 +577,13 @@ export async function respondToGuestInvite(
       needsApproval: true,
       inviteId: invite.id,
       eventId: claimedEventId ?? invite.event_id,
-      warning: claimError
-        ? 'Your RSVP was saved, but we could not add the plan to your account yet.'
-        : undefined,
     };
   }
 
   return {
     ok: true,
     outcome: typeof outcome === 'string' ? outcome : undefined,
-    // Only offer an onward route when the claim actually succeeded. Returning
-    // the id after an RPC error would render a link to an RLS-gated page that
-    // immediately bounces the responder back out.
-    eventId: claimedEventId ?? undefined,
-    warning: claimError
-      ? 'Your RSVP was saved, but we could not add the plan to your account yet.'
-      : undefined,
+    // The successful RSVP transaction also attached the verified account.
+    eventId: claimedEventId,
   };
 }

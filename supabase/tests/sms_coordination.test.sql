@@ -3,6 +3,10 @@ select no_plan();
 insert into auth.users(id,email) values
  ('21000000-0000-0000-0000-000000000001','sms-host@example.com'),
  ('21000000-0000-0000-0000-000000000002','sms-member@example.com');
+
+-- These are fully registered RSVP participants; eligibility refusals have separate tests.
+update public.profiles set onboarded = true, legal_terms_version = '2026-08-31'
+where id in ('21000000-0000-0000-0000-000000000001', '21000000-0000-0000-0000-000000000002');
 update public.profiles set contact_phone='+15555550777',contact_email='sms-member@example.com',timezone='UTC',quiet_hours_start=0,quiet_hours_end=0 where id='21000000-0000-0000-0000-000000000002';
 update public.profile_contacts set verified_at=now() where user_id='21000000-0000-0000-0000-000000000002';
 set local role authenticated;

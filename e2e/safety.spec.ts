@@ -1,6 +1,7 @@
 import { expect, test, type Browser, type BrowserContext, type Page } from '@playwright/test';
 import {
   adminClient,
+  bringCardToTop,
   createAccount,
   DB,
   expectToast,
@@ -372,27 +373,30 @@ test.describe('safety and moderation', () => {
 
     // D13: browsing people needs you to be discoverable yourself.
     const f = await personPage(browser, finder);
-    await f.page.goto('/discover');
+    await f.page.goto('/discover?mode=people');
     await expect(f.page.getByText('You are not discoverable.')).toBeVisible();
     await expect(f.page.getByRole('link', { name: found.name, exact: true })).toHaveCount(0);
     await f.page.getByRole('switch', { name: 'Show me in people discovery' }).click();
     await expectToast(f.page, 'You are discoverable now.');
 
     // G5: the card links to their profile, and they can be marked "Interested".
-    const card = f.page.locator('div', { has: f.page.getByRole('link', { name: found.name, exact: true }) }).filter({ has: f.page.getByRole('button', { name: 'Interested' }) }).last();
-    await expect(card.getByRole('button', { name: 'Block' })).toBeVisible();
-    await card.getByRole('link', { name: found.name, exact: true }).click();
+    // The range starts at Anywhere when no city is set, so nobody is hidden.
+    const foundLink = f.page.getByRole('link', { name: found.name, exact: true });
+    await bringCardToTop(f.page, foundLink);
+    await expect(f.page.getByRole('button', { name: 'Block' })).toBeVisible();
+    await foundLink.click();
     await f.page.waitForURL(new RegExp(`/u/${found.handle}`));
     await expect(f.page.getByText(`@${found.handle}`).first()).toBeVisible();
     await f.page.goBack();
-    await card.getByRole('button', { name: 'Interested' }).click();
+    await bringCardToTop(f.page, foundLink);
+    await f.page.getByRole('button', { name: 'Interested', exact: true }).click();
     await expectToast(f.page, 'Saved privately. Nothing is sent unless it’s mutual.');
 
     // They pick the finder back, and it is mutual: a private room opens.
     const g = await personPage(browser, found);
-    await g.page.goto('/discover');
-    const back = g.page.locator('div', { has: g.page.getByRole('link', { name: finder.name, exact: true }) }).filter({ has: g.page.getByRole('button', { name: 'Interested' }) }).last();
-    await back.getByRole('button', { name: 'Interested' }).click();
+    await g.page.goto('/discover?mode=people');
+    await bringCardToTop(g.page, g.page.getByRole('link', { name: finder.name, exact: true }));
+    await g.page.getByRole('button', { name: 'Interested', exact: true }).click();
     await expectToast(g.page, 'It is mutual.');
     await g.page.getByRole('button', { name: 'Say hi' }).first().click();
     await g.page.waitForURL(/\/rooms\/[0-9a-f-]{36}/);
@@ -422,7 +426,7 @@ test.describe('safety and moderation', () => {
     await expect(g.page.getByText(hello)).toBeVisible();
 
     // Neither finds the other in discovery any more.
-    await g.page.goto('/discover');
+    await g.page.goto('/discover?mode=people');
     await expect(g.page.getByRole('link', { name: finder.name, exact: true })).toHaveCount(0);
 
     // D12: in a plan's room the blocked person can still write to the group,

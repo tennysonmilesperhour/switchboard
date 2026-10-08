@@ -191,6 +191,7 @@ describe('respondViaShareLink', () => {
       // RPC normalizes it back to NULL.
       p_contact: '',
       p_accept: true,
+      p_answers: {},
     });
     expect(mocks.notifyUsers).toHaveBeenCalledWith(
       ['host-1'],
@@ -371,10 +372,12 @@ describe('respondToGuestInvite', () => {
     expect(mocks.rpc).toHaveBeenCalledWith('respond_to_guest_invite', {
       p_token: 'guest-token-1',
       p_accept: true,
+      p_user: 'user-3',
+      p_answers: {},
     });
   });
 
-  it('binds the answered invite to the account, on the session client', async () => {
+  it('binds the answered invite atomically using the verified session identity', async () => {
     mocks.db.user = { id: 'user-3' };
     mocks.db.invites['guest-token-1'] = {
       id: 'invite-1',
@@ -389,9 +392,9 @@ describe('respondToGuestInvite', () => {
     // An accepted invite still carrying invitee_id = null is invisible on
     // /plans and unreachable at /events/<id> — the responder ends up stuck on
     // the confirmation card with no way into the plan they just joined.
-    expect(mocks.userRpc).toHaveBeenCalledWith('claim_guest_invite', {
-      p_token: 'guest-token-1',
-    });
+    expect(mocks.rpc).toHaveBeenCalledWith('respond_to_guest_invite',
+      expect.objectContaining({ p_token: 'guest-token-1', p_user: 'user-3' }));
+    expect(mocks.userRpc).not.toHaveBeenCalledWith('claim_guest_invite', expect.anything());
     // Never the service-role client: it has no session, so auth.uid() is null
     // and the claim would silently no-op.
     expect(mocks.rpc).not.toHaveBeenCalledWith('claim_guest_invite', expect.anything());
@@ -426,7 +429,7 @@ describe('respondToGuestInvite', () => {
     expect(mocks.notifyUsers).not.toHaveBeenCalled();
   });
 
-  it('still records a declined answer, and keeps the claim best-effort', async () => {
+  it('does not depend on a second best-effort claim after accepting', async () => {
     mocks.db.user = { id: 'user-3' };
     mocks.db.invites['guest-token-1'] = {
       id: 'invite-1',
@@ -439,16 +442,9 @@ describe('respondToGuestInvite', () => {
 
     const result = await respondToGuestInvite('guest-token-1', true);
 
-    // The RSVP is already written by this point; a failed claim must not throw
-    // it away — but it must not pass silently either.
+    // The transaction already attached the account; there is no partial claim.
     expect(result.ok).toBe(true);
-    expect(mocks.reportOperationalError).toHaveBeenCalledWith(
-      'guest-rsvp.claim',
-      expect.anything(),
-      expect.objectContaining({ eventId: 'event-1' }),
-    );
-    // Do not offer a link to the RLS-gated event page when the invite never
-    // became reachable by this account.
-    expect(result.eventId).toBeUndefined();
+    expect(mocks.userRpc).not.toHaveBeenCalledWith('claim_guest_invite', expect.anything());
+    expect(result.eventId).toBe('event-1');
   });
 });

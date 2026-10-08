@@ -26,6 +26,10 @@ insert into auth.users (id, email) values
   ('00000000-0000-0000-0000-0000000f6007', 'polish-stranger@example.com'),
   ('00000000-0000-0000-0000-0000000f6008', 'polish-second-requester@example.com');
 
+-- These are fully registered RSVP participants; eligibility refusals have separate tests.
+update public.profiles set onboarded = true, legal_terms_version = '2026-08-31'
+where id in ('00000000-0000-0000-0000-0000000f6001', '00000000-0000-0000-0000-0000000f6002', '00000000-0000-0000-0000-0000000f6003', '00000000-0000-0000-0000-0000000f6004', '00000000-0000-0000-0000-0000000f6005', '00000000-0000-0000-0000-0000000f6006', '00000000-0000-0000-0000-0000000f6007', '00000000-0000-0000-0000-0000000f6008');
+
 -- One plan with invitations going out, a co-host, and an Open Table.
 insert into public.events (id, host_id, title, status, invite_mode, capacity, open_table,
                            recurrence, starts_at)

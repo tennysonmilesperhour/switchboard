@@ -190,8 +190,8 @@ export const FEATURE_GROUPS: readonly FeatureGroup[] = [
         id: 'open-table',
         title: 'Open Table',
         blurb:
-          'Leave a few seats open to friends-of-friends; they ask to join and you approve, so the guest list still belongs to you. Whoever asked hears your answer, yes or no.',
-        where: 'Plan wizard → Privacy or Edit plan; requests arrive on the plan page, and your own wait on Explore',
+          'Leave a few seats open to friends-of-friends, or show the plan to people nearby; they swipe to ask and you approve, so the guest list still belongs to you. Whoever asked hears your answer, yes or no.',
+        where: 'Plan wizard → Privacy or Edit plan; requests arrive on the plan page, and your own wait on Explore → Plans',
         href: '/discover',
       },
       {
@@ -453,15 +453,23 @@ export const FEATURE_GROUPS: readonly FeatureGroup[] = [
         title: 'Find something to do',
         blurb:
           'Describe the kind of evening you want and get a handful of fitting ideas, each with a short why — one tap turns any of them into a plan.',
-        where: 'Explore in the bottom bar',
+        where: 'Explore → Plans, under the cards',
+        href: '/discover',
+      },
+      {
+        id: 'local-event-discovery',
+        title: 'What’s happening nearby',
+        blurb:
+          'Browse fresh local listings for tonight, this weekend, or the next seven days; search by interest, filter for free events, save or hide one, and jump to the organizer to sign up.',
+        where: 'Explore → Around Salt Lake',
         href: '/discover',
       },
       {
         id: 'people-discovery',
         title: 'People discovery',
         blurb:
-          'Meet people beyond your contacts, in lanes you opt into — and only if you’ve chosen to be discoverable yourself.',
-        where: 'Explore → People discovery',
+          'Swipe through people beyond your contacts, filtered by how far they are and what they’re open to — and only if you’ve chosen to be discoverable yourself. Nothing is sent unless you both pick each other.',
+        where: 'Explore → People',
         href: '/discover',
       },
       {
@@ -493,7 +501,7 @@ export const FEATURE_GROUPS: readonly FeatureGroup[] = [
         title: 'Partner perks',
         blurb:
           'Verified local spots offering something to Switchboard groups, and a way to claim your own venue.',
-        where: 'Explore → Partner perks 🏪',
+        where: 'Explore → Plans → Partner perks 🏪',
         href: '/discover',
       },
       {
@@ -802,6 +810,14 @@ export const FEATURE_GROUPS: readonly FeatureGroup[] = [
           'A private record of which parts of Switchboard you’ve actually used, and a nudge toward one you haven’t. Yours only, and it never pings you.',
         where: 'More → Everything, at the top',
         href: '/features',
+      },
+      {
+        id: 'walkthroughs',
+        title: 'Walkthroughs',
+        blurb:
+          'Short demos that play themselves while you tap Next: one for the whole idea in a minute, and deeper ones on plans, deciding, people, rooms, places, and settings.',
+        where: 'More → Everything → Walkthroughs, at the top',
+        href: '/tour/welcome',
       },
       {
         id: 'tips-reset',

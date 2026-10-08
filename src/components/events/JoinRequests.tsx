@@ -40,6 +40,8 @@ export function JoinRequests({
       } else if (result.outcome === 'pending_approval') {
         // A guardian plan: the host's yes is not the guardian's.
         toast.info(`${request.name} is waiting on a guardian’s OK - it counts once they approve.`);
+      } else if (result.outcome === 'sent') {
+        toast.info(`${request.name} has an invitation to finish the required details before their place is confirmed.`);
       } else if (result.outcome === 'gone') {
         toast.info('That request was already answered.');
       } else {

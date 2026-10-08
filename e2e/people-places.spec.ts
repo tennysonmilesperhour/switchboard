@@ -8,6 +8,7 @@ import {
   runCascadeSweep,
   unique,
   type Account,
+  bringCardToTop,
 } from './support';
 
 /**
@@ -226,15 +227,15 @@ test.describe('people and places', () => {
 
       // D8: both people hear about it, each naming the other.
       await expectNotification(page, 'A ritual is due');
-      await expect(page.getByText(`with ${ben.name}. Plan it, or skip this one.`, { exact: false })).toBeVisible();
+      await expect(page.getByRole('main').getByText(`with ${ben.name}. Plan it, or skip this one.`, { exact: false })).toBeVisible();
       await expectNotification(benPage, 'A ritual is due');
-      await expect(benPage.getByText(`with ${ana.name}. Plan it, or skip this one.`, { exact: false })).toBeVisible();
+      await expect(benPage.getByRole('main').getByText(`with ${ana.name}. Plan it, or skip this one.`, { exact: false })).toBeVisible();
       await shot(benPage, 'ritual-reminder-inbox');
 
       // A second sweep does not remind them again.
       await runCascadeSweep(request);
       await benPage.reload();
-      await expect(benPage.getByText('A ritual is due')).toHaveCount(1);
+      await expect(benPage.getByRole('main').getByText('A ritual is due')).toHaveCount(1);
 
       // Ben skips this one from Mutual; it moves a week on for both of them.
       await benPage.goto('/mutual');
@@ -777,27 +778,25 @@ test.describe('people and places', () => {
       expect(error, error?.message).toBeNull();
     }
 
-    const cardFor = (p: Page, other: Account) =>
-      p
-        .locator('div', { has: p.getByRole('link', { name: other.name, exact: true }) })
-        .filter({ has: p.getByRole('button', { name: 'Interested' }) })
-        .last();
+    const linkFor = (p: Page, other: Account) =>
+      p.getByRole('link', { name: other.name, exact: true });
 
     const ulaSide = await signedIn(browser, ula);
     const vicSide = await signedIn(browser, vic);
     try {
       const u = ulaSide.page;
-      await u.goto('/discover');
+      await u.goto('/discover?mode=people');
       await u.getByRole('button', { name: 'Nearby', exact: true }).click();
-      await expect(cardFor(u, vic)).toBeVisible();
+      await bringCardToTop(u, linkFor(u, vic));
       await expect(u.getByRole('link', { name: wes.name, exact: true })).toHaveCount(0);
-      await cardFor(u, vic).getByRole('button', { name: 'Interested' }).click();
+      await u.getByRole('button', { name: 'Interested', exact: true }).click();
       await expectToast(u, 'Saved privately. Nothing is sent unless it’s mutual.');
 
       const v = vicSide.page;
-      await v.goto('/discover');
+      await v.goto('/discover?mode=people');
       await v.getByRole('button', { name: 'Nearby', exact: true }).click();
-      await cardFor(v, ula).getByRole('button', { name: 'Interested' }).click();
+      await bringCardToTop(v, linkFor(v, ula));
+      await v.getByRole('button', { name: 'Interested', exact: true }).click();
       await expectToast(v, 'It is mutual.');
       await shot(v, 'discovery-nearby-match');
 

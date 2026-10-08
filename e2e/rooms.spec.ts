@@ -485,7 +485,11 @@ test.describe('rooms', () => {
   test('a room photo is private: members see it, an anonymous request does not', async () => {
     await boPage.goto(roomUrl);
     await hana.goto(roomUrl);
-    await boPage.locator('input[type="file"][accept="image/*"]').setInputFiles({
+    // Exercise the visible upload control. Setting a hidden input immediately
+    // after navigation can precede hydration and drop its change handler.
+    const chooser = boPage.waitForEvent('filechooser');
+    await boPage.getByRole('button', { name: 'Send a photo', exact: true }).click();
+    await (await chooser).setFiles({
       name: 'cake.png',
       mimeType: 'image/png',
       buffer: png(),

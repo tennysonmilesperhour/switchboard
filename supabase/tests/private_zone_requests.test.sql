@@ -5,7 +5,7 @@
 -- get around the wait; leaving is free and ends your check-in there.
 
 begin;
-select plan(20);
+select plan(24);
 
 -- ————————————————————————— fixtures —————————————————————————
 insert into auth.users (id, email) values
@@ -32,6 +32,8 @@ insert into public.zones (id, slug, name, organizer_id, visibility) values
 insert into public.zone_members (zone_id, member_id, role) values
   ('00000000-0000-0000-0000-0000000f0701'::uuid, '00000000-0000-0000-0000-00000000703c', 'member'),
   ('00000000-0000-0000-0000-0000000f0701'::uuid, '00000000-0000-0000-0000-00000000704d', 'member');
+
+update public.zones set invite_code = 'old-retreat-code' where slug = 'zr-retreat';
 
 insert into public.moments (id, user_id, zone_id, place_name, status, available_until) values
   ('00000000-0000-0000-0000-0000000d0701'::uuid, '00000000-0000-0000-0000-00000000703c',
@@ -121,6 +123,8 @@ select is(
 );
 
 -- ————————————————————————— the one new ask —————————————————————————
+select is(public.join_zone_via_code('old-retreat-code'), null::text,
+  'a denied requester cannot bypass the decision with a link');
 reset role;
 update public.zone_join_requests
    set decided_at = now() - interval '31 days'
@@ -142,6 +146,9 @@ select is(
   2,
   'and that ask is counted'
 );
+
+select is(public.join_zone_via_code('old-retreat-code'), null::text,
+  'a pending second ask still requires moderator approval');
 
 select set_config('request.jwt.claims',
   '{"sub":"00000000-0000-0000-0000-00000000701a","role":"authenticated"}', true);
@@ -199,6 +206,8 @@ select is(
 );
 
 -- ————————————————————————— leaving —————————————————————————
+select is(public.join_zone_via_code('old-retreat-code'), null::text,
+  'a removed member cannot rejoin with an old link');
 select set_config('request.jwt.claims',
   '{"sub":"00000000-0000-0000-0000-00000000704d","role":"authenticated"}', true);
 
@@ -223,6 +232,8 @@ select is(
 );
 
 -- ————————————————————————— strangers —————————————————————————
+select is(public.join_zone_via_code('old-retreat-code'), 'zr-retreat',
+  'a person who voluntarily left can still redeem the link');
 select set_config('request.jwt.claims',
   '{"sub":"00000000-0000-0000-0000-00000000705e","role":"authenticated"}', true);
 

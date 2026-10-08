@@ -15,6 +15,7 @@ export interface PlanExtrasValue {
   theme: EventTheme;
   remindersEnabled: boolean;
   openTable: boolean;
+  broadcastNearby: boolean;
   newQuestions: NewQuestion[];
 }
 
@@ -115,6 +116,24 @@ export function PlanExtrasFields({
           </span>
         </span>
       </label>
+
+      {value.openTable && (
+        <label className="flex items-start gap-3 cursor-pointer rounded-card bg-cream px-4 py-3">
+          <input
+            type="checkbox"
+            checked={value.broadcastNearby}
+            onChange={(e) => set({ broadcastNearby: e.target.checked })}
+            className="mt-1 size-4 accent-terracotta"
+          />
+          <span>
+            <span className="font-bold">Show it to people nearby</span>
+            <span className="block text-sm text-ink-soft mt-0.5">
+              People in your range, strangers included, see the title, day and open seats in
+              Explore, never the place. Needs your city set in Edit profile.
+            </span>
+          </span>
+        </label>
+      )}
 
       <div className="space-y-2">
         <p className={`text-plate text-plate-inset ${FIELD_LABEL}`}>Questions for guests</p>
