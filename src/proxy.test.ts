@@ -9,7 +9,7 @@ beforeEach(() => {
   createServerClient.mockClear();
 });
 afterEach(() => vi.unstubAllEnvs());
-test.each(['/api/cron/cascade', '/api/cron/digest'])('lets the scheduler reach %s on its deployment hostname', async path => {
+test.each(['/api/cron/cascade', '/api/cron/digest', '/api/cron/external-events'])('lets the scheduler reach %s on its deployment hostname', async path => {
   const response = await proxy(new NextRequest(`https://switchboard-deployment.vercel.app${path}`));
   expect(response.status).toBe(200);
   expect(response.headers.get('x-middleware-next')).toBe('1');
