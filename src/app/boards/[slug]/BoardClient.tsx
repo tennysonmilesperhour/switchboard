@@ -261,7 +261,7 @@ export function BoardClient({
       <section>
         <form onSubmit={submitPost}>
           <Card>
-            <div className="flex gap-2 mb-3">
+            <div className="flex flex-wrap gap-2 mb-3">
               {(
                 [
                   ['notice', 'Notice'],
