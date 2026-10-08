@@ -112,6 +112,10 @@ begin
          'boards', -- invite_code is a moderator-only bearer capability (W19).
          'calendar_subscriptions',
          'parental_approvals',
+         'event_sources',
+         'external_events',
+         'external_event_listings',
+         'external_event_submissions',
          'sms_opt_outs',
          'sms_jobs',
          'sms_consent_events'
@@ -127,6 +131,17 @@ end $$;
 -- SB-01 revoked from `anon, authenticated` only, so profiles is included here.
 grant select, insert, update, delete on all tables in schema public to service_role;
 grant usage, select on all sequences in schema public to service_role;
+
+-- External discovery has a deliberately narrower grant surface than the
+-- hosted defaults simulated above: raw listings and source health are
+-- operator-only, canonical events expose an explicit column allowlist, and
+-- submissions/preferences are scoped to their owner. Preserve the migration's
+-- exact browser grants in local and CI environments.
+revoke all on public.event_sources, public.external_event_listings from anon, authenticated;
+revoke insert, update, delete on public.external_events from anon, authenticated;
+revoke all on public.external_event_submissions from anon;
+revoke update, delete on public.external_event_submissions from authenticated;
+revoke all on public.external_event_preferences from anon;
 
 -- Preserve SMS evidence and consent mutation grants when simulating hosted defaults.
 revoke all on public.sms_jobs, public.sms_consent_events from anon, authenticated;
