@@ -1,14 +1,21 @@
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import { NextRequest } from 'next/server';
+import { unstable_doesMiddlewareMatch } from 'next/experimental/testing/server';
 const createServerClient = vi.hoisted(() => vi.fn());
 vi.mock('@supabase/ssr', () => ({ createServerClient }));
-import { proxy } from './proxy';
+import { config, proxy } from './proxy';
 import { LEGAL_VERSION } from '@/lib/legal';
 beforeEach(() => {
   vi.stubEnv('VERCEL_ENV', 'production');
   createServerClient.mockClear();
 });
 afterEach(() => vi.unstubAllEnvs());
+test.each(['/site-analytics.js', '/site-analytics.js?v=1'])('serves the consent script %s without an auth redirect', url => {
+  expect(unstable_doesMiddlewareMatch({ config, nextConfig: {}, url })).toBe(false);
+});
+test.each(['/', '/settings', '/api/uploads/image', '/site-analyticsXjs', '/site-analytics.js/private'])('keeps the auth proxy on %s', url => {
+  expect(unstable_doesMiddlewareMatch({ config, nextConfig: {}, url })).toBe(true);
+});
 test.each(['/api/cron/cascade', '/api/cron/digest', '/api/cron/external-events'])('lets the scheduler reach %s on its deployment hostname', async path => {
   const response = await proxy(new NextRequest(`https://switchboard-deployment.vercel.app${path}`));
   expect(response.status).toBe(200);
