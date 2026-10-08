@@ -675,6 +675,14 @@ export const FEATURE_GROUPS: readonly FeatureGroup[] = [
         href: '/you',
       },
       {
+        id: 'look-back',
+        title: 'Look back',
+        blurb:
+          'Swipe through plans that are over: left if it wasn’t for you, right if you liked it, up if you loved it, down if you didn’t go. Add a journal note or a few details first if you want. Private to you.',
+        where: 'More → Your Read → Reflections',
+        href: '/you',
+      },
+      {
         id: 'profile-strength',
         title: 'Profile strength',
         blurb: 'What’s still missing from your profile, and why it matters for who finds you.',

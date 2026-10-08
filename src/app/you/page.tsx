@@ -8,6 +8,7 @@ import {
   loadReflections,
   reflectionReady,
 } from '@/lib/server/identity';
+import { loadReflectionDeck } from '@/lib/server/reflection-deck';
 import { YouClient } from './YouClient';
 
 export const metadata: Metadata = { title: 'Your Read' };
@@ -21,10 +22,11 @@ export default async function YouPage() {
 
   // Facets must compute first so reflection-readiness reflects this visit.
   const facets = await loadMyIdentity();
-  const [settings, reflections, ready] = await Promise.all([
+  const [settings, reflections, ready, deck] = await Promise.all([
     loadOperatorSettings(),
     loadReflections(),
     reflectionReady(),
+    loadReflectionDeck(),
   ]);
 
   return (
@@ -34,6 +36,8 @@ export default async function YouPage() {
         settings={settings}
         reflections={reflections}
         reflectionReady={ready}
+        deck={deck.cards}
+        deckFailed={deck.failed}
       />
     </AppShell>
   );

@@ -9,6 +9,7 @@ import { EmptyState } from '@/components/ui/EmptyState';
 import { setFacetPref, setFacetVerdict } from '@/lib/actions/identity';
 import type { DisplayFacet, Reflection } from '@/lib/server/identity';
 import { OPTIONAL_FACETS, type Confidence } from '@/lib/engine/identity';
+import type { DeckCard } from '@/lib/server/reflection-deck';
 import { OperatorSettings } from './OperatorSettings';
 import { Reflections } from './Reflections';
 
@@ -29,6 +30,8 @@ interface YouClientProps {
   settings: Record<string, boolean>;
   reflections: Reflection[];
   reflectionReady: boolean;
+  deck: DeckCard[];
+  deckFailed: boolean;
 }
 
 export function YouClient({
@@ -36,6 +39,8 @@ export function YouClient({
   settings,
   reflections,
   reflectionReady,
+  deck,
+  deckFailed,
 }: YouClientProps) {
   // A rejected facet ("not me") is set aside just like a hidden one, but labeled
   // differently — the model heard you, and keeps the correction as signal.
@@ -84,7 +89,12 @@ export function YouClient({
         </details>
       ) : null}
 
-      <Reflections reflections={reflections} ready={reflectionReady} />
+      <Reflections
+        reflections={reflections}
+        ready={reflectionReady}
+        deck={deck}
+        deckFailed={deckFailed}
+      />
 
       <OperatorSettings settings={settings} />
     </div>
