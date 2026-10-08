@@ -63,9 +63,12 @@ function isApiCall(request: NextRequest): boolean {
 
 export async function proxy(request: NextRequest) {
   // Vercel cron invokes the deployment hostname and does not follow redirects.
-  // These two JSON endpoints authenticate their own CRON_SECRET; browser
+  // These JSON endpoints authenticate their own CRON_SECRET; browser
   // canonicalization and session refresh must not intercept the scheduler.
-  if (['/api/cron/cascade', '/api/cron/digest'].includes(request.nextUrl.pathname)) {
+  if (
+    ['/api/cron/cascade', '/api/cron/digest', '/api/cron/external-events']
+      .includes(request.nextUrl.pathname)
+  ) {
     return NextResponse.next();
   }
 
