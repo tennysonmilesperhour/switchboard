@@ -28,6 +28,8 @@ import { invitationStep, readyToSendInvitations } from '@/lib/poll-readiness';
 import { capacityProblem } from '@/lib/plan-capacity';
 import { normalizeNewQuestions, planExtrasProblem } from '@/lib/plan-extras';
 import { sameInstant } from '@/lib/plan-time';
+import { BROADCAST_NEEDS_HOME_AREA } from '@/lib/nearby-plans';
+import { callerHasHomeArea, hostHasHomeArea } from '@/lib/server/host-home-area';
 import {
   createEventError,
   deliveryWarning,
@@ -75,6 +77,10 @@ export async function createEvent(
   // publish with an operator code.
   const capacityError = capacityProblem(input.capacity);
   if (capacityError) return createEventError(capacityError);
+  const broadcastNearby = Boolean(input.broadcastNearby && input.openTable && input.capacity);
+  if (broadcastNearby && !(await callerHasHomeArea(supabase))) {
+    return createEventError(BROADCAST_NEEDS_HOME_AREA);
+  }
   if (input.enablePoll) {
     const now = Date.now();
     if (input.suggestDeadline && new Date(input.suggestDeadline).getTime() < now) {
@@ -145,6 +151,18 @@ export async function createEvent(
     if (ritualError) await reportOperationalError('ritual.plan', ritualError, { eventId });
   }
 
+  // Broadcast is a column the atomic create does not know about; the host owns
+  // the row, so a plain update (RLS: host only) switches it on.
+  if (broadcastNearby) {
+    const { error: broadcastError } = await supabase
+      .from('events')
+      .update({ broadcast_nearby: true })
+      .eq('id', eventId);
+    if (broadcastError) {
+      await reportOperationalError('event.broadcast', broadcastError, { eventId });
+    }
+  }
+
   // Put the plan on the map. After invite delivery so a geocode can't delay it.
   await persistEventCoordinates(supabase, eventId, input);
 
@@ -208,7 +226,7 @@ export async function updateEventDetails(
   const [{ data: before }, { data: asked, error: askedError }] = await Promise.all([
     admin
       .from('events')
-      .select('starts_at, ends_at, location_name, location_address, title')
+      .select('starts_at, ends_at, location_name, location_address, title, host_id')
       .eq('id', eventId)
       .maybeSingle(),
     admin.from('event_questions').select('position').eq('event_id', eventId),
@@ -232,6 +250,10 @@ export async function updateEventDetails(
       })
     : null;
   if (extrasError) return validation(extrasError);
+  const broadcastNearby = Boolean(extras?.broadcastNearby && extras.openTable);
+  if (broadcastNearby && !(await hostHasHomeArea(admin, before.host_id))) {
+    return validation(BROADCAST_NEEDS_HOME_AREA);
+  }
 
   // Compared as instants, never as strings. The row comes back from PostgREST
   // as `2026-09-25T02:00:00+00:00` and the form sends `toISOString()`'s
@@ -273,6 +295,8 @@ export async function updateEventDetails(
             theme: extras.theme,
             reminders_enabled: extras.remindersEnabled,
             open_table: extras.openTable,
+            // Never on without an Open Table: the database refuses it too.
+            broadcast_nearby: broadcastNearby,
           }
         : {}),
       // The reminder markers describe the time they were sent for. Left set, a

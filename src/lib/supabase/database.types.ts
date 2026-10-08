@@ -1092,6 +1092,7 @@ export type Database = {
       }
       events: {
         Row: {
+          broadcast_nearby: boolean
           cancel_reason: string | null
           cancel_voice_url: string | null
           capacity: number | null
@@ -1128,6 +1129,7 @@ export type Database = {
           wishlist_url: string | null
         }
         Insert: {
+          broadcast_nearby?: boolean
           cancel_reason?: string | null
           cancel_voice_url?: string | null
           capacity?: number | null
@@ -1164,6 +1166,7 @@ export type Database = {
           wishlist_url?: string | null
         }
         Update: {
+          broadcast_nearby?: boolean
           cancel_reason?: string | null
           cancel_voice_url?: string | null
           capacity?: number | null
@@ -4544,6 +4547,19 @@ export type Database = {
           url: string
         }[]
       }
+      list_nearby_plans: {
+        Args: { p_max_km?: number }
+        Returns: {
+          distance_band: string
+          event_id: string
+          host_name: string
+          known_via: string
+          spots_left: number
+          starts_at: string
+          time_zone: string
+          title: string
+        }[]
+      }
       list_open_reports: {
         Args: never
         Returns: {
@@ -4590,6 +4606,13 @@ export type Database = {
           name: string
           perk: string
           url: string
+        }[]
+      }
+      list_people_distance_bands: {
+        Args: { p_self?: string }
+        Returns: {
+          distance_band: string
+          person_id: string
         }[]
       }
       list_suspended_accounts: {

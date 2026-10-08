@@ -11,6 +11,7 @@ import {
   unique,
   waitForMail,
   type Account,
+  bringCardToTop,
 } from './support';
 
 /**
@@ -482,10 +483,8 @@ test.describe('plans, more', () => {
     await login(asker, stranger.handle);
     const ask = async () => {
       await asker.goto('/discover');
-      const card = asker.locator('div', { hasText: title }).filter({
-        has: asker.getByRole('button', { name: 'Ask to join' }),
-      }).last();
-      await card.getByRole('button', { name: 'Ask to join' }).click();
+      await bringCardToTop(asker, asker.getByRole('heading', { name: title }));
+      await asker.getByRole('button', { name: 'Ask to join', exact: true }).click();
       await expect(asker.getByText('Asked to join. The host will get back to you.')).toBeVisible();
       // The request stays visible to the person who made it.
       await asker.reload();

@@ -61,6 +61,7 @@ export function EventEditForm({
     theme: isEventTheme(event.theme) ? event.theme : 'default',
     remindersEnabled: event.reminders_enabled,
     openTable: event.open_table,
+    broadcastNearby: event.broadcast_nearby,
     newQuestions: [],
   }));
   const [error, setError] = useState<string | null>(null);
@@ -125,6 +126,7 @@ export function EventEditForm({
           theme: extras.theme,
           remindersEnabled: extras.remindersEnabled,
           openTable: extras.openTable,
+          broadcastNearby: extras.openTable && extras.broadcastNearby,
           newQuestions,
         },
       });

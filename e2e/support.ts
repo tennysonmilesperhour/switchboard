@@ -1,4 +1,4 @@
-import { expect, test, type APIRequestContext, type BrowserContext, type Page } from '@playwright/test';
+import { expect, test, type APIRequestContext, type BrowserContext, type Locator, type Page } from '@playwright/test';
 import { createServerClient } from '@supabase/ssr';
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
@@ -374,4 +374,30 @@ export async function runCascadeSweep(request: APIRequestContext): Promise<Recor
     await new Promise((resolve) => setTimeout(resolve, 3_000));
   }
   throw new Error(`The cascade sweep never completed a run: ${last}`);
+}
+
+/**
+ * Explore shows one card at a time. Pass cards until the one matching `target`
+ * is on top (passing is local for plans and private for people, so nothing is
+ * sent), so a spec can act on a specific plan or person without depending on
+ * the deck's order.
+ *
+ * Two races this guards against, both of which passed the very card being
+ * looked for or passed nothing at all:
+ *  - right after a page load or refresh the deck may not be on screen yet, so
+ *    the target is judged only once either it or the Pass button is visible;
+ *  - a click before the page is interactive does nothing, so each pass waits
+ *    for the card count to change and is retried if it did not.
+ */
+export async function bringCardToTop(page: Page, target: Locator, pass = 'Pass'): Promise<void> {
+  const passButton = page.getByRole('button', { name: pass, exact: true });
+  const counter = page.getByText(/^\d+ cards? left$/);
+  for (let i = 0; i < 60; i += 1) {
+    await expect(target.or(passButton).first()).toBeVisible();
+    if (await target.isVisible()) return;
+    const before = await counter.first().textContent();
+    await passButton.click();
+    await expect(counter).not.toHaveText(before ?? '', { timeout: 5_000 }).catch(() => {});
+  }
+  await expect(target).toBeVisible();
 }

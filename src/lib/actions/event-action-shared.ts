@@ -37,6 +37,8 @@ export interface CreateEventInput {
   capacity: number | null;
   inviteMode: InviteMode;
   openTable: boolean;
+  /** Also show this Open Table to people nearby, strangers included. */
+  broadcastNearby?: boolean;
   showInviteList: boolean;
   showAccepted: boolean;
   showExpired: boolean;
@@ -251,6 +253,7 @@ export interface UpdateEventInput {
     theme: EventTheme;
     remindersEnabled: boolean;
     openTable: boolean;
+    broadcastNearby?: boolean;
     /** Questions to add. Existing ones are never edited or removed here. */
     newQuestions: NewQuestion[];
   };
