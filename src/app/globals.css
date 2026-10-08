@@ -457,10 +457,12 @@ html {
 /* Form controls default to their intrinsic width as a flex item's minimum
  * (an input is ~20 characters, a select is its longest option), so a
  * `flex-1` field beside a button pushed the button off the screen at phone
- * widths. Letting them shrink keeps every field inside its row. In a layer,
- * so a utility like `min-w-40` still wins. */
+ * widths. Letting them shrink keeps every field inside its row. Checkboxes
+ * and radios go the other way: they sit beside long labels, which squeezed a
+ * `size-4` box down to 13px, so they never shrink. In a layer, so a utility
+ * like `min-w-40` still wins. */
 @layer base {
-  input,
+  input:not([type="checkbox"], [type="radio"]),
   select,
   textarea {
     min-width: 0;
@@ -468,6 +470,11 @@ html {
 
   select {
     max-width: 100%;
+  }
+
+  input[type="checkbox"],
+  input[type="radio"] {
+    flex-shrink: 0;
   }
 }
 
