@@ -2,7 +2,7 @@ import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import { NextRequest } from 'next/server';
 const createServerClient = vi.hoisted(() => vi.fn());
 vi.mock('@supabase/ssr', () => ({ createServerClient }));
-import { proxy, WELCOME_CDN_CACHE_CONTROL } from './proxy';
+import { proxy } from './proxy';
 import { AUTH_BOUNCE_COOKIE } from '@/lib/auth-bounce';
 import { LEGAL_VERSION } from '@/lib/legal';
 beforeEach(() => {
@@ -225,11 +225,12 @@ test('reads the auth server\'s user_banned answer as a suspension, not a sign-ou
   expect(signOut).toHaveBeenCalledWith({ scope: 'local' });
 });
 
-test('caches a signed-out GET of the marketing page at the CDN', async () => {
+test('does not CDN-cache the marketing page, whose CSP nonce changes every request', async () => {
   signedOut();
   const response = await proxy(new NextRequest('https://switchboardsocial.me/welcome?account=deleted'));
   expect(response.headers.get('x-middleware-next')).toBe('1');
-  expect(response.headers.get('Vercel-CDN-Cache-Control')).toBe(WELCOME_CDN_CACHE_CONTROL);
+  expect(response.headers.get('Vercel-CDN-Cache-Control')).toBeNull();
+  expect(response.headers.get('Cache-Control') ?? '').not.toMatch(/s-maxage/);
 });
 
 test('does not CDN-cache other public pages or authenticated routes', async () => {

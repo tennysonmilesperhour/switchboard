@@ -50,40 +50,6 @@ function isPublicPath(pathname: string): boolean {
 }
 
 /**
- * How long Vercel's CDN may serve the signed-out marketing document without
- * rendering it again. Fresh for a day, then stale-while-revalidate for a week.
- * A new deployment drops the cached copy; this is not a browser cache.
- */
-export const WELCOME_CDN_CACHE_CONTROL =
-  'public, s-maxage=86400, stale-while-revalidate=604800';
-
-/**
- * Cache the public marketing page at the CDN, and nowhere else.
- *
- * The page cannot be prerendered. `script-src` is a per-request nonce (see
- * `buildCsp`), and Next.js only stamps that nonce while it is rendering the
- * document — a build-time static or ISR file would ship scripts the CSP then
- * refuses. Caching the finished response instead keeps the nonce and the
- * policy on the same bytes.
- *
- * Only a signed-out GET/HEAD of exactly `/welcome`. The HTML has no account
- * data (a signed-in visitor is redirected home before this runs, and the
- * bounce-release render is left uncached so a session is never stored under
- * the public URL). Authenticated app routes are not given this header, so
- * they keep rendering per request.
- */
-function cacheSignedOutWelcome(
-  response: NextResponse,
-  request: NextRequest,
-  signedIn: boolean,
-) {
-  if (signedIn) return;
-  if (request.method !== 'GET' && request.method !== 'HEAD') return;
-  if (request.nextUrl.pathname !== '/welcome') return;
-  response.headers.set('Vercel-CDN-Cache-Control', WELCOME_CDN_CACHE_CONTROL);
-}
-
-/**
  * A programmatic request to an API route, as opposed to someone following an
  * API link in the browser (the calendar download), who is better served by the
  * sign-in redirect than by a JSON body.
@@ -124,6 +90,12 @@ export async function proxy(request: NextRequest) {
   // Next.js can extract it and stamp its framework/bundle <script> tags, and
   // the CSP rides the RESPONSE so the browser enforces it. Rebuilt on each
   // NextResponse.next so Supabase cookie refreshes keep both.
+  //
+  // Nonce-CSP pages must not be CDN-cached: no s-maxage, no ISR. This proxy
+  // runs before the cache and issues a new nonce on every request, while a
+  // cached document still carries the previous one. The browser then blocks
+  // the inline scripts, including the ones signup needs. /welcome stays
+  // dynamic and uncached for that reason.
   const nonce = btoa(crypto.randomUUID());
   const csp = buildCsp(nonce);
   const { pathname } = request.nextUrl;
@@ -150,10 +122,7 @@ export async function proxy(request: NextRequest) {
   const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
   if (!supabaseUrl || !supabaseAnonKey) {
-    if (isPublicPath(pathname)) {
-      cacheSignedOutWelcome(response, request, false);
-      return response;
-    }
+    if (isPublicPath(pathname)) return response;
     return redirectWithCsp('/welcome');
   }
 
@@ -327,7 +296,6 @@ export async function proxy(request: NextRequest) {
     }
   }
 
-  cacheSignedOutWelcome(response, request, user !== null);
   return response;
 }
 
