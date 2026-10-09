@@ -94,6 +94,25 @@ describe('unsupportedMarkdown', () => {
     ]);
   });
 
+  it('names inline emphasis the page would show as literal characters', () => {
+    const lines = ['an *italic* word', 'an _italic_ word', 'a ~~gone~~ word', 'a __bold__ word'];
+    for (const line of lines) {
+      expect(unsupportedMarkdown(line), line).toHaveLength(1);
+    }
+  });
+
+  it('allows bold, snake_case, underscores in links and code, and bullets', () => {
+    for (const line of [
+      'a **bold** word',
+      '- a **bold** bullet',
+      'the snake_case_name and a_b',
+      'a [link](https://example.com/a_b_c) here',
+      'run `npm run seed_demo*` now',
+    ]) {
+      expect(unsupportedMarkdown(line), line).toEqual([]);
+    }
+  });
+
   it('allows angle brackets inside code spans and table separators', () => {
     expect(unsupportedMarkdown('Links at `/i/<token>` open.\n\n| a |\n| --- |\n| b |')).toEqual([]);
   });

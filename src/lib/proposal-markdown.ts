@@ -11,7 +11,8 @@
  * - paragraphs
  * - flat bullet lists, numbered lists and `- [ ]` / `- [x]` task lists
  * - pipe tables
- * - `**bold**`, `` `code` `` and `[text](https://url)` links
+ * - `**bold**`, `` `code` `` and `[text](https://url)` links (no italics,
+ *   strikethrough or images)
  *
  * Anything else is not rendered as markup. `unsupportedMarkdown` names it, and
  * `proposal-markdown.test.ts` fails the build when the proposal uses it, so an
@@ -256,6 +257,18 @@ export function unsupportedMarkdown(source: string): UnsupportedMarkdown[] {
       else if (/^\s*(-{3,}|\*{3,}|_{3,})\s*$/.test(text)) add('horizontal rules are not rendered');
       else if (/<\/?[a-z][^>]*>/i.test(withoutCode)) add('raw HTML is never rendered');
       else if (/!\[[^\]]*\]\(/.test(withoutCode)) add('images are not rendered');
+      else {
+        // Inline emphasis the reader does not draw: it would show as literal
+        // delimiter characters. **bold** is the only emphasis it renders.
+        const plain = withoutCode
+          .replace(/\*\*[^*]+\*\*/g, '')
+          .replace(/^\s*[-*]\s+/, '');
+        if (plain.includes('*')) add('italics with * are not rendered; use **bold** or plain text');
+        else if (plain.includes('~~')) add('strikethrough is not rendered');
+        else if (/(^|[\s(])_{1,2}[^_\s][^_]*_{1,2}(?=$|[\s).,;:!?])/.test(plain)) {
+          add('emphasis with _ is not rendered; use **bold** or plain text');
+        }
+      }
     });
   return found;
 }

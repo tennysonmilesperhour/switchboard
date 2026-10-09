@@ -1250,6 +1250,12 @@ open to anyone who guesses the path, and nothing private belongs on it.
   typed nodes that React escapes. Links must be absolute `https:` (a
   `javascript:` link keeps its label and loses its href); raw HTML, images and
   nested constructs are not rendered and fail `npm test`.
+- **Analytics must not copy the token.** The client PostHog SDK captures
+  `$current_url` on every pageview, which on this route is the credential.
+  `src/lib/analytics/before-send.ts` drops every event captured on
+  `/proposal/...` and redacts the path from any other event that mentions it
+  (`$prev_pageview_pathname`, referrers). A new secret-link page adds its prefix
+  there. Server request logs still contain the path, as for `/i/<token>`.
 - **Rotate by changing the env var.** The link is a bearer credential: do not
   paste it where it will be indexed, and treat a leaked one as a reason to
   rotate.
