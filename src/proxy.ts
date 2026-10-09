@@ -30,6 +30,7 @@ const PUBLIC_PREFIXES = [
   '/verify-contact',
   '/verify-fact', // emailed fact-verification link; the page sends a signed-out visitor to sign in and back
   '/scope-verification', // client-facing checklist, shared by URL; nothing private on it
+  '/proposal', // token-gated page (PROPOSAL_ACCESS_TOKEN); the page itself answers 404 without it
   '/api/scope-feedback', // the checklist's feedback box; the client has no account by design
   '/api/scope-progress', // the checklist's shared board, readable by anyone with the link
   '/api/sms/inbound',

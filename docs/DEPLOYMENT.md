@@ -106,6 +106,11 @@ The app reads these (see `.env.example` for the full list). Set them in Vercel
 - `SCOPE_WATCH_EMAIL` — optional; where to write when the scope-of-work
   checklist gains a note or moves on. Needs Resend configured above. Unset means
   those notifications are simply off, and nothing else changes.
+- `PROPOSAL_ACCESS_TOKEN` - optional; the secret segment of the private page at
+  `/proposal/<token>`, which renders `docs/PROPOSAL.md`. At least 24 characters
+  (`openssl rand -hex 24`). Unset or shorter, the page shows the not-found screen to everyone.
+  Share the full link only with people who should read the fees and strategy,
+  and rotate it by changing the value.
 - `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_FROM_NUMBER`,
   `CONTACT_VERIFICATION_SECRET` — required together for phone verification
 - `NEXT_PUBLIC_VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY` — optional; web push

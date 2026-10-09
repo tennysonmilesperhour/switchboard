@@ -1229,6 +1229,34 @@ somebody else's screenshot, get a file served back executable, or talk the
 triage job into shipping a change that is not words?*
 
 
+## The private proposal page (a secret link, not a guessable path)
+
+`/proposal/<token>` renders `docs/PROPOSAL.md`, which holds fees and investor
+strategy. It is the opposite of `/scope-verification` on purpose: that page is
+open to anyone who guesses the path, and nothing private belongs on it.
+
+- **The token is the authorization**, as for `/i/<token>` and the calendar feed.
+  `proposalAccessGranted` compares it to `PROPOSAL_ACCESS_TOKEN` with
+  `bearerMatches` (constant-time) and fails closed: an unset secret, one under 24
+  characters, or an empty token all call `notFound()`: the app's ordinary
+  not-found screen, with no proposal text and (via `generateMetadata`) no
+  proposal title, so a wrong guess cannot confirm the page exists. The root
+  `loading.tsx` makes the status line a streamed 200 either way; the body is
+  what is gated.
+- **The page is public to the proxy, private to the route.** `/proposal` is in
+  `PUBLIC_PREFIXES` because the reader has no account; the gate is the route's
+  own check, never the UI. It is `noindex` and disallowed in `robots.ts`.
+- **The Markdown is data, not markup.** `src/lib/proposal-markdown.ts` produces
+  typed nodes that React escapes. Links must be absolute `https:` (a
+  `javascript:` link keeps its label and loses its href); raw HTML, images and
+  nested constructs are not rendered and fail `npm test`.
+- **Rotate by changing the env var.** The link is a bearer credential: do not
+  paste it where it will be indexed, and treat a leaked one as a reason to
+  rotate.
+
+Litmus test: *could a stranger who guesses `/proposal` or `/proposal/anything`
+learn that the page exists, or read a line of it?*
+
 ## Nearby plans (a host's opt-in, a band and nothing finer)
 
 Explore can show a host's Open Table to strangers in range
