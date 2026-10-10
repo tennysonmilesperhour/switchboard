@@ -276,6 +276,12 @@
     padding: 2px 7px; border-radius: 5px; height: fit-content; margin-top: 1px;
   }
 
+  .item-link { margin-top: 8px; font-size: 12.5px; }
+  .item-link a {
+    color: var(--green); font-weight: 600; text-decoration: underline;
+    text-underline-offset: 2px;
+  }
+
   .foot {
     margin-top: 36px; padding-top: 18px; border-top: 1px solid var(--line);
     font-size: 12px; color: var(--ink-faint); line-height: 1.6;
@@ -616,6 +622,18 @@
       { id:"K5", name:"Appearance presets", what:"Settings › Appearance offers new looks, including Afterparty, Guestlist and Prompt, which change typefaces, corners and colours across the whole app. The original Switchboard look stays the default.", verify:"Pick each new preset, confirm the app changes and the choice survives a reload, then switch back." },
       { id:"K6", name:"Private zones", what:"A zone can be visible only to people you let in, by link or by request. You can remove anyone later. Someone you pass on is told, and can ask once more after 30 days.", verify:"Create a private zone. From another account open its link and tap Ask to join; approve the request and confirm they can see the zone." },
     ]},
+
+    { id: "L", title: "Week of October 5 to 10, 2026", blurb: "This week\u2019s updates, each with a link to the feature and how to try it", items: [
+      { id:"L1", name:"Explore: Plans and People", what:"Explore now has a Plans and People toggle. Each side has a range picker (my area, nearby, farther out, anywhere), measured from your profile city rather than GPS, and a stack of cards you decide by swiping or with buttons. Hosts can opt a plan in to being shown to people nearby; strangers only ever see a rough distance band, never the venue or coordinates.", verify:"Open Explore, switch between Plans and People, change the range, and swipe or tap Pass and Interested on a few cards. On a plan you host, turn on the option to show it to people nearby and confirm a second account in range sees it with a distance band only.", link:{ href:"/discover", label:"Open Explore" } },
+      { id:"L2", name:"Look-back deck for past plans", what:"Plans that ended a day or more ago, which you hosted, co-hosted or said yes to, appear as a card deck in Reflections. Swipe left for not for me, right for liked, up for loved, down for didn\u2019t go. Buttons and arrow keys do the same. Answers are private and feed your energy map.", verify:"Open You and find Reflections. With a finished plan on your account, swipe a card each way and confirm it leaves the deck. Use the journal button on a card to add a note or tags.", link:{ href:"/you", label:"Open You" } },
+      { id:"L3", name:"Choose how long live location lasts", what:"Before and during a live location share you can pick a duration from 30 minutes up to 8 hours. Changing who can see you keeps the running time instead of resetting it.", verify:"On the map, start sharing and pick 30 minutes. Change who can see you and confirm the countdown keeps going. Pick a longer time while sharing and confirm the window restarts from now.", link:{ href:"/map", label:"Open the map" } },
+      { id:"L4", name:"Sharper map and faster live people", what:"The map is redrawn with vector tiles: sharper at every zoom, with a dark style that follows the app theme. One finger scrolls the page and two fingers move the map. People sharing live location refresh about every 8 seconds while the screen is visible.", verify:"Open the map on a phone and confirm it is crisp, then switch to dark mode and confirm the map follows. Scroll with one finger, pinch with two. Have a second account share live location and confirm their pin moves within about 10 seconds.", link:{ href:"/map", label:"Open the map" } },
+      { id:"L5", name:"Find each other", what:"Once two people match, their private room has a Find each other panel. Each shares exact location with only the other for an hour, sees the other on a map with distance and direction, and gets walking directions. A block ends it at once, and a point that goes quiet for 15 minutes is hidden.", verify:"With two matched accounts, open their room, start Find each other on both, and confirm each sees the other with distance and directions. Block from one account and confirm the points disappear.", link:{ href:"/rooms", label:"Open Rooms" } },
+      { id:"L6", name:"Message from a status, and nearby notices", what:"Tapping a friend\u2019s status now opens a direct conversation with them, with Make a plan at the bottom of the room. When someone turns a status on, discoverable friends who are sharing a live location within 5 km get one notification, at most once per pair every three hours.", verify:"From a second account, turn on a status. On the first account tap that friend\u2019s status on Home and confirm a conversation opens with Make a plan available. Confirm the nearby friend received one notification and no repeat inside three hours.", link:{ href:"/", label:"Open Home" } },
+      { id:"L7", name:"Near you on People, plus lanes and verified facts", what:"People has a Near you section listing discoverable people in your area who share geography. Discovery now has friends, dating and networking lanes with their own switches and preferences, a mood that raises or lowers your bar for up to 72 hours, and verified school or work facts proven by a mailed link to a matching email domain or by vouches.", verify:"Open People and confirm Near you lists a nearby discoverable account. Open Discovery settings, turn a lane on, set a mood and confirm it ends by itself. In Edit profile, add a school or employer and verify it by the emailed link.", link:{ href:"/discover/preferences", label:"Open Discovery settings" } },
+      { id:"L8", name:"Walkthrough tours", what:"A new account sees a short self-playing walkthrough after onboarding, with Skip on every frame. Six deeper walkthroughs (plans, deciding, people, rooms, places, settings) are listed at the top of Everything and each ends with a Try it link.", verify:"Open the first-run tour and tap Next through it, then Skip. Open Everything and play one of the deeper walkthroughs, then use its Try it link.", link:{ href:"/tour/welcome", label:"Play the first tour" } },
+      { id:"L9", name:"Tappable links in room messages", what:"Links pasted into a room message are now tappable. Long words, URLs and emails wrap inside their box instead of running off the side, and checkboxes keep their full size beside long labels on every screen width.", verify:"Paste a link and a very long URL into a room and confirm both are tappable and stay inside the message bubble on a narrow phone.", link:{ href:"/rooms", label:"Open Rooms" } },
+    ]},
   ];
 
   var ITEM_IDS = [];
@@ -885,6 +903,7 @@
             '</div>' +
             '<div class="item-what">' + esc(it.what) + '</div>' +
             '<div class="item-verify"><span class="vl">Try it</span><span>' + esc(it.verify) + '</span></div>' +
+            linkLine(it) +
             markLine(it.id) +
             '<button class="item-report" type="button" data-id="' + it.id + '" data-label="' + esc(it.name) + '">Report a problem</button>' +
           '</div>';
@@ -936,6 +955,14 @@
     }
     flushPending();
   });
+
+  // Items may carry a `link` (a path inside the app). Only same-site paths are
+  // drawn, so a typo in the data can never send the client somewhere else.
+  function linkLine(it) {
+    var l = it.link;
+    if (!l || typeof l.href !== "string" || l.href.charAt(0) !== "/" || l.href.charAt(1) === "/") return "";
+    return '<div class="item-link"><a href="' + esc(l.href) + '" target="_blank" rel="noopener">' + esc(l.label || "Open it") + ' &rarr;</a></div>';
+  }
 
   function esc(s) {
     var d = document.createElement("div");
