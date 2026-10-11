@@ -7,7 +7,10 @@ import { EmptyState } from '@/components/ui/EmptyState';
 import { COMMUNITY_COVENANT_SUMMARY } from '@/lib/legal';
 import { Glyph } from '@/components/ui/Glyph';
 
-export const metadata: Metadata = { title: 'Community' };
+export const metadata: Metadata = {
+  title: 'Community',
+  alternates: { canonical: '/community' },
+};
 
 export default async function CommunityPage() {
   const supabase = await createClient();

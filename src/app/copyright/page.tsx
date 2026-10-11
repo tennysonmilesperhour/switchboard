@@ -1,5 +1,10 @@
+import type { Metadata } from 'next';
 import Link from 'next/link';
 import { supportEmail } from '@/lib/contact';
+
+export const metadata: Metadata = {
+  alternates: { canonical: '/copyright' },
+};
 
 export default function CopyrightPage() {
   const email = supportEmail();

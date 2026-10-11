@@ -4,6 +4,7 @@ import { unstable_doesMiddlewareMatch } from 'next/experimental/testing/server';
 const createServerClient = vi.hoisted(() => vi.fn());
 vi.mock('@supabase/ssr', () => ({ createServerClient }));
 import { config, proxy } from './proxy';
+import { AUTH_BOUNCE_COOKIE } from '@/lib/auth-bounce';
 import { LEGAL_VERSION } from '@/lib/legal';
 beforeEach(() => {
   vi.stubEnv('VERCEL_ENV', 'production');
@@ -229,6 +230,51 @@ test('reads the auth server\'s user_banned answer as a suspension, not a sign-ou
   const response = await proxy(new NextRequest('https://switchboardsocial.me/plans'));
   expect(response.headers.get('location')).toBe('https://switchboardsocial.me/login?error=suspended');
   expect(signOut).toHaveBeenCalledWith({ scope: 'local' });
+});
+
+test('does not CDN-cache the marketing page, whose CSP nonce changes every request', async () => {
+  signedOut();
+  const response = await proxy(new NextRequest('https://switchboardsocial.me/welcome?account=deleted'));
+  expect(response.headers.get('x-middleware-next')).toBe('1');
+  expect(response.headers.get('Vercel-CDN-Cache-Control')).toBeNull();
+  expect(response.headers.get('Cache-Control') ?? '').not.toMatch(/s-maxage/);
+});
+
+test('does not CDN-cache other public pages or authenticated routes', async () => {
+  signedOut();
+  const privacy = await proxy(new NextRequest('https://switchboardsocial.me/privacy'));
+  expect(privacy.headers.get('x-middleware-next')).toBe('1');
+  expect(privacy.headers.get('Vercel-CDN-Cache-Control')).toBeNull();
+
+  signedInAs({ id: 'u1' });
+  const settings = await proxy(new NextRequest('https://switchboardsocial.me/settings'));
+  expect(settings.headers.get('x-middleware-next')).toBe('1');
+  expect(settings.headers.get('Vercel-CDN-Cache-Control')).toBeNull();
+
+  const home = await proxy(new NextRequest('https://switchboardsocial.me/'));
+  expect(home.headers.get('x-middleware-next')).toBe('1');
+  expect(home.headers.get('Vercel-CDN-Cache-Control')).toBeNull();
+});
+
+test('does not CDN-cache the marketing page once a session is present', async () => {
+  signedInAs({ id: 'u1' });
+  const redirected = await proxy(new NextRequest('https://switchboardsocial.me/welcome'));
+  expect(redirected.status).toBe(307);
+  expect(redirected.headers.get('location')).toBe('https://switchboardsocial.me/');
+  expect(redirected.headers.get('Vercel-CDN-Cache-Control')).toBeNull();
+
+  const rendered = await proxy(new NextRequest('https://switchboardsocial.me/welcome', {
+    headers: { cookie: `${AUTH_BOUNCE_COOKIE}=1` },
+  }));
+  expect(rendered.headers.get('x-middleware-next')).toBe('1');
+  expect(rendered.headers.has('location')).toBe(false);
+  expect(rendered.headers.get('Vercel-CDN-Cache-Control')).toBeNull();
+});
+
+test('does not CDN-cache a non-GET of the marketing page', async () => {
+  signedOut();
+  const response = await proxy(new NextRequest('https://switchboardsocial.me/welcome', { method: 'POST' }));
+  expect(response.headers.get('Vercel-CDN-Cache-Control')).toBeNull();
 });
 
 test('lets a banned session\'s Server Action through to requireUser instead of redirecting it', async () => {
