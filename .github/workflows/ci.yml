@@ -3,7 +3,11 @@ name: CI
 on:
   push:
     branches: [main]
+  # ready_for_review is not in the default set. Without it, a draft that
+  # becomes ready would keep the skipped Authenticated E2E result from the
+  # draft run.
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
   workflow_dispatch:
 
 # Cancel older PR runs when a newer commit needs testing. Each main or manual
@@ -66,6 +70,11 @@ jobs:
       - name: Smoke test
         run: npx playwright test
 
+  # The job always starts and reports success when the suite is skipped.
+  # A job-level `if` would mark the check skipped, and a required check that
+  # is skipped stays pending. The suite itself still runs on pushes to main,
+  # manual dispatch, and ready pull requests from anyone other than Dependabot
+  # when the diff is not docs-only.
   authenticated-e2e:
     name: Authenticated E2E
     runs-on: ubuntu-latest
@@ -85,10 +94,60 @@ jobs:
       RESEND_API_URL: http://127.0.0.1:54380/emails
 
     steps:
+      # Workflow-level paths filters would skip this job entirely. A skipped
+      # job leaves a required check pending, so the job always starts and the
+      # expensive steps below consult this output.
+      - name: Decide whether to run the suite
+        id: gate
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          run=true
+          reason="running"
+          if [ "${GITHUB_EVENT_NAME}" = "pull_request" ]; then
+            draft=$(jq -r '.pull_request.draft' "$GITHUB_EVENT_PATH")
+            author=$(jq -r '.pull_request.user.login' "$GITHUB_EVENT_PATH")
+            number=$(jq -r '.pull_request.number' "$GITHUB_EVENT_PATH")
+            if [ "$draft" = "true" ]; then
+              run=false
+              reason="draft pull request"
+            elif [ "$author" = "dependabot[bot]" ] || [ "${GITHUB_ACTOR}" = "dependabot[bot]" ]; then
+              run=false
+              reason="Dependabot pull request"
+            else
+              if ! files=$(gh api --paginate "repos/${GITHUB_REPOSITORY}/pulls/${number}/files" --jq '.[].filename'); then
+                echo "Could not list changed files." >&2
+                exit 1
+              fi
+              docs_only=true
+              count=0
+              while IFS= read -r file; do
+                [ -n "$file" ] || continue
+                count=$((count + 1))
+                case "$file" in
+                  *.md|.github/dependabot.yml) ;;
+                  *) docs_only=false ;;
+                esac
+              done < <(printf '%s\n' "$files")
+              if [ "$count" -eq 0 ] || [ "$docs_only" != "true" ]; then
+                run=true
+                reason="running"
+              else
+                run=false
+                reason="docs-only pull request"
+              fi
+            fi
+          fi
+          echo "run=${run}" >> "$GITHUB_OUTPUT"
+          echo "Authenticated E2E: ${reason}"
+
       - name: Check out repository
+        if: steps.gate.outputs.run == 'true'
         uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
 
       - name: Set up Node
+        if: steps.gate.outputs.run == 'true'
         uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
           node-version: 22
@@ -97,12 +156,15 @@ jobs:
       # Make room before pulling database images, not after the stack and app
       # have already consumed the runner's disk.
       - name: Ensure space for database and browser tests
+        if: steps.gate.outputs.run == 'true'
         run: bash scripts/ci/ensure-disk-space.sh 12
 
       - name: Install dependencies
+        if: steps.gate.outputs.run == 'true'
         run: npm ci
 
       - name: Set up Supabase CLI
+        if: steps.gate.outputs.run == 'true'
         uses: supabase/setup-cli@1dedf2c611547ede7232d26866dd3c56ab903bbb # v1.7.3
         with:
           version: 2.116.0
@@ -110,10 +172,12 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
 
       - name: Write a minimal local Supabase config
+        if: steps.gate.outputs.run == 'true'
         run: |
           [ -f supabase/config.toml ] || printf 'project_id = "switchboard"\n' > supabase/config.toml
 
       - name: Log in to ghcr.io
+        if: steps.gate.outputs.run == 'true'
         # Anonymous pulls from ghcr.io share a rate limit with every other
         # anonymous runner, and that limit refused postgres and realtime for
         # seven minutes straight. The job token's packages:read is enough to
@@ -121,19 +185,23 @@ jobs:
         run: echo "${{ github.token }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
 
       - name: Start local Supabase
+        if: steps.gate.outputs.run == 'true'
         run: node scripts/ci/start-supabase.mjs
 
       # Run against the same fresh migrations and seed as the browser tests.
       # pgTAP tests roll back their transactions, before E2E fixtures are added.
       - name: Run pgTAP security tests
+        if: steps.gate.outputs.run == 'true'
         run: supabase test db
 
       - name: Verify generated database types
+        if: steps.gate.outputs.run == 'true'
         run: |
           supabase gen types typescript --local > "$RUNNER_TEMP/database.types.ts"
           diff -u src/lib/supabase/database.types.ts "$RUNNER_TEMP/database.types.ts"
 
       - name: Export local Supabase env
+        if: steps.gate.outputs.run == 'true'
         run: |
           # `supabase status -o env` emits shell-quoted values
           # (KEY="value"). $GITHUB_ENV does not interpret shell quoting, so the
@@ -153,25 +221,31 @@ jobs:
           echo "NEXT_PUBLIC_APP_URL=http://localhost:3000" >> "$GITHUB_ENV"
 
       - name: Verify account export and complete deletion
+        if: steps.gate.outputs.run == 'true'
         run: npx vitest run src/lib/server/account-data.integration.test.ts
 
       - name: Seed authenticated E2E fixtures
+        if: steps.gate.outputs.run == 'true'
         run: node e2e/seed.mjs
 
       # After the Supabase env is exported, so the client bundle is built
       # against the same project the tests run against.
       - name: Build
+        if: steps.gate.outputs.run == 'true'
         run: npm run build
 
       - name: Ensure remaining space for browser tests
+        if: steps.gate.outputs.run == 'true'
         run: bash scripts/ci/ensure-disk-space.sh 8
 
       # This job is the desktop authenticated contract; the verify job above
       # already runs the public smoke contract against both desktop and mobile.
       - name: Install Playwright browsers
+        if: steps.gate.outputs.run == 'true'
         run: npx playwright install --with-deps chromium
 
       - name: Run authenticated journey tests
+        if: steps.gate.outputs.run == 'true'
         run: npx playwright test --project=desktop e2e/authed.spec.ts e2e/invite-links.spec.ts e2e/client-signoff.spec.ts e2e/places.spec.ts e2e/accounts.spec.ts e2e/plan-lifecycle.spec.ts e2e/safety.spec.ts e2e/rooms.spec.ts e2e/people-places.spec.ts e2e/plans-more.spec.ts e2e/settings.spec.ts
         env:
           PLAYWRIGHT_WEB_SERVER: npm run start

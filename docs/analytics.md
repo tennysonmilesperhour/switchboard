@@ -23,6 +23,13 @@ Both leave dev quiet if you leave the keys unset. Every event — client and
 server — carries `app: "switchboard"` so this product's data stays cleanly
 separable from anything else sharing the PostHog project.
 
+### Secret-link pages are never captured
+
+`before_send` (`src/lib/analytics/before-send.ts`) drops every client event
+captured on `/proposal/<token>` and redacts that path from any other event, so a
+bearer token in a URL never reaches PostHog. Add the prefix there when a new page
+authorizes by a secret path segment.
+
 ### The `/ingest` reverse proxy
 
 The browser SDK talks to a **same-origin** path, `/ingest`, which `next.config.ts`

@@ -94,9 +94,13 @@ than timing out.
 ## In CI
 
 The **Authenticated E2E** job in `.github/workflows/ci.yml` does all of the
-above on every PR: `supabase start`, `node e2e/seed.mjs`, build, then every
-authenticated spec with `E2E_DB=1`. The job sets the four variables above at
-job level, with the same test-only values, so the build, the server and the
+above on every push to `main`, on manual dispatch, and on a pull request that
+is ready for review, was not opened by Dependabot, and changes more than
+documentation (`*.md`, including `README.md`, and `.github/dependabot.yml`):
+`supabase start`, `node e2e/seed.mjs`, build, then every authenticated spec
+with `E2E_DB=1`. Draft, Dependabot, and docs-only pull requests start the job
+and report success without those steps. The job sets the four variables above
+at job level, with the same test-only values, so the build, the server and the
 specs agree.
 
 ## Fixtures owe the product its rules

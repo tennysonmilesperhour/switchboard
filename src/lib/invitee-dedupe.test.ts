@@ -24,8 +24,8 @@ describe('deliveryKey', () => {
   });
 
   it('is case-insensitive for email and for handles', () => {
-    expect(deliveryKey(guest('a', 'Boaz', 'BoazGBarfuss@Gmail.com'))).toBe(
-      'email:boazgbarfuss@gmail.com',
+    expect(deliveryKey(guest('a', 'Boaz', 'Boaz.Sample@Gmail.com'))).toBe(
+      'email:boaz.sample@gmail.com',
     );
     expect(deliveryKey(guest('a', 'Boaz', '@Boaz'))).toBe('handle:boaz');
   });
@@ -119,7 +119,7 @@ describe('likelyDuplicates', () => {
     member('k2', 'Xochitl Sarah Millington', 'p-xochitl'),
     member('k3', 'Talia Barfuss', 'p-talia'),
     member('k4', 'KATHRYN MACDONALD POELMAN', 'p-kathryn'),
-    guest('k5', 'boazgbarfuss@gmail.com', 'boazgbarfuss@gmail.com'),
+    guest('k5', 'boaz.sample@gmail.com', 'boaz.sample@gmail.com'),
   ];
 
   it('catches the pair the host caught by eye, and nothing else', () => {
