@@ -114,8 +114,22 @@ describe('the checklist itself', () => {
     const linked = items.filter((item) => item.link);
     expect(linked.length, 'the weekly section should link to its features').toBeGreaterThan(0);
     for (const item of linked) {
-      expect(item.link?.href, `${item.id}.link.href`).toMatch(/^\/(?!\/)/);
+      expect(item.link?.href, `${item.id}.link.href`).toMatch(/^\/(?![/\\])/);
+      expect(item.link?.href, `${item.id}.link.href has a backslash`).not.toContain('\\');
       expect(item.link?.label?.trim(), `${item.id}.link.label`).toBeTruthy();
+    }
+  });
+
+  it('refuses link hrefs that browsers resolve to another site', () => {
+    const script = inlineScript();
+    const guard = /function linkLine\(it\) \{[\s\S]*?\n  \}/.exec(script)?.[0] ?? '';
+    const run = (href: string) =>
+      runInNewContext(`${guard}; linkLine({ link: { href: ${JSON.stringify(href)}, label: 'x' } })`, {
+        esc: (v: string) => v,
+      }) as string;
+    expect(run('/map')).toContain('href="/map"');
+    for (const bad of ['//evil.example', '/\\evil.example', 'https://evil.example', 'map']) {
+      expect(run(bad), bad).toBe('');
     }
   });
 

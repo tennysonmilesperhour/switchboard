@@ -960,7 +960,7 @@
   // drawn, so a typo in the data can never send the client somewhere else.
   function linkLine(it) {
     var l = it.link;
-    if (!l || typeof l.href !== "string" || l.href.charAt(0) !== "/" || l.href.charAt(1) === "/") return "";
+    if (!l || typeof l.href !== "string" || !/^\/(?![\/\\])/.test(l.href) || l.href.indexOf("\\") !== -1) return "";
     return '<div class="item-link"><a href="' + esc(l.href) + '" target="_blank" rel="noopener">' + esc(l.label || "Open it") + ' &rarr;</a></div>';
   }
 
