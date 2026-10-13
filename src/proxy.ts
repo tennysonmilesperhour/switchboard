@@ -91,6 +91,12 @@ export async function proxy(request: NextRequest) {
   // Next.js can extract it and stamp its framework/bundle <script> tags, and
   // the CSP rides the RESPONSE so the browser enforces it. Rebuilt on each
   // NextResponse.next so Supabase cookie refreshes keep both.
+  //
+  // Nonce-CSP pages must not be CDN-cached: no s-maxage, no ISR. This proxy
+  // runs before the cache and issues a new nonce on every request, while a
+  // cached document still carries the previous one. The browser then blocks
+  // the inline scripts, including the ones signup needs. /welcome stays
+  // dynamic and uncached for that reason.
   const nonce = btoa(crypto.randomUUID());
   const csp = buildCsp(nonce);
   const { pathname } = request.nextUrl;

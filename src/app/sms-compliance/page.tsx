@@ -8,6 +8,7 @@ export const metadata: Metadata = {
   title: 'SMS Program Compliance',
   description:
     'Public SMS program and consent-flow details for Switchboard Social transactional text notifications.',
+  alternates: { canonical: '/sms-compliance' },
 };
 
 const sampleMessages = [

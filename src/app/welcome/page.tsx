@@ -35,6 +35,9 @@ export const metadata: Metadata = {
     title: 'Switchboard - plans without pressure',
     description: PITCH,
   },
+  // metadataBase in the root layout expands this to
+  // https://switchboardsocial.me/welcome in production.
+  alternates: { canonical: '/welcome' },
 };
 
 const FEATURES = [
@@ -167,6 +170,12 @@ export default async function WelcomePage({
 
       <footer className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1 pb-10 text-center text-xs text-ink-soft">
         <span>© 2026 Switchboard</span>
+        <a
+          href="https://tennysontaggart.com"
+          className="inline-flex min-h-11 items-center hover:text-ink"
+        >
+          by Tennyson Taggart
+        </a>
         <Link href="/privacy" className="inline-flex min-h-11 items-center hover:text-ink">Privacy</Link>
         <Link href="/terms" className="inline-flex min-h-11 items-center hover:text-ink">Terms</Link>
         <Link href="/community" className="inline-flex min-h-11 items-center hover:text-ink">Community</Link>

@@ -6,7 +6,10 @@ import { supportEmail } from '@/lib/contact';
 import { SUSPENDED_LOGIN_ERROR } from '@/lib/suspension';
 import { LoginForm } from './LoginForm';
 
-export const metadata: Metadata = { title: 'Sign in' };
+export const metadata: Metadata = {
+  title: 'Sign in',
+  alternates: { canonical: '/login' },
+};
 
 /**
  * `?error=` values the auth routes redirect here with, and the code each one
