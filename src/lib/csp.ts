@@ -112,6 +112,7 @@ export function buildCsp(
     "object-src 'none'",
     "base-uri 'self'",
     "form-action 'self'",
-    "frame-ancestors 'none'",
+    // Permit the owner's live portfolio preview; unrelated origins stay blocked.
+    "frame-ancestors https://tennysontaggart.com https://www.tennysontaggart.com https://tennyson-taggart.swanzai.chatgpt.site",
   ].join('; ');
 }
