@@ -93,6 +93,20 @@ describe('buildCsp', () => {
     expect(hosted, 'only our project, not every Supabase project').not.toContain('*.supabase.co');
   });
 
+  it('allows only the three portfolio origins to frame the app', () => {
+    const policy = csp({ isDev: false });
+    const ancestors = policy.split('; ').find(part => part.startsWith('frame-ancestors '));
+    expect(ancestors?.split(' ').slice(1)).toEqual([
+      'https://tennysontaggart.com',
+      'https://www.tennysontaggart.com',
+      'https://tennyson-taggart.swanzai.chatgpt.site',
+    ]);
+    // The framing exception must not relax script, form, or nested-frame rules.
+    expect(policy).toContain("script-src 'self' 'nonce-n0nce'");
+    expect(policy).toContain("form-action 'self'");
+    expect(policy).toContain("frame-src 'none'");
+  });
+
   it('keeps the directives that make an injected script useless', () => {
     const policy = csp({ isDev: false });
     for (const directive of [
@@ -100,7 +114,6 @@ describe('buildCsp', () => {
       "object-src 'none'",
       "base-uri 'self'",
       "form-action 'self'",
-      "frame-ancestors 'none'",
       "frame-src 'none'",
     ]) {
       expect(policy).toContain(directive);
