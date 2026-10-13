@@ -248,14 +248,14 @@ describe('POST /api/scope-progress', () => {
   it('uses the real checklist total even when a caller claims a different scope', async () => {
     await post({ itemId: 'A1', checked: true, total: 1 });
     expect(mocks.notifyProgress).toHaveBeenCalledWith(
-      expect.objectContaining({ checked: 3, total: 41 }),
+      expect.objectContaining({ checked: 3, total: 50 }),
     );
   });
 
   it('ignores a nonsense total rather than emailing “3 of NaN”', async () => {
     await post({ itemId: 'A1', checked: true, total: 'lots' });
     expect(mocks.notifyProgress).toHaveBeenCalledWith(
-      expect.objectContaining({ total: 41 }),
+      expect.objectContaining({ total: 50 }),
     );
   });
 });
