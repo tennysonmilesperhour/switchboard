@@ -41,5 +41,8 @@
     "tailwindcss": "^4",
     "typescript": "^5",
     "vitest": "^4.1.9"
+  },
+  "overrides": {
+    "zod": "4.6.6"
   }
 }
