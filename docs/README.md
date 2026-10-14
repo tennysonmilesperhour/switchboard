@@ -46,6 +46,12 @@ files are historical evidence, never a source of current product truth.
 | [`archive/COMPLETION-PLAN-2026-09.md`](archive/COMPLETION-PLAN-2026-09.md) | September 29 completeness audit, its 27 decisions, and the work built in PR #223; owner actions carried into `DOCKET.md`. |
 | [`archive/WEEKLY-PLAN-2026-08-11.md`](archive/WEEKLY-PLAN-2026-08-11.md) | Completed six-item weekly plan. |
 
+## Research
+
+| File | What it is |
+|---|---|
+| [`research/timeleft-onboarding.md`](research/timeleft-onboarding.md) | How Timeleft interviews and matches new users, and proposed changes to Switchboard onboarding and profile creation. |
+
 ## Historical specs
 
 | File | Historical purpose |
