@@ -100,6 +100,10 @@ const KIND_TO_CATEGORY: Record<string, NotificationCategory> = {
   event_invite: 'plans',
   rsvp_accepted: 'plans',
   rsvp_declined_note: 'plans',
+  // An Open Table guest gave their seat back the day before (to the host), and
+  // the seat went to the next person waiting (to them).
+  seat_released: 'plans',
+  seat_opened: 'plans',
   join_request: 'plans',
   join_approved: 'plans',
   event_updated: 'plans',

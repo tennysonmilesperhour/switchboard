@@ -364,3 +364,17 @@ onboarding at app.timeleft.com would answer them:
   Trustpilot https://www.trustpilot.com/review/timeleft.com
 - Competitors: TechCrunch on 222 https://techcrunch.com/2022/11/14/2440702/ ,
   TechCrunch on Pie https://techcrunch.com/2025/03/04/andy-dunns-new-app-pie-uses-ai-to-help-you-make-friends
+
+## Part 6. Follow-up ideas built
+
+From the ideas list that came out of this research, three are built:
+
+- **Why you two** (`20261014122000_match_room_why.sql`, `src/lib/match-why.ts`): a match
+  room opens by saying how the pair matched (introducer, shared plan, or what both
+  tapped) and up to three things both picked, under the same `discovery_interests`
+  rule as the intro hint.
+- **Same crew again** (`src/lib/same-crew.ts`): two or more hang-again matches from one
+  plan put a Home card up with a new plan already inviting all of them.
+- **Still coming?** (`20261014123000_attendance_check.sql`): in the 36 hours before an
+  Open Table, a guest confirms or gives the seat back; a seat given back goes to the
+  first person on the waitlist.

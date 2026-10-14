@@ -23,11 +23,15 @@ import {
   MatchmakerCard,
   HangAgainCard,
   type HangAgainCardData,
+  AttendanceCard,
+  type AttendanceCheckData,
+  SameCrewCard,
   RitualCard,
   type ProposalCardData,
   type RitualCardData,
 } from '@/components/home/HomeCards';
 import { getReconnectionSuggestions } from '@/lib/server/radar';
+import { loadSameCrews } from '@/lib/server/same-crew';
 import { formatDateTime, formatRelative } from '@/lib/format';
 import { greetingFor } from '@/lib/greeting';
 import { resolveDefaultSignalCircle } from '@/lib/signal-audience';
@@ -56,6 +60,7 @@ const HOME_SECTIONS = {
   radar: { area: 'home.radar', code: 'SB-RADAR-LOAD' },
   reflections: { area: 'home.reflections', code: 'SB-ENERGY-LOAD' },
   hangAgain: { area: 'home.hang-again', code: 'SB-HANG-LOAD' },
+  attendance: { area: 'home.attendance', code: 'SB-SEAT-LOAD' },
 } as const satisfies Record<string, { area: string; code: ErrorCode }>;
 
 type HomeSection = keyof typeof HOME_SECTIONS;
@@ -233,6 +238,8 @@ export default async function HomePage() {
     { data: energyLogged, error: energyLoggedError },
     { data: upcomingRows, error: upcomingError },
     { data: hangAgainRows, error: hangAgainError },
+    { data: attendanceRows, error: attendanceError },
+    sameCrewResult,
   ] = await Promise.all([
     supabase.rpc('my_matchmaker_proposals'),
     supabase
@@ -272,9 +279,24 @@ export default async function HomePage() {
     // People from finished plans you're not connected to (R7). The function
     // decides who counts; Home only renders what it returns.
     supabase.rpc('hang_again_prompts'),
+    // Accepted Open Table seats starting within a day and a half (idea 6).
+    supabase.rpc('attendance_checks'),
+    // Two or more people from one plan who all matched with you (idea 2). Its
+    // failure is reported with the hang-again section it sits beside.
+    loadSameCrews(supabase, user.id).catch((error: unknown) => ({ crews: [], error })),
   ]);
   check('introductions', 'matchmaker-proposals', proposalError);
   check('hangAgain', 'hang-again-prompts', hangAgainError);
+  check('hangAgain', 'same-crew', sameCrewResult.error);
+  check('attendance', 'attendance-checks', attendanceError);
+  const sameCrews = sameCrewResult.crews;
+  const attendanceChecks: AttendanceCheckData[] = (attendanceRows ?? []).map((row) => ({
+    inviteId: row.invite_id,
+    eventId: row.event_id,
+    title: row.title,
+    startsAt: row.starts_at,
+    timeZone: row.time_zone,
+  }));
   check('rituals', 'rituals', ritualError);
   check('radar', 'reconnection', radarResult.error);
   check('reflections', 'recent-past', recentPastError);
@@ -594,6 +616,29 @@ export default async function HomePage() {
                   eventId={event.id}
                   eventTitle={event.title}
                 />
+              ))}
+            </div>
+          </section>
+        )}
+
+        {/* Still coming? (the day before an Open Table) */}
+        {failed.has('attendance') && <SectionError section="attendance" />}
+        {attendanceChecks.length > 0 && (
+          <section aria-label="Still coming">
+            <div className="space-y-2.5">
+              {attendanceChecks.map((check) => (
+                <AttendanceCard key={check.inviteId} check={check} />
+              ))}
+            </div>
+          </section>
+        )}
+
+        {/* Same crew again (two or more hang-again matches from one plan) */}
+        {sameCrews.length > 0 && (
+          <section aria-label="Same crew again">
+            <div className="space-y-2.5">
+              {sameCrews.map((crew) => (
+                <SameCrewCard key={crew.eventId} crew={crew} />
               ))}
             </div>
           </section>

@@ -612,6 +612,11 @@ const REGISTRY = {
     fix: 'Reload the page.',
     actor: 'reader',
   },
+  'SB-SEAT-LOAD': {
+    message: 'Your upcoming Open Table seats didn’t load.',
+    fix: 'Reload the page. Your seats are unchanged.',
+    actor: 'reader',
+  },
   'SB-HANG-LOAD': {
     message: 'People from your recent plans didn’t load.',
     fix: 'Reload the page.',
@@ -874,6 +879,13 @@ const REGISTRY = {
   },
   // "Hang out again?" after a plan. The refusal never says why: the reason can
   // be a block, which the person answering must not learn.
+  // "Still coming?" before an Open Table. A refusal means the window closed or
+  // the seat is no longer yours; either way the seat is as it was.
+  'SB-SEAT-SAVE': {
+    message: 'That answer about your seat didn’t save.',
+    fix: 'Reload the plan to see where your seat stands.',
+    actor: 'reader',
+  },
   'SB-HANG-SAVE': {
     message: 'That answer didn’t save.',
     fix: 'Reload Home and try again.',
@@ -1343,6 +1355,7 @@ const AREA_CODES: Record<string, ErrorCode> = {
   'mutual.respond': 'SB-MUTUAL-SAVE',
   'mutual.unmatch': 'SB-MUTUAL-SAVE',
   'hang-again.answer': 'SB-HANG-SAVE',
+  'attendance.confirm': 'SB-SEAT-SAVE',
   'ritual.create': 'SB-RITUAL-SAVE',
   'ritual.update': 'SB-RITUAL-SAVE',
   'ritual.skip': 'SB-RITUAL-SAVE',
@@ -1403,6 +1416,7 @@ const AREA_CODES: Record<string, ErrorCode> = {
   'home.radar': 'SB-RADAR-LOAD',
   'home.reflections': 'SB-ENERGY-LOAD',
   'home.hang-again': 'SB-HANG-LOAD',
+  'home.attendance': 'SB-SEAT-LOAD',
   'notifications.load': 'SB-NOTIFY-LOAD',
   'notifications.invites': 'SB-INVITE-LOAD',
   'notifications.matches': 'SB-MATCH-LOAD',

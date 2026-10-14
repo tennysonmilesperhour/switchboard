@@ -10,6 +10,11 @@ import { useToast } from '@/components/ui/Toast';
 import { logEnergy, type Feeling } from '@/lib/actions/energy';
 import { respondToIntroduction } from '@/lib/actions/matchmaker';
 import { answerHangAgain } from '@/lib/actions/hang-again';
+import { listOf } from '@/lib/match-why';
+import { confirmAttendance } from '@/lib/actions/attendance';
+import { useConfirm } from '@/components/ui/ConfirmDialog';
+import { formatDateTime } from '@/lib/format';
+import type { CrewCardData } from '@/lib/server/same-crew';
 import { respondToRitual, skipRitual } from '@/lib/actions/rituals';
 
 /* One-tap private reflection after an event. */
@@ -314,13 +319,6 @@ export function RitualCard({ ritual }: { ritual: RitualCardData }) {
   return null;
 }
 
-/** "a", "a and b", "a, b, and c". */
-function listOf(items: string[]): string {
-  if (items.length <= 1) return items.join('');
-  if (items.length === 2) return `${items[0]} and ${items[1]}`;
-  return `${items.slice(0, -1).join(', ')}, and ${items[items.length - 1]}`;
-}
-
 /* "Hang out again?" about one person from a finished plan. Private both ways. */
 export interface HangAgainCardData {
   eventId: string;
@@ -405,6 +403,118 @@ export function HangAgainCard({ prompt }: { prompt: HangAgainCardData }) {
           Not really
         </Button>
       </div>
+    </Card>
+  );
+}
+
+/* "Still coming?" in the day and a half before an Open Table. */
+export interface AttendanceCheckData {
+  inviteId: string;
+  eventId: string;
+  title: string;
+  startsAt: string;
+  timeZone: string | null;
+}
+
+export function AttendanceCard({ check }: { check: AttendanceCheckData }) {
+  const [pending, startTransition] = useTransition();
+  const [done, setDone] = useState<null | 'confirmed' | 'released'>(null);
+  const toast = useToast();
+  const confirm = useConfirm();
+
+  async function answer(coming: boolean) {
+    if (!coming) {
+      const ok = await confirm({
+        title: 'Give your seat back?',
+        body: 'The host hears that a seat opened, and it goes to the next person waiting. You can’t take it back after.',
+        confirmLabel: 'Give it back',
+        danger: true,
+      });
+      if (!ok) return;
+    }
+    startTransition(async () => {
+      try {
+        const res = await confirmAttendance(check.inviteId, coming);
+        if (!res.ok) {
+          toast.error(res.error ?? 'Could not save that. Try again.', res.code);
+          return;
+        }
+        setDone(res.outcome ?? 'confirmed');
+      } catch {
+        toast.error('Could not save that. Try again.');
+      }
+    });
+  }
+
+  if (done) {
+    return (
+      <Card tone="cream" className="animate-rise">
+        <p className="text-sm text-ink-soft">
+          {done === 'confirmed'
+            ? 'See you there.'
+            : 'Thanks for saying so. Your seat went back to the table.'}
+        </p>
+      </Card>
+    );
+  }
+
+  return (
+    <Card tone="gold">
+      <p className="text-sm">
+        Still coming to{' '}
+        <Link href={`/events/${check.eventId}`} className="font-bold hover:underline">
+          {check.title}
+        </Link>
+        ?
+      </p>
+      <p className="text-xs text-ink-faint mt-0.5">
+        {formatDateTime(check.startsAt, check.timeZone)}. The host is counting
+        seats, and someone may be waiting for one.
+      </p>
+      <div className="flex gap-2 mt-3">
+        <Button
+          variant="accept"
+          size="sm"
+          className="flex-1"
+          disabled={pending}
+          onClick={() => void answer(true)}
+        >
+          I’ll be there
+        </Button>
+        <Button
+          variant="ghost"
+          size="sm"
+          className="flex-1"
+          disabled={pending}
+          onClick={() => void answer(false)}
+        >
+          Can’t make it
+        </Button>
+      </div>
+    </Card>
+  );
+}
+
+/* Two or more people from one plan who all want to hang out again with you. */
+export function SameCrewCard({ crew }: { crew: CrewCardData }) {
+  const names = crew.members.map((member) => member.name.split(' ')[0]);
+  return (
+    <Card tone="sage">
+      <p className="text-xs uppercase tracking-wide text-sage-deep font-medium">
+        Same crew again?
+      </p>
+      <p className="text-sm mt-1.5">
+        You, {listOf(names)} all said yes to hanging out again after{' '}
+        <strong>{crew.eventTitle}</strong>.
+      </p>
+      <div className="flex -space-x-2 mt-2" aria-hidden>
+        {crew.members.map((member) => (
+          <Avatar key={member.id} name={member.name} seed={member.id} size="sm" />
+        ))}
+      </div>
+      <Link href={crew.href} className="inline-block mt-3">
+        <Button size="sm">Plan something with them</Button>
+      </Link>
     </Card>
   );
 }

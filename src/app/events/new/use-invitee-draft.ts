@@ -43,13 +43,13 @@ import {
 export function useInviteeDraft({
   userId,
   friends,
-  initialInviteeId,
+  initialInviteeIds,
   suggestedWindowMinutes,
   onError,
 }: {
   userId: string;
   friends: WizardFriend[];
-  initialInviteeId: string | null;
+  initialInviteeIds: string[];
   /** The response window a freshly added person starts with. */
   suggestedWindowMinutes: number;
   /** Where a failure that is not about one field goes. */
@@ -57,17 +57,16 @@ export function useInviteeDraft({
 }) {
   // People & order
   const [invitees, setInvitees] = useState<DraftInvitee[]>(() => {
-    const preselected = friends.find((f) => f.id === initialInviteeId);
-    if (!preselected) return [];
-    return [
-      {
-        key: preselected.id,
-        profileId: preselected.id,
-        name: preselected.name,
+    return initialInviteeIds
+      .map((id) => friends.find((f) => f.id === id))
+      .filter((friend): friend is WizardFriend => Boolean(friend))
+      .map((friend) => ({
+        key: friend.id,
+        profileId: friend.id,
+        name: friend.name,
         groupStage: 0,
         windowMinutes: 24 * 60,
-      },
-    ];
+      }));
   });
   /**
    * Pairs the host has looked at and called two different people, as

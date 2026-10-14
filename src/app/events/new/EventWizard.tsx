@@ -45,7 +45,7 @@ export function EventWizard({
   initialTitle = '',
   initialDescription = '',
   ritualId = null,
-  initialInviteeId = null,
+  initialInviteeIds = [],
   initialDecide = false,
   initialError = null,
   defaultPace = 'standard',
@@ -59,7 +59,7 @@ export function EventWizard({
   initialTitle?: string;
   initialDescription?: string;
   ritualId?: string | null;
-  initialInviteeId?: string | null;
+  initialInviteeIds?: string[];
   initialDecide?: boolean;
   initialError?: string | null;
   /** Host's tempo, from the opt-in "Tune my defaults" operator setting. */
@@ -157,7 +157,7 @@ export function EventWizard({
   const people = useInviteeDraft({
     userId,
     friends,
-    initialInviteeId,
+    initialInviteeIds,
     suggestedWindowMinutes: suggested.windowMinutes,
     onError: setSubmitError,
   });

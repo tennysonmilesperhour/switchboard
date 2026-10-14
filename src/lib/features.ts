@@ -195,6 +195,14 @@ export const FEATURE_GROUPS: readonly FeatureGroup[] = [
         href: '/discover',
       },
       {
+        id: 'still-coming',
+        title: 'Still coming?',
+        blurb:
+          'In the day and a half before an Open Table, Home asks each guest to confirm. Someone who can’t make it gives their seat back in one tap, and it goes straight to the next person waiting. No score, no record beyond the no itself.',
+        where: 'Home, the day before an Open Table you said yes to',
+        start: { href: '/', label: 'Home' },
+      },
+      {
         id: 'privacy-access',
         title: 'Privacy and access',
         blurb:
@@ -407,6 +415,22 @@ export const FEATURE_GROUPS: readonly FeatureGroup[] = [
           'After a plan is over, Home asks about the people you met there that you aren’t connected to yet. Say yes and it stays private unless they say yes too; then you both hear at once and get a room to say hi. A no is never seen.',
         where: 'Home, for two weeks after a plan you went to',
         start: { href: '/', label: 'Home' },
+      },
+      {
+        id: 'same-crew',
+        title: 'Same crew again',
+        blurb:
+          'When two or more people from one plan all said yes to hanging out again with you, Home offers a new plan with all of them already on the list.',
+        where: 'Home, after hang-out-again matches from the same plan',
+        start: { href: '/', label: 'Home' },
+      },
+      {
+        id: 'why-you-matched',
+        title: 'Why you two',
+        blurb:
+          'A match room opens by saying how the two of you matched: the friend who introduced you, the plan you were both at, or what you both tapped, plus up to three things you both picked.',
+        where: 'Rooms → any match',
+        href: '/rooms',
       },
       {
         id: 'rituals',
