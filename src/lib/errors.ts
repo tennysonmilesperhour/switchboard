@@ -612,6 +612,11 @@ const REGISTRY = {
     fix: 'Reload the page.',
     actor: 'reader',
   },
+  'SB-HANG-LOAD': {
+    message: 'People from your recent plans didn’t load.',
+    fix: 'Reload the page.',
+    actor: 'reader',
+  },
   'SB-REFLECT-LOAD': {
     message: 'Your look-back deck didn’t load.',
     fix: 'Reload the page. Nothing you already swiped was lost.',
@@ -865,6 +870,13 @@ const REGISTRY = {
   'SB-MUTUAL-SAVE': {
     message: 'That Mutual update didn’t save.',
     fix: 'Reload Mutual and try again.',
+    actor: 'reader',
+  },
+  // "Hang out again?" after a plan. The refusal never says why: the reason can
+  // be a block, which the person answering must not learn.
+  'SB-HANG-SAVE': {
+    message: 'That answer didn’t save.',
+    fix: 'Reload Home and try again.',
     actor: 'reader',
   },
   'SB-RITUAL-SAVE': {
@@ -1330,6 +1342,7 @@ const AREA_CODES: Record<string, ErrorCode> = {
   'mutual.intent': 'SB-MUTUAL-SAVE',
   'mutual.respond': 'SB-MUTUAL-SAVE',
   'mutual.unmatch': 'SB-MUTUAL-SAVE',
+  'hang-again.answer': 'SB-HANG-SAVE',
   'ritual.create': 'SB-RITUAL-SAVE',
   'ritual.update': 'SB-RITUAL-SAVE',
   'ritual.skip': 'SB-RITUAL-SAVE',
@@ -1389,6 +1402,7 @@ const AREA_CODES: Record<string, ErrorCode> = {
   'home.rituals': 'SB-RITUAL-LOAD',
   'home.radar': 'SB-RADAR-LOAD',
   'home.reflections': 'SB-ENERGY-LOAD',
+  'home.hang-again': 'SB-HANG-LOAD',
   'notifications.load': 'SB-NOTIFY-LOAD',
   'notifications.invites': 'SB-INVITE-LOAD',
   'notifications.matches': 'SB-MATCH-LOAD',

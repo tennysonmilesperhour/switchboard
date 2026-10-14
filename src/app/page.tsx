@@ -21,6 +21,8 @@ import { passportProgress } from '@/lib/passport';
 import {
   EnergyPrompt,
   MatchmakerCard,
+  HangAgainCard,
+  type HangAgainCardData,
   RitualCard,
   type ProposalCardData,
   type RitualCardData,
@@ -53,6 +55,7 @@ const HOME_SECTIONS = {
   rituals: { area: 'home.rituals', code: 'SB-RITUAL-LOAD' },
   radar: { area: 'home.radar', code: 'SB-RADAR-LOAD' },
   reflections: { area: 'home.reflections', code: 'SB-ENERGY-LOAD' },
+  hangAgain: { area: 'home.hang-again', code: 'SB-HANG-LOAD' },
 } as const satisfies Record<string, { area: string; code: ErrorCode }>;
 
 type HomeSection = keyof typeof HOME_SECTIONS;
@@ -229,6 +232,7 @@ export default async function HomePage() {
     { data: recentPast, error: recentPastError },
     { data: energyLogged, error: energyLoggedError },
     { data: upcomingRows, error: upcomingError },
+    { data: hangAgainRows, error: hangAgainError },
   ] = await Promise.all([
     supabase.rpc('my_matchmaker_proposals'),
     supabase
@@ -265,8 +269,12 @@ export default async function HomePage() {
       .or(`starts_at.is.null,starts_at.gte.${nowIso}`)
       .order('starts_at', { ascending: true, nullsFirst: false })
       .limit(8),
+    // People from finished plans you're not connected to (R7). The function
+    // decides who counts; Home only renders what it returns.
+    supabase.rpc('hang_again_prompts'),
   ]);
   check('introductions', 'matchmaker-proposals', proposalError);
+  check('hangAgain', 'hang-again-prompts', hangAgainError);
   check('rituals', 'rituals', ritualError);
   check('radar', 'reconnection', radarResult.error);
   check('reflections', 'recent-past', recentPastError);
@@ -291,6 +299,7 @@ export default async function HomePage() {
       status: string;
       room_id: string | null;
       other_name: string | null;
+      shared: string[] | null;
     }) => ({
       id: row.id,
       activity: row.activity,
@@ -300,8 +309,15 @@ export default async function HomePage() {
       status: row.status,
       roomId: row.room_id,
       otherName: row.other_name,
+      shared: row.shared ?? [],
     }),
   );
+  const hangAgain: HangAgainCardData[] = (hangAgainRows ?? []).map((row) => ({
+    eventId: row.event_id,
+    eventTitle: row.event_title,
+    personId: row.person_id,
+    personName: row.person_name,
+  }));
 
   const ritualToday = localDate(profile?.timezone);
   const rituals: RitualCardData[] = (ritualRows ?? [])
@@ -578,6 +594,22 @@ export default async function HomePage() {
                   eventId={event.id}
                   eventTitle={event.title}
                 />
+              ))}
+            </div>
+          </section>
+        )}
+
+        {/* Hang out again? (private, after a finished plan) */}
+        {failed.has('hangAgain') && <SectionError section="hangAgain" />}
+        {hangAgain.length > 0 && (
+          <section aria-label="Hang out again">
+            <SectionHeader
+              title="Hang out again?"
+              hint="Private. They only find out if they say yes too."
+            />
+            <div className="space-y-2.5">
+              {hangAgain.map((prompt) => (
+                <HangAgainCard key={`${prompt.eventId}:${prompt.personId}`} prompt={prompt} />
               ))}
             </div>
           </section>

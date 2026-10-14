@@ -202,6 +202,8 @@ Timeleft's lesson is that a few strong signals beat many weak ones.
 
 ### R3. A short "how you like to hang" card set (meet-new lanes only)
 
+**Status: not planned.**
+
 This is the useful core of Timeleft's quiz, cut to what Switchboard would
 actually consume. Six cards, one tap each, all skippable, about 60 seconds.
 
@@ -233,6 +235,8 @@ Rules taken from Timeleft's mistakes:
 
 ### R4. Keep logistics per plan, with profile defaults
 
+**Status: not planned.**
+
 Timeleft asks budget, diet and language at booking, not on the profile. Do the
 same, with a default.
 
@@ -242,6 +246,10 @@ same, with a default.
   build them together.
 
 ### R5. A staged reveal for stranger plans
+
+**Status: built for matchmaker introductions** (`20261014120000_matchmaker_shared_hints.sql`):
+an open intro shows up to three things both people picked, only when both let
+discovery show interests. Open Table seats are not covered.
 
 For matchmaker proposals and Open Table seats, Timeleft's night-before teaser
 maps onto Switchboard's masked identity:
@@ -255,6 +263,8 @@ maps onto Switchboard's masked identity:
 
 ### R6. Icebreakers that use what we know
 
+**Status: not planned.**
+
 Timeleft's game is praised for starting conversation and criticized for being
 too personal and for one-phone logistics.
 
@@ -265,6 +275,9 @@ too personal and for one-phone logistics.
   leans deep.
 
 ### R7. A post-plan feedback loop that does the real learning
+
+**Status: built** (`20261014121000_hang_again.sql`, the "Hang out again?" section
+on Home). Impressions are not built.
 
 222 and Timeleft both learn more from post-event ratings than from the quiz.
 Switchboard already has `discovery_signals`.

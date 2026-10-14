@@ -9,6 +9,7 @@ import { Avatar } from '@/components/ui/Avatar';
 import { useToast } from '@/components/ui/Toast';
 import { logEnergy, type Feeling } from '@/lib/actions/energy';
 import { respondToIntroduction } from '@/lib/actions/matchmaker';
+import { answerHangAgain } from '@/lib/actions/hang-again';
 import { respondToRitual, skipRitual } from '@/lib/actions/rituals';
 
 /* One-tap private reflection after an event. */
@@ -85,6 +86,11 @@ export interface ProposalCardData {
   status: string;
   roomId: string | null;
   otherName: string | null;
+  /**
+   * Up to three things both of you picked, shown before either name is. Empty
+   * when either of you hides interests from discovery.
+   */
+  shared: string[];
 }
 
 export function MatchmakerCard({ proposal }: { proposal: ProposalCardData }) {
@@ -132,6 +138,12 @@ export function MatchmakerCard({ proposal }: { proposal: ProposalCardData }) {
       </p>
       {proposal.note && (
         <p className="text-sm text-ink-soft mt-1">“{proposal.note}”</p>
+      )}
+      {proposal.shared.length > 0 && (
+        <p className="text-sm text-ink-soft mt-1.5">
+          You both picked{' '}
+          <strong className="text-ink">{listOf(proposal.shared)}</strong>.
+        </p>
       )}
       <p className="text-xs text-ink-faint mt-1.5">
         Who? Only revealed if you both say yes. A no is never seen by anyone.
@@ -300,4 +312,99 @@ export function RitualCard({ ritual }: { ritual: RitualCardData }) {
   }
 
   return null;
+}
+
+/** "a", "a and b", "a, b, and c". */
+function listOf(items: string[]): string {
+  if (items.length <= 1) return items.join('');
+  if (items.length === 2) return `${items[0]} and ${items[1]}`;
+  return `${items.slice(0, -1).join(', ')}, and ${items[items.length - 1]}`;
+}
+
+/* "Hang out again?" about one person from a finished plan. Private both ways. */
+export interface HangAgainCardData {
+  eventId: string;
+  eventTitle: string;
+  personId: string;
+  personName: string;
+}
+
+export function HangAgainCard({ prompt }: { prompt: HangAgainCardData }) {
+  const [pending, startTransition] = useTransition();
+  const [result, setResult] = useState<null | { yes: boolean; matched: boolean; url?: string }>(null);
+  const toast = useToast();
+
+  function answer(yes: boolean) {
+    startTransition(async () => {
+      try {
+        const res = await answerHangAgain(prompt.eventId, prompt.personId, yes);
+        if (!res.ok) {
+          toast.error(res.error ?? 'Could not save that. Try again.', res.code);
+          return;
+        }
+        setResult({ yes, matched: Boolean(res.matched), url: res.url });
+      } catch {
+        toast.error('Could not save that. Try again.');
+      }
+    });
+  }
+
+  if (result?.matched) {
+    return (
+      <Card tone="sage" className="animate-rise">
+        <p className="text-sm">
+          <strong>{prompt.personName}</strong> wants to hang out again too.
+        </p>
+        {result.url && (
+          <Link href={result.url} className="inline-block mt-2">
+            <Button size="sm">Say hi</Button>
+          </Link>
+        )}
+      </Card>
+    );
+  }
+
+  if (result) {
+    return (
+      <Card tone="cream" className="animate-rise">
+        <p className="text-sm text-ink-soft">
+          {result.yes
+            ? 'Noted. If they say yes too, you’ll both find out.'
+            : 'Got it. They won’t know.'}
+        </p>
+      </Card>
+    );
+  }
+
+  return (
+    <Card>
+      <div className="flex items-center gap-3">
+        <Avatar name={prompt.personName} seed={prompt.personId} size="sm" />
+        <p className="text-sm flex-1">
+          You and <strong>{prompt.personName}</strong> were both at{' '}
+          <strong>{prompt.eventTitle}</strong>. Hang out again?
+        </p>
+      </div>
+      <div className="flex gap-2 mt-3">
+        <Button
+          variant="accept"
+          size="sm"
+          className="flex-1"
+          disabled={pending}
+          onClick={() => answer(true)}
+        >
+          I’d like that
+        </Button>
+        <Button
+          variant="ghost"
+          size="sm"
+          className="flex-1"
+          disabled={pending}
+          onClick={() => answer(false)}
+        >
+          Not really
+        </Button>
+      </div>
+    </Card>
+  );
 }

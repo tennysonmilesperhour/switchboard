@@ -4227,6 +4227,10 @@ export type Database = {
         Args: { p_cohost: string; p_event: string }
         Returns: string
       }
+      answer_hang_again: {
+        Args: { p_event: string; p_target: string; p_yes: boolean }
+        Returns: string
+      }
       app_schema_status: { Args: never; Returns: Json }
       app_schema_version: { Args: never; Returns: string }
       apply_cascade_updates: {
@@ -4476,6 +4480,15 @@ export type Database = {
         }
         Returns: string
       }
+      hang_again_prompts: {
+        Args: never
+        Returns: {
+          event_id: string
+          event_title: string
+          person_id: string
+          person_name: string
+        }[]
+      }
       home_around_available: { Args: never; Returns: boolean }
       is_blocked_with: { Args: { p_other: string }; Returns: boolean }
       is_board_member: {
@@ -4714,6 +4727,7 @@ export type Database = {
           other_name: string
           proposer_name: string
           room_id: string
+          shared: string[]
           status: string
         }[]
       }

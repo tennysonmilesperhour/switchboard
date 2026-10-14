@@ -388,7 +388,7 @@ export const FEATURE_GROUPS: readonly FeatureGroup[] = [
         id: 'matchmaker',
         title: 'Play matchmaker',
         blurb:
-          'Introduce two friends over an activity. Each hears about it privately, and they only learn who the other is if both are curious.',
+          'Introduce two friends over an activity. Each hears about it privately, with up to three things they both picked as a hint, and they only learn who the other is if both are curious.',
         where: 'People → Play matchmaker 🤝',
         href: '/people',
       },
@@ -399,6 +399,14 @@ export const FEATURE_GROUPS: readonly FeatureGroup[] = [
           'Say you’re down to connect with someone and it stays private unless they say it too. A no is never observable by anyone, and either of you can unmatch later.',
         where: 'Home → Mutual',
         href: '/mutual',
+      },
+      {
+        id: 'hang-again',
+        title: 'Hang out again?',
+        blurb:
+          'After a plan is over, Home asks about the people you met there that you aren’t connected to yet. Say yes and it stays private unless they say yes too; then you both hear at once and get a room to say hi. A no is never seen.',
+        where: 'Home, for two weeks after a plan you went to',
+        start: { href: '/', label: 'Home' },
       },
       {
         id: 'rituals',
