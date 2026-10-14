@@ -174,7 +174,7 @@ These were open decisions; the owner accepted the recommendations in
     the account's email address. Email sign-in is unaffected. Guarded in
     `src/lib/actions/auth.test.ts`.
 14. **Username-only accounts are asked for a recovery email.** Onboarding shows
-    username sign-ups an optional third step; the address becomes the profile's
+    username sign-ups an optional last step; the address becomes the profile's
     contact email (unverified) and a verification link is sent on the way out.
     Nothing blocks on it — onboarding is the only route out of onboarding.
     Settings shows a banner to any account whose login address is synthetic and

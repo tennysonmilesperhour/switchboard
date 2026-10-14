@@ -106,11 +106,14 @@ test.describe('accounts', () => {
       await page.goto(linkIn(mail, '/auth/confirm'));
       await page.waitForURL(/\/onboarding/, { timeout: 30_000 });
       await expect(page.getByRole('heading', { name: 'First, a little about you.' })).toBeVisible();
-      await expect(page.getByText('Step 1 of 2')).toBeVisible();
+      await expect(page.getByText('Step 1 of 3')).toBeVisible();
       await expect(page.getByLabel('Your name')).toHaveValue('Sam Signup');
 
       await agreeAndContinue(page);
-      await expect(page.getByText('Step 2 of 2')).toBeVisible();
+      // What they're here for: optional, so Continue straight through.
+      await expect(page.getByText('Step 2 of 3')).toBeVisible();
+      await page.getByRole('button', { name: 'Continue', exact: true }).click();
+      await expect(page.getByText('Step 3 of 3')).toBeVisible();
       await page.getByRole('button', { name: 'Start connecting' }).click();
       await skipFirstRunTour(page);
       await expectHome(page);
@@ -143,15 +146,17 @@ test.describe('accounts', () => {
       // No confirmation step for a username: creating the account is the
       // first sign-in (bug #82 was a sign-up that didn't establish a session).
       await page.waitForURL(/\/onboarding/, { timeout: 30_000 });
-      await expect(page.getByText('Step 1 of 3')).toBeVisible();
+      await expect(page.getByText('Step 1 of 4')).toBeVisible();
       await expect(page.getByLabel('Handle')).toHaveValue(handle);
       await agreeAndContinue(page);
-      await expect(page.getByText('Step 2 of 3')).toBeVisible();
+      await expect(page.getByText('Step 2 of 4')).toBeVisible();
+      await page.getByRole('button', { name: 'Continue', exact: true }).click();
+      await expect(page.getByText('Step 3 of 4')).toBeVisible();
       await page.getByRole('button', { name: 'Continue', exact: true }).click();
 
       // A username account can't recover a password without a verified email,
       // so onboarding asks for one — and never blocks on it.
-      await expect(page.getByText('Step 3 of 3')).toBeVisible();
+      await expect(page.getByText('Step 4 of 4')).toBeVisible();
       await expect(page.getByLabel(/A recovery email/)).toBeVisible();
       await page.getByRole('button', { name: 'Skip for now' }).click();
       await skipFirstRunTour(page);

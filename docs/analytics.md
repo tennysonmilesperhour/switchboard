@@ -54,7 +54,7 @@ product succeeds at its mission.
 | `poll_voted` | `castVote` | `event_id` only | Habit + time-to-decision. |
 | `pmf_survey_response` | `submitPmf` | `choice` | Sean Ellis product-market-fit signal. |
 | `signup_completed` | `createPasswordAccount` | `method` (`email`/`username`) | Top of the funnel. (Google OAuth signups are not captured here.) |
-| `onboarding_completed` | `completeOnboarding` | `interest_count`, `down_to_count` | Signup→active conversion; counts only, never the interest strings. |
+| `onboarding_completed` | `completeOnboarding` | `interest_count`, `down_to_count`, `lane_count`, `top_pick_count` | Signup→active conversion, and how many people opt into meeting new people at signup; counts only, never the interest strings or which lanes. |
 | `board_post_created` | `addBoardPost` | `kind` | Do offers/requests get used at all? Kind only, never title/body. |
 | `board_post_response` | `respondToBoardPost` | `kind` | Requests receiving a response — the loop-closure rate. |
 | `board_post_fulfilled` | `fulfillBoardPost` | `kind` | Offers/requests that actually resolved. |

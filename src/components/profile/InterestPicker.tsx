@@ -22,6 +22,8 @@ interface InterestPickerProps {
    * option on screen at once. Off for short, single-group lists.
    */
   collapsible?: boolean;
+  /** Called with the full selection whenever it changes. */
+  onChange?: (selected: string[]) => void;
 }
 
 /**
@@ -42,6 +44,7 @@ export function InterestPicker({
   searchable = true,
   max,
   collapsible = false,
+  onChange,
 }: InterestPickerProps) {
   const [selected, setSelected] = useState<string[]>(initialSelected);
   const [query, setQuery] = useState('');
@@ -54,12 +57,17 @@ export function InterestPicker({
   // `input` after mount so dirty-tracking (and anything else listening) picks it up.
   const rootRef = useRef<HTMLDivElement>(null);
   const mounted = useRef(false);
+  const onChangeRef = useRef(onChange);
+  useEffect(() => {
+    onChangeRef.current = onChange;
+  }, [onChange]);
   useEffect(() => {
     if (!mounted.current) {
       mounted.current = true;
       return;
     }
     rootRef.current?.dispatchEvent(new Event('input', { bubbles: true }));
+    onChangeRef.current?.(selected);
   }, [selected]);
 
   const atLimit = max != null && selected.length >= max;

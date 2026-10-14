@@ -168,6 +168,8 @@ Ordered by value for effort.
 
 ### R1. Add an intent step: "What are you here for?"
 
+**Status: built** (step 2 of onboarding, `src/lib/onboarding-discovery.ts`).
+
 Timeleft's `desired-feelings` step and its 2026 refresh both point the same
 way: ask intent first, it shapes everything after.
 
@@ -182,6 +184,10 @@ way: ask intent first, it shapes everything after.
   first card never sees R3.
 
 ### R2. Ask for a top three, and seed weights from it
+
+**Status: built** (end of the interests step; starred items are weighted 85 in
+the friends lane and every lane picked in R1). The cap on free-text and total
+interest counts is not built yet.
 
 Today interests are a flat list, so `discovery_weights` start blank.
 Timeleft's lesson is that a few strong signals beat many weak ones.

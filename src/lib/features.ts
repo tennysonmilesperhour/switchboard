@@ -476,7 +476,7 @@ export const FEATURE_GROUPS: readonly FeatureGroup[] = [
         id: 'discovery-lanes',
         title: 'Friends, dating, and networking lanes',
         blurb:
-          'Three separate sides of you, each with its own on switch, its own card line, and its own rules for who can see you and who you want to see. Dating and networking stay off until you turn them on, and a pair only appears when both people’s settings let it through.',
+          'Three separate sides of you, each with its own on switch, its own card line, and its own rules for who can see you and who you want to see. Dating and networking stay off until you turn them on (at sign-up or later), and a pair only appears when both people’s settings let it through.',
         where: 'Explore → People discovery → Discovery settings',
         href: '/discover/preferences',
       },
@@ -693,7 +693,7 @@ export const FEATURE_GROUPS: readonly FeatureGroup[] = [
         id: 'interests',
         title: 'Interests and what you’re down for',
         blurb:
-          'What you like and what you’d say yes to, feeding discovery, matchmaking, and suggestions.',
+          'What you like and what you’d say yes to, feeding discovery, matchmaking, and suggestions. The few you star at sign-up count most.',
         where: 'Settings → Interests & activities',
         href: '/settings',
       },

@@ -1237,6 +1237,7 @@ const AREA_CODES: Record<string, ErrorCode> = {
   // that the whole page was rendering defaults.
   'settings.load': 'SB-SETTINGS-LOAD',
   'onboarding.load': 'SB-PROFILE-LOAD',
+  'onboarding.discovery': 'SB-DISCOVERY-SAVE',
   'settings.discoverability': 'SB-SETTINGS-SAVE',
   'settings.sabbatical': 'SB-SETTINGS-SAVE',
   'settings.quiet-hours': 'SB-SETTINGS-SAVE',
