@@ -1,4 +1,5 @@
 import { notFound, redirect } from 'next/navigation';
+import { matchReasons } from '@/lib/match-why';
 import { createClient } from '@/lib/supabase/server';
 import { AppShell } from '@/components/shell/AppShell';
 import { aiEnabled } from '@/lib/ai/claude';
@@ -93,6 +94,25 @@ export default async function RoomPage({
       .limit(1),
     supabase.rpc('room_is_read_only', { p_room: id }),
   ]);
+
+  // A match room says why the two of you matched. The function answers only
+  // the two people in the match; a failed read just leaves the room as it was.
+  const { data: whyRows } =
+    room.kind === 'match'
+      ? await supabase.rpc('match_room_why', { p_room: id })
+      : { data: null };
+  const whyRow = whyRows?.[0];
+  const why = matchReasons(
+    whyRow
+      ? {
+          kind: whyRow.kind,
+          activity: whyRow.activity ?? '',
+          shared: whyRow.shared ?? [],
+          eventTitle: whyRow.event_title,
+          introducedBy: whyRow.introduced_by,
+        }
+      : null,
+  );
 
   const memberRows = members ?? [];
   const memberNames: Record<string, string> = {};
@@ -194,6 +214,7 @@ export default async function RoomPage({
         readOnly={readOnlyState}
         plan={event ? { id: event.id, title: event.title } : null}
         canLeave={canLeave}
+        why={why}
         smartFiling={aiEnabled()}
       />
     </AppShell>

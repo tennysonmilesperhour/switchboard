@@ -195,6 +195,14 @@ export const FEATURE_GROUPS: readonly FeatureGroup[] = [
         href: '/discover',
       },
       {
+        id: 'still-coming',
+        title: 'Still coming?',
+        blurb:
+          'In the day and a half before an Open Table, Home asks each guest to confirm. Someone who can’t make it gives their seat back in one tap, and it goes straight to the next person waiting. No score, no record beyond the no itself.',
+        where: 'Home, the day before an Open Table you said yes to',
+        start: { href: '/', label: 'Home' },
+      },
+      {
         id: 'privacy-access',
         title: 'Privacy and access',
         blurb:
@@ -388,7 +396,7 @@ export const FEATURE_GROUPS: readonly FeatureGroup[] = [
         id: 'matchmaker',
         title: 'Play matchmaker',
         blurb:
-          'Introduce two friends over an activity. Each hears about it privately, and they only learn who the other is if both are curious.',
+          'Introduce two friends over an activity. Each hears about it privately, with up to three things they both picked as a hint, and they only learn who the other is if both are curious.',
         where: 'People → Play matchmaker 🤝',
         href: '/people',
       },
@@ -399,6 +407,30 @@ export const FEATURE_GROUPS: readonly FeatureGroup[] = [
           'Say you’re down to connect with someone and it stays private unless they say it too. A no is never observable by anyone, and either of you can unmatch later.',
         where: 'Home → Mutual',
         href: '/mutual',
+      },
+      {
+        id: 'hang-again',
+        title: 'Hang out again?',
+        blurb:
+          'After a plan is over, Home asks about the people you met there that you aren’t connected to yet. Say yes and it stays private unless they say yes too; then you both hear at once and get a room to say hi. A no is never seen.',
+        where: 'Home, for two weeks after a plan you went to',
+        start: { href: '/', label: 'Home' },
+      },
+      {
+        id: 'same-crew',
+        title: 'Same crew again',
+        blurb:
+          'When two or more people from one plan all said yes to hanging out again with you, Home offers a new plan with all of them already on the list.',
+        where: 'Home, after hang-out-again matches from the same plan',
+        start: { href: '/', label: 'Home' },
+      },
+      {
+        id: 'why-you-matched',
+        title: 'Why you two',
+        blurb:
+          'A match room opens by saying how the two of you matched: the friend who introduced you, the plan you were both at, or what you both tapped, plus up to three things you both picked.',
+        where: 'Rooms → any match',
+        href: '/rooms',
       },
       {
         id: 'rituals',
@@ -476,7 +508,7 @@ export const FEATURE_GROUPS: readonly FeatureGroup[] = [
         id: 'discovery-lanes',
         title: 'Friends, dating, and networking lanes',
         blurb:
-          'Three separate sides of you, each with its own on switch, its own card line, and its own rules for who can see you and who you want to see. Dating and networking stay off until you turn them on, and a pair only appears when both people’s settings let it through.',
+          'Three separate sides of you, each with its own on switch, its own card line, and its own rules for who can see you and who you want to see. Dating and networking stay off until you turn them on (at sign-up or later), and a pair only appears when both people’s settings let it through.',
         where: 'Explore → People discovery → Discovery settings',
         href: '/discover/preferences',
       },
@@ -693,7 +725,7 @@ export const FEATURE_GROUPS: readonly FeatureGroup[] = [
         id: 'interests',
         title: 'Interests and what you’re down for',
         blurb:
-          'What you like and what you’d say yes to, feeding discovery, matchmaking, and suggestions.',
+          'What you like and what you’d say yes to, feeding discovery, matchmaking, and suggestions. The few you star at sign-up count most.',
         where: 'Settings → Interests & activities',
         href: '/settings',
       },

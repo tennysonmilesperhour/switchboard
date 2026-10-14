@@ -16,7 +16,8 @@ export default async function NewEventPage({
     title?: string;
     description?: string;
     ritual?: string;
-    invite?: string;
+    /** One id, or several (`?invite=a&invite=b`, from "Same crew again"). */
+    invite?: string | string[];
     error?: string;
     decide?: string;
   }>;
@@ -125,7 +126,7 @@ export default async function NewEventPage({
     ),
   }));
 
-  const friends: WizardFriend[] = (connections ?? []).map((connection) => {
+  const connectedFriends: WizardFriend[] = (connections ?? []).map((connection) => {
     const other =
       connection.requester_id === user.id
         ? connection.addressee
@@ -138,6 +139,39 @@ export default async function NewEventPage({
       sabbatical: sabbaticalOf(profile),
     };
   });
+
+  // People to start with. A connection is found in the list above. Someone you
+  // are not connected to is offered only when you have a match with them (a
+  // "Same crew again" plan after a hang-out-again match): matches_select shows
+  // only your own matches, so an id from the URL cannot add anyone else.
+  const inviteIds = [...new Set([invite ?? []].flat())]
+    .filter((value) => /^[0-9a-f-]{36}$/i.test(value))
+    .slice(0, 12);
+  const unknownIds = inviteIds.filter((id) => !connectedFriends.some((f) => f.id === id));
+  let matchedFriends: WizardFriend[] = [];
+  if (unknownIds.length > 0) {
+    const { data: matchRows } = await supabase
+      .from('matches')
+      .select('user_a, user_b')
+      .or(`user_a.eq.${user.id},user_b.eq.${user.id}`);
+    const matched = new Set(
+      (matchRows ?? []).map((row) => (row.user_a === user.id ? row.user_b : row.user_a)),
+    );
+    const allowed = unknownIds.filter((id) => matched.has(id));
+    if (allowed.length > 0) {
+      const { data: people } = await supabase
+        .from('profiles')
+        .select('id, display_name, handle, sabbatical, sabbatical_message')
+        .in('id', allowed);
+      matchedFriends = (people ?? []).map((profile) => ({
+        id: profile.id,
+        name: profile.display_name,
+        handle: profile.handle ?? '',
+        sabbatical: sabbaticalOf(profile),
+      }));
+    }
+  }
+  const friends = [...connectedFriends, ...matchedFriends];
 
   return (
     // No header back arrow: it went to /plans, which threw the whole draft
@@ -153,7 +187,7 @@ export default async function NewEventPage({
         initialTitle={title ?? ''}
         initialDescription={description ?? ''}
         ritualId={ritual ?? null}
-        initialInviteeId={invite ?? null}
+        initialInviteeIds={inviteIds}
         initialDecide={decide === '1'}
         initialError={errorMessage}
         defaultPace={defaultPace}

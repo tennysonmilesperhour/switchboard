@@ -8,6 +8,9 @@ import { InterestPicker } from '@/components/profile/InterestPicker';
 import { INTEREST_CATEGORIES, DOWN_TO_GROUP } from '@/lib/interests';
 import Link from 'next/link';
 import { COMMUNITY_COVENANT_SUMMARY } from '@/lib/legal';
+import { Chip } from '@/components/ui/Chip';
+import { GENDERS, GENDER_LABEL, SELVES, itemKey, type Self } from '@/lib/discovery-lanes';
+import { LANE_CARDS, MAX_TOP_PICKS } from '@/lib/onboarding-discovery';
 
 interface OnboardingFormProps {
   initialName: string;
@@ -22,16 +25,19 @@ interface OnboardingFormProps {
   askRecoveryEmail?: boolean;
 }
 
-/** Errors about fields on step 1, which step 2 cannot show or fix. */
+/** Errors about fields on step 1, which later steps cannot show or fix. */
 const STEP_ONE_ERRORS = new Set(['name', 'handle', 'handle_taken', 'agreement']);
 /** Errors about the recovery step. */
-const STEP_THREE_ERRORS = new Set(['recovery_email']);
+const RECOVERY_ERRORS = new Set(['recovery_email']);
+
+/** Step 1: who you are. 2: what you're here for. 3: interests. 4: recovery. */
+type Step = 1 | 2 | 3 | 4;
 
 /**
- * One form, two light steps. Everything stays mounted (hidden, not unmounted)
- * so the single `completeOnboarding` submission still carries every field;
- * step 1 holds all the `required` inputs, so `reportValidity()` gates the
- * Continue button without touching the optional step-2 pickers.
+ * One form, a few light steps. Everything stays mounted (hidden, not
+ * unmounted) so the single `completeOnboarding` submission still carries every
+ * field; step 1 holds all the `required` inputs, so `reportValidity()` gates
+ * the Continue button without touching the optional steps after it.
  */
 export function OnboardingForm({
   initialName,
@@ -40,8 +46,8 @@ export function OnboardingForm({
   error,
   askRecoveryEmail = false,
 }: OnboardingFormProps) {
-  const steps = askRecoveryEmail ? 3 : 2;
-  const [step, setStep] = useState<1 | 2 | 3>(1);
+  const steps = askRecoveryEmail ? 4 : 3;
+  const [step, setStep] = useState<Step>(1);
   // A failed save redirects back here with only the query string changed, so
   // this component stays mounted. Return to the step that holds the field the
   // error names instead of leaving the reader on step 2, unable to see it.
@@ -49,10 +55,44 @@ export function OnboardingForm({
   if (error !== seenError) {
     setSeenError(error);
     if (error && STEP_ONE_ERRORS.has(error)) setStep(1);
-    if (error && askRecoveryEmail && STEP_THREE_ERRORS.has(error)) setStep(3);
+    if (error && askRecoveryEmail && RECOVERY_ERRORS.has(error)) setStep(4);
   }
   const formRef = useRef<HTMLFormElement>(null);
   const recoveryRef = useRef<HTMLInputElement>(null);
+  const [lanes, setLanes] = useState<Self[]>([]);
+  // Picked interests and activities, as discovery item keys, so the top-three
+  // row can offer exactly what was picked. A pick that is deselected falls out
+  // of the top three with it.
+  const [picked, setPicked] = useState<{ interests: string[]; downTo: string[] }>({
+    interests: [],
+    downTo: [],
+  });
+  const [top, setTop] = useState<string[]>([]);
+  const pickedKeys = [
+    ...picked.interests.map((label) => ({ key: itemKey('interest', label), label })),
+    ...picked.downTo.map((label) => ({ key: itemKey('down_to', label), label })),
+  ];
+  const liveTop = top.filter((key) => pickedKeys.some((item) => item.key === key));
+
+  function toggleLane(self: Self) {
+    setLanes((current) =>
+      current.includes(self) ? current.filter((lane) => lane !== self) : [...current, self],
+    );
+  }
+
+  function toggleTop(key: string) {
+    setTop((current) => {
+      const live = current.filter((k) => pickedKeys.some((item) => item.key === k));
+      if (live.includes(key)) return live.filter((k) => k !== key);
+      if (live.length >= MAX_TOP_PICKS) return live;
+      return [...live, key];
+    });
+  }
+
+  function goTo(next: Step) {
+    setStep(next);
+    window.scrollTo({ top: 0 });
+  }
   // Normalize the handle to lowercase as it's typed so the validated value
   // matches what the user sees. The `lowercase` CSS class only changes the
   // display, so without this the browser would reject a value that looks valid.
@@ -71,11 +111,8 @@ export function OnboardingForm({
     };
   }, []);
 
-  function continueToInterests() {
-    if (formRef.current?.reportValidity()) {
-      setStep(2);
-      window.scrollTo({ top: 0 });
-    }
+  function continueFromStepOne() {
+    if (formRef.current?.reportValidity()) goTo(2);
   }
 
   return (
@@ -177,12 +214,120 @@ export function OnboardingForm({
           </label>
         </div>
 
-        <Button type="button" size="lg" className="w-full" onClick={continueToInterests}>
+        <Button type="button" size="lg" className="w-full" onClick={continueFromStepOne}>
           Continue
         </Button>
       </div>
 
       <div hidden={step !== 2} className="space-y-6">
+        <div className="space-y-1">
+          <h2 className="text-lg font-bold text-ink">What are you here for?</h2>
+          <p className="text-sm text-ink-soft leading-relaxed">
+            Pick any that fit. You can change this anytime in Discover.
+          </p>
+        </div>
+
+        <div className="flex items-start gap-3 rounded-card border border-line bg-cream p-4">
+          <div className="flex-1">
+            <p className="text-sm font-bold text-ink">Plans with people I already know</p>
+            <p className="text-sm text-ink-soft">Friends, family, and your circles.</p>
+          </div>
+          <span className="rounded-pill bg-card px-2 py-0.5 text-xs font-bold text-ink-faint">
+            Always on
+          </span>
+        </div>
+
+        <fieldset className="space-y-3">
+          <legend className="text-sm font-medium text-ink mb-1">
+            Open to meeting new people?{' '}
+            <span className="text-ink-faint font-normal">(optional)</span>
+          </legend>
+          {SELVES.map((self) => (
+            <label
+              key={self}
+              className={`flex items-start gap-3 rounded-card border p-4 transition-colors ${
+                lanes.includes(self) ? 'border-terracotta bg-card' : 'border-line bg-card'
+              }`}
+            >
+              <input
+                type="checkbox"
+                name="lanes"
+                value={self}
+                checked={lanes.includes(self)}
+                onChange={() => toggleLane(self)}
+                className="mt-1 size-4 accent-terracotta"
+              />
+              <span>
+                <span className="block text-sm font-bold text-ink">{LANE_CARDS[self].label}</span>
+                <span className="block text-sm text-ink-soft">{LANE_CARDS[self].blurb}</span>
+              </span>
+            </label>
+          ))}
+          {lanes.length > 0 ? (
+            <p className="rounded-card bg-cream p-3 text-sm text-ink-soft leading-relaxed">
+              People outside your circles who share your interests can find you
+              in Discover, only in the lanes you picked. Nobody learns you’re
+              interested in them unless it’s mutual.
+            </p>
+          ) : null}
+        </fieldset>
+
+        {lanes.includes('dating') ? (
+          <div className="space-y-4 rounded-card border border-line bg-card p-4">
+            <fieldset className="space-y-2">
+              <legend className="text-sm font-medium text-ink">
+                I am{' '}
+                <span className="text-ink-faint font-normal">(optional)</span>
+              </legend>
+              <div className="flex flex-wrap gap-x-4 gap-y-2">
+                {GENDERS.map((gender) => (
+                  <label key={gender} className="flex items-center gap-2 text-sm text-ink-soft">
+                    <input
+                      type="radio"
+                      name="identifies_as"
+                      value={gender}
+                      className="size-4 accent-terracotta"
+                    />
+                    {GENDER_LABEL[gender]}
+                  </label>
+                ))}
+              </div>
+            </fieldset>
+            <fieldset className="space-y-2">
+              <legend className="text-sm font-medium text-ink">
+                Interested in{' '}
+                <span className="text-ink-faint font-normal">(optional, leave blank for anyone)</span>
+              </legend>
+              <div className="flex flex-wrap gap-x-4 gap-y-2">
+                {GENDERS.map((gender) => (
+                  <label key={gender} className="flex items-center gap-2 text-sm text-ink-soft">
+                    <input
+                      type="checkbox"
+                      name="interested_in"
+                      value={gender}
+                      className="size-4 accent-terracotta"
+                    />
+                    {GENDER_LABEL[gender]}
+                  </label>
+                ))}
+              </div>
+            </fieldset>
+          </div>
+        ) : null}
+
+        <Button type="button" size="lg" className="w-full" onClick={() => goTo(3)}>
+          Continue
+        </Button>
+        <button
+          type="button"
+          onClick={() => goTo(1)}
+          className="w-full text-center text-sm font-bold text-ink-faint hover:text-ink"
+        >
+          ← Back
+        </button>
+      </div>
+
+      <div hidden={step !== 3} className="space-y-6">
         <fieldset className="space-y-3">
           <legend className="text-sm font-medium text-ink mb-1">
             What do you enjoy?{' '}
@@ -191,7 +336,11 @@ export function OnboardingForm({
           <p className="text-sm text-ink-soft leading-relaxed">
             Pick a few to start — you can add more anytime in Settings.
           </p>
-          <InterestPicker name="interests" groups={INTEREST_CATEGORIES} />
+          <InterestPicker
+            name="interests"
+            groups={INTEREST_CATEGORIES}
+            onChange={(interests) => setPicked((current) => ({ ...current, interests }))}
+          />
         </fieldset>
 
         <fieldset className="space-y-3">
@@ -203,18 +352,47 @@ export function OnboardingForm({
             name="down_to"
             groups={[DOWN_TO_GROUP]}
             searchable={false}
+            onChange={(downTo) => setPicked((current) => ({ ...current, downTo }))}
           />
         </fieldset>
+
+        {pickedKeys.length > 0 ? (
+          <fieldset className="space-y-3">
+            <legend className="text-sm font-medium text-ink mb-1">
+              Which matter most?{' '}
+              <span className="text-ink-faint font-normal">(up to {MAX_TOP_PICKS}, optional)</span>
+            </legend>
+            <p className="text-sm text-ink-soft leading-relaxed">
+              We’ll lean on these when suggesting plans and people.
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {pickedKeys.map(({ key, label }) => {
+                const starred = liveTop.includes(key);
+                return (
+                  <Chip
+                    key={key}
+                    selected={starred}
+                    emoji={starred ? '✦' : undefined}
+                    disabled={!starred && liveTop.length >= MAX_TOP_PICKS}
+                    onClick={() => toggleTop(key)}
+                  >
+                    {label}
+                  </Chip>
+                );
+              })}
+            </div>
+            {liveTop.map((key) => (
+              <input key={key} type="hidden" name="top" value={key} />
+            ))}
+          </fieldset>
+        ) : null}
 
         {askRecoveryEmail ? (
           <Button
             type="button"
             size="lg"
             className="w-full"
-            onClick={() => {
-              setStep(3);
-              window.scrollTo({ top: 0 });
-            }}
+            onClick={() => goTo(4)}
           >
             Continue
           </Button>
@@ -223,7 +401,7 @@ export function OnboardingForm({
         )}
         <button
           type="button"
-          onClick={() => setStep(1)}
+          onClick={() => goTo(2)}
           className="w-full text-center text-sm font-bold text-ink-faint hover:text-ink"
         >
           ← Back
@@ -231,7 +409,7 @@ export function OnboardingForm({
       </div>
 
       {askRecoveryEmail && (
-        <div hidden={step !== 3} className="space-y-6">
+        <div hidden={step !== 4} className="space-y-6">
           <div className="space-y-2">
             <label htmlFor="recovery_email" className="text-sm font-medium text-ink">
               A recovery email{' '}
@@ -262,7 +440,7 @@ export function OnboardingForm({
           />
           <button
             type="button"
-            onClick={() => setStep(2)}
+            onClick={() => goTo(3)}
             className="w-full text-center text-sm font-bold text-ink-faint hover:text-ink"
           >
             ← Back

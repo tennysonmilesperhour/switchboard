@@ -2003,6 +2003,7 @@ export type Database = {
       }
       invites: {
         Row: {
+          attendance_confirmed_at: string | null
           created_at: string
           decline_message: string | null
           decline_note: string | null
@@ -2020,6 +2021,7 @@ export type Database = {
           window_minutes: number
         }
         Insert: {
+          attendance_confirmed_at?: string | null
           created_at?: string
           decline_message?: string | null
           decline_note?: string | null
@@ -2037,6 +2039,7 @@ export type Database = {
           window_minutes?: number
         }
         Update: {
+          attendance_confirmed_at?: string | null
           created_at?: string
           decline_message?: string | null
           decline_note?: string | null
@@ -4227,6 +4230,10 @@ export type Database = {
         Args: { p_cohost: string; p_event: string }
         Returns: string
       }
+      answer_hang_again: {
+        Args: { p_event: string; p_target: string; p_yes: boolean }
+        Returns: string
+      }
       app_schema_status: { Args: never; Returns: Json }
       app_schema_version: { Args: never; Returns: string }
       apply_cascade_updates: {
@@ -4241,6 +4248,16 @@ export type Database = {
         Returns: boolean
       }
       are_connected: { Args: { a: string; b: string }; Returns: boolean }
+      attendance_checks: {
+        Args: never
+        Returns: {
+          event_id: string
+          invite_id: string
+          starts_at: string
+          time_zone: string
+          title: string
+        }[]
+      }
       auth_user_id_by_email: { Args: { p_email: string }; Returns: string }
       calendar_subscription_status: {
         Args: never
@@ -4349,6 +4366,13 @@ export type Database = {
         Returns: {
           basis: string[]
           summary: string
+        }[]
+      }
+      confirm_attendance: {
+        Args: { p_coming: boolean; p_invite: string }
+        Returns: {
+          outcome: string
+          promoted_invite: string
         }[]
       }
       consume_rate_limit: {
@@ -4475,6 +4499,15 @@ export type Database = {
           p_sid: string
         }
         Returns: string
+      }
+      hang_again_prompts: {
+        Args: never
+        Returns: {
+          event_id: string
+          event_title: string
+          person_id: string
+          person_name: string
+        }[]
       }
       home_around_available: { Args: never; Returns: boolean }
       is_blocked_with: { Args: { p_other: string }; Returns: boolean }
@@ -4671,6 +4704,16 @@ export type Database = {
           suspended_until: string
         }[]
       }
+      match_room_why: {
+        Args: { p_room: string }
+        Returns: {
+          activity: string
+          event_title: string
+          introduced_by: string
+          kind: string
+          shared: string[]
+        }[]
+      }
       moderate_lift_suspension: {
         Args: { p_member: string; p_note?: string }
         Returns: string
@@ -4714,6 +4757,7 @@ export type Database = {
           other_name: string
           proposer_name: string
           room_id: string
+          shared: string[]
           status: string
         }[]
       }

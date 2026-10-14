@@ -27,6 +27,11 @@ import type { ProfileLink, ProfileSocial } from '@/lib/types';
 import { toJson } from '@/lib/supabase/json';
 import type { NotificationPrefs } from '@/lib/notifications';
 import { requestContactVerification } from '@/lib/actions/contact-verification';
+import {
+  onboardingSelfRows,
+  onboardingWeightRows,
+  parseOnboardingDiscovery,
+} from '@/lib/onboarding-discovery';
 
 const HANDLE_PATTERN = USERNAME_PATTERN;
 const MAX_LINKS = 15;
@@ -277,6 +282,16 @@ export async function completeOnboarding(formData: FormData): Promise<void> {
     .toLowerCase();
   const interests = formData.getAll('interests').map(String).filter(Boolean);
   const downTo = formData.getAll('down_to').map(String).filter(Boolean);
+  // What they're here for, and which interests matter most
+  // (docs/research/timeleft-onboarding.md, R1 and R2). Both optional.
+  const discovery = parseOnboardingDiscovery({
+    lanes: formData.getAll('lanes').map(String),
+    top: formData.getAll('top').map(String),
+    interests,
+    downTo,
+    identifiesAs: formData.get('identifies_as') ? String(formData.get('identifies_as')) : null,
+    interestedIn: formData.getAll('interested_in').map(String),
+  });
   const acceptedTerms = formData.get('terms_agreement') === 'on';
   const acceptedCovenant = formData.get('community_agreement') === 'on';
 
@@ -303,6 +318,9 @@ export async function completeOnboarding(formData: FormData): Promise<void> {
     legal_terms_accepted_at: new Date().toISOString(),
     community_covenant_accepted_at: new Date().toISOString(),
     ...(recoveryEmail ? { contact_email: recoveryEmail } : {}),
+    // Picking a lane is asking to be found in it; the card says so where it is
+    // picked. Discoverable is the master switch every lane sits under.
+    ...(discovery.lanes.length > 0 ? { discoverable: true } : {}),
   };
 
   // The authenticated user has already been verified by requireUserOrRedirect.
@@ -347,6 +365,28 @@ export async function completeOnboarding(formData: FormData): Promise<void> {
     ]);
   }
 
+  // Seed the discovery lanes and top-pick weights. Best-effort: a failure must
+  // not hold someone at onboarding, and /discover/preferences can set all of
+  // it again. Owner-only tables, so the caller's own session writes them.
+  const selfRows = onboardingSelfRows(user.id, discovery);
+  if (selfRows.length > 0) {
+    const { error: selvesError } = await supabase
+      .from('discovery_selves')
+      .upsert(selfRows, { onConflict: 'user_id,self' });
+    if (selvesError) {
+      await reportOperationalError('onboarding.discovery', selvesError, { userId: user.id });
+    }
+  }
+  const weightRows = onboardingWeightRows(user.id, discovery);
+  if (weightRows.length > 0) {
+    const { error: weightsError } = await supabase
+      .from('discovery_weights')
+      .upsert(weightRows, { onConflict: 'user_id,self,item' });
+    if (weightsError) {
+      await reportOperationalError('onboarding.discovery', weightsError, { userId: user.id });
+    }
+  }
+
   // A new account created from an invite: adopt any guest invites addressed to
   // this person's sign-in email/phone so they're waiting in the app.
   // Best-effort, but a failure is reported: it means the claim machinery is
@@ -370,6 +410,8 @@ export async function completeOnboarding(formData: FormData): Promise<void> {
   await capture(user.id, ANALYTICS_EVENTS.onboardingCompleted, {
     interest_count: interests.length,
     down_to_count: downTo.length,
+    lane_count: discovery.lanes.length,
+    top_pick_count: discovery.top.length,
   });
 
   // Return to the destination the user was originally headed for (e.g. an invite

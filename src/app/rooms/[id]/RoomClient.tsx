@@ -82,6 +82,8 @@ interface RoomClientProps {
   readOnly: RoomReadOnly;
   plan: { id: string; title: string } | null;
   canLeave: boolean;
+  /** For a match room: why the two of you matched, as short sentences. */
+  why?: string[];
   /** False when AI filing is unavailable and only the pattern rules run (G32). */
   smartFiling: boolean;
 }
@@ -122,6 +124,7 @@ export function RoomClient({
   readOnly,
   plan,
   canLeave,
+  why = [],
   smartFiling,
 }: RoomClientProps) {
   const [messages, setMessages] = useState<RoomMessage[]>(initialMessages);
@@ -486,6 +489,22 @@ export function RoomClient({
         canLeave={canLeave}
         readOnly={readOnly}
       />
+
+      {why.length > 0 && (
+        <section
+          aria-label="Why you matched"
+          className="mb-2 shrink-0 rounded-card border border-line bg-cream/60 px-3 py-2.5"
+        >
+          <p className="text-[11px] font-bold uppercase tracking-wide text-ink-faint">
+            Why you two
+          </p>
+          {why.map((line) => (
+            <p key={line} className="mt-0.5 text-sm text-ink-soft">
+              {line}
+            </p>
+          ))}
+        </section>
+      )}
 
       {findEachOther && (
         <FindEachOther roomId={roomId} otherName={otherMember?.name ?? 'them'} />
