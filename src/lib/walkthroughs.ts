@@ -211,7 +211,8 @@ export const WALKTHROUGHS: readonly Walkthrough[] = [
       {
         id: 'consensus',
         title: 'See where it’s leaning',
-        caption: 'The consensus meter shows the group’s lean as a whole, and nothing more.',
+        caption:
+          'Once three people have rated, the consensus meter shows the group’s lean as a whole, and nothing more.',
         scene: 'consensus',
         features: ['consensus-meter'],
       },

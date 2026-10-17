@@ -66,14 +66,17 @@ update public.poll_options set label = 'Greek festival, Saturday'
 
 select ok(pg_temp.tally_moved(), 'editing an idea moves it too, so a fixed typo reaches everyone');
 
--- ————————————————————————— a vote, as before ————————————————————————————
+-- ————————————————————————— a lone vote ——————————————————————————————————
+-- Below three voters a vote changes nothing anyone can see, so the counter
+-- stays put rather than announce who just voted (20261017120000). The vote
+-- signal above the floor is covered in poll_result_floor.test.sql.
 insert into public.poll_votes (poll_id, option_id, voter_id, weight) values
   ('00000000-0000-0000-0000-0000000a1b00',
    '00000000-0000-0000-0000-0000000a1c01'::uuid,
    '00000000-0000-0000-0000-0000000a1002',
    1);
 
-select ok(pg_temp.tally_moved(), 'a vote still moves the counter — the original signal is intact');
+select ok(not pg_temp.tally_moved(), 'a lone vote does not move the counter: it would only say who voted');
 
 -- ————————————————————————— a removal ————————————————————————————————————
 delete from public.poll_options where id = '00000000-0000-0000-0000-0000000a1c01'::uuid;

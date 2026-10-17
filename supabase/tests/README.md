@@ -20,7 +20,9 @@ regresses an invariant fails the build rather than shipping.
 `rls_invariants.test.sql`:
 
 - **Anonymity invariant 1** — `poll_votes` are readable only by their author
-  (the group sees aggregates via `poll_results()` only).
+  (the group sees aggregates via `poll_results()` only). The reveal floor on
+  those aggregates (no numbers below three voters, and a silent live counter)
+  is in `poll_result_floor.test.sql`.
 - **Anonymity invariant 2** — `mutual_intents` are readable only by their author,
   so a target never learns of unrequited interest.
 - **C1 (room-membership fix)** — a user cannot insert themselves into a room they

@@ -68,7 +68,9 @@ candidates instead.
   (`/api/cron/cascade`) as the guarantee.
 - **Two anonymity invariants** are enforced at the database layer:
   1. `poll_votes` are selectable only by their author; the group sees
-     aggregates via the `poll_results()` function.
+     aggregates via the `poll_results()` function, and only once at least
+     three people have rated (below that it returns no numbers, so nobody can
+     subtract their own vote and read another's).
   2. `mutual_intents` are selectable only by their author; matching happens
      in a trigger so a target never learns of unrequited interest.
 - AI is a **bonus, never a blocker** - every AI path has a deterministic

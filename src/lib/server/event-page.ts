@@ -39,7 +39,7 @@ import type { HostCardData } from '@/components/events/HostCard';
 import type { PendingParentalApproval } from '@/components/events/ParentalApprovalManager';
 import type { AnnouncementView } from '@/components/events/Announcements';
 import type { ThreadCommentView } from '@/components/events/EventThread';
-import type { OptionResult } from '@/components/polls/PollSection';
+import type { OptionResult } from '@/components/polls/PollTotals';
 import { readyToSendInvitations } from '@/lib/poll-readiness';
 import { reportOperationalError } from '@/lib/server/observability';
 import { guardianStepFor, type GuardianRequestView } from '@/lib/guardian-approval';

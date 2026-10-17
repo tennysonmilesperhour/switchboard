@@ -103,6 +103,23 @@ export type PollOutcome =
 export const RUNOFF_FINALISTS = 3;
 
 /**
+ * How many people must have rated something before any total is shown.
+ *
+ * Every voter knows their own ballot, so with two voters either one subtracts
+ * theirs from the totals and reads the other's exactly. Below this many
+ * people with a non-zero rating, `poll_results()` returns no numbers and the
+ * live counter stays still. The database decides this
+ * (`private.poll_reveal_floor()`, 20261017120000); this constant mirrors it so
+ * the runner and the copy agree, and scoring.test.ts checks the two match.
+ */
+export const POLL_REVEAL_FLOOR = 3;
+
+/** Distinct people with at least one non-zero rating: who counts toward the floor. */
+export function contributingVoters(votes: readonly Vote[]): number {
+  return new Set(votes.filter((v) => v.weight !== 0).map((v) => v.voterId)).size;
+}
+
+/**
  * Decide what closing a poll does, from the ranking the votes produced.
  *
  * Two outcomes used to come out of nowhere. `scoreOptions` breaks its last tie
@@ -116,15 +133,21 @@ export const RUNOFF_FINALISTS = 3;
  *   - a leader that only leads on the id tiebreak → the host picks;
  *   - a runoff with nothing to narrow (three ideas or fewer) → the vote just
  *     cast *was* the final round, so its clear leader wins rather than the
- *     host being handed a decision they asked the group to make.
+ *     host being handed a decision they asked the group to make;
+ *   - a runoff with fewer than `POLL_REVEAL_FLOOR` voters → no narrowing
+ *     round. Publishing a top-three cut of two people's ballots tells each of
+ *     them more about the other than one winner does, so the clear leader
+ *     wins outright, as it would in an auto poll.
  */
 export function decidePoll(input: {
   resolution: string;
   phase: string;
   ranked: readonly OptionScore[];
   voteCount: number;
+  /** `contributingVoters` of the same ballots. */
+  voters: number;
 }): PollOutcome {
-  const { resolution, phase, ranked, voteCount } = input;
+  const { resolution, phase, ranked, voteCount, voters } = input;
   if (voteCount === 0 || ranked.length === 0) return { kind: 'host_pick' };
 
   const clearLeader = (): PollOutcome => {
@@ -136,7 +159,7 @@ export function decidePoll(input: {
 
   if (resolution === 'auto') return clearLeader();
   if (resolution === 'runoff') {
-    if (phase !== 'runoff' && ranked.length > RUNOFF_FINALISTS) {
+    if (closesIntoRunoff(resolution, phase, ranked.length, voters >= POLL_REVEAL_FLOOR)) {
       // Anything level with the last finalist goes through too: cutting an
       // idea that tied for third on its id is the coin flip this avoids.
       const cutoff = ranked[RUNOFF_FINALISTS - 1];
@@ -155,11 +178,21 @@ function sameStanding(a: OptionScore, b: OptionScore): boolean {
   return a.score === b.score && a.objections === b.objections && a.loves === b.loves;
 }
 
-/** Whether closing this poll now narrows it to a runoff rather than deciding it. */
+/**
+ * Whether closing this poll now narrows it to a runoff rather than deciding it.
+ * `revealed` is whether the poll has reached `POLL_REVEAL_FLOOR`; the page
+ * reads it off `poll_results()`, the runner counts it from the ballots.
+ */
 export function closesIntoRunoff(
   resolution: string,
   phase: string,
   optionCount: number,
+  revealed: boolean,
 ): boolean {
-  return resolution === 'runoff' && phase !== 'runoff' && optionCount > RUNOFF_FINALISTS;
+  return (
+    resolution === 'runoff' &&
+    phase !== 'runoff' &&
+    optionCount > RUNOFF_FINALISTS &&
+    revealed
+  );
 }
