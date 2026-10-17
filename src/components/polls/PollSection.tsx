@@ -25,14 +25,7 @@ import { errorFor, errorRef, type ErrorCode } from '@/lib/errors';
 import { formatDateTime } from '@/lib/format';
 import type { Poll, PollOption } from '@/lib/types';
 import { pollHint, pollOptionDetail, pollOptionLabel } from './option-label';
-
-export interface OptionResult {
-  option_id: string;
-  score: number;
-  loves: number;
-  objections: number;
-  voters: number;
-}
+import { consensusOf, PollFloorNote, type OptionResult } from './PollTotals';
 
 interface PollSectionProps {
   poll: Poll;
@@ -172,11 +165,6 @@ const WEIGHT_BUTTONS: Array<{ weight: Weight; emoji: string; label: string }> = 
   { weight: -1, emoji: '🙅', label: "I'd rather not" },
 ];
 
-function consensusOf(result: OptionResult | undefined): number {
-  if (!result || result.voters === 0) return 0;
-  return Math.round(((result.score / result.voters + 1) / 3) * 100);
-}
-
 /**
  * How long to sit on a tally bump before re-fetching aggregates.
  *
@@ -239,10 +227,10 @@ export function PollSection({
     }),
   );
 
-  // Live poll: DB triggers bump polls.tally_version on every vote change and
-  // on every change to the ideas themselves (20260921180000). Subscribe to this
-  // poll's row and re-fetch so the meter moves as others vote and the list
-  // grows as others suggest — without ever exposing an individual vote, or
+  // Live poll: DB triggers bump polls.tally_version on every change to the
+  // ideas (20260921180000) and on votes at the reveal floor (20261017120000).
+  // Subscribe to this poll's row and re-fetch so the meter moves as others
+  // vote and the list grows as others suggest — without ever exposing an individual vote, or
   // putting an idea's text and author on a channel of their own.
   //
   // Coalesced, because that trigger is noisier than it looks: it fires for this
@@ -294,10 +282,13 @@ export function PollSection({
     })
     .filter((option) => !justRemoved.has(option.id));
 
+  // Below the floor there are no numbers; a decided poll's clear leader goes first.
+  const revealed = results.some((r) => r.revealed);
   const ranked = [...shownOptions].sort((a, b) => {
     const ra = resultFor(a.id);
     const rb = resultFor(b.id);
     return (
+      Number(rb?.leads ?? false) - Number(ra?.leads ?? false) ||
       (rb?.score ?? 0) - (ra?.score ?? 0) ||
       (ra?.objections ?? 0) - (rb?.objections ?? 0) ||
       (rb?.loves ?? 0) - (ra?.loves ?? 0)
@@ -497,8 +488,15 @@ export function PollSection({
         </p>
       )}
 
-      {/* Consensus meter - aggregate only, never individual votes */}
-      {votingOpen && results.some((r) => r.voters > 0) && (
+      {/* Consensus meter - aggregate only, and only from the reveal floor up */}
+      {!revealed && !winner && options.length > 0 && (
+        <PollFloorNote
+          votingOpen={votingOpen}
+          decided={poll.phase === 'decided'}
+          hasLeader={results.some((r) => r.leads)}
+        />
+      )}
+      {votingOpen && revealed && results.some((r) => (r.voters ?? 0) > 0) && (
         <div className="mb-4">
           <div className="flex justify-between text-xs mb-1.5">
             <span className="font-bold text-ink-soft uppercase tracking-wide">Group consensus</span>
@@ -614,7 +612,10 @@ export function PollSection({
                     )}
                     <IdeaMedia option={option} />
                   </div>
-                  {(result?.voters ?? 0) > 0 && (
+                  {!revealed && !winner && result?.leads && (
+                    <span className="text-xs font-bold text-sage-deep whitespace-nowrap">Leading</span>
+                  )}
+                  {revealed && (result?.voters ?? 0) > 0 && (
                     <span
                       className="text-xs text-ink-faint whitespace-nowrap"
                       title={`${result?.voters} voted`}
@@ -779,7 +780,7 @@ export function PollSection({
           >
             {poll.resolution === 'auto'
               ? 'Close voting & pick winner'
-              : closesIntoRunoff(poll.resolution, poll.phase, options.length)
+              : closesIntoRunoff(poll.resolution, poll.phase, options.length, revealed)
                 ? 'Close voting → runoff'
                 : poll.resolution === 'runoff'
                   ? 'Close voting & pick winner'

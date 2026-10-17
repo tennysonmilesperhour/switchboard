@@ -360,6 +360,9 @@ integrations a deployment has wired up is reconnaissance, not public data.
   `find_nearby_people` mutual/block/visibility/radius/coarsening invariants.
 - `supabase/tests/zone_presence.test.sql` — `moments` stays owner-only and
   `zone_presence` counts only other, live, unblocked people in its own zone.
+- `supabase/tests/poll_result_floor.test.sql`: `poll_results()` returns no
+  numbers below three contributing voters, a neutral tap is not cover, and the
+  live counter moves for a vote only at or across the floor.
 - `supabase/tests/invite_blocks.test.sql` — event invite inserts honor blocks,
   cap each plan at 100 rows, and never let a host write an accepted RSVP.
 - `supabase/tests/matchmaker_blocks.test.sql` — a matchmaker intro can never
@@ -1102,6 +1105,68 @@ check-in. Covered by `supabase/tests/zone_presence.test.sql`.
 
 Litmus test: *does a zone surface ever return something that identifies who is
 there, to someone who has not themselves checked in?*
+
+## Poll totals (a floor before any number)
+
+An aggregate is only anonymous if there is a crowd behind it. Every voter knows
+their own ballot, so a total over two voters is the other person's vote plus
+something you already know. `poll_results()` used to return exact per-option
+score, loves, objections and voter counts from the first vote, which let either
+person in a two-person poll read the other's ratings exactly and broke "Nobody
+sees your vote" (`vote-privacy` in `src/lib/features.ts`).
+`20261017120000_poll_result_floor.sql` puts a floor under it:
+
+- **No number below the floor.** `private.poll_reveal_floor()` is 3. A poll
+  counts distinct people with at least one non-zero rating
+  (`private.poll_contributing_voters`). Below that, `poll_results()` returns
+  one row per option with every number NULL and `revealed = false`. The host
+  gets the same rows as everyone else.
+- **A neutral tap is not cover.** A stored 0 (a rating tapped twice) adds
+  nothing to any total, so it does not count toward the floor. Otherwise one
+  person tapping and untapping would unlock the other two people's totals.
+- **Closed below the floor, one coarse fact.** Once a poll is decided,
+  `leads` marks the option that leads outright on score, then fewest
+  objections, then most loves. A shared lead marks nothing. That is what the
+  host needs to settle a host-pick poll, and it says no more than an
+  auto-resolved poll publishes as its winner.
+- **Resolution below the floor.** Auto still crowns a clear leader (one option,
+  no counts). A runoff poll skips the narrowing round (`decidePoll` in
+  `src/lib/engine/scoring.ts`): a published top-three cut of two people's
+  ballots tells each more about the other than one winner does. The UI's
+  "Close voting → runoff" label asks the same `closesIntoRunoff` rule.
+- **The live counter is quiet below the floor.** `polls.tally_version` is on the
+  realtime publication, so its timing is visible to every viewer of the poll.
+  A vote bumps it only when the poll was or is at the floor
+  (`private.bump_poll_tally_for_vote`), so crossing the floor either way bumps
+  once and every open page reveals or hides together, while a vote that
+  changes nothing visible says nothing about who just voted. Idea changes keep
+  `public.bump_poll_tally`: ideas are visible to everyone anyway.
+- **One number, two languages.** `POLL_REVEAL_FLOOR` in `scoring.ts` mirrors
+  the SQL floor for the runner and the copy; `scoring.test.ts` reads the
+  migration and fails if they disagree. `poll_result_floor.test.sql` walks one,
+  two (plus a neutral-only third), and three or more voters, the counter at
+  each step, and a decided poll's leader with and without a tie.
+
+Accepted exposure:
+
+- **Everyone but one comparing notes.** With N contributing voters, N - 1 of
+  them pooling their ballots can subtract and recover the last one. That is
+  true of any exact tally; the floor stops a single person from doing it alone.
+- **Differencing above the floor.** Once revealed, totals are live. Someone who
+  snapshots them before and after a vote and knows who cast it (because the
+  voter said so, or because the counter moved while only one other person was
+  on the page) learns that vote. The floor does not address this; batching
+  or delaying reveals above the floor would.
+- **The winner.** A decided poll names its winner. In a small group that,
+  together with your own ballot, says which way the others leaned. Deciding is
+  the point of the poll.
+
+Follow-up with the same shape: the availability grid shows per-slot free
+counts with no floor, so in a two-person plan each person can read the other's
+free times from them.
+
+Litmus test: *could one person, knowing only their own ballot, compute
+someone else's from anything this surface returns or from when it changes?*
 
 ## Private zones (membership decides readability)
 

@@ -292,7 +292,8 @@ export const FEATURE_GROUPS: readonly FeatureGroup[] = [
       {
         id: 'consensus-meter',
         title: 'Consensus meter',
-        blurb: 'Watch where the group is actually leaning, as an aggregate and nothing more.',
+        blurb:
+          'Watch where the group is actually leaning, as an aggregate and nothing more. It appears once at least three people have rated ideas.',
         where: 'Any plan with a poll open',
         start: { href: '/plans', label: 'Your plans' },
       },
@@ -300,7 +301,7 @@ export const FEATURE_GROUPS: readonly FeatureGroup[] = [
         id: 'vote-privacy',
         title: 'Nobody sees your vote',
         blurb:
-          'Not the host, not anyone. Individual votes are unreadable by design — the group only ever sees totals.',
+          'Not the host, not anyone. Individual votes are unreadable by design, and totals stay hidden until at least three people have rated, so nobody can subtract their own vote and read yours. Only everyone else pooling their votes could, as with any tally.',
         where: 'Every poll, always',
         start: { href: '/plans', label: 'Your plans' },
       },

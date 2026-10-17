@@ -53,10 +53,13 @@ const POLL = {
   vote_deadline: '2026-09-25T10:00:00.000Z',
 };
 const OPTIONS = ['a', 'b', 'c', 'd'].map((id) => ({ id }));
+// Three voters: a runoff only narrows once the poll reaches POLL_REVEAL_FLOOR.
 const VOTES = [
   { option_id: 'a', voter_id: 'voter-1', weight: 2 },
   { option_id: 'b', voter_id: 'voter-1', weight: 1 },
   { option_id: 'd', voter_id: 'voter-1', weight: -1 },
+  { option_id: 'a', voter_id: 'voter-2', weight: 1 },
+  { option_id: 'b', voter_id: 'voter-3', weight: 1 },
 ];
 
 beforeEach(() => {
@@ -154,6 +157,25 @@ describe('poll resolution', () => {
     expect(queries.at(-1)?.steps).toContainEqual(['update', {
       phase: 'runoff', vote_deadline: null, allow_suggestions: false,
     }]);
+  });
+
+  it('decides a runoff poll below the reveal floor without a narrowing round', async () => {
+    database([
+      { data: POLL },
+      { data: OPTIONS },
+      { data: VOTES.filter((v) => v.voter_id === 'voter-1') },
+      { data: [{ id: 'poll-1' }] },
+    ]);
+    await resolvePoll('poll-1');
+    // Nothing deleted: no idea is cut and no ballot is cleared for a round
+    // whose top-three cut would read one person's ratings back to the group.
+    expect(queries.map((query) => query.table)).toEqual([
+      'polls', 'poll_options', 'poll_votes', 'polls',
+    ]);
+    expect(queries.at(-1)?.steps).toContainEqual(['update', {
+      phase: 'decided', winning_option_id: 'a',
+    }]);
+    expect(mocks.notifyPollOpened).not.toHaveBeenCalled();
   });
 
   it('does not resolve a fresh runoff selected by an earlier cron snapshot', async () => {

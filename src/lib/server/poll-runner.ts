@@ -2,6 +2,7 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import { notifyPollOpened, notifyPollOutcome } from '@/lib/server/poll-notices';
 import { applyDecidedDate } from '@/lib/server/poll-date';
 import {
+  contributingVoters,
   decidePoll,
   normalizeWeight,
   scoreOptions,
@@ -104,6 +105,8 @@ export async function resolvePoll(
     ranked,
     // A rating tapped twice is stored as a neutral 0, which says nothing.
     voteCount: engineVotes.filter((v) => v.weight !== 0).length,
+    // Below the reveal floor a runoff poll decides without a narrowing round.
+    voters: contributingVoters(engineVotes),
   });
 
   if (outcome.kind === 'runoff') {

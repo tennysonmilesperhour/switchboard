@@ -4772,9 +4772,11 @@ export type Database = {
       poll_results: {
         Args: { p_poll: string }
         Returns: {
+          leads: boolean
           loves: number
           objections: number
           option_id: string
+          revealed: boolean
           score: number
           voters: number
         }[]

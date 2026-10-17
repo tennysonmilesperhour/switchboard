@@ -1,10 +1,14 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { describe, expect, it, test } from 'vitest';
 import {
   closesIntoRunoff,
+  contributingVoters,
   decidePoll,
   finalists,
   groupConsensus,
   nextWeight,
+  POLL_REVEAL_FLOOR,
   scoreOptions,
   type OptionScore,
   type Vote,
@@ -149,7 +153,9 @@ describe('decidePoll', () => {
   it('hands a poll nobody voted on to the host instead of crowning an id', () => {
     const ranked = [score('a', 0), score('b', 0)];
     for (const resolution of ['auto', 'runoff', 'host_pick']) {
-      expect(decidePoll({ resolution, phase: 'voting', ranked, voteCount: 0 })).toEqual({
+      expect(
+        decidePoll({ resolution, phase: 'voting', ranked, voteCount: 0, voters: 0 }),
+      ).toEqual({
         kind: 'host_pick',
       });
     }
@@ -158,7 +164,7 @@ describe('decidePoll', () => {
   it('never narrows a runoff on no votes, which deleted suggestions at random', () => {
     const ranked = ['a', 'b', 'c', 'd', 'e'].map((id) => score(id, 0));
     expect(
-      decidePoll({ resolution: 'runoff', phase: 'voting', ranked, voteCount: 0 }),
+      decidePoll({ resolution: 'runoff', phase: 'voting', ranked, voteCount: 0, voters: 0 }),
     ).toEqual({ kind: 'host_pick' });
   });
 
@@ -169,6 +175,7 @@ describe('decidePoll', () => {
         phase: 'voting',
         ranked: [score('b', 4, 2), score('a', 1)],
         voteCount: 3,
+        voters: 3,
       }),
     ).toEqual({ kind: 'winner', optionId: 'b' });
   });
@@ -180,6 +187,7 @@ describe('decidePoll', () => {
         phase: 'voting',
         ranked: [score('a', 2, 1), score('b', 2, 1)],
         voteCount: 2,
+        voters: 2,
       }),
     ).toEqual({ kind: 'host_pick' });
   });
@@ -191,6 +199,7 @@ describe('decidePoll', () => {
         phase: 'voting',
         ranked: [score('a', 2, 1, 0), score('b', 2, 2, 1)],
         voteCount: 4,
+        voters: 3,
       }),
     ).toEqual({ kind: 'winner', optionId: 'a' });
   });
@@ -198,7 +207,7 @@ describe('decidePoll', () => {
   it('narrows a runoff to the top three, keeping anything level with third', () => {
     const ranked = [score('a', 5), score('b', 4), score('c', 2), score('d', 2), score('e', 0)];
     expect(
-      decidePoll({ resolution: 'runoff', phase: 'voting', ranked, voteCount: 6 }),
+      decidePoll({ resolution: 'runoff', phase: 'voting', ranked, voteCount: 6, voters: 3 }),
     ).toEqual({ kind: 'runoff', finalistIds: ['a', 'b', 'c', 'd'] });
   });
 
@@ -207,7 +216,7 @@ describe('decidePoll', () => {
     // round. The host asked the group to decide, so the group's leader wins.
     const ranked = [score('a', 3), score('b', 1), score('c', 0)];
     expect(
-      decidePoll({ resolution: 'runoff', phase: 'voting', ranked, voteCount: 3 }),
+      decidePoll({ resolution: 'runoff', phase: 'voting', ranked, voteCount: 3, voters: 3 }),
     ).toEqual({ kind: 'winner', optionId: 'a' });
   });
 
@@ -218,6 +227,7 @@ describe('decidePoll', () => {
         phase: 'runoff',
         ranked: [score('c', 3), score('a', 1), score('b', 0)],
         voteCount: 3,
+        voters: 3,
       }),
     ).toEqual({ kind: 'winner', optionId: 'c' });
   });
@@ -229,6 +239,7 @@ describe('decidePoll', () => {
         phase: 'voting',
         ranked: [score('a', 9), score('b', 0)],
         voteCount: 5,
+        voters: 3,
       }),
     ).toEqual({ kind: 'host_pick' });
   });
@@ -236,9 +247,61 @@ describe('decidePoll', () => {
 
 describe('closesIntoRunoff', () => {
   it('only promises a runoff when there is something to narrow', () => {
-    expect(closesIntoRunoff('runoff', 'voting', 5)).toBe(true);
-    expect(closesIntoRunoff('runoff', 'voting', 3)).toBe(false);
-    expect(closesIntoRunoff('runoff', 'runoff', 5)).toBe(false);
-    expect(closesIntoRunoff('auto', 'voting', 5)).toBe(false);
+    expect(closesIntoRunoff('runoff', 'voting', 5, true)).toBe(true);
+    expect(closesIntoRunoff('runoff', 'voting', 3, true)).toBe(false);
+    expect(closesIntoRunoff('runoff', 'runoff', 5, true)).toBe(false);
+    expect(closesIntoRunoff('auto', 'voting', 5, true)).toBe(false);
+  });
+
+  it('never promises a runoff below the reveal floor', () => {
+    expect(closesIntoRunoff('runoff', 'voting', 5, false)).toBe(false);
+  });
+});
+
+describe('the reveal floor', () => {
+  it('counts people with a non-zero rating, not ballots or neutral taps', () => {
+    expect(
+      contributingVoters([
+        vote('u1', 'a', 2),
+        vote('u1', 'b', -1),
+        vote('u2', 'a', 1),
+        vote('u3', 'a', 0),
+      ]),
+    ).toBe(2);
+  });
+
+  it('is the same number the database enforces', () => {
+    const migration = readFileSync(
+      join(process.cwd(), 'supabase/migrations/20261017120000_poll_result_floor.sql'),
+      'utf8',
+    );
+    const floor = migration.match(
+      /function private\.poll_reveal_floor\(\)[\s\S]*?select (\d+);/,
+    );
+    expect(floor?.[1]).toBe(String(POLL_REVEAL_FLOOR));
+  });
+
+  it('decides a runoff poll below the floor without a narrowing round', () => {
+    const ranked = ['a', 'b', 'c', 'd', 'e'].map((id, index) => ({
+      optionId: id,
+      score: 5 - index,
+      loves: 0,
+      objections: 0,
+      voters: 2,
+      consensus: 0,
+    }));
+    expect(
+      decidePoll({ resolution: 'runoff', phase: 'voting', ranked, voteCount: 6, voters: 2 }),
+    ).toEqual({ kind: 'winner', optionId: 'a' });
+  });
+
+  it('still lets an auto poll below the floor crown a clear leader', () => {
+    const ranked = [
+      { optionId: 'a', score: 3, loves: 1, objections: 0, voters: 2, consensus: 0 },
+      { optionId: 'b', score: 0, loves: 0, objections: 1, voters: 2, consensus: 0 },
+    ];
+    expect(
+      decidePoll({ resolution: 'auto', phase: 'voting', ranked, voteCount: 4, voters: 2 }),
+    ).toEqual({ kind: 'winner', optionId: 'a' });
   });
 });
