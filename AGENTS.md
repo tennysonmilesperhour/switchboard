@@ -165,3 +165,27 @@ longer exists and nothing errors.
   louder lie than an index entry that names one.
 - Keep them quick: 3 to 7 steps, a sentence or two each. Skip stays on every
   frame of the first-run tour (`docs/AUTH.md`: no state is a dead end).
+
+# The landscape
+
+Switchboard competes with invite pages (Partiful, Luma, Apple Invites),
+stranger dinners (Timeleft, 222, Pie), interest groups (Meetup, run clubs),
+social calendars (Howbout, Saturn) and presence maps (Zenly, Snap Map). Each
+one is good at part of social connection and has failed at another part in
+public. **[`docs/LANDSCAPE.md`](docs/LANDSCAPE.md)** collects what they teach
+and the research underneath them. **Before designing or writing copy for a
+surface where people ask, answer, decide, see each other, or find each other,
+read its section 12 checklist.** In short:
+
+- Switchboard specialises in **asking without exposure**. A feature belongs if
+  it lowers the social cost of asking, answering, deciding, or wanting to see
+  someone again, and exposes nobody while doing it.
+- Guests answer without an account or an install. Hosting stays free. Never
+  charge for priority, visibility, or a hint about who is interested.
+- One-sided interest stays undetectable, including through counts, timing and
+  realtime events. Aggregates need a minimum group size.
+- Every pending state has a clock and a neutral end. Failure is told only to
+  the person who can act on it.
+- Anything that needs local density stays hidden until the area has it.
+- The research memos in `docs/landscape/` are dated evidence. Update
+  `LANDSCAPE.md` when the field or the product changes, not the memos.

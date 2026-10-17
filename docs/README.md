@@ -21,6 +21,7 @@ files are historical evidence, never a source of current product truth.
 | [`analytics.md`](analytics.md) | Every tracked analytics event and the anonymity guardrail. |
 | [`DOCKET.md`](DOCKET.md) | The living backlog: strategy, queued builds, design threads, and carried residuals. |
 | [`INNOVATIONS.md`](INNOVATIONS.md) | Unshipped ideas only; shipped features are removed. |
+| [`LANDSCAPE.md`](LANDSCAPE.md) | The social connection landscape (Partiful, Luma, Timeleft, 222, Meetup, Howbout, Zenly and more) and what Switchboard takes from it: strategy, product, design, voice, marketing, code, metrics, and a pre-ship checklist. |
 | [`POSTHOG_SOURCEMAPS.md`](POSTHOG_SOURCEMAPS.md) | How to upload production source maps to PostHog and verify the result. |
 | [`SLC_EVENT_SOURCES.md`](SLC_EVENT_SOURCES.md) | Event ingestion coverage, source acceptance rules, and the expansion path for Salt Lake discovery. |
 | [`PROPOSAL.md`](PROPOSAL.md) | The next-stage proposal (pitch deck, demo, store launch, integrations, stages and fees). Edit this file; it is served live to people holding the secret link at `/proposal/<PROPOSAL_ACCESS_TOKEN>`. Plain Markdown only; `npm test` fails on syntax the page cannot draw. |
@@ -45,6 +46,21 @@ files are historical evidence, never a source of current product truth.
 | [`archive/SHIP-READINESS-AUDIT.md`](archive/SHIP-READINESS-AUDIT.md) | Earlier ship-readiness audit. |
 | [`archive/COMPLETION-PLAN-2026-09.md`](archive/COMPLETION-PLAN-2026-09.md) | September 29 completeness audit, its 27 decisions, and the work built in PR #223; owner actions carried into `DOCKET.md`. |
 | [`archive/WEEKLY-PLAN-2026-08-11.md`](archive/WEEKLY-PLAN-2026-08-11.md) | Completed six-item weekly plan. |
+
+## Landscape research
+
+Point-in-time memos (2026-10-17) behind `LANDSCAPE.md`. Each claim carries a
+verification tag and a source; they are evidence, not living product truth.
+
+| File | Covers |
+|---|---|
+| [`landscape/A-strangers.md`](landscape/A-strangers.md) | Apps that seat strangers together: Timeleft, 222, Pie, Bumble For Friends, Meet5. |
+| [`landscape/B-invites.md`](landscape/B-invites.md) | Invite and hosting tools: Partiful, Luma, Apple Invites, Posh, Evite, Paperless Post. |
+| [`landscape/C-communities.md`](landscape/C-communities.md) | Interest groups and communities: Meetup, Facebook Groups, Discord, Heylo, Nextdoor, run clubs. |
+| [`landscape/D-calendars-presence.md`](landscape/D-calendars-presence.md) | Social calendars, availability toggles, scheduling polls, and location apps. |
+| [`landscape/E-psychology-closefriends.md`](landscape/E-psychology-closefriends.md) | Close-friends apps and the research on loneliness, friendship and asking. |
+| [`landscape/F-strategy.md`](landscape/F-strategy.md) | Funding, post-mortems, cold start, Salt Lake City, money, distribution, positioning. |
+| [`landscape/S-switchboard-audit.md`](landscape/S-switchboard-audit.md) | Audit of this repository at `3c17f65` for comparison with the field. |
 
 ## Historical specs
 
