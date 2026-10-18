@@ -81,6 +81,7 @@ const NOT_INDEXED: Record<string, string> = {
   moderation: 'operator screen, gated to appointed moderators',
   'scope-verification': 'client-facing verification checklist, URL-only access',
   proposal: 'private next-stage proposal, reached by a secret link, not browsed to',
+  demo: 'investor demo, reached by a secret link, not browsed to',
   api: 'not a page',
   auth: 'not a page',
 };
