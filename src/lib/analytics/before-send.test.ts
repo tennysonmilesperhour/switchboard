@@ -90,6 +90,23 @@ describe('beforeSend', () => {
       expect(JSON.stringify(result)).not.toContain(TOKEN);
     });
 
+    it('treats the investor demo link the same way', () => {
+      const properties = { $current_url: `https://switchboardsocial.me/demo/${TOKEN}?mode=present` };
+      expect(beforeSend(event({ event: '$pageview', properties }))).toBeNull();
+
+      const later = beforeSend(
+        event({
+          event: '$pageview',
+          properties: {
+            $current_url: 'https://switchboardsocial.me/welcome',
+            $prev_pageview_pathname: `/demo/${TOKEN}`,
+          },
+        }),
+      );
+      expect(later?.properties.$prev_pageview_pathname).toBe('/demo/[redacted]');
+      expect(JSON.stringify(later)).not.toContain(TOKEN);
+    });
+
     it('leaves ordinary pages alone', () => {
       const result = beforeSend(
         event({ event: '$pageview', properties: { $current_url: 'https://switchboardsocial.me/features' } }),

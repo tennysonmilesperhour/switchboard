@@ -4,8 +4,8 @@ import type { CaptureResult } from 'posthog-js';
  * Shared `before_send` hook for the browser PostHog client (wired in
  * `src/components/system/PostHogProvider.tsx`). Three jobs, in order:
  *
- *  0. Keep secret-link pages out of analytics. `/proposal/<token>` carries its
- *     credential in the path, and autocapture would copy it into PostHog as
+ *  0. Keep secret-link pages out of analytics. `/proposal/<token>` and
+ *     `/demo/<token>` carry their credential in the path, and autocapture would copy it into PostHog as
  *     `$current_url` on every visit. Events from that page are dropped, and the
  *     token is scrubbed from any other event that mentions the path (the next
  *     pageview's `$prev_pageview_pathname`, a referrer).
@@ -47,7 +47,8 @@ function isNextControlFlow(event: CaptureResult): boolean {
 }
 
 /** Paths whose final segment is a bearer credential. Extend this list, never the page. */
-const SECRET_LINK_PATH = /\/proposal\/[^/?#\s]+/g;
+const SECRET_LINK_PREFIXES = ['/proposal/', '/demo/'] as const;
+const SECRET_LINK_PATH = /\/(proposal|demo)\/[^/?#\s]+/g;
 
 function currentPath(event: CaptureResult): string {
   const props = event.properties ?? {};
@@ -63,15 +64,16 @@ function currentPath(event: CaptureResult): string {
 }
 
 function isSecretLinkPage(event: CaptureResult): boolean {
-  return currentPath(event).startsWith('/proposal/');
+  const path = currentPath(event);
+  return SECRET_LINK_PREFIXES.some((prefix) => path.startsWith(prefix));
 }
 
 /** Redacts the credential segment from every top-level string property. */
 function scrubSecretLinks(properties: CaptureResult['properties']): CaptureResult['properties'] {
   const scrubbed = { ...properties };
   for (const [key, value] of Object.entries(scrubbed)) {
-    if (typeof value === 'string' && value.includes('/proposal/')) {
-      scrubbed[key] = value.replace(SECRET_LINK_PATH, '/proposal/[redacted]');
+    if (typeof value === 'string' && SECRET_LINK_PREFIXES.some((prefix) => value.includes(prefix))) {
+      scrubbed[key] = value.replace(SECRET_LINK_PATH, '/$1/[redacted]');
     }
   }
   return scrubbed;

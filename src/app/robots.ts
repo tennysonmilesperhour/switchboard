@@ -33,6 +33,7 @@ export default function robots(): MetadataRoute.Robots {
         '/moderation',
         '/features',
         '/proposal',
+        '/demo',
       ],
     },
     ...(appUrl ? { sitemap: `${appUrl}/sitemap.xml` } : {}),

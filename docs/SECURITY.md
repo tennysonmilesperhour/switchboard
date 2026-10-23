@@ -1263,6 +1263,12 @@ open to anyone who guesses the path, and nothing private belongs on it.
 Litmus test: *could a stranger who guesses `/proposal` or `/proposal/anything`
 learn that the page exists, or read a line of it?*
 
+The investor demo at `/demo/<token>` follows every rule above with its own
+secret, `DEMO_ACCESS_TOKEN` (`demoAccessGranted` calls the same check). It
+shows only made-up data, so what the gate protects is the pitch framing and the
+talk track. It is in `PUBLIC_PREFIXES`, `robots.ts` and the analytics scrub,
+and sends `Referrer-Policy: no-referrer`.
+
 ## Nearby plans (a host's opt-in, a band and nothing finer)
 
 Explore can show a host's Open Table to strangers in range
