@@ -4,7 +4,9 @@
       "main": false
     }
   },
-  "regions": ["sfo1"],
+  "regions": [
+    "sfo1"
+  ],
   "crons": [
     {
       "path": "/api/cron/cascade",
@@ -18,5 +20,6 @@
       "path": "/api/cron/external-events",
       "schedule": "17 */3 * * *"
     }
-  ]
+  ],
+  "installCommand": "npx --yes npm@12.2.1 ci --ignore-scripts"
 }
