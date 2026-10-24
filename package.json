@@ -44,5 +44,6 @@
   },
   "overrides": {
     "zod": "4.6.6"
-  }
+  },
+  "packageManager": "npm@12.2.1"
 }
