@@ -77,7 +77,8 @@ jobs:
   # when the diff is not docs-only.
   authenticated-e2e:
     name: Authenticated E2E
-    runs-on: ubuntu-latest
+    # Keep the browser OS stable; ubuntu-latest moved to 26.04 and Chromium crashed mid-suite.
+    runs-on: ubuntu-24.04
     # Setup takes about 4 minutes and the 11 journey files about 21 on a hosted
     # runner (2026-10-03); 25 cut the run off mid-suite with nothing failing.
     timeout-minutes: 40
