@@ -17,7 +17,7 @@ function isTransientImageFailure(output) {
     /unhealthy|health check.*fail|failed to connect to (?:postgres|database|db)/i,
   ];
   const imageFailure = /failed to pull|error pulling image|failed to resolve (?:reference|source)|(?:public\.ecr\.aws|ghcr\.io)\//i;
-  const transient = /toomanyrequests|too many requests|\b429\b|\b50[234]\b|TLS handshake timeout|i\/o timeout|connection reset by peer|temporary failure in name resolution|temporary network|unexpected EOF|context deadline exceeded|Client\.Timeout exceeded/i;
+  const transient = /toomanyrequests|too many requests|error from registry: Data limit exceeded|\b429\b|\b50[234]\b|TLS handshake timeout|i\/o timeout|connection reset by peer|temporary failure in name resolution|temporary network|unexpected EOF|context deadline exceeded|Client\.Timeout exceeded/i;
   return !deterministic.some((pattern) => pattern.test(output)) && imageFailure.test(output) && transient.test(output);
 }
 

@@ -587,19 +587,19 @@ test.describe('people and places', () => {
       await page.reload();
       const mine = page.locator('li', { hasText: ask });
       await expect(mine).toContainText(`Can help: ${nia.name}`);
-      // Post actions are thumb-sized (44 px). boundingBox() does not wait, and
-      // right after this reload it can come back empty while the button is
-      // still settling — the failure then reads as 0px even though the control
-      // is on the page. Scroll each one into view and keep measuring until the
-      // layout reports a real box. The bar stays 44px.
+      // A notification refresh can replace a button after the reload. Retry
+      // the complete read-only check so scrolling also re-resolves the locator.
+      // Every action must still be visible and at least 44px high.
       for (const label of ['Mark complete', 'edit', 'remove', 'make it a plan']) {
         const button = mine.getByRole('button', { name: label, exact: true });
-        await button.scrollIntoViewIfNeeded();
-        await expect(button).toBeVisible();
-        await expect.poll(
-          async () => (await button.boundingBox())?.height ?? 0,
-          { message: `"${label}" is shorter than a 44px thumb target` },
-        ).toBeGreaterThanOrEqual(44);
+        await expect(async () => {
+          await button.scrollIntoViewIfNeeded({ timeout: 2_000 });
+          await expect(button).toBeVisible({ timeout: 2_000 });
+          expect(
+            (await button.boundingBox())?.height ?? 0,
+            `"${label}" is shorter than a 44px thumb target`,
+          ).toBeGreaterThanOrEqual(44);
+        }).toPass({ timeout: 15_000 });
       }
       await shot(page, 'board-can-help');
       await mine.getByRole('link', { name: nia.name }).click();
