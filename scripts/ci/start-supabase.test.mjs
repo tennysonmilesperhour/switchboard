@@ -75,6 +75,22 @@ test("a second transient failure preserves its exit code and never starts a thir
   assert.equal(f.exported(), "");
 });
 
+test("ECR data-limit image failures use the existing single mirror fallback", async (t) => {
+  const error = "failed to pull docker image from all registries: public.ecr.aws/supabase/postgres:17.6.1.165: Error response from daemon: error from registry: Data limit exceeded";
+  const f = fixture(t, [{ code: 1, output: error }, {}, {}]);
+  assert.equal(await f.run(), 0);
+  assert.deepEqual(f.calls().map(({ args, registry }) => [args[0], registry]), [
+    ["start", "public.ecr.aws"], ["stop", "public.ecr.aws"], ["start", "ghcr.io"],
+  ]);
+  assert.equal(f.exported(), "SUPABASE_INTERNAL_IMAGE_REGISTRY=ghcr.io\n");
+});
+
+test("data limits without an image pull failure do not trigger a registry fallback", async (t) => {
+  const f = fixture(t, [{ code: 1, output: "Data limit exceeded" }, {}]);
+  assert.equal(await f.run(), 1);
+  assert.equal(f.calls().length, 2);
+});
+
 for (const [name, error] of [
   ["migration", "ERROR: column does not exist (SQLSTATE 42703)"],
   ["config", "failed to parse config: decoding failed"],
